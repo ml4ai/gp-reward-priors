@@ -9,8 +9,7 @@ from itertools import islice
 class ClassificationGenerator(object):
     def __init__(self, data_loader):
         self.batch_size = data_loader.batch_size
-        self.data_iterator = islice(enumerate(util.inf_loop(data_loader)),
-                                    sys.maxsize)
+        self.data_iterator = islice(enumerate(util.inf_loop(data_loader)), sys.maxsize)
 
     def get(self, n_data=None, return_label=False):
         _, data = next(self.data_iterator)
@@ -37,12 +36,11 @@ class UniformGenerator(object):
 
         # Initialize generator to create random pointss
         if isinstance(x_max, float):
-            self.rand_generator = torch.distributions.uniform.Uniform(
-                x_min, x_max)
+            self.rand_generator = torch.distributions.uniform.Uniform(x_min, x_max)
         else:
             self.rand_generator = torch.distributions.uniform.Uniform(
-                torch.from_numpy(x_min).float(),
-                torch.from_numpy(x_max).float())
+                torch.from_numpy(x_min).float(), torch.from_numpy(x_max).float()
+            )
 
     def get(self, n_data):
         X = self.rand_generator.rsample([n_data])
@@ -72,16 +70,16 @@ class MeasureSetGenerator(object):
 
         # Initialize generator to create random pointss
         self.rand_generator = torch.distributions.uniform.Uniform(
-            torch.from_numpy(self.x_min).float(),
-            torch.from_numpy(self.x_max).float())
-        
+            torch.from_numpy(self.x_min).float(), torch.from_numpy(self.x_max).float()
+        )
+
         self.use_cache = fix_data
         self.X_cached = None
 
     def get(self, n_data):
         if self.use_cache and self.X_cached is not None:
             return self.X_cached
-        
+
         n_real = int(n_data * self.real_ratio)
         # assert n_real < self.X.shape[0]
         n_real = min(n_real, int(self.X.shape[0]))
@@ -103,3 +101,37 @@ class MeasureSetGenerator(object):
             self.X_cached = X
         return X
 
+
+# This samples inputs from a real dataset
+# It can also sample from auxiliary set if needed (e.g., when the next state is needed to compute rewards for RL problems)
+# X.shape[0] and aux_X.shape[0] are assumed to be equal
+class DataSetSampler(object):
+    def __init__(self, X, aux_X=None):
+        if not isinstance(X, torch.Tensor):
+            self.X = torch.from_numpy(X).float()
+        else:
+            self.X = X.float()
+
+        if aux_X is not None:
+            self.has_aux = True
+            if not isinstance(aux_X, torch.Tensor):
+                self.aux_X = torch.from_numpy(aux_X).float()
+            else:
+                self.aux_X = aux_X.float()
+        else:
+            self.has_aux = False
+            self.aux_X = None
+
+    def get(self, n_data):
+        # Can't sample more than what exists
+        n_real = min(n_data, int(self.X.shape[0]))
+
+        # Choose randomly training inputs
+        indices = torch.randperm(self.X.shape[0])[:n_real]
+
+        X = self.X[indices, ...]
+        if self.aux_X is not None:
+            aux_X = self.aux_X[indices, ...]
+
+            return X, aux_X
+        return X
