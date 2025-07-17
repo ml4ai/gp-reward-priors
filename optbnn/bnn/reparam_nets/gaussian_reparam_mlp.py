@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,18 +8,30 @@ import torch.nn.functional as F
 from ..activation_fns import *
 from ..reparam_layers.gaussian_reparam_linear import GaussianLinearReparameterization
 
+torch.pi = torch.acos(torch.zeros(1)).item() * 2
+
 
 def init_norm_layer(input_dim, norm_layer):
     if norm_layer == "batchnorm":
-        return nn.BatchNorm1d(input_dim, eps=0, momentum=None,
-                              affine=False, track_running_stats=False)
+        return nn.BatchNorm1d(
+            input_dim, eps=0, momentum=None, affine=False, track_running_stats=False
+        )
     elif norm_layer is None:
         return nn.Identity()
 
 
 class GaussianMLPReparameterization(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dims, activation_fn,
-                 W_std=None, b_std=None, scaled_variance=True, norm_layer=None):
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        hidden_dims,
+        activation_fn,
+        W_std=None,
+        b_std=None,
+        scaled_variance=True,
+        norm_layer=None,
+    ):
         """Initialization.
 
         Args:
@@ -40,38 +54,62 @@ class GaussianMLPReparameterization(nn.Module):
         self.norm_layer = norm_layer
 
         # Setup activation function
-        options = {'cos': torch.cos, 'tanh': torch.tanh, 'relu': F.relu,
-                   'softplus': F.softplus, 'rbf': rbf, 'linear': linear,
-                   'sin': sin, 'leaky_relu': F.leaky_relu,
-                   'swish': swish}
+        options = {
+            "cos": torch.cos,
+            "tanh": torch.tanh,
+            "relu": F.relu,
+            "softplus": F.softplus,
+            "rbf": rbf,
+            "linear": linear,
+            "sin": sin,
+            "leaky_relu": F.leaky_relu,
+            "swish": swish,
+        }
         if activation_fn in options:
+            self.activation_fn_type = activation_fn
             self.activation_fn = options[activation_fn]
         else:
+            self.activation_fn_type = None
             self.activation_fn = activation_fn
 
         if b_std is None:
             b_std = W_std
 
         # Initialize layers
-        self.layers = nn.ModuleList([GaussianLinearReparameterization(
-            input_dim, hidden_dims[0], W_std, b_std,
-            scaled_variance=scaled_variance)])
+        self.layers = nn.ModuleList(
+            [
+                GaussianLinearReparameterization(
+                    input_dim,
+                    hidden_dims[0],
+                    W_std,
+                    b_std,
+                    scaled_variance=scaled_variance,
+                )
+            ]
+        )
 
-        self.norm_layers = nn.ModuleList([init_norm_layer(
-            hidden_dims[0], self.norm_layer)])
+        self.norm_layers = nn.ModuleList(
+            [init_norm_layer(hidden_dims[0], self.norm_layer)]
+        )
 
         for i in range(1, len(hidden_dims)):
             self.layers.add_module(
-                "linear_{}".format(i), GaussianLinearReparameterization(
-                    hidden_dims[i-1], hidden_dims[i], W_std, b_std,
-                    scaled_variance=scaled_variance))
+                "linear_{}".format(i),
+                GaussianLinearReparameterization(
+                    hidden_dims[i - 1],
+                    hidden_dims[i],
+                    W_std,
+                    b_std,
+                    scaled_variance=scaled_variance,
+                ),
+            )
             self.norm_layers.add_module(
-                "norm_{}".format(i), init_norm_layer(hidden_dims[i],
-                                                     self.norm_layer))
+                "norm_{}".format(i), init_norm_layer(hidden_dims[i], self.norm_layer)
+            )
 
         self.output_layer = GaussianLinearReparameterization(
-            hidden_dims[-1], output_dim, W_std, b_std,
-            scaled_variance=scaled_variance)
+            hidden_dims[-1], output_dim, W_std, b_std, scaled_variance=scaled_variance
+        )
 
     def forward(self, X):
         """Performs forward pass given input data.
@@ -86,8 +124,7 @@ class GaussianMLPReparameterization(nn.Module):
         """
         X = X.view(-1, self.input_dim)
 
-        for linear_layer, norm_layer in zip(list(self.layers),
-                                            list(self.norm_layers)):
+        for linear_layer, norm_layer in zip(list(self.layers), list(self.norm_layers)):
             X = self.activation_fn(norm_layer(linear_layer(X)))
 
         X = self.output_layer(X)
@@ -108,8 +145,7 @@ class GaussianMLPReparameterization(nn.Module):
         """
         X = X.view(-1, self.input_dim)
         X = torch.unsqueeze(X, 0).repeat([n_samples, 1, 1])
-        for linear_layer, norm_layer in zip(list(self.layers),
-                                            list(self.norm_layers)):
+        for linear_layer, norm_layer in zip(list(self.layers), list(self.norm_layers)):
             if self.norm_layer is None:
                 X = self.activation_fn(linear_layer.sample_predict(X, n_samples))
             else:
@@ -123,3 +159,56 @@ class GaussianMLPReparameterization(nn.Module):
         X = torch.transpose(X, 0, 1)
 
         return X
+
+    def compute_covariance(self, X):
+        """
+        Produces a covariance matrix over a set of inputs X.
+        X must be a (n_samples, n_raw_features) 2D array
+        Right now only the arc-cosine kernel is available (i.e., self.activation_fn == relu)
+        This assume you passed in a string for activation_fn
+        It also assumes there are no norm layers
+        """
+
+        if self.activation_fn_type == "relu":
+            two_pi = 2 * torch.pi
+            layers = list(self.layers)
+            K = (layers[0].b_std * layers[0].b_std) + (
+                (layers[0].W_std * layers[0].W_std)
+            ) * (X @ X.T)
+            for i in range(1, len(self.hidden_dims)):
+                K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
+                theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
+                theta = (
+                    theta - torch.diag_embed(torch.diagonal(theta))
+                ) + torch.diag_embed(torch.diagonal(theta) * 0.0)
+                K = (layers[i].b_std * layers[i].b_std) + (
+                    (layers[i].W_std * layers[i].W_std) / two_pi
+                ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
+            K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
+            theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
+            theta = (
+                theta - torch.diag_embed(torch.diagonal(theta))
+            ) + torch.diag_embed(torch.diagonal(theta) * 0.0)
+            K = (self.output_layer.b_std * self.output_layer.b_std) + (
+                (self.output_layer.W_std * self.output_layer.W_std) / two_pi
+            ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
+
+            return K
+        else:
+            raise NotImplementedError
+
+    def sample_nngp(self, X, num_samples):
+        """
+        Produce samples from the prior latent functions at the points X.
+        """
+        K = self.compute_covariance(X)
+
+        mu = torch.zeros(K.size(0)).float()
+        weight_generator = torch.distributions.multivariate_normal.MultivariateNormal(
+            mu, K
+        )
+        samples = []
+        for i in range(self.output_dim):
+            samples.append(weight_generator.sample(torch.Size([num_samples])))
+
+        return torch.stack(samples, dim=0).permute(2,1, 0)
