@@ -48,3 +48,11 @@ class LikCategorical(LikelihoodModule):
 
     def loglik(self, fx, y):
         return -self.loss(fx, y)
+
+class LikCE(LikelihoodModule):
+    def __init__(self):
+        super(LikCE, self).__init__()
+        self.loss = torch.nn.CrossEntropyLoss(reduction='sum')
+
+    def loglik(self, fx, y):
+        return -self.loss(fx, y)
