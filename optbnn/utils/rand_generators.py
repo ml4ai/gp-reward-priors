@@ -5,6 +5,8 @@ from . import util
 
 from itertools import islice
 
+from optbnn.utils.normalization import zscore_normalization
+
 
 class ClassificationGenerator(object):
     def __init__(self, data_loader):
@@ -106,7 +108,7 @@ class MeasureSetGenerator(object):
 # It can also sample from auxiliary set if needed (e.g., when the next state is needed to compute rewards for RL problems)
 # X.shape[0] and aux_X.shape[0] are assumed to be equal
 class DataSetSampler(object):
-    def __init__(self, X, aux_X=None):
+    def __init__(self, X, aux_X=None, normalize_X=False, normalize_aux_X=False):
         if not isinstance(X, torch.Tensor):
             self.X = torch.from_numpy(X).float()
         else:
@@ -122,6 +124,7 @@ class DataSetSampler(object):
             self.has_aux = False
             self.aux_X = None
 
+
     def get(self, n_data):
         # Can't sample more than what exists
         n_real = min(n_data, int(self.X.shape[0]))
@@ -135,3 +138,19 @@ class DataSetSampler(object):
 
             return X, aux_X
         return X
+    
+    def get_batches(self, n_data, batches=10):
+        # Can't sample more than what exists
+        n_real = min(n_data * batches, int(self.X.shape[0]))
+
+        # Choose randomly training inputs
+        indices = torch.randperm(self.X.shape[0])[:n_real]
+
+        X = self.X[indices, ...]
+        X_batch = torch.stack(list(torch.chunk(X, batches, dim=0)))
+        if self.aux_X is not None:
+            aux_X = self.aux_X[indices, ...]
+            aux_X_batch = torch.stack(list(torch.chunk(aux_X, batches, dim=0)))
+
+            return X_batch, aux_X_batch
+        return X_batch
