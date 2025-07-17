@@ -207,41 +207,49 @@ class LCFModel(torch.nn.Module):
     They take two main initial arguments, a covariance matrix and a function that
     takes inputs and evaluates them over a vector of functions
 
-    The covariance arg can take a (n_concepts, ) 1D array or a symmetric (n_concepts,n_concepts) 2D array
+    The p_covariance arg can take a (n_concepts, ) 1D array or a symmetric (n_concepts,n_concepts) 2D array
 
     The function_vect arg takes a function that takes (n_samples,n_raw_features) 2D array
     as input and outputs a (n_samples,n_concepts) 2D array
 
     Its up to the function_vect arg to provide a row of ones for an intercept term
 
-    Optionally, a (n_concepts,) 1D array for the mean argument can be given
+    Optionally, a (n_concepts,) 1D array for the p_mean argument can be given
 
-    If mean is not given, a (n_concepts,) 1D array of zeros is automatically generated
+    If p_mean is not given, a (n_concepts,) 1D array of zeros is automatically generated
+
+    Note that p_covariance and p_mean correspond to the coefficients for the linear combination,
+    but are not the same as the mean and covariance of the resulting Gaussian Process
 
     This does not have working forward function (for now)
     """
 
-    def __init__(self, covariance, function_vect, mean=None, name=None):
+    def __init__(self, p_covariance, function_vect, p_mean=None, name=None):
         super(LCFModel, self).__init__()
         self.name = name
         self.function_vect = function_vect
 
-        if isinstance(covariance, np.ndarray):
-            if covariance.ndim == 1:
-                covariance = np.diag(covariance)
-            covariance = torch.from_numpy(covariance)
+        if isinstance(p_covariance, np.ndarray):
+            if p_covariance.ndim == 1:
+                p_covariance = np.diag(p_covariance)
+            p_covariance = torch.from_numpy(p_covariance).float()
         else:
-            if covariance.ndim == 1:
-                covariance = torch.diag(covariance)
+            if p_covariance.ndim == 1:
+                p_covariance = torch.diag(p_covariance).float()
 
-        if mean is not None:
-            if isinstance(mean, np.ndarray):
-                mean = torch.from_numpy(mean)
+        if p_mean is not None:
+            if isinstance(p_mean, np.ndarray):
+                p_mean = torch.from_numpy(p_mean).float()
         else:
-            mean = torch.zeros(covariance.size(0))
+            p_mean = torch.zeros(p_covariance.size(0)).float()
         self.weight_generator = (
-            torch.distributions.multivariate_normal.MultivariateNormal(mean, covariance)
+            torch.distributions.multivariate_normal.MultivariateNormal(
+                p_mean, p_covariance
+            )
         )
+
+        self.p_mean = p_mean
+        self.p_covariance = p_covariance
 
     def forward(self, X=None, Y=None):
         pass
@@ -256,4 +264,22 @@ class LCFModel(torch.nn.Module):
             Y = self.function_vect(X, aux_X)
         else:
             Y = self.function_vect(X)
-        return torch.mm(Y, self.weight_generator.sample(torch.Size([num_samples])).T).unsqueeze(-1)
+        return torch.mm(
+            Y,
+            self.weight_generator.sample(torch.Size([num_samples])).T.double(),
+        ).unsqueeze(-1)
+
+    def compute_covariance(self, X, aux_X=None):
+        """
+        Produces a covariance matrix over a set of inputs X.
+        X must be a (n_samples, n_raw_features) 2D array
+        If given, its assumed aux_X.shape[0] == X.shape[0]
+        """
+        if aux_X is not None:
+            Y = self.function_vect(X, aux_X)
+        else:
+            Y = self.function_vect(X)
+
+        return torch.mm(
+            torch.mm(Y, self.p_covariance.double()), Y.T
+        )
