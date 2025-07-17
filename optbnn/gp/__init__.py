@@ -8,3 +8,4 @@ from . import models
 from . import parameter
 from . import priors
 from . import quadrature
+from . import reward_functions
