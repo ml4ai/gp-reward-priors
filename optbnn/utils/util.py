@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import os
 import argparse
+import h5py
 
 from pathlib import Path
 from itertools import repeat
@@ -27,18 +28,29 @@ def load_uci_data(uci_dir, split_id, name, version="original"):
         x_test: numpy array, the test data points.
         y_test: numpy array, the test labels.
     """
-    datasets = ["boston", "concrete", "energy", "kin8nm",
-                "naval", "power", "protein", "wine", "yacht"]
-    if not(name in datasets):
+    datasets = [
+        "boston",
+        "concrete",
+        "energy",
+        "kin8nm",
+        "naval",
+        "power",
+        "protein",
+        "wine",
+        "yacht",
+    ]
+    if not (name in datasets):
         raise ValueError("Invalid dataset name.")
     assert version in ["original", "gap"]
 
     uci_dir = os.path.join(uci_dir, name)
     data_file = os.path.join(uci_dir, "data.txt")
-    idx_train_file = os.path.join(uci_dir, "{}/index_train_{}.txt").\
-        format(version, split_id)
-    idx_test_file = os.path.join(uci_dir, "{}/index_test_{}.txt").\
-        format(version, split_id)
+    idx_train_file = os.path.join(uci_dir, "{}/index_train_{}.txt").format(
+        version, split_id
+    )
+    idx_test_file = os.path.join(uci_dir, "{}/index_test_{}.txt").format(
+        version, split_id
+    )
 
     data = np.loadtxt(data_file)
     idx_train = np.loadtxt(idx_train_file).astype(np.int32)
@@ -51,6 +63,48 @@ def load_uci_data(uci_dir, split_id, name, version="original"):
     return x_train, y_train, x_test, y_test
 
 
+# The training_ratio argument must be > 0 and <= 1. int(sample_size*training_ratio) becomes training data
+# and (sample_size - training data) becomes test data
+# if training_ratio == 1.0, then the data is returned without any splitting
+# splitting is random according to a seed set by the set_seed function below
+# X is shaped as (samples,2,seq_size,obs_dim+1) where the 2 is from combining preference pairs
+# and the +1 is concatenating the attn_mask
+# y is shaped (samples,)
+def load_pref_data(pref_dir, training_ratio=0.8):
+    assert training_ratio > 0.0
+    assert training_ratio <= 1.0
+    with h5py.File(pref_dir) as f:
+        obs_1 = np.concatenate(
+            [f["states"][:], f["actions"][:], f["attn_mask"][:].reshape(-1, 100, 1)],
+            axis=-1,
+        )
+        obs_2 = np.concatenate(
+            [
+                f["states_2"][:],
+                f["actions_2"][:],
+                f["attn_mask_2"][:].reshape(-1, 100, 1),
+            ],
+            axis=-1,
+        )
+        y = f["labels"][:]
+    X = np.stack([obs_1, obs_2], axis=1)
+
+    if training_ratio == 1.0:
+        return X, y
+
+    num_samples = X.shape[0]
+    indices = np.arange(num_samples)
+    np.random.shuffle(indices)
+    split_point = int(num_samples * training_ratio)
+    train_indices = indices[:split_point]
+    test_indices = indices[split_point:]
+    X_train = X[train_indices, ...]
+    y_train = y[train_indices, ...]
+    X_test = X[test_indices, ...]
+    y_test = y[test_indices, ...]
+    return X_train, y_train, X_test, y_test
+
+
 def prepare_device(n_gpu_use):
     """Setup GPU device if available, move model into configured device.
 
@@ -59,15 +113,19 @@ def prepare_device(n_gpu_use):
     """
     n_gpu = torch.cuda.device_count()
     if n_gpu_use > 0 and n_gpu == 0:
-        print("Warning: There\'s no GPU available on this machine,"
-              "training will be performed on CPU.")
+        print(
+            "Warning: There's no GPU available on this machine,"
+            "training will be performed on CPU."
+        )
         n_gpu_use = 0
     if n_gpu_use > n_gpu:
-        print("Warning: The number of GPU\'s configured to use"
-              " is {}, but only {} are available "
-              "on this machine.".format(n_gpu_use, n_gpu))
+        print(
+            "Warning: The number of GPU's configured to use"
+            " is {}, but only {} are available "
+            "on this machine.".format(n_gpu_use, n_gpu)
+        )
         n_gpu_use = n_gpu
-    device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
+    device = torch.device("cuda:0" if n_gpu_use > 0 else "cpu")
     list_ids = list(range(n_gpu_use))
 
     return device, list_ids
@@ -80,7 +138,7 @@ def to_one_hot(y, num_classes=10):
         y: numpy array, shape [num_classes], the true labels.
 
     Returns:
-        one_hot: numpy array, size (?, num_classes), 
+        one_hot: numpy array, size (?, num_classes),
             array containing the one-hot encoding of the true classes.
     """
     if isinstance(y, torch.Tensor):
@@ -97,12 +155,12 @@ def str2bool(v):
     """Convert string to boolean variable"""
     if isinstance(v, bool):
         return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def save_pickle(data, file_path):
@@ -112,7 +170,7 @@ def save_pickle(data, file_path):
         data: a dictionary containing the data needs to be saved.
         file_path: string, path to the output file.
     """
-    with open(file_path, 'wb') as handle:
+    with open(file_path, "wb") as handle:
         pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -125,7 +183,7 @@ def load_pickle(file_path):
     Returns:
         A dictionary containing the loaded data.
     """
-    with open(file_path, 'rb') as handle:
+    with open(file_path, "rb") as handle:
         data = pickle.load(handle)
     return data
 
@@ -151,7 +209,7 @@ def read_json(file_path):
         A dictionary containing the loaded data.
     """
     file_path = Path(file_path)
-    with file_path.open('rt') as handle:
+    with file_path.open("rt") as handle:
         return json.load(handle, object_hook=OrderedDict)
 
 
@@ -163,7 +221,7 @@ def write_json(content, file_path):
         file_path: string, path to the output file.
     """
     file_path = Path(file_path)
-    with file_path.open('wt') as handle:
+    with file_path.open("wt") as handle:
         json.dump(content, handle, indent=4, sort_keys=False)
 
 
@@ -195,8 +253,7 @@ def get_all_data(data_loader):
 
 
 def split_train_val(x_train, y_train, splitting_ratio=0.2):
-    """Split the data into training and validation set.
-    """
+    """Split the data into training and validation set."""
     num_samples = x_train.shape[0]
     num_train_samples = int(num_samples * (1 - splitting_ratio))
 
