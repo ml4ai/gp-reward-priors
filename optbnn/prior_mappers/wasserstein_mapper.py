@@ -109,24 +109,24 @@ class WassersteinDistance:
             if not self.gpu_gp:
                 X = X.to("cpu")
                 aux_X = aux_X.to("cpu")
-    
+
             # Draw functions from GP
             gp_samples_bag = (
-                self.gp.sample_functions(X.double(), aux_X.double(),n_samples_bag)
+                self.gp.sample_functions(X.double(), n_samples_bag,aux_X.double())
                 .detach()
                 .float()
                 .to(self.device)
             )
             if self.output_dim > 1:
                 gp_samples_bag = gp_samples_bag.squeeze()
-    
+
             if not self.gpu_gp:
                 X = X.to(self.device)
                 aux_X = aux_X.to(self.device)
         else:
             if not self.gpu_gp:
                 X = X.to("cpu")
-    
+
             # Draw functions from GP
             gp_samples_bag = (
                 self.gp.sample_functions(X.double(), n_samples_bag)
@@ -136,7 +136,7 @@ class WassersteinDistance:
             )
             if self.output_dim > 1:
                 gp_samples_bag = gp_samples_bag.squeeze()
-    
+
             if not self.gpu_gp:
                 X = X.to(self.device)
 
@@ -289,7 +289,7 @@ class MapperWasserstein(object):
 
                 # Draw functions from GP
                 gp_samples = (
-                    self.gp.sample_functions(X.double(), aux_X.double(), n_samples)
+                    self.gp.sample_functions(X.double(), n_samples,aux_X.double())
                     .detach()
                     .float()
                     .to(self.device)
@@ -315,6 +315,7 @@ class MapperWasserstein(object):
                 self.wasserstein.wasserstein_optimisation(
                     X,
                     n_samples,
+                    aux_X=aux_X,
                     n_steps=wasserstein_steps[1],
                     threshold=self.wasserstein_threshold,
                     debug=debug,
