@@ -16,10 +16,19 @@ from ..utils.util import inf_loop, ensure_dir, prepare_device
 
 
 class BayesNet:
-    def __init__(self, net, likelihood, prior, ckpt_dir, temperature=1.0,
-                 sampling_method="adaptive_sghmc",
-                 weights_format="state_dict", task="regression",
-                 logger=None, n_gpu=0):
+    def __init__(
+        self,
+        net,
+        likelihood,
+        prior,
+        ckpt_dir,
+        temperature=1.0,
+        sampling_method="adaptive_sghmc",
+        weights_format="state_dict",
+        task="regression",
+        logger=None,
+        n_gpu=0,
+    ):
         """
         Bayesian Neural Networks use uses stochastic gradient MCMC methods
             to sample from the posterior distribution.
@@ -33,8 +42,8 @@ class BayesNet:
             sampling_method: specifies the sampling strategy.
             weights_format: str, the format of sampled weights; possible
                 values: state_dict, tuple.
-            task: str, the type of task, which is either `classification`,
-                or `regression`.
+            task: str, the type of task, which is `classification`,`regression`,
+                or `pref` (twin network call)
             logger: instance of logging.Logger.
         """
         self.net = net
@@ -59,8 +68,7 @@ class BayesNet:
         self.sampled_weights = []
         self.num_samples = 0
         self.num_saved_sets_weights = 0
-        self.sampled_weights_dir = os.path.join(self.ckpt_dir,
-                                                "sampled_weights")
+        self.sampled_weights_dir = os.path.join(self.ckpt_dir, "sampled_weights")
         ensure_dir(self.sampled_weights_dir)
 
         # Setup GPU device if available, move model into configured device
@@ -80,20 +88,19 @@ class BayesNet:
 
     @property
     def network_weights(self):
-        """Extract current network weight values.
-        """
+        """Extract current network weight values."""
         if self.weights_format == "tuple":
             return tuple(
                 np.asarray(parameter.data.clone().detach().cpu().numpy())
-                for parameter in self.net.parameters())
+                for parameter in self.net.parameters()
+            )
 
         elif self.weights_format == "state_dict":
             return self.net.state_dict()
 
     @network_weights.setter
     def network_weights(self, weights):
-        """Assign new weights to our neural networks parameters.
-        """
+        """Assign new weights to our neural networks parameters."""
         if self.weights_format == "tuple":
             for parameter, sample in zip(self.net.parameters(), weights):
                 parameter.copy_(torch.from_numpy(sample))
@@ -117,11 +124,18 @@ class BayesNet:
         Return:
             The negative log joint density.
         """
-        return (self.lik_module(fx_batch, y_batch)) / y_batch.shape[0] + \
-            self.prior_module(self.net) / num_datapoints
+        return (self.lik_module(fx_batch, y_batch)) / y_batch.shape[
+            0
+        ] + self.prior_module(self.net) / num_datapoints
 
-    def _initialize_sampler(self, num_datapoints, lr=1e-2, mdecay=0.05,
-                            num_burn_in_steps=3000, epsilon=1e-10):
+    def _initialize_sampler(
+        self,
+        num_datapoints,
+        lr=1e-2,
+        mdecay=0.05,
+        num_burn_in_steps=3000,
+        epsilon=1e-10,
+    ):
         """Initialize a stochastic gradient MCMC sampler.
 
         Args:
@@ -131,25 +145,23 @@ class BayesNet:
             num_burn_in_steps: int, number of burn-in steps to perform.
                 This value is passed to the given `sampler` if it supports
                 special burn-in specific behavior like that of Adaptive SGHMC.
-            epsilon: float, epsilon for numerical stability. 
+            epsilon: float, epsilon for numerical stability.
         """
         dtype = np.float32
         self.sampler_params = {}
 
         # Apply temperature scaling
-        self.sampler_params['scale_grad'] = dtype(num_datapoints) / self.temperature
-        self.sampler_params['lr'] = dtype(lr)
-        self.sampler_params['mdecay'] = dtype(mdecay)
+        self.sampler_params["scale_grad"] = dtype(num_datapoints) / self.temperature
+        self.sampler_params["lr"] = dtype(lr)
+        self.sampler_params["mdecay"] = dtype(mdecay)
 
         if self.sampling_method == "adaptive_sghmc":
-            self.sampler_params['num_burn_in_steps'] = num_burn_in_steps
-            self.sampler_params['epsilon'] = dtype(epsilon)
+            self.sampler_params["num_burn_in_steps"] = num_burn_in_steps
+            self.sampler_params["epsilon"] = dtype(epsilon)
 
-            self.sampler = AdaptiveSGHMC(self.net.parameters(),
-                                         **self.sampler_params)
+            self.sampler = AdaptiveSGHMC(self.net.parameters(), **self.sampler_params)
         elif self.sampling_method == "sghmc":
-            self.sampler = SGHMC(self.net.parameters(),
-                                 **self.sampler_params)
+            self.sampler = SGHMC(self.net.parameters(), **self.sampler_params)
 
     def _save_sampled_weights(self):
         """Save a set of sampled weights to file.
@@ -157,9 +169,10 @@ class BayesNet:
         Args:
             sampled_weights: a state_dict containing the model's parameters.
         """
-        file_path = os.path.join(self.sampled_weights_dir,
-                                 "sampled_weights_{0:07d}".format(
-                                     self.num_saved_sets_weights))
+        file_path = os.path.join(
+            self.sampled_weights_dir,
+            "sampled_weights_{0:07d}".format(self.num_saved_sets_weights),
+        )
         torch.save({"sampled_weights": self.sampled_weights}, file_path)
         self.num_saved_sets_weights += 1
 
@@ -167,7 +180,7 @@ class BayesNet:
         """Load a set of sampled weights from a given file.
 
         Args:
-            file_path: str, the path to the file containing a set of sampled 
+            file_path: str, the path to the file containing a set of sampled
                 weights.
 
         Returns:
@@ -183,6 +196,7 @@ class BayesNet:
 
         Returns: a generator for loading sampled weights.
         """
+
         def load_weights(file_path):
             checkpoint = torch.load(file_path)
             sampled_weights = checkpoint["sampled_weights"]
@@ -190,8 +204,9 @@ class BayesNet:
             return sampled_weights
 
         def sampled_weights_loader(sampled_weights_dir):
-            file_paths = glob.glob(os.path.join(sampled_weights_dir,
-                                                "sampled_weights*"))
+            file_paths = glob.glob(
+                os.path.join(sampled_weights_dir, "sampled_weights*")
+            )
             for file_path in file_paths:
                 for weights in load_weights(file_path):
                     yield weights
@@ -202,13 +217,23 @@ class BayesNet:
 
         return sampled_weights_loader(self.sampled_weights_dir)
 
-    def sample_multi_chains(self, x_train=None, y_train=None, data_loader=None,
-                            num_samples=None, num_chains=1, keep_every=100,
-                            n_discarded=0, num_burn_in_steps=3000,
-                            lr=1e-2, batch_size=32,
-                            epsilon=1e-10, mdecay=0.05,
-                            print_every_n_samples=10,
-                            resample_prior_every=1000):
+    def sample_multi_chains(
+        self,
+        x_train=None,
+        y_train=None,
+        data_loader=None,
+        num_samples=None,
+        num_chains=1,
+        keep_every=100,
+        n_discarded=0,
+        num_burn_in_steps=3000,
+        lr=1e-2,
+        batch_size=32,
+        epsilon=1e-10,
+        mdecay=0.05,
+        print_every_n_samples=10,
+        resample_prior_every=1000,
+    ):
         """
         Use multiple chains of sampling.
 
@@ -242,23 +267,47 @@ class BayesNet:
         for chain in range(num_chains):
             self.print_info("Chain: {}".format(chain))
             self.net.reset_parameters()
-            self.train(x_train, y_train, data_loader, num_samples, keep_every,
-                       n_discarded, num_burn_in_steps,
-                       lr, batch_size, epsilon, mdecay,
-                       print_every_n_samples, continue_training=False,
-                       clear_sampled_weights=False,
-                       resample_prior_every=resample_prior_every)
+            self.train(
+                x_train,
+                y_train,
+                data_loader,
+                num_samples,
+                keep_every,
+                n_discarded,
+                num_burn_in_steps,
+                lr,
+                batch_size,
+                epsilon,
+                mdecay,
+                print_every_n_samples,
+                continue_training=False,
+                clear_sampled_weights=False,
+                resample_prior_every=resample_prior_every,
+            )
             if self.task == "classification":
                 self._save_sampled_weights()
                 self.sampled_weights.clear()
                 self._save_checkpoint(mode="last")
 
-    def train(self, x_train=None, y_train=None, data_loader=None,
-              num_samples=None, keep_every=100, n_discarded=0,
-              num_burn_in_steps=3000, lr=1e-2, batch_size=32, epsilon=1e-10,
-              mdecay=0.05, print_every_n_samples=10, continue_training=False,
-              clear_sampled_weights=True, resample_prior_every=1000,
-              resample_hyper_prior_burn_in=True):
+    def train(
+        self,
+        x_train=None,
+        y_train=None,
+        data_loader=None,
+        num_samples=None,
+        keep_every=100,
+        n_discarded=0,
+        num_burn_in_steps=3000,
+        lr=1e-2,
+        batch_size=32,
+        epsilon=1e-10,
+        mdecay=0.05,
+        print_every_n_samples=10,
+        continue_training=False,
+        clear_sampled_weights=True,
+        resample_prior_every=1000,
+        resample_hyper_prior_burn_in=True,
+    ):
         """
         Train a BNN using a given dataset.
 
@@ -299,24 +348,32 @@ class BayesNet:
                 # Normalize the dataset
                 x_train, y_train = x_train.squeeze(), y_train.squeeze()
                 x_train_, y_train_ = self._normalize_data(x_train, y_train)
+            if self.task == "pref":
+                x_train_, y_train_ = (
+                    torch.from_numpy(x_train.squeeze()).float(),
+                    torch.from_numpy(y_train.squeeze()).long(),
+                )
 
             # Initialize a data loader for training data.
             train_loader = inf_loop(
                 data_utils.DataLoader(
                     data_utils.TensorDataset(x_train_, y_train_),
                     batch_size=batch_size,
-                    shuffle=True))
+                    shuffle=True,
+                )
+            )
 
         # Estimate the number of update steps
-        num_steps = 0 if num_samples is None else (num_samples+1) * keep_every
+        num_steps = 0 if num_samples is None else (num_samples + 1) * keep_every
 
         # Initialize the sampler
         if not continue_training:
             if clear_sampled_weights:
                 self.sampled_weights.clear()
             self.net = self.net.float()
-            self._initialize_sampler(num_datapoints, lr, mdecay,
-                                     num_burn_in_steps, epsilon)
+            self._initialize_sampler(
+                num_datapoints, lr, mdecay, num_burn_in_steps, epsilon
+            )
             num_steps += num_burn_in_steps
 
         # Initialize the batch generator
@@ -324,18 +381,31 @@ class BayesNet:
 
         # Start sampling
         self.net.train()
-        n_samples = 0 # used to discard first samples
+        n_samples = 0  # used to discard first samples
         for step, (x_batch, y_batch) in batch_generator:
             x_batch, y_batch = x_batch.to(self.device), y_batch.to(self.device)
-            if self.task == "regression":
-                x_batch = x_batch.view(y_batch.shape[0], -1)
-                y_batch = y_batch.view(-1, 1)
 
             # Forward pass
             if self.task == "regression":
+                x_batch = x_batch.view(y_batch.shape[0], -1)
+                y_batch = y_batch.view(-1, 1)
                 fx_batch = self.net(x_batch).view(-1, 1)
             elif self.task == "classification":
                 fx_batch = self.net(x_batch, log_softmax=True)
+            elif self.task == "pref":
+                B, _, T, d_dim = x_batch.size()
+                obs_dim = d_dim - 1
+                am_1 = x_batch[:, 0, :, obs_dim]
+                am_2 = x_batch[:, 1, :, obs_dim]
+                x_batch_1 = x_batch[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+                x_batch_2 = x_batch[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+                pred_1 = self.net(x_batch_1).view(B, T) * am_1
+                pred_2 = self.net(x_batch_2).view(B, T) * am_2
+
+                sum_pred_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
+                sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+                fx_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
 
             self.sampler.zero_grad()
             # Calculate the negative log joint density
@@ -343,7 +413,7 @@ class BayesNet:
 
             # Estimate the gradients
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), 100.)
+            torch.nn.utils.clip_grad_norm_(self.net.parameters(), 100.0)
 
             # Update parameters
             self.sampler.step()
@@ -359,12 +429,12 @@ class BayesNet:
                             self.prior_module.resample(self.net)
 
             # Save the sampled weight
-            if (step > num_burn_in_steps) and \
-                    ((step - num_burn_in_steps) % keep_every == 0):
+            if (step > num_burn_in_steps) and (
+                (step - num_burn_in_steps) % keep_every == 0
+            ):
                 n_samples += 1
                 if n_samples > n_discarded:
-                    self.sampled_weights.append(copy.deepcopy(
-                        self.network_weights))
+                    self.sampled_weights.append(copy.deepcopy(self.network_weights))
                     self.num_samples += 1
 
                     # Print evaluation on training data
@@ -392,14 +462,17 @@ class BayesNet:
 
         file_path = os.path.join(self.ckpt_dir, file_name)
 
-        torch.save({
-            "step": self.step,
-            "num_samples": self.num_samples,
-            "num_saved_sets_weights": self.num_saved_sets_weights,
-            "sampler_params": self.sampler_params,
-            "model_state_dict": self.net.state_dict(),
-            "sampler_state_dict": self.sampler.state_dict(),
-        }, file_path)
+        torch.save(
+            {
+                "step": self.step,
+                "num_samples": self.num_samples,
+                "num_saved_sets_weights": self.num_saved_sets_weights,
+                "sampler_params": self.sampler_params,
+                "model_state_dict": self.net.state_dict(),
+                "sampler_state_dict": self.sampler.state_dict(),
+            },
+            file_path,
+        )
 
     def load_checkpoint(self, path):
         """Load sampled weights, sampler state from a checkpoint file.
@@ -412,16 +485,15 @@ class BayesNet:
         self.num_samples = checkpoint["num_samples"]
         self.num_saved_sets_weights = checkpoint["num_saved_sets_weights"]
         self.net.load_state_dict(checkpoint["model_state_dict"])
-        self._load_sampler(checkpoint["sampler_state_dict"],
-                           checkpoint["sampler_params"])
+        self._load_sampler(
+            checkpoint["sampler_state_dict"], checkpoint["sampler_params"]
+        )
 
     def _load_sampler(self, state_dict, sampler_params):
         """Load sampler from state dict and set of parameters"""
         self.sampler_params = sampler_params
         if self.sampling_method == "adaptive_sghmc":
-            self.sampler = AdaptiveSGHMC(self.net.parameters(),
-                                         **sampler_params)
+            self.sampler = AdaptiveSGHMC(self.net.parameters(), **sampler_params)
         elif self.sampling_method == "sghmc":
-            self.sampler = SGHMC(self.net.parameters(),
-                                 **sampler_params)
+            self.sampler = SGHMC(self.net.parameters(), **sampler_params)
         self.sampler.load_state_dict(state_dict)
