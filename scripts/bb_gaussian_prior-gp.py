@@ -411,3 +411,5 @@ def train(config: TrainConfig):
 
 
 # In[ ]:
+if __name__ == "__main__":
+    train()

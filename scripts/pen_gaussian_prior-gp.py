@@ -408,3 +408,6 @@ def train(config: TrainConfig):
         post_fig = os.path.join(config.FIG_DIR, "pen_gp_posteriors_plot.png")
         plt.savefig(post_fig)
         plt.close(fig)
+
+if __name__ == "__main__":
+    train()
