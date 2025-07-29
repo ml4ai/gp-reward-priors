@@ -84,6 +84,7 @@ class TrainConfig:
     mdecay: float = 0.01
     print_every_n_samples: int = 5
     dataset: str = "data/bb/t0012_pref.hdf5"
+    dataset_id: str = "bb_t0012"
     training_split: float = 0.8
     # general params
     run_prior_tuning: bool = True

@@ -84,6 +84,7 @@ class TrainConfig:
     mdecay: float = 0.01
     print_every_n_samples: int = 5
     dataset: str = "data/adroit_pen/AdroitHandPen-v1_pref_b.hdf5"
+    dataset_id: str = "pen"
     training_split: float = 0.8
     # general params
     run_prior_tuning: bool = True
@@ -408,6 +409,7 @@ def train(config: TrainConfig):
         post_fig = os.path.join(config.FIG_DIR, "pen_gp_posteriors_plot.png")
         plt.savefig(post_fig)
         plt.close(fig)
+
 
 if __name__ == "__main__":
     train()
