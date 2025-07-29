@@ -1,4 +1,5 @@
 import numpy as np
+import wandb
 import torch
 import torch.nn as nn
 import os
@@ -364,6 +365,7 @@ class MapperWasserstein(object):
             prior_optimizer.step()
 
             wdist_hist.append(float(wdist))
+            wandb.log({"W_dist": float(wdist)}, step=it)
             if (it % print_every == 0) or it == 1:
                 self.print_info(
                     ">>> Iteration # {:3d}: "

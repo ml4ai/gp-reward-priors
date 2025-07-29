@@ -2,6 +2,7 @@ import itertools
 import os
 
 import numpy as np
+import wandb
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -100,7 +101,9 @@ class MapperWassersteinGP(object):
                 return loss
 
             for it in range(1, num_iters + 1):
-                X_batch, aux_X_batch = self.data_generator.get_batches(self.n_data, batches)
+                X_batch, aux_X_batch = self.data_generator.get_batches(
+                    self.n_data, batches
+                )
                 prior_optimizer.zero_grad()
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
@@ -109,6 +112,7 @@ class MapperWassersteinGP(object):
                 with torch.no_grad():
                     wdist = torch.sqrt(losses).sum() / X_batch.size(0)
                     wdist_hist.append(float(wdist))
+                    wandb.log({"avg_2_W_dist": float(wdist)}, step=it)
                     if (it % print_every == 0) or it == 1:
                         self.print_info(
                             ">>> Iteration # {:3d}: "
@@ -162,6 +166,7 @@ class MapperWassersteinGP(object):
                 with torch.no_grad():
                     wdist = torch.sqrt(losses).sum() / X_batch.size(0)
                     wdist_hist.append(float(wdist))
+                    wandb.log({"avg_2_W_dist": float(wdist)}, step=it)
                     if (it % print_every == 0) or it == 1:
                         self.print_info(
                             ">>> Iteration # {:3d}: "
