@@ -21,7 +21,7 @@ class PrefNet(BayesNet):
         sampling_method="adaptive_sghmc",
         logger=None,
         n_gpu=0,
-        name="bn"
+        name="bn",
     ):
         """Bayesian Neural Networks for regression task.
 
@@ -48,6 +48,7 @@ class PrefNet(BayesNet):
             logger=logger,
             n_gpu=n_gpu,
         )
+        self.name = name
 
     def train_and_evaluate(
         self,
@@ -214,13 +215,16 @@ class PrefNet(BayesNet):
         )
 
         if train:
-            wandb.log({f"{name}_mean_cross_entropy": ce, f"{name}_mean_accuracy":acc}, step=self.num_samples)
+            wandb.log(
+                {f"{self.name}_mean_cross_entropy": ce, f"{self.name}_mean_accuracy": acc},
+                step=self.num_samples,
+            )
             self.print_info(
                 "Samples # {:5d} : CE = {:.4f} "
                 "ACC = {:.4f} ".format(self.num_samples, ce, acc)
             )
         else:
-            wandb.log({f"{name}_mean_cross_entropy": ce, f"{name}_mean_accuracy":acc})
+            wandb.log({f"{self.name}_mean_cross_entropy": ce, f"{self.name}_mean_accuracy": acc})
             self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
-            
+
         self.net.train()
