@@ -197,13 +197,13 @@ class GaussianMLPReparameterization(nn.Module):
         else:
             raise NotImplementedError
 
-    def sample_nngp(self, X, num_samples):
+    def sample_nngp(self, X, num_samples,device):
         """
         Produce samples from the prior latent functions at the points X.
         """
         K = self.compute_covariance(X)
 
-        mu = torch.zeros(K.size(0)).float()
+        mu = torch.zeros(K.size(0)).float().to(device)
         weight_generator = torch.distributions.multivariate_normal.MultivariateNormal(
             mu, K
         )

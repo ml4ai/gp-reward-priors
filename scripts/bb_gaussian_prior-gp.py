@@ -250,7 +250,7 @@ def train(config: TrainConfig):
         bb_prior.sample_functions(X, n_plot, aux_X).detach().cpu().numpy().squeeze()
     )
 
-    nngp_samples = opt_bnn.sample_nngp(X, n_plot).detach().cpu().numpy().squeeze()
+    nngp_samples = opt_bnn.sample_nngp(X, n_plot,device).detach().cpu().numpy().squeeze()
 
     opt_bnn_samples = (
         opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
