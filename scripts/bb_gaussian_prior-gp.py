@@ -156,7 +156,7 @@ def train(config: TrainConfig):
 
     # p_mean = np.array([0.0, -1.0, 1.0, 10.0, 50.0, -5.0])
     p_covariance = np.identity(3)
-    bb_prior = LCFModel(p_covariance, bb_reward_prior,device=device)
+    bb_prior = LCFModel(p_covariance, bb_reward_prior, device=device)
     bb_prior = bb_prior.to(device)
 
     # In[10]:
@@ -244,7 +244,8 @@ def train(config: TrainConfig):
     n_plot = 4000
     util.set_seed(config.seed + 7)
     X, aux_X = data_generator.get(100)
-
+    X = X.to(device)
+    aux_X = aux_X.to(device)
     gp_samples = (
         bb_prior.sample_functions(X, n_plot, aux_X).detach().cpu().numpy().squeeze()
     )
