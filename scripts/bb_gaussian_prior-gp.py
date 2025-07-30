@@ -156,7 +156,7 @@ def train(config: TrainConfig):
 
     # p_mean = np.array([0.0, -1.0, 1.0, 10.0, 50.0, -5.0])
     p_covariance = np.identity(3)
-    bb_prior = LCFModel(p_covariance, bb_reward_prior)
+    bb_prior = LCFModel(p_covariance, bb_reward_prior,device=device)
     bb_prior = bb_prior.to(device)
 
     # In[10]:

@@ -224,24 +224,24 @@ class LCFModel(torch.nn.Module):
     This does not have working forward function (for now)
     """
 
-    def __init__(self, p_covariance, function_vect, p_mean=None, name=None):
+    def __init__(self, p_covariance, function_vect, device,p_mean=None, name=None):
         super(LCFModel, self).__init__()
         self.name = name
         self.function_vect = function_vect
-
+        self.device=device
         if isinstance(p_covariance, np.ndarray):
             if p_covariance.ndim == 1:
                 p_covariance = np.diag(p_covariance)
-            p_covariance = torch.from_numpy(p_covariance).float()
+            p_covariance = torch.from_numpy(p_covariance).float().to(device)
         else:
             if p_covariance.ndim == 1:
-                p_covariance = torch.diag(p_covariance).float()
+                p_covariance = torch.diag(p_covariance).float().to(device)
 
         if p_mean is not None:
             if isinstance(p_mean, np.ndarray):
-                p_mean = torch.from_numpy(p_mean).float()
+                p_mean = torch.from_numpy(p_mean).float().to(device)
         else:
-            p_mean = torch.zeros(p_covariance.size(0)).float()
+            p_mean = torch.zeros(p_covariance.size(0)).float().to(device)
         self.weight_generator = (
             torch.distributions.multivariate_normal.MultivariateNormal(
                 p_mean, p_covariance
@@ -261,9 +261,9 @@ class LCFModel(torch.nn.Module):
         If given, its assumed aux_X.shape[0] == X.shape[0]
         """
         if aux_X is not None:
-            Y = self.function_vect(X, aux_X)
+            Y = self.function_vect(X, aux_X,self.device)
         else:
-            Y = self.function_vect(X)
+            Y = self.function_vect(X,self.device)
         return torch.mm(
             Y,
             self.weight_generator.sample(torch.Size([num_samples])).T.double(),
@@ -276,9 +276,9 @@ class LCFModel(torch.nn.Module):
         If given, its assumed aux_X.shape[0] == X.shape[0]
         """
         if aux_X is not None:
-            Y = self.function_vect(X, aux_X)
+            Y = self.function_vect(X, aux_X,self.device)
         else:
-            Y = self.function_vect(X)
+            Y = self.function_vect(X,self.device)
 
         return torch.mm(
             torch.mm(Y, self.p_covariance.double()), Y.T

@@ -11,11 +11,11 @@ import numpy as np
 # X, the set of state-action pairs is not actually considered here. This reward
 # function is based on the next state only. But we keep X to conform with how the
 # LCFmodel class works
-def pen_task_reward_prior(X, aux_X):
+def pen_task_reward_prior(X, aux_X,device):
     if isinstance(aux_X, np.ndarray):
-        aux_X = torch.from_numpy(aux_X)
+        aux_X = torch.from_numpy(aux_X).to(device)
 
-    intercept = torch.ones(aux_X.size(0)).double()
+    intercept = torch.ones(aux_X.size(0)).double().to(device)
 
     goal_distance = torch.linalg.norm(aux_X[:, 39:42], dim=1).double()
     orien_similarity = torch.einsum(
@@ -34,9 +34,9 @@ def pen_task_reward_prior(X, aux_X):
 
 
 # Same as above, no intercept
-def pen_task_reward_prior_no_intercept(X, aux_X):
+def pen_task_reward_prior_no_intercept(X, aux_X,device):
     if isinstance(aux_X, np.ndarray):
-        aux_X = torch.from_numpy(aux_X)
+        aux_X = torch.from_numpy(aux_X).to(device)
 
     goal_distance = torch.linalg.norm(aux_X[:, 39:42], dim=1).double()
     orien_similarity = torch.einsum(
@@ -55,11 +55,11 @@ def pen_task_reward_prior_no_intercept(X, aux_X):
 
 
 # BB reward function. Again, just aux_X is used here. Assumes the state contains 6 closest obstacles
-def bb_reward_prior(X, aux_X):
+def bb_reward_prior(X, aux_X,device):
     if isinstance(aux_X, np.ndarray):
-        aux_X = torch.from_numpy(aux_X)
+        aux_X = torch.from_numpy(aux_X).to(device)
 
-    intercept = torch.ones(aux_X.size(0)).double()
+    intercept = torch.ones(aux_X.size(0)).double().to(device)
 
     goal_distance = torch.sqrt(
         (aux_X[:, 20] - aux_X[:, 0]) ** 2 + (aux_X[:, 21] - aux_X[:, 1]) ** 2
