@@ -144,12 +144,13 @@ def posterior_sampler(preds, n_samps):
 
 @pyrallis.wrap()
 def train(config: TrainConfig):
+    run_id = str(uuid.uuid4())
     wandb.init(
         config=asdict(config),
         project=config.project,
         group=config.group,
         name=config.name,
-        id=str(uuid.uuid4()),
+        id=run_id,
         save_code=True,
     )
     util.set_seed(config.seed)
@@ -284,6 +285,15 @@ def train(config: TrainConfig):
 
     # In[17]:
     if config.run_training:
+        wandb.init(
+            config=asdict(config),
+            project=config.project,
+            group=config.group,
+            name=config.name,
+            id=run_id,
+            save_code=True,
+            resume_from=f"{run_id}?_step=0",
+        )
         # SGHMC Hyper-parameters
         sampling_configs = {
             "batch_size": config.batch_size,  # Mini-batch size
