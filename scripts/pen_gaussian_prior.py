@@ -302,7 +302,7 @@ def train(config: TrainConfig):
     # In[ ]:
 
     # In[17]:
-    if run_training:
+    if config.run_training:
         # SGHMC Hyper-parameters
         sampling_configs = {
             "batch_size": config.batch_size,  # Mini-batch size

@@ -250,7 +250,9 @@ def train(config: TrainConfig):
         pen_prior.sample_functions(X, n_plot, aux_X).detach().cpu().numpy().squeeze()
     )
 
-    nngp_samples = opt_bnn.sample_nngp(X, n_plot,device).detach().cpu().numpy().squeeze()
+    nngp_samples = (
+        opt_bnn.sample_nngp(X, n_plot, device).detach().cpu().numpy().squeeze()
+    )
 
     opt_bnn_samples = (
         opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
@@ -281,7 +283,7 @@ def train(config: TrainConfig):
     plt.close(fig)
 
     # In[17]:
-    if run_training:
+    if config.run_training:
         # SGHMC Hyper-parameters
         sampling_configs = {
             "batch_size": config.batch_size,  # Mini-batch size
