@@ -144,14 +144,6 @@ def posterior_sampler(preds, n_samps):
 
 @pyrallis.wrap()
 def train(config: TrainConfig):
-    wandb.init(
-        config=asdict(config),
-        project=config.project,
-        group=config.group,
-        name=config.name,
-        id=str(uuid.uuid4()),
-        save_code=True,
-    )
     util.set_seed(config.seed)
 
     # p_mean = np.array([0.0, -1.0, 1.0, 10.0, 50.0, -5.0])
@@ -192,6 +184,14 @@ def train(config: TrainConfig):
     # Initiialize the Wasserstein optimizer
     util.set_seed(config.seed)
     if config.run_prior_tuning:
+        wandb.init(
+            config=asdict(config),
+            project=config.project,
+            group=config.group,
+            name=f"{config.name}_tuning",
+            id=str(uuid.uuid4()),
+            save_code=True,
+        )        
         mapper = MapperWassersteinGP(
             pen_prior,
             opt_bnn,
@@ -213,6 +213,7 @@ def train(config: TrainConfig):
         )
         path = os.path.join(config.OUT_DIR, "wsr_values.log")
         np.savetxt(path, w_hist, fmt="%.6e")
+        wandb.finish()
 
     # In[14]:
 
@@ -318,7 +319,14 @@ def train(config: TrainConfig):
         saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
         util.ensure_dir(saved_dir)
         bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="FG")
-
+        wandb.init(
+            config=asdict(config),
+            project=config.project,
+            group=config.group,
+            name=f"{config.name}_FG_training",
+            id=str(uuid.uuid4()),
+            save_code=True,
+        )
         # Start sampling
         bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
 
@@ -337,6 +345,7 @@ def train(config: TrainConfig):
                 float(r_hat.mean()), float(r_hat.std())
             )
         )
+        wandb.finish()
         bnn_std_preds = bnn_std_preds.squeeze().T
 
         # Save the predictions
@@ -347,7 +356,7 @@ def train(config: TrainConfig):
 
         # Load the optimized prior
         ckpt_path = os.path.join(
-            OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
         )
         prior = OptimGaussianPrior(ckpt_path)
 
@@ -361,7 +370,14 @@ def train(config: TrainConfig):
         bayes_net_optim = PrefNet(
             net, likelihood, prior, saved_dir, n_gpu=1, name="GPi"
         )
-
+        wandb.init(
+            config=asdict(config),
+            project=config.project,
+            group=config.group,
+            name=f"{config.name}_GPi_training",
+            id=str(uuid.uuid4()),
+            save_code=True,
+        )
         # Start sampling
         bayes_net_optim.sample_multi_chains(X_train, y_train, **sampling_configs)
 
@@ -381,6 +397,7 @@ def train(config: TrainConfig):
                 float(r_hat.mean()), float(r_hat.std())
             )
         )
+        wandb.finish()
         bnn_optim_preds = bnn_optim_preds.squeeze().T
 
         # Save the predictions
