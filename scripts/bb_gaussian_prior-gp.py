@@ -356,7 +356,7 @@ def train(config: TrainConfig):
 
         # Load the optimized prior
         ckpt_path = os.path.join(
-            OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
         )
         prior = OptimGaussianPrior(ckpt_path)
 
