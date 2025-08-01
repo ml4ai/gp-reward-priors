@@ -12,9 +12,9 @@ save_ckpt_every: 50
 print_every: 20
 batch_size: 256
 num_samples: 50
-n_discarded: 10
+n_discarded: 20
 num_burn_in_steps: 5000
-keep_every: 2000
+keep_every: 3000
 sghmc_lr: 0.008
 num_chains: 4
 mdecay: 0.01
