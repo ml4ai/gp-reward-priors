@@ -13,7 +13,7 @@ print_every: 20
 batch_size: 256
 num_samples: 50
 n_discarded: 10
-num_burn_in_steps: 3000
+num_burn_in_steps: 5000
 keep_every: 2000
 sghmc_lr: 0.008
 num_chains: 4
