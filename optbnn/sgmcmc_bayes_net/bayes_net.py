@@ -284,7 +284,7 @@ class BayesNet:
                 clear_sampled_weights=False,
                 resample_prior_every=resample_prior_every,
             )
-            if self.task == "classification":
+            if self.task == "classification" or self.task == "pref":
                 self._save_sampled_weights()
                 self.sampled_weights.clear()
                 self._save_checkpoint(mode="last")
