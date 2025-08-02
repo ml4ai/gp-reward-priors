@@ -11,11 +11,11 @@ lr: 0.08
 save_ckpt_every: 50
 print_every: 20
 batch_size: 256
-num_samples: 50
-n_discarded: 20
+num_samples: 60
+n_discarded: 30
 num_burn_in_steps: 5000
-keep_every: 3000
-sghmc_lr: 0.008
+keep_every: 5000
+sghmc_lr: 0.01
 num_chains: 4
 mdecay: 0.01
 print_every_n_samples: 5
