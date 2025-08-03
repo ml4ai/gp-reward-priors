@@ -20,6 +20,7 @@ num_chains: 4
 mdecay: 0.01
 print_every_n_samples: 5
 dataset: data/bb/t0012_pref.hdf5
+dataset_id: bb_t0012
 training_split: 0.8
 run_prior_tuning: true
 run_training: true
