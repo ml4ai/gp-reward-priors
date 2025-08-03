@@ -171,6 +171,15 @@ def train(config: TrainConfig):
     depth = config.depth  # Number of hidden layers
     transfer_fn = "relu"  # Activation function
 
+    # Initialize Gaussian prior.
+    # Fixed Prior
+    std_bnn = GaussianMLPReparameterization(
+        input_dim=69,
+        output_dim=1,
+        activation_fn=transfer_fn,
+        hidden_dims=[width] * depth,
+    )
+
     # Prior to be optimized
     opt_bnn = GaussianMLPReparameterization(
         input_dim=69,
@@ -179,6 +188,7 @@ def train(config: TrainConfig):
         hidden_dims=[width] * depth,
     )
 
+    std_bnn = std_bnn.to(device)
     opt_bnn = opt_bnn.to(device)
 
     # In[11]:
