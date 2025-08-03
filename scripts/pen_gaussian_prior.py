@@ -246,7 +246,7 @@ def train(config: TrainConfig):
     # In[ ]:
 
     # Visualize progression of the prior optimization
-    if preload_prior_dir is None:
+    if config.preload_prior_dir is None:
         wdist_file = os.path.join(config.OUT_DIR, "wsr_values.log")
     else:
         wdist_file = os.path.join(config.preload_prior_dir, "wsr_values.log")
@@ -265,7 +265,7 @@ def train(config: TrainConfig):
 
     # Load the optimize prior
     util.set_seed(config.seed)
-    if preload_prior_dir is None:
+    if config.preload_prior_dir is None:
         ckpt_path = os.path.join(
             config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
         )
