@@ -395,9 +395,14 @@ def train(config: TrainConfig):
         # In[21]:
 
         # Load the optimized prior
-        ckpt_path = os.path.join(
-            config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
-        )
+        if config.preload_prior_dir is None:
+            ckpt_path = os.path.join(
+                config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            )
+        else:
+            ckpt_path = os.path.join(
+                config.preload_prior_dir, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            )
         prior = OptimGaussianPrior(ckpt_path)
 
         # Setup likelihood

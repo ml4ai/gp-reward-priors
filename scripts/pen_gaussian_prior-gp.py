@@ -91,6 +91,7 @@ class TrainConfig:
     run_training: bool = True
     seed: int = 1
     OUT_DIR: Optional[str] = "./exp/reward_learning_gp/pen"  # Save path
+    preload_prior_dir: Optional[str] = None
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
@@ -99,7 +100,8 @@ class TrainConfig:
             self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
             util.ensure_dir(self.OUT_DIR)
             util.ensure_dir(self.FIG_DIR)
-
+        if self.preload_prior_dir is not None:
+            self.preload_prior_dir = osp.expanduser(self.preload_prior_dir)
 
 # In[8]:
 
@@ -218,7 +220,10 @@ def train(config: TrainConfig):
     # In[14]:
 
     # Visualize progression of the prior optimization
-    wdist_file = os.path.join(config.OUT_DIR, "wsr_values.log")
+    if config.preload_prior_dir is None:
+        wdist_file = os.path.join(config.OUT_DIR, "wsr_values.log")
+    else:
+        wdist_file = os.path.join(config.preload_prior_dir, "wsr_values.log")
     wdist_vals = np.loadtxt(wdist_file)
 
     fig = plt.figure(figsize=(6, 3.5))
@@ -234,9 +239,14 @@ def train(config: TrainConfig):
 
     # Load the optimize prior
     util.set_seed(config.seed)
-    ckpt_path = os.path.join(
-        config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
-    )
+    if config.preload_prior_dir is None:
+        ckpt_path = os.path.join(
+            config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+        )
+    else:
+        ckpt_path = os.path.join(
+            config.preload_prior_dir, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+        )
     opt_bnn.load_state_dict(torch.load(ckpt_path))
 
     # In[16]:
@@ -355,9 +365,14 @@ def train(config: TrainConfig):
         # In[21]:
 
         # Load the optimized prior
-        ckpt_path = os.path.join(
-            config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
-        )
+        if config.preload_prior_dir is None:
+            ckpt_path = os.path.join(
+                config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            )
+        else:
+            ckpt_path = os.path.join(
+                config.preload_prior_dir, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+            )
         prior = OptimGaussianPrior(ckpt_path)
 
         # Setup likelihood
