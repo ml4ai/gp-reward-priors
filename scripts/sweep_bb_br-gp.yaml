@@ -1,10 +1,10 @@
 project: BR-training
-program: pen_gaussian_prior.py
+program: bb_gaussian_prior-gp.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/pen_gaussian_prior.yaml"
+    value: "scripts/bb_gaussian_prior-gp.yaml"
   run_prior_tuning:
     value: false
   width:
@@ -21,4 +21,3 @@ parameters:
     values: [0.01, 0.008, 0.001, 0.0008, 0.0001]
   mdecay:
     values: [0.01, 0.008, 0.001, 0.0008, 0.0001]
-    

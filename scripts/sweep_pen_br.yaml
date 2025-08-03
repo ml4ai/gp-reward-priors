@@ -1,10 +1,12 @@
 project: BR-training
-program: bb_gaussian_prior-gp.py
+program: pen_gaussian_prior.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_gaussian_prior-gp.yaml"
+    value: "scripts/pen_gaussian_prior.yaml"
+  preload_prior_dir:
+    value: "./exp/reward_learning/pen/br-pen-f86cc2a5"
   run_prior_tuning:
     value: false
   width:
