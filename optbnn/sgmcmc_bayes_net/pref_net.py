@@ -3,8 +3,8 @@
 import copy
 
 import numpy as np
-import wandb
 import torch
+import wandb
 
 from ..metrics.metrics_tensor import accuracy
 from .bayes_net import BayesNet
@@ -123,15 +123,14 @@ class PrefNet(BayesNet):
         self._save_sampled_weights()
         self.print_info("Finish")
 
-    def predict(self, x_test, return_individual_predictions=False):
+    def predict(self, x_test, return_individual_predictions=False, use_map=False):
         """Predicts mean and variance for the given test point.
 
         Args:
             x_test: numpy array, can be (d,) for a single datapoint or (n,d) for a batch of datapoints
             return_individual_predictions: bool, if True also the predictions
                 of the individual models are returned.
-            return_raw_predictions: bool, indicates whether or not return
-                the raw predictions along with the unnormalized predictions.
+            use_map: bool, also returns predictions using the map estimate. Asserts that self.map is not None
 
         Returns:
             a tuple consisting of mean and variance.
@@ -164,8 +163,16 @@ class PrefNet(BayesNet):
         pred_var = np.var(predictions, axis=0)
 
         if return_individual_predictions:
+            if use_map:
+                assert self.map is not None
+                pred_map = network_predict(x_test_, weights=self.map)
+                return pred_mean, pred_var, pred_map, predictions
             return pred_mean, pred_var, predictions
 
+        if use_map:
+            assert self.map is not None
+            pred_map = network_predict(x_test_, weights=self.map)
+            return pred_mean, pred_var, pred_map
         return pred_mean, pred_var
 
     def _print_evaluations(self, x, y, train=True):
@@ -216,7 +223,10 @@ class PrefNet(BayesNet):
 
         if train:
             wandb.log(
-                {f"{self.name}_mean_cross_entropy": ce, f"{self.name}_mean_accuracy": acc},
+                {
+                    f"{self.name}_mean_cross_entropy": ce,
+                    f"{self.name}_mean_accuracy": acc,
+                },
                 step=self.num_samples,
             )
             self.print_info(
@@ -224,7 +234,61 @@ class PrefNet(BayesNet):
                 "ACC = {:.4f} ".format(self.num_samples, ce, acc)
             )
         else:
-            wandb.log({f"{self.name}_mean_cross_entropy": ce, f"{self.name}_mean_accuracy": acc})
+            wandb.log(
+                {
+                    f"{self.name}_mean_cross_entropy": ce,
+                    f"{self.name}_mean_accuracy": acc,
+                }
+            )
             self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
 
         self.net.train()
+
+    def find_map(self, x, y):
+        """find the map estimate given a set of data and set of sampled weights.
+           Asserts that self.sampled_weights is not empty
+
+        Args:
+            x: numpy array, shape [batch_size, num_features], the input data.
+            y: numpy array, shape [batch_size, 1], the corresponding targets.
+        """
+        assert self.sampled_weights
+
+        def network_loss(x, y, weights):
+            with torch.no_grad():
+                self.network_weights = weights
+                B, _, T, d_dim = x.size()
+                obs_dim = d_dim - 1
+                am_1 = x[:, 0, :, obs_dim]
+                am_2 = x[:, 1, :, obs_dim]
+                x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+                x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+                pred_1 = self.net(x_1).view(B, T) * am_1
+                pred_2 = self.net(x_2).view(B, T) * am_2
+
+                sum_pred_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
+                sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+                fx_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
+                return (
+                    self._neg_log_joint(
+                        fx_batch,
+                        y,
+                        B,
+                    )
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+
+        x_t, y_t = (
+            torch.from_numpy(x.squeeze()).float().to(self.device),
+            torch.from_numpy(y.squeeze()).long().to(self.device),
+        )
+        losses = np.array(
+            [
+                network_loss(x_t, y_t, weights=weights)
+                for weights in self.sampled_weights
+            ]
+        )
+        self.map = self.sampled_weights[np.argmin(losses)]

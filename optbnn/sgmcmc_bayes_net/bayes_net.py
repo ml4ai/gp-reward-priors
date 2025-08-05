@@ -78,6 +78,8 @@ class BayesNet:
             self.net = torch.nn.DataParallel(net, device_ids=device_ids)
         self.prior_module = self.prior_module.to(self.device)
 
+        self.map = None
+
     def reset(self):
         self.step = 0
         self.sampler = None
@@ -85,6 +87,7 @@ class BayesNet:
         self.num_samples = 0
         self.num_saved_sets_weights = 0
         self.net.reset_parameters()
+        self.map = None
 
     @property
     def network_weights(self):
@@ -211,7 +214,7 @@ class BayesNet:
                 for weights in load_weights(file_path):
                     yield weights
 
-                self.network_weights.clear()
+                # self.network_weights.clear()
                 if "cuda" in str(self.device):
                     torch.cuda.empty_cache()
 
@@ -477,13 +480,13 @@ class BayesNet:
             file_path,
         )
 
-    def load_checkpoint(self, path):
+    def load_checkpoint(self, path, device):
         """Load sampled weights, sampler state from a checkpoint file.
 
         Args:
             path: str, the path to checkpoint file.
         """
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location=device)
         self.step = checkpoint["step"]
         self.num_samples = checkpoint["num_samples"]
         self.num_saved_sets_weights = checkpoint["num_saved_sets_weights"]
