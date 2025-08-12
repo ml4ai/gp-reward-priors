@@ -203,7 +203,7 @@ class OptimHierarchicalPrior(PriorModule):
         self.device = device
         self.eps = eps
 
-        data = torch.load(saved_path, map_location=torch.device(self.device))
+        data = torch.load(saved_path, map_location=torch.device(self.device),weights_only=False)
         for name, param in data.items():
             self.params[name] = param.to(self.device)
 
@@ -310,7 +310,7 @@ class OptimNormFlowPrior(PriorModule):
         self.model.requires_grad_(False)
         
         if saved_path is not None:
-            data = torch.load(saved_path, map_location=torch.device(self.device))
+            data = torch.load(saved_path, map_location=torch.device(self.device),weights_only=False)
             self.model.load_state_dict(data)
 
     def logp(self, net: nn.Module):
@@ -364,7 +364,7 @@ class OptimGaussianPrior(PriorModule):
         self.params = {}
         self.device = device
 
-        data = torch.load(saved_path, map_location=torch.device(self.device))
+        data = torch.load(saved_path, map_location=torch.device(self.device),weights_only=False)
         for name, param in data.items():
             self.params[name] = param.to(self.device)
 
