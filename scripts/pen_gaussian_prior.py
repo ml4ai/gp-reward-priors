@@ -273,7 +273,7 @@ def train(config: TrainConfig):
         ckpt_path = os.path.join(
             config.preload_prior_dir, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
         )
-    opt_bnn.load_state_dict(torch.load(ckpt_path))
+    opt_bnn.load_state_dict(torch.load(ckpt_path, weights_only=False))
 
     # In[ ]:
 

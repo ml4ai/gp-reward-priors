@@ -189,7 +189,7 @@ class BayesNet:
         Returns:
             sampled_weights: a state_dict containing the model's parameters.
         """
-        checkpoint = torch.load(file_path)
+        checkpoint = torch.load(file_path,weights_only=False)
         sampled_weights = checkpoint["sampled_weights"]
 
         return sampled_weights
@@ -201,7 +201,7 @@ class BayesNet:
         """
 
         def load_weights(file_path):
-            checkpoint = torch.load(file_path)
+            checkpoint = torch.load(file_path,weights_only=False)
             sampled_weights = checkpoint["sampled_weights"]
 
             return sampled_weights
@@ -486,7 +486,7 @@ class BayesNet:
         Args:
             path: str, the path to checkpoint file.
         """
-        checkpoint = torch.load(path, map_location=device)
+        checkpoint = torch.load(path, map_location=device,weights_only=False)
         self.step = checkpoint["step"]
         self.num_samples = checkpoint["num_samples"]
         self.num_saved_sets_weights = checkpoint["num_saved_sets_weights"]
