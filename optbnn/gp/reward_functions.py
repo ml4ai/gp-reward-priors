@@ -29,7 +29,7 @@ def pen_task_reward_prior(X, aux_X,device):
     dropped = (aux_X[:, 26] < 0.075).double()
 
     return torch.stack(
-        [intercept, -goal_distance, orien_similarity, close, closer, -dropped], dim=1
+        [intercept, -1.0*goal_distance, orien_similarity, 10.0*close, 50.0*closer, -5*dropped], dim=1
     ).double()
 
 
