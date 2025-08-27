@@ -72,7 +72,7 @@ class TrainConfig:
     OUT_DIR: Optional[str] = "./exp/reward_learning_gp/bb_tuning"  # Save path
 
     def __post_init__(self):
-        self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
+        self.name = f"{self.name}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
             self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
             self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
