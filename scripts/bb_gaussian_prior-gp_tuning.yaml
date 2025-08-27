@@ -4,7 +4,7 @@ name: br
 width: 64
 depth: 3
 tuning_set: data/bb/bb_tuning_set.hdf5
-mapper_num_iters: 1000
+mapper_num_iters: 300
 n_data: 512
 batches: 10
 lr: 0.08
