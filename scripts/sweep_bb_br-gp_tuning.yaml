@@ -1,0 +1,15 @@
+project: BR-training
+program: bb_gaussian_prior-gp.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/bb_gaussian_prior-gp_tuning.yaml"
+  width:
+    values: [64, 128, 256]
+  n_data: 
+    values: [512, 1024, 2048]
+  batches:
+    values: [10,20,30]
+  lr:
+    values: [0.08, 0.01, 0.008, 0.001, 0.0008, 0.0001]
