@@ -1,5 +1,5 @@
 project: BR-training
-program: bb_gaussian_prior-gp.py
+program: bb_gaussian_prior-gp_tuning.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
