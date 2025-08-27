@@ -1,0 +1,14 @@
+project: BR-training
+group: BR
+name: br
+width: 64
+depth: 3
+tuning_set: data/bb/bb_tuning_set.hdf5
+mapper_num_iters: 1000
+n_data: 512
+batches: 10
+lr: 0.08
+save_ckpt_every: 50
+print_every: 20
+seed: 1
+OUT_DIR: ./exp/reward_learning_gp/bb_tuning
