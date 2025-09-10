@@ -18,4 +18,4 @@ parameters:
   sghmc_lr:
     value: 0.008
   mdecay:
-    values: 0.01
+    value: 0.01
