@@ -84,7 +84,7 @@ class TrainConfig:
         if self.OUT_DIR is not None:
             self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
             util.ensure_dir(self.OUT_DIR)
-            if self.preload_prior_dir is not None:
+            if self.prior_dir is not None:
                 self.prior_dir = osp.expanduser(self.prior_dir)
 
 
