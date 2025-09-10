@@ -1,10 +1,10 @@
 project: BR-training
-program: bb_gaussian_prior-gp_FG.py
+program: bb_gaussian_prior-gp_optim.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_gaussian_prior-gp_FG.yaml"
+    value: "scripts/bb_gaussian_prior-gp_optim.yaml"
   width:
     value: 128
   num_samples:
@@ -12,10 +12,10 @@ parameters:
   n_discarded:
     values: [10,20,30]
   num_burn_in_steps:
-    values: [100,500,1000]
+    values: [100,500,1000,2000,3000,5000]
   keep_every:
     values: [100,500,1000,2000,3000,5000]
   sghmc_lr:
     value: 0.008
   mdecay:
-    value: 0.01
+    values: 0.01
