@@ -8,9 +8,9 @@ parameters:
   width:
     value: 128
   num_samples:
-    values: 60
+    value: 60
   n_discarded:
-    values: 20
+    value: 20
   num_burn_in_steps:
     values: [100,500,1000,2000,3000,5000]
   keep_every:
