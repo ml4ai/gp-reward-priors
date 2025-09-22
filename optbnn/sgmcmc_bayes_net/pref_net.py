@@ -185,6 +185,7 @@ class PrefNet(BayesNet):
             train: bool, indicate whether we're evaluating on the training data.
         """
         self.net.eval()
+        self.find_map(x, y)
         B, _, T, d_dim = x.shape
         obs_dim = d_dim - 1
         am_1 = x[:, 0, :, obs_dim]
@@ -192,8 +193,8 @@ class PrefNet(BayesNet):
         x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
         x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-        pred_mean_1, _ = self.predict(x_1)
-        pred_mean_2, _ = self.predict(x_2)
+        _, _, pred_mean_1 = self.predict(x_1, use_map=True)
+        _, _, pred_mean_2 = self.predict(x_2, use_map=True)
         pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
         pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
 
@@ -241,7 +242,7 @@ class PrefNet(BayesNet):
                 }
             )
             self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
-
+        self.map = None
         self.net.train()
 
     def find_map(self, x, y):
