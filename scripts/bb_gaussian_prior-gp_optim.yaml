@@ -1,12 +1,12 @@
 project: BR-training
 group: BR
 name: br
-width: 64
+width: 128
 depth: 3
 batch_size: 256
-num_samples: 60
-n_discarded: 30
-num_burn_in_steps: 5000
+num_samples: 120
+n_discarded: 40
+num_burn_in_steps: 3000
 keep_every: 5000
 sghmc_lr: 0.01
 num_chains: 4
