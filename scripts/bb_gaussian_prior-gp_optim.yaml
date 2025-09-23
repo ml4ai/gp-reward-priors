@@ -8,7 +8,7 @@ num_samples: 120
 n_discarded: 40
 num_burn_in_steps: 3000
 keep_every: 5000
-sghmc_lr: 0.01
+sghmc_lr: 0.008
 num_chains: 4
 mdecay: 0.01
 print_every_n_samples: 5
