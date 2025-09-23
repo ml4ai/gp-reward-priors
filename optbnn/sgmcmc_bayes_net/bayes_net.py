@@ -236,6 +236,7 @@ class BayesNet:
         mdecay=0.05,
         print_every_n_samples=10,
         resample_prior_every=1000,
+        eval_map = False,
     ):
         """
         Use multiple chains of sampling.
@@ -266,6 +267,7 @@ class BayesNet:
                 from the last training run.
             resample_prior_every: int, num ber of sampling steps to perform
                 before resampling prior.
+            eval_map: bool, uses map estimate to evaluate if true, otherwise posterior predictive mean
         """
         for chain in range(num_chains):
             self.print_info("Chain: {}".format(chain))
@@ -286,6 +288,7 @@ class BayesNet:
                 continue_training=False,
                 clear_sampled_weights=False,
                 resample_prior_every=resample_prior_every,
+                eval_map = eval_map,
             )
             if self.task == "classification":
                 self._save_sampled_weights()
@@ -313,6 +316,7 @@ class BayesNet:
         clear_sampled_weights=True,
         resample_prior_every=1000,
         resample_hyper_prior_burn_in=True,
+        eval_map=False,
     ):
         """
         Train a BNN using a given dataset.
@@ -343,6 +347,7 @@ class BayesNet:
                 the sampled weights in the case of continuing the training.
             resample_prior_every: int, num ber of sampling steps to perform
                 before resampling prior.
+            eval_map: bool, uses map estimate to evaluate if true, otherwise posterior predictive mean
         """
         # Setup data loader
         if data_loader is not None:
@@ -447,9 +452,9 @@ class BayesNet:
                     if self.num_samples % print_every_n_samples == 0:
                         self.net.eval()
                         if (x_train is not None) and (y_train is not None):
-                            self._print_evaluations(x_train, y_train, True)
+                            self._print_evaluations(x_train, y_train, True,eval_map)
                         else:
-                            self._print_evaluations(x_batch, y_batch, True)
+                            self._print_evaluations(x_batch, y_batch, True,eval_map)
                         self.net.train()
 
     def _save_checkpoint(self, mode="best"):
