@@ -137,7 +137,7 @@ def train(config: TrainConfig):
     bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="FG")
     # Start sampling
     bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
-    bayes_net.eval_test_data(self, X_test, y_test, X_train, y_train)
+    bayes_net_std.eval_test_data(self, X_test, y_test, X_train, y_train)
 
     # In[20]:
 
