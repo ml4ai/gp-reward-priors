@@ -91,7 +91,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name={config.name},
+        name=config.name,
         id=str(uuid.uuid4()),
         save_code=True,
     )
