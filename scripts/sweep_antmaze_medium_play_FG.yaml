@@ -1,0 +1,10 @@
+project: BR-training-FG
+program: antmaze_FG.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/antmaze_medium_play_FG.yaml"
+  sghmc_lr:
+    values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]
+    
