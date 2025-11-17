@@ -141,10 +141,8 @@ def accuracy(output, target):
     """
     with torch.no_grad():
         pred = torch.argmax(output, dim=1)
-        assert pred.shape[0] == len(target)
-        correct = 0
-        correct += torch.sum(pred == target)
-    return correct / len(target)
+        tar = torch.argmax(target, dim=1)
+        return torch.mean(pred == tar)
 
 
 def top_k_acc(output, target, k=3):
