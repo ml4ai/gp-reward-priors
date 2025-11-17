@@ -143,8 +143,7 @@ def accuracy(output, target):
     with torch.no_grad():
         pred = torch.argmax(output, dim=1)
         tar = torch.argmax(target, dim=1)
-        print(pred.shape)
-        print(tar.shape)
+        print((pred == tar).shape)
         return torch.mean(pred == tar)
 
 
