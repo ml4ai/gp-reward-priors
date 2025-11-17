@@ -141,10 +141,10 @@ def accuracy(output, target):
         torch tensor: the resulting accuracy.
     """
     with torch.no_grad():
-        print(pred.shape)
-        print(tar.shape)
         pred = torch.argmax(output, dim=1)
         tar = torch.argmax(target, dim=1)
+        print(pred.shape)
+        print(tar.shape)
         return torch.mean(pred == tar)
 
 
