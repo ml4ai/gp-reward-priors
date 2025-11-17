@@ -362,7 +362,7 @@ class BayesNet:
             if self.task == "pref":
                 x_train_, y_train_ = (
                     torch.from_numpy(x_train.squeeze()).float(),
-                    torch.from_numpy(y_train.squeeze()).long(),
+                    torch.from_numpy(y_train.squeeze()).float(),
                 )
 
             # Initialize a data loader for training data.
