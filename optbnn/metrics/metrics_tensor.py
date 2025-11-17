@@ -21,8 +21,8 @@ def nll_gaussian(output, target, sigma, no_dim=1):
         torch tensor, the resulting negative log-likelihood.
     """
     with torch.no_grad():
-        exponent = 0.5*(target - output)**2 / sigma**2
-        log_coeff = no_dim*torch.log(sigma) + 0.5*no_dim*np.log(2*np.pi)
+        exponent = 0.5 * (target - output) ** 2 / sigma**2
+        log_coeff = no_dim * torch.log(sigma) + 0.5 * no_dim * np.log(2 * np.pi)
 
     return (log_coeff + exponent).mean()
 
@@ -46,10 +46,12 @@ def nll_mc_dropout(preds, target, T, tau):
         preds = preds.view(preds.shape[0], preds.shape[1], 1)
         target = target.view(-1, 1)
 
-        ll = torch.logsumexp(-0.5 * tau * (target[None] - preds)**2., 0) - \
-            torch.log(torch.scalar_tensor(T)) - \
-            0.5 * torch.log(torch.scalar_tensor(2*np.pi)) + \
-            0.5 * torch.log(torch.scalar_tensor(tau))
+        ll = (
+            torch.logsumexp(-0.5 * tau * (target[None] - preds) ** 2.0, 0)
+            - torch.log(torch.scalar_tensor(T))
+            - 0.5 * torch.log(torch.scalar_tensor(2 * np.pi))
+            + 0.5 * torch.log(torch.scalar_tensor(tau))
+        )
 
     return -torch.mean(ll)
 
@@ -65,7 +67,7 @@ def rmse(output, target):
         torch tensor: the resulting RMSE.
     """
     with torch.no_grad():
-        result = torch.mean((output.squeeze() - target.squeeze())**2.)**0.5
+        result = torch.mean((output.squeeze() - target.squeeze()) ** 2.0) ** 0.5
     return result
 
 
@@ -104,11 +106,10 @@ def brier_score(output, target):
         num_classes = output.shape[1]
 
         targets_one_hot = torch.zeros_like(output)
-        targets_one_hot[torch.arange(target.shape[0]), target] = 1.
+        targets_one_hot[torch.arange(target.shape[0]), target] = 1.0
 
         squared_diff = (targets_one_hot - output) ** 2
-        score = torch.mean(torch.div(torch.sum(squared_diff, axis=1),
-                                     num_classes))
+        score = torch.mean(torch.div(torch.sum(squared_diff, axis=1), num_classes))
     return score
 
 
@@ -124,7 +125,7 @@ def entropy(output, target=None):
     Returns:
         torch tensor: the resulting entropy.
     """
-    return torch.sum(-output*torch.log(output), axis=1).mean()
+    return torch.sum(-output * torch.log(output), axis=1).mean()
 
 
 def accuracy(output, target):
@@ -140,6 +141,8 @@ def accuracy(output, target):
         torch tensor: the resulting accuracy.
     """
     with torch.no_grad():
+        print(pred.shape)
+        print(tar.shape)
         pred = torch.argmax(output, dim=1)
         tar = torch.argmax(target, dim=1)
         return torch.mean(pred == tar)
