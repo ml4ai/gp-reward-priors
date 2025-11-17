@@ -207,7 +207,7 @@ class PrefNet(BayesNet):
             ce = (
                 loss(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -216,7 +216,7 @@ class PrefNet(BayesNet):
             acc = (
                 accuracy(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -266,7 +266,7 @@ class PrefNet(BayesNet):
             ce = (
                 loss(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -275,7 +275,7 @@ class PrefNet(BayesNet):
             acc = (
                 accuracy(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -338,7 +338,7 @@ class PrefNet(BayesNet):
             ce = (
                 loss(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -347,7 +347,7 @@ class PrefNet(BayesNet):
             acc = (
                 accuracy(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -384,7 +384,7 @@ class PrefNet(BayesNet):
             ce = (
                 loss(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -393,7 +393,7 @@ class PrefNet(BayesNet):
             acc = (
                 accuracy(
                     torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).long().to(self.device),
+                    torch.from_numpy(y).float().to(self.device),
                 )
                 .detach()
                 .cpu()
@@ -448,7 +448,7 @@ class PrefNet(BayesNet):
 
         x_t, y_t = (
             torch.from_numpy(x.squeeze()).float().to(self.device),
-            torch.from_numpy(y.squeeze()).long().to(self.device),
+            torch.from_numpy(y.squeeze()).float().to(self.device),
         )
         losses = np.array(
             [
