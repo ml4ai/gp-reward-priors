@@ -226,8 +226,8 @@ class PrefNet(BayesNet):
             if train:
                 wandb.log(
                     {
-                        f"{self.name}_mean_cross_entropy": ce,
-                        f"{self.name}_mean_accuracy": acc,
+                        f"{self.name}_training_mean_cross_entropy": ce,
+                        f"{self.name}_training_mean_accuracy": acc,
                     },
                     step=self.num_samples,
                 )
@@ -238,8 +238,8 @@ class PrefNet(BayesNet):
             else:
                 wandb.log(
                     {
-                        f"{self.name}_mean_cross_entropy": ce,
-                        f"{self.name}_mean_accuracy": acc,
+                        f"{self.name}_eval_mean_cross_entropy": ce,
+                        f"{self.name}_eval_mean_accuracy": acc,
                     }
                 )
                 self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
@@ -285,8 +285,8 @@ class PrefNet(BayesNet):
             if train:
                 wandb.log(
                     {
-                        f"{self.name}_mean_cross_entropy": ce,
-                        f"{self.name}_mean_accuracy": acc,
+                        f"{self.name}_training_mean_cross_entropy": ce,
+                        f"{self.name}_training_mean_accuracy": acc,
                     },
                     step=self.num_samples,
                 )
@@ -297,11 +297,116 @@ class PrefNet(BayesNet):
             else:
                 wandb.log(
                     {
-                        f"{self.name}_mean_cross_entropy": ce,
-                        f"{self.name}_mean_accuracy": acc,
+                        f"{self.name}_eval_mean_cross_entropy": ce,
+                        f"{self.name}_eval_mean_accuracy": acc,
                     }
                 )
                 self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
+            self.net.train()
+
+    def eval_test_data(self, x, y, x_map=None, y_map=None):
+        """Evaluate the sampled weights on training/validation data and
+            during the training log the results. If x_map and y_map are not None, then
+            the eval is done using map estimate computed from x_map and y_map.
+
+        Args:
+            x: numpy array, shape [batch_size, num_features], the input data.
+            y: numpy array, shape [batch_size, 1], the corresponding targets.
+            x_map: numpy array, shape [training_size, num_features], input data used to find map
+            y_map: numpy array, shape [training_size, 1], the targets used to find map
+        """
+        self.net.eval()
+        if (x_map is not None) and (y_map is not None):
+            self.find_map(x_map, y_map)
+            B, _, T, d_dim = x.shape
+            obs_dim = d_dim - 1
+            am_1 = x[:, 0, :, obs_dim]
+            am_2 = x[:, 1, :, obs_dim]
+            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+            _, _, pred_mean_1 = self.predict(x_1, use_map=True)
+            _, _, pred_mean_2 = self.predict(x_2, use_map=True)
+            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+
+            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
+            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
+            # shape is (B,2)
+            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
+            loss = torch.nn.CrossEntropyLoss()
+            ce = (
+                loss(
+                    torch.from_numpy(fx_batch).float().to(self.device),
+                    torch.from_numpy(y).long().to(self.device),
+                )
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            acc = (
+                accuracy(
+                    torch.from_numpy(fx_batch).float().to(self.device),
+                    torch.from_numpy(y).long().to(self.device),
+                )
+                .detach()
+                .cpu()
+                .numpy()
+            )
+
+            wandb.log(
+                {
+                    f"{self.name}_eval_mean_cross_entropy": ce,
+                    f"{self.name}_eval_mean_accuracy": acc,
+                }
+            )
+            self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
+            self.map = None
+            self.net.train()
+        else:
+            B, _, T, d_dim = x.shape
+            obs_dim = d_dim - 1
+            am_1 = x[:, 0, :, obs_dim]
+            am_2 = x[:, 1, :, obs_dim]
+            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+            pred_mean_1, _ = self.predict(x_1)
+            pred_mean_2, _ = self.predict(x_2)
+            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+
+            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
+            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
+            # shape is (B,2)
+            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
+            loss = torch.nn.CrossEntropyLoss()
+            ce = (
+                loss(
+                    torch.from_numpy(fx_batch).float().to(self.device),
+                    torch.from_numpy(y).long().to(self.device),
+                )
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            acc = (
+                accuracy(
+                    torch.from_numpy(fx_batch).float().to(self.device),
+                    torch.from_numpy(y).long().to(self.device),
+                )
+                .detach()
+                .cpu()
+                .numpy()
+            )
+
+            wandb.log(
+                {
+                    f"{self.name}_eval_mean_cross_entropy": ce,
+                    f"{self.name}_eval_mean_accuracy": acc,
+                }
+            )
+            self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
             self.net.train()
 
     def find_map(self, x, y):
