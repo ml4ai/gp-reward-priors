@@ -5,6 +5,10 @@ parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
     value: "scripts/antmaze_medium_play_FG.yaml"
+  width:
+    values: [64, 128, 256]
+  depth:
+    values: [2, 3, 4]
   sghmc_lr:
     values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]
     
