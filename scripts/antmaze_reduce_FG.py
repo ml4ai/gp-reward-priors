@@ -118,11 +118,14 @@ def train(config: TrainConfig):
     }
 
     # In[18]:
-
-    X_train, y_train, _, _ = util.load_pref_data(
-        config.dataset, 1.0-config.training_reduce
-    )
-
+    if config.training_reduce:
+        X_train, y_train, _, _ = util.load_pref_data(
+            config.dataset, 1.0 - config.training_reduce
+        )
+    else:
+        X_train, y_train = util.load_pref_data(
+            config.dataset, 1.0 - config.training_reduce
+        )
     # In[19]:
 
     # Initialize the prior
@@ -138,6 +141,7 @@ def train(config: TrainConfig):
     bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="FG")
     # Start sampling
     bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
+
 
 # In[ ]:
 if __name__ == "__main__":
