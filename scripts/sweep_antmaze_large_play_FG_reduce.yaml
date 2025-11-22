@@ -1,10 +1,10 @@
 project: BR-training-FG
-program: antmaze_FG.py
+program: antmaze_reduce_FG.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/antmaze_large_play_FG.yaml"
+    value: "scripts/antmaze_large_play_FG_reduce.yaml"
   width:
     value: 256
   depth:
