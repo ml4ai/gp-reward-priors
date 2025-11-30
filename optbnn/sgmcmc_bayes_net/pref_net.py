@@ -123,7 +123,7 @@ class PrefNet(BayesNet):
         self._save_sampled_weights()
         self.print_info("Finish")
 
-    def predict(self, x_test, return_individual_predictions=False, use_map=False):
+    def predict(self, x_test, return_individual_predictions=False, use_map=False, map_only=False):
         """Predicts mean and variance for the given test point.
 
         Args:
@@ -131,6 +131,7 @@ class PrefNet(BayesNet):
             return_individual_predictions: bool, if True also the predictions
                 of the individual models are returned.
             use_map: bool, also returns predictions using the map estimate. Asserts that self.map is not None
+            map_only: bool, only returns map prediction, ignores use_map. Asserts that self.map is not None
 
         Returns:
             a tuple consisting of mean and variance.
@@ -147,33 +148,37 @@ class PrefNet(BayesNet):
                     .cpu()
                     .numpy()
                 )
-
-        # Make predictions for each sampled weights
-        # the shape for this is (n_weights,samples,1)
-        predictions = np.array(
-            [
-                network_predict(x_test_, weights=weights)
-                for weights in self.sampled_weights
-            ]
-        )
-
-        # Calculates the predictive mean and variance
-        # The shape for these is (samples,1)
-        pred_mean = np.mean(predictions, axis=0)
-        pred_var = np.var(predictions, axis=0)
-
-        if return_individual_predictions:
+        if map_only:
+            assert self.map is not None
+            pred_map = network_predict(x_test_, weights=self.map)
+            return pred_map
+        else:
+            # Make predictions for each sampled weights
+            # the shape for this is (n_weights,samples,1)
+            predictions = np.array(
+                [
+                    network_predict(x_test_, weights=weights)
+                    for weights in self.sampled_weights
+                ]
+            )
+    
+            # Calculates the predictive mean and variance
+            # The shape for these is (samples,1)
+            pred_mean = np.mean(predictions, axis=0)
+            pred_var = np.var(predictions, axis=0)
+    
+            if return_individual_predictions:
+                if use_map:
+                    assert self.map is not None
+                    pred_map = network_predict(x_test_, weights=self.map)
+                    return pred_mean, pred_var, pred_map, predictions
+                return pred_mean, pred_var, predictions
+    
             if use_map:
                 assert self.map is not None
                 pred_map = network_predict(x_test_, weights=self.map)
-                return pred_mean, pred_var, pred_map, predictions
-            return pred_mean, pred_var, predictions
-
-        if use_map:
-            assert self.map is not None
-            pred_map = network_predict(x_test_, weights=self.map)
-            return pred_mean, pred_var, pred_map
-        return pred_mean, pred_var
+                return pred_mean, pred_var, pred_map
+            return pred_mean, pred_var
 
     def _print_evaluations(self, x, y, train=True, eval_map=False):
         """Evaluate the sampled weights on training/validation data and
