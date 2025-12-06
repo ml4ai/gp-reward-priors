@@ -99,7 +99,9 @@ dataset = qlearning_ant_dataset(gym_env)
 
 base_path = "./../data/antmaze"
 
-print(dataset["terminals"].shape)
+for i in range(dataset["terminals"].shape[0]):
+    print(dataset["goals"][i])
+    print(dataset["terminals"][i])
 
 
 # with h5py.File(base_path + "/antmaze-medium-play-v2_tuning_set.hdf5", "a") as f:
