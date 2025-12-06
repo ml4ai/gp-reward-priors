@@ -97,12 +97,24 @@ gym_env = gym.make(env)
 
 dataset = qlearning_ant_dataset(gym_env)
 
-print(dataset["observations"][0])
-print()
-print(dataset["next_observations"][0])
-print()
-print(dataset["goals"][0])
-print()
-print(dataset["xys"][0])
-print()
-print(np.linalg.norm(dataset["xys"][0] - dataset["goals"][0]))
+base_path = "./../data/antmaze"
+
+print(dataset["terminals"].sum())
+
+
+# with h5py.File(base_path + "/antmaze-medium-play-v2_tuning_set.hdf5", "a") as f:
+#     f.create_dataset("states", data=pref_dataset["observations"])
+#     f.create_dataset("states_2", data=pref_dataset["observations_2"])
+
+#     f.create_dataset("actions", data=pref_dataset["actions"])
+#     f.create_dataset("actions_2", data=pref_dataset["actions_2"])
+
+#     f.create_dataset("timesteps", data=pref_dataset["timestep_1"] - 1)
+#     f.create_dataset("timesteps_2", data=pref_dataset["timestep_2"] - 1)
+
+#     am = np.ones((1000, 100)) * 1.0
+#     am_2 = np.ones((1000, 100)) * 1.0
+#     f.create_dataset("attn_mask", data=am)
+#     f.create_dataset("attn_mask_2", data=am_2)
+
+#     f.create_dataset("labels", data=pref_dataset["labels"])
