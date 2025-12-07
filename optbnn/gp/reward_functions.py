@@ -72,3 +72,22 @@ def bb_reward_prior(X, aux_X,device):
     return torch.stack(
         [intercept, -goal_distance, min_obs_dist], dim=1
     ).double()
+
+# antmaze reward function. This combines the sparse and dense reward with a intercept. 
+# The sparse reward is a binary 1 or 0 depending on if the ants xy-position has a euclidean distance less than or
+# equal to 0.5 from the goal. The dense reward is the negative euclidean distance from the goal. 
+# Overall this function only uses aux_X but keeps X to conform with standards set by other classes. 
+def antmaze_task_reward_prior(X, aux_X,device):
+    if isinstance(aux_X, np.ndarray):
+        aux_X = torch.from_numpy(aux_X).to(device)
+
+    intercept = torch.ones(aux_X.size(0)).double().to(device)
+    
+    
+    goal_distance = torch.linalg.norm(aux_X[:, 0:2] - aux_X[:, 2:], dim=1).double()
+
+    reached_goal = (goal_distance <= 0.5).double()
+
+    return torch.stack(
+        [intercept, -1.0*goal_distance, reached_goal], dim=1
+    ).double()
