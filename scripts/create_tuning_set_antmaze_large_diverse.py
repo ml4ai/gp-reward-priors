@@ -91,7 +91,7 @@ def qlearning_ant_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
     }
 
 
-env = "antmaze-medium-play-v2"
+env = "antmaze-large-diverse-v2"
 
 gym_env = gym.make(env)
 
@@ -100,7 +100,7 @@ dataset = qlearning_ant_dataset(gym_env)
 base_path = "./../data/antmaze"
 
 
-with h5py.File(base_path + "/antmaze-medium-play-v2_tuning_set.hdf5", "a") as f:
+with h5py.File(base_path + "/antmaze-large-diverse-v2_tuning_set.hdf5", "a") as f:
     obs = np.concatenate(
             [f["observations"][:], f["actions"][:]],
             axis=-1,
