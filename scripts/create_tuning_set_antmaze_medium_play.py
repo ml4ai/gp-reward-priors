@@ -102,12 +102,12 @@ base_path = "./../data/antmaze"
 
 with h5py.File(base_path + "/antmaze-medium-play-v2_tuning_set.hdf5", "a") as f:
     obs = np.concatenate(
-            [f["observations"][:], f["actions"][:]],
+            [dataset["observations"], dataset["actions"]],
             axis=-1,
     )
 
     aux_obs = np.concatenate(
-            [f["goals"][:], f["xys"][:]],
+            [dataset["goals"], dataset["xys"]],
             axis=-1,
     )
     f.create_dataset("obs", data=obs)
