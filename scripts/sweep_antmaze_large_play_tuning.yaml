@@ -1,4 +1,4 @@
-project: BR-training
+project: BR-tuning
 program: antmaze_tuning.py
 method: grid
 parameters:

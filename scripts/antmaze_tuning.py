@@ -57,7 +57,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "BR-training"
+    project: str = "BR-tuning"
     group: str = "BR"
     name: str = "br"
     # model params
