@@ -1,6 +1,7 @@
 import d4rl
 import gym
 import numpy as np
+import h5py
 
 
 def qlearning_ant_dataset(env, dataset=None, terminate_on_end=False, **kwargs):

@@ -1,6 +1,7 @@
 import d4rl
 import gym
 import numpy as np
+import h5py
 
 
 def qlearning_ant_dataset(env, dataset=None, terminate_on_end=False, **kwargs):
@@ -102,13 +103,13 @@ base_path = "./../data/antmaze"
 
 with h5py.File(base_path + "/antmaze-large-diverse-v2_tuning_set.hdf5", "a") as f:
     obs = np.concatenate(
-            [f["observations"][:], f["actions"][:]],
-            axis=-1,
+        [f["observations"][:], f["actions"][:]],
+        axis=-1,
     )
 
     aux_obs = np.concatenate(
-            [f["goals"][:], f["xys"][:]],
-            axis=-1,
+        [f["goals"][:], f["xys"][:]],
+        axis=-1,
     )
     f.create_dataset("obs", data=obs)
     f.create_dataset("aux_obs", data=aux_obs)
