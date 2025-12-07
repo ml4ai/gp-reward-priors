@@ -1,0 +1,23 @@
+project: BR-training
+program: antmaze_tuning.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "antmaze_tuning.yaml"
+  tuning_set:
+    value: "data/antmaze/antmaze-large-play-v2_tuning_set.hdf5"
+  dataset_id: 
+    value: "antmaze_large_play"
+  width:
+    values: [64, 128, 256]
+  depth:
+    values: [2, 3, 4]
+  n_data: 
+    values: [256, 512, 1024, 2048]
+  n_samples:
+    values: [256, 512, 1024, 2048]
+  wasserstein_lr:
+    values: [0.03, 0.003, 0.0003, 0.00003]
+  lr:
+    values: [0.03, 0.003, 0.0003, 0.00003]
