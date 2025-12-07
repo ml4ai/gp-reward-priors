@@ -4,7 +4,7 @@ method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "antmaze_tuning.yaml"
+    value: "scripts/antmaze_tuning.yaml"
   tuning_set:
     value: "data/antmaze/antmaze-medium-diverse-v2_tuning_set.hdf5"
   dataset_id: 
