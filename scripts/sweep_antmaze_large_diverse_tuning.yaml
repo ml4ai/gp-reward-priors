@@ -21,3 +21,5 @@ parameters:
     value: 0.00003
   lr:
     values: [0.03, 0.003, 0.0003, 0.00003]
+  OUT_DIR: 
+    value: "./exp/reward_learning/antmaze_tuning/antmaze_large_diverse"
