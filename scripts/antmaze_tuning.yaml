@@ -8,7 +8,7 @@ dataset_id: antmaze_medium_play
 mapper_num_iters: 1000
 n_data: 512
 wasserstein_steps_0: 0
-wasserstein_steps_1: 1200
+wasserstein_steps_1: 1000
 n_samples: 1024
 wasserstein_lr: 0.001
 lr: 0.08

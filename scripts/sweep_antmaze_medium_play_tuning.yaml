@@ -14,10 +14,10 @@ parameters:
   depth:
     values: [2, 3, 4]
   n_data: 
-    values: [256, 512, 1024, 2048]
+    value: 256
   n_samples:
-    values: [256, 512, 1024, 2048]
+    value: 512
   wasserstein_lr:
-    values: [0.03, 0.003, 0.0003, 0.00003]
+    value: 0.00003
   lr:
     values: [0.03, 0.003, 0.0003, 0.00003]
