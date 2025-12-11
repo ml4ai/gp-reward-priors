@@ -76,15 +76,14 @@ class TrainConfig:
     save_ckpt_every: int = 50
     print_every: int = 20
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning/antmaze_tuning"  # Save path
+    OUT_DIR: str = "./exp/reward_learning/antmaze_tuning"  # Save path
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}-{self.width}_{self.depth}"
-        if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
-            self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
-            util.ensure_dir(self.OUT_DIR)
-            util.ensure_dir(self.FIG_DIR)
+        self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+        self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
+        util.ensure_dir(self.OUT_DIR)
+        util.ensure_dir(self.FIG_DIR)
 
 
 # In[8]:

@@ -76,13 +76,12 @@ class TrainConfig:
     training_split: float = 0.8
     # general params
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning/antmaze_medium_play_FG"  # Save path
+    OUT_DIR: str = "./exp/reward_learning/antmaze_medium_play_FG"  # Save path
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
-        if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
-            util.ensure_dir(self.OUT_DIR)
+        self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+        util.ensure_dir(self.OUT_DIR)
 
 
 @pyrallis.wrap()
