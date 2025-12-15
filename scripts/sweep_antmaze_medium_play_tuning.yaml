@@ -10,7 +10,7 @@ parameters:
   dataset_id: 
     value: "antmaze_medium_play"
   width:
-    value: 64
+    value: 128
   depth:
     value: 3
   n_data: 
@@ -20,7 +20,7 @@ parameters:
   wasserstein_lr:
     value: 0.00003
   lr:
-    value: 0.003
+    value: 0.0003
   seed:
     values: [0, 1, 2, 3, 4, 5, 6, 7]
   OUT_DIR: 
