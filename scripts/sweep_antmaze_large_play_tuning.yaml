@@ -10,9 +10,9 @@ parameters:
   dataset_id: 
     value: "antmaze_large_play"
   width:
-    value: 256
+    value: 64
   depth:
-    value: 3
+    value: 4
   n_data: 
     value: 256
   n_samples:
