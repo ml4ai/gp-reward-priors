@@ -10,7 +10,7 @@ parameters:
   dataset_id: 
     value: "antmaze_large_diverse"
   width:
-    value: 64
+    value: 128
   depth:
     value: 4
   n_data: 
