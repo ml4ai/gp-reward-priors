@@ -1,0 +1,18 @@
+project: BR-training-optim
+program: antmaze_reduce_optim.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/antmaze_large_diverse_optim_reduce.yaml"
+  width:
+    value: 256
+  depth:
+    value: 2
+  sghmc_lr:
+    value: 0.03
+  training_reduce:
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7]
+    
