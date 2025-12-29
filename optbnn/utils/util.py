@@ -86,7 +86,10 @@ def load_pref_data(pref_dir, training_ratio=0.8):
             ],
             axis=-1,
         )
-        y = np.eye(2)[f["labels"][:].astype(int)]
+        if f["labels"].ndim > 1:
+            y = f["labels"][:]
+        else:
+            y = np.eye(2)[f["labels"][:].astype(int)]
     X = np.stack([obs_1, obs_2], axis=1)
 
     if training_ratio == 1.0:
