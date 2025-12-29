@@ -179,6 +179,15 @@ class BayesNet:
         torch.save({"sampled_weights": self.sampled_weights}, file_path)
         self.num_saved_sets_weights += 1
 
+    def save_map(self):
+        """Save map estimate to file.
+        """
+        file_path = os.path.join(
+            self.sampled_weights_dir,
+            "map_estimate",
+        )
+        torch.save({"map_estimate": self.map}, file_path)
+
     def _load_sampled_weights(self, file_path):
         """Load a set of sampled weights from a given file.
 
@@ -189,11 +198,20 @@ class BayesNet:
         Returns:
             sampled_weights: a state_dict containing the model's parameters.
         """
-        checkpoint = torch.load(file_path,weights_only=False)
+        checkpoint = torch.load(file_path, weights_only=False)
         sampled_weights = checkpoint["sampled_weights"]
 
         return sampled_weights
 
+    def load_map(self, file_path):
+        """Load map estimate from a given file.
+
+        Args:
+            file_path: str, the path to the file containing map estimate.
+        """
+        checkpoint = torch.load(file_path, weights_only=False)
+        self.map = checkpoint["map_estimate"]
+    
     def _load_all_sampled_weights(self):
         """Load all the sampled weights from files.
 
@@ -201,7 +219,7 @@ class BayesNet:
         """
 
         def load_weights(file_path):
-            checkpoint = torch.load(file_path,weights_only=False)
+            checkpoint = torch.load(file_path, weights_only=False)
             sampled_weights = checkpoint["sampled_weights"]
 
             return sampled_weights
@@ -236,7 +254,7 @@ class BayesNet:
         mdecay=0.05,
         print_every_n_samples=10,
         resample_prior_every=1000,
-        eval_map = False,
+        eval_map=False,
     ):
         """
         Use multiple chains of sampling.
@@ -288,7 +306,7 @@ class BayesNet:
                 continue_training=False,
                 clear_sampled_weights=False,
                 resample_prior_every=resample_prior_every,
-                eval_map = eval_map,
+                eval_map=eval_map,
             )
             if self.task == "classification":
                 self._save_sampled_weights()
@@ -452,9 +470,9 @@ class BayesNet:
                     if self.num_samples % print_every_n_samples == 0:
                         self.net.eval()
                         if (x_train is not None) and (y_train is not None):
-                            self._print_evaluations(x_train, y_train, True,eval_map)
+                            self._print_evaluations(x_train, y_train, True, eval_map)
                         else:
-                            self._print_evaluations(x_batch, y_batch, True,eval_map)
+                            self._print_evaluations(x_batch, y_batch, True, eval_map)
                         self.net.train()
 
     def _save_checkpoint(self, mode="best"):
@@ -491,7 +509,7 @@ class BayesNet:
         Args:
             path: str, the path to checkpoint file.
         """
-        checkpoint = torch.load(path, map_location=device,weights_only=False)
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
         self.step = checkpoint["step"]
         self.num_samples = checkpoint["num_samples"]
         self.num_saved_sets_weights = checkpoint["num_saved_sets_weights"]
