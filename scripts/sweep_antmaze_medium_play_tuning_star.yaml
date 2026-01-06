@@ -10,7 +10,7 @@ parameters:
   dataset_id: 
     value: "antmaze_medium_play"
   width:
-    value: 64
+    value: 128
   depth:
     value: 2
   n_data: 
