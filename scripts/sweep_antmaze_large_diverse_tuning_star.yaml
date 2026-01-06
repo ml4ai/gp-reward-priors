@@ -10,15 +10,15 @@ parameters:
   dataset_id: 
     value: "antmaze_large_diverse"
   width:
-    value: 256
+    value: 64
   depth:
-    value: 2
+    value: 3
   n_data: 
     value: 256
   batches:
     value: 10
   lr:
-    value: 0.03
+    value: 0.003
   seed:
     values: [0, 1, 2, 3, 4, 5, 6, 7]
   OUT_DIR: 
