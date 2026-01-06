@@ -208,62 +208,62 @@ def train(config: TrainConfig):
     plt.savefig(wdist_fig)
     plt.close(fig)
 
-    # In[15]:
+    # # In[15]:
 
-    # Load the optimize prior
-    util.set_seed(config.seed)
-    ckpt_path = os.path.join(
-        config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
-    )
-    opt_bnn.load_state_dict(torch.load(ckpt_path, weights_only=False))
+    # # Load the optimize prior
+    # util.set_seed(config.seed)
+    # ckpt_path = os.path.join(
+    #     config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+    # )
+    # opt_bnn.load_state_dict(torch.load(ckpt_path, weights_only=False))
 
-    # In[16]:
+    # # In[16]:
 
-    # Draw functions from the priors
-    n_plot = 4000
-    util.set_seed(config.seed + 7)
-    X, aux_X = data_generator.get(100)
-    X = X.to(device)
-    aux_X = aux_X.to(device)
-    gp_samples = (
-        antmaze_prior.sample_functions(X, n_plot, aux_X)
-        .detach()
-        .cpu()
-        .numpy()
-        .squeeze()
-    )
+    # # Draw functions from the priors
+    # n_plot = 4000
+    # util.set_seed(config.seed + 7)
+    # X, aux_X = data_generator.get(100)
+    # X = X.to(device)
+    # aux_X = aux_X.to(device)
+    # gp_samples = (
+    #     antmaze_prior.sample_functions(X, n_plot, aux_X)
+    #     .detach()
+    #     .cpu()
+    #     .numpy()
+    #     .squeeze()
+    # )
 
-    nngp_samples = (
-        opt_bnn.sample_nngp(X, n_plot, device).detach().cpu().numpy().squeeze()
-    )
+    # nngp_samples = (
+    #     opt_bnn.sample_nngp(X, n_plot, device).detach().cpu().numpy().squeeze()
+    # )
 
-    opt_bnn_samples = (
-        opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
-    )
+    # opt_bnn_samples = (
+    #     opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
+    # )
 
-    seq = np.arange(100)
+    # seq = np.arange(100)
 
-    fig, axs = plt.subplots(1, 3, figsize=(14, 3))
-    plot_samples(seq, gp_samples, ax=axs[0], n_keep=5)
-    axs[0].set_title("GP Prior")
-    axs[0].set_ylim([int(np.min(gp_samples)) - 1, int(np.max(gp_samples)) + 1])
+    # fig, axs = plt.subplots(1, 3, figsize=(14, 3))
+    # plot_samples(seq, gp_samples, ax=axs[0], n_keep=5)
+    # axs[0].set_title("GP Prior")
+    # axs[0].set_ylim([int(np.min(gp_samples)) - 1, int(np.max(gp_samples)) + 1])
 
-    plot_samples(seq, nngp_samples, ax=axs[1], color="xkcd:grass", n_keep=5)
-    axs[1].set_title("NNGP Prior")
-    axs[1].set_ylim([int(np.min(nngp_samples)) - 1, int(np.max(nngp_samples)) + 1])
+    # plot_samples(seq, nngp_samples, ax=axs[1], color="xkcd:grass", n_keep=5)
+    # axs[1].set_title("NNGP Prior")
+    # axs[1].set_ylim([int(np.min(nngp_samples)) - 1, int(np.max(nngp_samples)) + 1])
 
-    plot_samples(
-        seq, opt_bnn_samples, ax=axs[2], color="xkcd:yellowish orange", n_keep=5
-    )
-    axs[2].set_title("BNN Prior (NNGP-induced)")
-    axs[2].set_ylim(
-        [int(np.min(opt_bnn_samples)) - 1, int(np.max(opt_bnn_samples)) + 1]
-    )
+    # plot_samples(
+    #     seq, opt_bnn_samples, ax=axs[2], color="xkcd:yellowish orange", n_keep=5
+    # )
+    # axs[2].set_title("BNN Prior (NNGP-induced)")
+    # axs[2].set_ylim(
+    #     [int(np.min(opt_bnn_samples)) - 1, int(np.max(opt_bnn_samples)) + 1]
+    # )
 
-    plt.tight_layout()
-    prior_fig = os.path.join(config.FIG_DIR, "antmaze_priors_plot.png")
-    plt.savefig(prior_fig)
-    plt.close(fig)
+    # plt.tight_layout()
+    # prior_fig = os.path.join(config.FIG_DIR, "antmaze_priors_plot.png")
+    # plt.savefig(prior_fig)
+    # plt.close(fig)
 
 
 # In[ ]:
