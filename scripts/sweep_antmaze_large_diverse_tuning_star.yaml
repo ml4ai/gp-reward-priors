@@ -12,7 +12,7 @@ parameters:
   width:
     value: 64
   depth:
-    value: 2
+    value: 3
   n_data: 
     value: 256
   batches:
