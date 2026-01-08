@@ -12,13 +12,13 @@ parameters:
   width:
     values: [128, 256]
   depth:
-    value: 3
+    value: 4
   n_data: 
     value: 256
   batches:
     value: 100
   lr:
-    value: 0.003
+    value: 0.03
   seed:
     value: 5
   OUT_DIR: 
