@@ -1,0 +1,21 @@
+project: BR-training-optim-star
+program: antmaze_reduce_optim.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/antmaze_medium_diverse_optim_reduce.yaml"
+  width:
+    value: 128
+  depth:
+    value: 2
+  sghmc_lr:
+    value: 0.003
+  training_reduce:
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7]
+  OUT_DIR:
+    value: "./exp/reward_learning/antmaze_medium_diverse_optim_star"
+  prior_dir:
+    value: "./exp/reward_learning/antmaze_tuning_star"
