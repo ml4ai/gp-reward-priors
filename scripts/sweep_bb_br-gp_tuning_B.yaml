@@ -12,4 +12,4 @@ parameters:
   batches:
     value: 100
   lr:
-    values: [0.3, 0.03, 0.003, 0.0003]
+    values: [0.00003, 0.000003, 0.0000003]
