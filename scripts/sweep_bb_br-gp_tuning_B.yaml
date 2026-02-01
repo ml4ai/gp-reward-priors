@@ -1,10 +1,10 @@
-project: BR-training
-program: bb_gaussian_prior-gp_tuning.py
+project: BR-tuning-star
+program: bb_gaussian_prior_tuning_star.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_gaussian_prior-gp_tuning.yaml"
+    value: "scripts/bb_gaussian_prior_tuning_star.yaml"
   width:
     value: 256
   n_data: 
