@@ -11,4 +11,4 @@ lr: 0.08
 save_ckpt_every: 50
 print_every: 20
 seed: 1
-OUT_DIR: ./exp/reward_learning_gp/bb_tuning
+OUT_DIR: ./exp/reward_learning/bb_tuning_star

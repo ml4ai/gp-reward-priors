@@ -69,7 +69,7 @@ class TrainConfig:
     save_ckpt_every: int = 50
     print_every: int = 20
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning_gp/bb_tuning"  # Save path
+    OUT_DIR: Optional[str] = "./exp/reward_learning/bb_tuning_star"  # Save path
 
     def __post_init__(self):
         self.name = f"{self.name}-{str(uuid.uuid4())[:8]}"
