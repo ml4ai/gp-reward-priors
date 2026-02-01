@@ -76,7 +76,7 @@ class TrainConfig:
     training_split: float = 0.8
     # general params
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning_gp/bb_FG"  # Save path
+    OUT_DIR: Optional[str] = "./exp/reward_learning/bb_FG"  # Save path
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"

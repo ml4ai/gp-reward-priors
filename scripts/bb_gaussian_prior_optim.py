@@ -55,9 +55,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "BR-training"
+    project: str = "BR-training-optim"
     group: str = "BR"
-    name: str = "br"
+    name: str = "br_optim"
     # model params
     width: int = 64
     depth: int = 3
@@ -76,16 +76,19 @@ class TrainConfig:
     training_split: float = 0.8
     # general params
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning_gp/bb_optim"  # Save path
-    prior_dir: Optional[str] = "./exp/reward_learning_gp/bb_tuning/br-02336596"
+    OUT_DIR: str = "./exp/reward_learning/bb_optim"  # Save path
+    prior_dir: str = "./exp/reward_learning/bb_tuning_star"
+    prior_ckpt: int = 300
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
-        if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
-            util.ensure_dir(self.OUT_DIR)
-            if self.prior_dir is not None:
-                self.prior_dir = osp.expanduser(self.prior_dir)
+        self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+        util.ensure_dir(self.OUT_DIR)
+
+        self.prior_dir = os.path.join(
+            osp.expanduser(self.prior_dir),
+            f"br-{self.dataset_id}-{self.width}-{self.depth}",
+        )
 
 
 @pyrallis.wrap()
@@ -94,11 +97,12 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=f"{config.name}_optim_training",
+        name=config.name,
         id=str(uuid.uuid4()),
         save_code=True,
     )
     util.set_seed(config.seed)
+    # Initialize BNN Priors
     width = config.width  # Number of units in each hidden layer
     depth = config.depth  # Number of hidden layers
     transfer_fn = "relu"  # Activation function
@@ -114,18 +118,19 @@ def train(config: TrainConfig):
         "num_chains": config.num_chains,  # Number of chains
         "mdecay": config.mdecay,  # Momentum coefficient
         "print_every_n_samples": config.print_every_n_samples,
+        "eval_map": False,
     }
 
     # In[18]:
 
-    X_train, y_train, X_test, _ = util.load_pref_data(
+    X_train, y_train, X_test, y_test = util.load_pref_data(
         config.dataset, config.training_split
     )
-    X_test = X_test[:, :, :, :28].reshape(-1, 28)
+    X_test_con = X_test[:, :, :, :28].reshape(-1, 28)
 
     # Load the optimized prior
     ckpt_path = os.path.join(
-        config.prior_dir, "ckpts", "it-{}.ckpt".format(300)
+        config.prior_dir, "ckpts", "it-{}.ckpt".format(config.prior_ckpt)
     )
     prior = OptimGaussianPrior(ckpt_path)
 
@@ -136,31 +141,32 @@ def train(config: TrainConfig):
     # Initialize the sampler
     saved_dir = os.path.join(config.OUT_DIR, "sampling_optim")
     util.ensure_dir(saved_dir)
-    bayes_net_optim = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="GPi")
+    bayes_net_optim = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="optim")
 
-    # Start sampling
     bayes_net_optim.sample_multi_chains(X_train, y_train, **sampling_configs)
-
+    bayes_net_optim.eval_test_data(X_test, y_test, X_train, y_train)
+    bayes_net_optim.save_map()
     # In[22]:
 
     # Make predictions
     util.set_seed(config.seed)
-    _, _, bnn_optim_preds = bayes_net_optim.predict(X_test, True)
+    _, _, bnn_optim_preds = bayes_net_optim.predict(X_test_con, True)
 
     # Convergence diagnostics using the R-hat statistic
     r_hat = compute_rhat_regression(bnn_optim_preds, sampling_configs["num_chains"])
     wandb.log(
-        {"GPi_mean_R_hat": float(r_hat.mean()), "GPi_std_R_hat": float(r_hat.std())}
+        {"optim_mean_R_hat": float(r_hat.mean()), "optim_std_R_hat": float(r_hat.std())}
     )
     print(
         r"R-hat: mean {:.4f} std {:.4f}".format(float(r_hat.mean()), float(r_hat.std()))
     )
-    
+
     bnn_optim_preds = bnn_optim_preds.squeeze().T
 
     # Save the predictions
     posterior_optim_path = os.path.join(config.OUT_DIR, "posterior_optim.npz")
     np.savez(posterior_optim_path, bnn_samples=bnn_optim_preds)
+
 
 # In[ ]:
 if __name__ == "__main__":

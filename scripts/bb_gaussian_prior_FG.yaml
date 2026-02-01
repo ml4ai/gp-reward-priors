@@ -16,4 +16,4 @@ dataset: data/bb/t0012_pref.hdf5
 dataset_id: bb_t0012
 training_split: 0.8
 seed: 1
-OUT_DIR: ./exp/reward_learning_gp/bb_FG
+OUT_DIR: ./exp/reward_learning/bb_FG
