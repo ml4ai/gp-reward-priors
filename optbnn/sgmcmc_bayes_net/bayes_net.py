@@ -289,7 +289,10 @@ class BayesNet:
         """
         for chain in range(num_chains):
             self.print_info("Chain: {}".format(chain))
-            self.net.reset_parameters()
+            if isinstance(self.net, torch.nn.DataParallel):
+                self.net.module.reset_parameters()
+            else:
+                self.net.reset_parameters()
             self.train(
                 x_train,
                 y_train,
