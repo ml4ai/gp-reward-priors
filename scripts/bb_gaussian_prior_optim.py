@@ -145,7 +145,6 @@ def train(config: TrainConfig):
 
     bayes_net_optim.sample_multi_chains(X_train, y_train, **sampling_configs)
     bayes_net_optim.eval_test_data(X_test, y_test, X_train, y_train)
-    bayes_net_optim.save_map()
     # In[22]:
 
     # Make predictions

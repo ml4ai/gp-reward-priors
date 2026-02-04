@@ -15,3 +15,7 @@ parameters:
     value: 3
   sghmc_lr:
     value: 0.003
+  num_burn_in_steps:
+    values: [4000, 5000]
+  keep_every:
+    values: [2000, 3000, 4000]
