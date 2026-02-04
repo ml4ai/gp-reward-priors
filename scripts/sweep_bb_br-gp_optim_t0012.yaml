@@ -14,4 +14,4 @@ parameters:
   depth:
     value: 3
   sghmc_lr:
-    values: [0.3, 0.03, 0.003]
+    value: 0.003
