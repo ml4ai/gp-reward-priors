@@ -14,4 +14,8 @@ parameters:
   depth:
     value: 3
   sghmc_lr:
-    values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]
+    value: 0.003
+  num_burn_in_steps:
+    value: 8000 
+  keep_every:
+    value: 4000
