@@ -1,0 +1,23 @@
+project: BR-training-optim-star
+program: bb_gaussian_prior_optim.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/bb_gaussian_prior_optim.yaml"
+  dataset:
+    value: "data/bb/t0048_pref.hdf5"
+  dataset_id: 
+    value: "BB_t0048"
+  width:
+    value: 256
+  depth:
+    value: 3
+  sghmc_lr:
+    value: 0.003
+  num_burn_in_steps:
+    value: 10000 
+  keep_every:
+    value: 4000
+  training_reduce:
+    value: 0.0
