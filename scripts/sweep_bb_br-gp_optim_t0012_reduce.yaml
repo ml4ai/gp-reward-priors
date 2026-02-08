@@ -1,10 +1,10 @@
 project: BR-training-optim-star
-program: bb_gaussian_prior_optim.py
+program: bb_gaussian_prior_optim_reduce.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_gaussian_prior_optim.yaml"
+    value: "scripts/bb_gaussian_prior_optim_reduce.yaml"
   dataset:
     value: "data/bb/t0012_pref.hdf5"
   dataset_id: 
