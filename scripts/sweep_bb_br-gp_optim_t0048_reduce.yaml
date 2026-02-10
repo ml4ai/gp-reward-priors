@@ -14,12 +14,12 @@ parameters:
   depth:
     value: 3
   sghmc_lr:
-    value: 0.003
+    values: [0.3, 0.03, 0.003, 0.0003]
   num_burn_in_steps:
     value: 10000 
   keep_every:
     value: 4000
   training_reduce:
     value: 0.9
-  seed:
-    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  # seed:
+  #   values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
