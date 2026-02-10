@@ -82,7 +82,7 @@ class TrainConfig:
     prior_ckpt: int = 300
 
     def __post_init__(self):
-        self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
+        self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}-{self.training_reduce}"
         self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
         util.ensure_dir(self.OUT_DIR)
 
