@@ -131,8 +131,8 @@ class MapperWassersteinGP(object):
                 if not self.gpu_gp:
                     X = X.to("cpu")
 
-                bnn_K = self.bnn.compute_covariance(X.double())
-                target_K = self.gp.compute_covariance(X.double(), aux_X.double())
+                bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
+                target_K = self.gp.compute_covariance(X.double()).to(self.device)
 
                 if not self.gpu_gp:
                     X = X.to(self.device)
