@@ -61,7 +61,7 @@ class MapperWassersteinBNN(object):
             X = X.to(self.device)
 
             bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
-            target_K = self.gp.compute_covariance(X.double()).to(self.device)
+            target_K = self.trained_bnn.compute_covariance(X.double()).to(self.device)
 
             t_evalues, t_evectors = torch.linalg.eigh(target_K)
             sqrt_t_evalues = torch.sqrt(torch.clamp(t_evalues, min=0.0))
