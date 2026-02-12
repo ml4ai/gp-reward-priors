@@ -1,0 +1,25 @@
+project: BR-training-optim-bnn
+program: bb_gaussian_prior_optim_reduce.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/bb_gaussian_prior_optim_reduce.yaml"
+  dataset:
+    value: "data/bb/t0012_pref.hdf5"
+  dataset_id: 
+    value: "BB_t0012_t0048"
+  width:
+    value: 256
+  depth:
+    value: 3
+  sghmc_lr:
+    value: 0.003
+  num_burn_in_steps:
+    value: 10000 
+  keep_every:
+    value: 4000 
+  training_reduce:
+    value: 0.9
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
