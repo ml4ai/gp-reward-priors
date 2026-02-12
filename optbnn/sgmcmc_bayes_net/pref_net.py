@@ -123,7 +123,9 @@ class PrefNet(BayesNet):
         self._save_sampled_weights()
         self.print_info("Finish")
 
-    def predict(self, x_test, return_individual_predictions=False, use_map=False, map_only=False):
+    def predict(
+        self, x_test, return_individual_predictions=False, use_map=False, map_only=False
+    ):
         """Predicts mean and variance for the given test point.
 
         Args:
@@ -148,6 +150,7 @@ class PrefNet(BayesNet):
                     .cpu()
                     .numpy()
                 )
+
         if map_only:
             assert self.map is not None
             pred_map = network_predict(x_test_, weights=self.map)
@@ -161,19 +164,19 @@ class PrefNet(BayesNet):
                     for weights in self.sampled_weights
                 ]
             )
-    
+
             # Calculates the predictive mean and variance
             # The shape for these is (samples,1)
             pred_mean = np.mean(predictions, axis=0)
             pred_var = np.var(predictions, axis=0)
-    
+
             if return_individual_predictions:
                 if use_map:
                     assert self.map is not None
                     pred_map = network_predict(x_test_, weights=self.map)
                     return pred_mean, pred_var, pred_map, predictions
                 return pred_mean, pred_var, predictions
-    
+
             if use_map:
                 assert self.map is not None
                 pred_map = network_predict(x_test_, weights=self.map)
@@ -462,3 +465,35 @@ class PrefNet(BayesNet):
             ]
         )
         self.map = self.sampled_weights[np.argmin(losses)]
+
+    def compute_covariance(self, X):
+        """Predicts mean and variance for the given test point.
+
+        Args:
+            x_test: numpy array, can be (d,) for a single datapoint or (n,d) for a batch of datapoints
+            return_individual_predictions: bool, if True also the predictions
+                of the individual models are returned.
+            use_map: bool, also returns predictions using the map estimate. Asserts that self.map is not None
+            map_only: bool, only returns map prediction, ignores use_map. Asserts that self.map is not None
+
+        Returns:
+            a tuple consisting of mean and variance.
+        """
+
+        def network_predict(X, weights):
+            with torch.no_grad():
+                self.network_weights = weights
+                return self.net(X.float().to(self.device))
+
+        predictions = (
+            torch.stack(
+                [
+                    network_predict(X, weights=weights)
+                    for weights in self.sampled_weights
+                ]
+            )
+            .squeeze()
+            .T
+        )
+        
+        return torch.cov(predictions)
