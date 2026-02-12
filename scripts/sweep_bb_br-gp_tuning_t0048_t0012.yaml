@@ -14,8 +14,8 @@ parameters:
   lr:
     values: [0.3, 0.03, 0.003, 0.0003]
   prior_dir:
-    value: "./exp/reward_learning/bb_tuning_star/br-BB_t0048-256-3"
+    value: "./exp/reward_learning/bb_tuning_star/br-BB_t0012-256-3"
   bnn_dir: 
-    value: "./exp/reward_learning/bb_optim/br-BB_t0048-384f3849"
+    value: "./exp/reward_learning/bb_optim/br-BB_t0012-a76832c6"
   bnn_width:
     value: 256
