@@ -1,0 +1,21 @@
+project: BR-tuning-bnn
+program: bb_gaussian_prior_tuning_bnn.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts/bb_gaussian_prior_tuning_bnn.yaml"
+  width:
+    value: 256
+  n_data: 
+    value: 256
+  batches:
+    value: 100
+  lr:
+    values: [0.3, 0.03, 0.003, 0.0003]
+  prior_dir:
+    value: "./exp/reward_learning/bb_tuning_star/br-BB_t0012-256-3"
+  bnn_dir: 
+    value: "./exp/reward_learning/bb_optim/br-BB_t0012-a76832c6"
+  bnn_width:
+    value: 256
