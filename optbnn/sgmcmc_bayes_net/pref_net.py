@@ -483,7 +483,7 @@ class PrefNet(BayesNet):
         def network_predict(X, weights):
             with torch.no_grad():
                 self.network_weights = weights
-                return self.net(X.to(self.device))
+                return self.net(X.float().to(self.device))
 
         predictions = (
             torch.stack(
@@ -495,5 +495,5 @@ class PrefNet(BayesNet):
             .squeeze()
             .T
         )
-        
-        return torch.cov(predictions)
+
+        return torch.cov(predictions).double()
