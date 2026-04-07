@@ -1,0 +1,17 @@
+project: BR-training
+group: BR
+name: br
+width: 64
+depth: 3
+tuning_set: data/adroit_pen/adroit_pen_tuning_set.hdf5
+mapper_num_iters: 1000
+n_data: 512
+wasserstein_steps_0: 0
+wasserstein_steps_1: 1200
+n_samples: 1024
+wasserstein_lr: 0.001
+lr: 0.08
+save_ckpt_every: 50
+print_every: 20
+seed: 1
+OUT_DIR: ./exp/reward_learning/pen_tuning
