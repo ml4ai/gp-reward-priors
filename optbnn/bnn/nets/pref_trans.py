@@ -183,15 +183,18 @@ class PT(nn.Module):
         embd_dropout: float = 0.1,
         max_pos: int = 1024,
         eps: float = 1e-05,
-        rngs: nnx.Rngs = nnx.Rngs(0, params=1, dropout=2),
+        scaled_variance: bool = True,
     ):
+        super(PT, self).__init__()
         self.embd_dim = embd_dim
         self.pref_attn_embd_dim = pref_attn_embd_dim
 
-        self.state_linear = nnx.Linear(state_dim, embd_dim, rngs=rngs)
-        self.action_linear = nnx.Linear(action_dim, embd_dim, rngs=rngs)
-        self.timestep_embed = nnx.Embed(max_episode_steps + 1, embd_dim, rngs=rngs)
-        self.stacked_layer_norm = nnx.LayerNorm(embd_dim, epsilon=eps, rngs=rngs)
+        self.state_linear = Linear(state_dim, embd_dim, scaled_variance=scaled_variance)
+        self.action_linear = Linear(
+            action_dim, embd_dim, scaled_variance=scaled_variance
+        )
+        self.timestep_embed = nn.Embedding(max_episode_steps + 1, embd_dim)
+        self.stacked_layer_norm = nn.LayerNorm(embd_dim, eps)
         self.gpt = GPT2Model(
             embd_dim=embd_dim,
             num_heads=num_heads,
@@ -204,11 +207,13 @@ class PT(nn.Module):
             eps=eps,
             rngs=rngs,
         )
-        self.pref_linear = nnx.Linear(embd_dim, 2 * pref_attn_embd_dim + 1, rngs=rngs)
-        self.attn_dropout = nnx.Dropout(0.0, rngs=rngs)
+        self.pref_linear = Linear(
+            embd_dim, 2 * pref_attn_embd_dim + 1, scaled_variance=scaled_variance
+        )
+        self.attn_dropout = nn.Dropout(0.0)
 
     def __call__(self, states, actions, timesteps, attn_mask, training=False):
-        batch_size, seq_length = states.shape[0], states.shape[1]
+        batch_size, seq_length, _ = states.size()
 
         embd_states = self.state_linear(states)
         embd_actions = self.action_linear(actions)
@@ -219,7 +224,7 @@ class PT(nn.Module):
         embd_actions = embd_actions + embd_timesteps
 
         stacked_inputs = (
-            jnp.stack([embd_states, embd_actions], axis=1)
+            torch.stack([embd_states, embd_actions], dim=1)
             .transpose(0, 2, 1, 3)
             .reshape(batch_size, 2 * seq_length, self.embd_dim)
         )
