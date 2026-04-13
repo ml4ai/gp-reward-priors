@@ -10,6 +10,7 @@ import h5py
 from pathlib import Path
 from itertools import repeat
 from collections import OrderedDict
+from torch.utils.data import Dataset
 
 
 def load_uci_data(uci_dir, split_id, name, version="original"):
@@ -106,6 +107,53 @@ def load_pref_data(pref_dir, training_ratio=0.8):
     X_test = X[test_indices, ...]
     y_test = y[test_indices, ...]
     return X_train, y_train, X_test, y_test
+
+
+class Pref_H5Dataset(Dataset):
+    def __init__(self, datafile, max_episode_length=None):
+        super(Pref_H5Dataset, self).__init__()
+        with h5py.File(datafile, "r") as f:
+            if max_episode_length is None:
+                self._max_episode_length = np.max(
+                    [np.max(f["timesteps"][:]), np.max(f["timesteps_2"][:])]
+                )
+            else:
+                self._max_episode_length = max_episode_length
+
+            self._sts_shape = f["states"].shape
+            self._acts_shape = f["actions"].shape
+            self.states = f["states"][:]
+            self.actions = f["actions"][:]
+            self.timesteps = f["timesteps"][:]
+            self.attn_mask = f["attn_mask"][:]
+
+            self.states_2 = f["states_2"][:]
+            self.actions_2 = f["actions_2"][:]
+            self.timesteps_2 = f["timesteps_2"][:]
+            self.attn_mask_2 = f["attn_mask_2"][:]
+            self.labels = f["labels"][:]
+
+    def __getitem__(self, index):
+        return (
+            self.states[index, ...],
+            self.actions[index, ...],
+            self.timesteps[index, ...],
+            self.attn_mask[index, ...],
+            self.states_2[index, ...],
+            self.actions_2[index, ...],
+            self.timesteps_2[index, ...],
+            self.attn_mask_2[index, ...],
+            self.labels[index],
+        )
+
+    def __len__(self):
+        return self._sts_shape[0]
+
+    def shapes(self):
+        return self._sts_shape, self._acts_shape
+
+    def max_episode_length(self):
+        return self._max_episode_length
 
 
 def prepare_device(n_gpu_use):
