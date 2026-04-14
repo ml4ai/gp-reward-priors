@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 from optbnn.bnn.priors import PriorModule
 
 TensorBatch = List[torch.Tensor]
@@ -157,7 +158,7 @@ class PTTrainer:
         log_dict = {}
 
         B, T, _ = states.size()
-        
+
         trans_pred_1, _ = self.net(
             states,
             actions,
@@ -173,11 +174,11 @@ class PTTrainer:
 
         trans_pred_1 = trans_pred_1["weighted_sum"]
         trans_pred_2 = trans_pred_2["weighted_sum"]
-        
+
         sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
         sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
         fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
-        
+
         loss = self.like(fX_batch, labels)
 
         self.opt.zero_grad()
@@ -209,7 +210,7 @@ class PTTrainer:
             log_dict = {}
 
             B, T, _ = states.size()
-            
+
             trans_pred_1, _ = self.net(
                 states,
                 actions,
@@ -222,14 +223,14 @@ class PTTrainer:
                 timesteps_2,
                 attn_mask_2,
             )
-    
+
             trans_pred_1 = trans_pred_1["weighted_sum"]
             trans_pred_2 = trans_pred_2["weighted_sum"]
-            
+
             sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
             sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
             fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
-            
+
             loss = self.like(fX_batch, labels)
 
             log_dict["eval_loss"] = loss.detach().cpu().numpy()
