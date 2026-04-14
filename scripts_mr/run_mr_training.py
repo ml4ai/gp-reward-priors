@@ -58,8 +58,8 @@ class TrainConfig:
             self.checkpoints_path = os.path.join(
                 osp.expanduser(self.checkpoints_path), self.name
             )
-        if prior:
-            if prior != "FG":
+        if self.prior:
+            if self.prior != "FG":
                 self.prior = os.path.join(
                     osp.expanduser(self.prior),
                     f"br-{self.dataset_id}-{self.width}-{self.depth}",
