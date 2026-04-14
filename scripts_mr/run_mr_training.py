@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, random_split
 
 import h5py
 
-sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
 
 from optbnn.utils import util
