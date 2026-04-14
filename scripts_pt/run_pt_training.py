@@ -17,9 +17,8 @@ import h5py
 
 sys.path.insert(0, os.path.abspath("../.."))
 from optbnn.utils import util
-from optbnn.bnn.nets.mlp import MLP
-from optbnn.bnn.priors import FixedGaussianPrior, OptimGaussianPrior
-from optbnn.training.training import MRTrainer
+from optbnn.bnn.nets.pref_trans import PT
+from optbnn.training.training import PTTrainer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -27,13 +26,21 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "MR-training"
-    group: str = "MR"
-    name: str = "mr"
+    project: str = "PT-training"
+    group: str = "PT"
+    name: str = "pt"
     # model params
-    width: int = 64
-    depth: int = 3
-    activations: str = "relu"
+    embd_dim: int = 256
+    pref_attn_embd_dim: Optional[int] = None
+    num_heads: int = 4
+    attn_dropout: float = 0.1
+    resid_dropout: float = 0.1
+    intermediate_dim: Optional[int] = None
+    num_layers: int = 1
+    embd_dropout: float = 0.1
+    model_eps: float = 0.1
+    max_ep_length: Optional[int] = None
+    default_max_pos: int = 2048
     # training params
     dataset_id: str = "D4RL/pen-v2"
     dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref.hdf5"
@@ -46,8 +53,6 @@ class TrainConfig:
     # general params
     seed: int = 0
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
-    prior: Optional[str] = None
-    prior_ckpt: int = 1000
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
@@ -55,12 +60,10 @@ class TrainConfig:
             self.checkpoints_path = os.path.join(
                 osp.expanduser(self.checkpoints_path), self.name
             )
-        if prior:
-            if prior != "FG":
-                self.prior = os.path.join(
-                    osp.expanduser(self.prior),
-                    f"br-{self.dataset_id}-{self.width}-{self.depth}",
-                )
+        if self.pref_attn_embd_dim is None:
+            self.pref_attn_embd_dim = self.embd_dim
+        if self.intermediate_dim is None:
+            self.intermediate_dim = 4 * self.embd_dim
 
 
 @pyrallis.wrap()
@@ -82,7 +85,7 @@ def train(config: TrainConfig):
 
     util.set_seed(config.seed)
     dataset = osp.expanduser(config.dataset)
-    dataset = util.Pref_H5Dataset(dataset, -1)
+    dataset = util.Pref_H5Dataset(dataset)
     state_shape, action_shape = dataset.shapes()
     state_dim = state_shape[2]
     action_dim = action_shape[2]
@@ -114,23 +117,30 @@ def train(config: TrainConfig):
     else:
         eval_interval = int(eval_interval)
 
-    net = MLP(
-        state_dim + action_dim, 1, [config.width] * config.depth, config.activations
+    max_pos = config.default_max_pos
+    while query_len > max_pos:
+        max_pos *= 2
+
+    net = PT(
+        state_dim,
+        action_dim,
+        dataset.max_episode_length(),
+        config.embd_dim,
+        config.pref_attn_embd_dim,
+        config.num_heads,
+        config.attn_dropout,
+        config.resid_dropout,
+        config.intermediate_dim,
+        config.num_layers,
+        config.embd_dropout,
+        max_pos,
+        config.model_eps,
     ).to(device)
-    if config.prior:
-        if config.prior == "FG":
-            prior = FixedGaussianPrior(std=1.0).to(device)
-        else:
-            ckpt_path = os.path.join(
-                config.prior, "ckpts", "it-{}.ckpt".format(config.prior)
-            )
-            prior = OptimGaussianPrior(ckpt_path).to(device)
+
     net_optimizer = torch.optim.Adam(net.parameters(), lr=config.lr)
-    model = MRTrainer(
+    model = PTTrainer(
         net,
         opt=net_optimizer,
-        num_datapoints=len(training_data),
-        prior=prior,
         device=device,
     )
     c_best_epoch = 0
