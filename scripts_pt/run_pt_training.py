@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader, random_split
 import h5py
 
 sys.path.insert(0, os.path.abspath("../.."))
+os.chdir("..")
+
 from optbnn.utils import util
 from optbnn.bnn.nets.pref_trans import PT
 from optbnn.training.training import PTTrainer
@@ -50,6 +52,7 @@ class TrainConfig:
     lr: float = 3e-4
     eval_every: int = 1  # How often (time steps) we evaluate
     criteria_key: str = "acc"
+    pin_memory: bool = True
     # general params
     seed: int = 0
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path

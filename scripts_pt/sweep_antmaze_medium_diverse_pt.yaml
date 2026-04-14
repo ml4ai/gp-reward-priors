@@ -1,0 +1,17 @@
+project: PT-training
+program: run_pt_training.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts_pt/antmaze_medium_diverse_pt.yaml"
+  num_heads:
+    values: [1, 2, 4, 8]
+  num_layers:
+    values: [1, 2, 3, 4]
+  embd_dim:
+    values: [64, 128, 256]
+  epochs:
+    value: 5000
+  lr:
+    values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]

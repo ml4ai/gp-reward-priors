@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader, random_split
 import h5py
 
 sys.path.insert(0, os.path.abspath("../.."))
+os.chdir("..")
+
 from optbnn.utils import util
 from optbnn.bnn.nets.mlp import MLP
 from optbnn.bnn.priors import FixedGaussianPrior, OptimGaussianPrior
@@ -35,7 +37,7 @@ class TrainConfig:
     depth: int = 3
     activations: str = "relu"
     # training params
-    dataset_id: str = "D4RL/pen-v2"
+    dataset_id: str = "D4RL_antmaze-medium-play-v2"
     dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref.hdf5"
     training_split: float = 0.7
     epochs: int = 10
@@ -43,6 +45,7 @@ class TrainConfig:
     lr: float = 3e-4
     eval_every: int = 1  # How often (time steps) we evaluate
     criteria_key: str = "acc"
+    pin_memory: bool = True
     # general params
     seed: int = 0
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
