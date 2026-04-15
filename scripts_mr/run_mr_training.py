@@ -156,7 +156,7 @@ def train(config: TrainConfig):
         }
         if epoch:
             for train_batch in training_data_loader:
-                train_batch = [b.to(config.device) for b in train_batch]
+                train_batch = [b.to(device) for b in train_batch]
                 for key, val in model.train(train_batch).items():
                     metrics[key].append(val)
         else:
@@ -166,7 +166,7 @@ def train(config: TrainConfig):
         # eval phase
         if epoch % config.eval_every == 0:
             for test_batch in test_data_loader:
-                test_batch = [b.to(config.device) for b in test_batch]
+                test_batch = [b.to(device) for b in test_batch]
                 for key, val in model.evaluation(test_batch).items():
                     metrics[key].append(val)
 
