@@ -60,7 +60,7 @@ class MRTrainer:
                 self.like(fX_batch, labels) + self.prior(self.net) / self.num_datapoints
             )
         self.opt.zero_grad()
-        loss.backwards()
+        loss.backward()
         self.opt.step()
         with torch.no_grad():
             log_dict["training_loss"] = loss.detach().cpu().numpy()
@@ -182,7 +182,7 @@ class PTTrainer:
         loss = self.like(fX_batch, labels)
 
         self.opt.zero_grad()
-        loss.backwards()
+        loss.backward()
         self.opt.step()
         with torch.no_grad():
             log_dict["training_loss"] = loss.detach().cpu().numpy()
