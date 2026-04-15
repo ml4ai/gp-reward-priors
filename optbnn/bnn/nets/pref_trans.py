@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..activation_fns import *
-from ..layers.linear import Linear
 
 
 def split_heads(x, num_heads, head_dim):
@@ -125,14 +124,13 @@ class GPT2MLP(nn.Module):
         embd_dim: int = 64,
         intermediate_dim: int = 256,
         resid_dropout: float = 0.1,
-        scaled_variance: bool = True,
     ):
         super(GPT2MLP, self).__init__()
-        self.in_linear = Linear(
-            embd_dim, intermediate_dim, scaled_variance=scaled_variance
+        self.in_linear = nn.Linear(
+            embd_dim, intermediate_dim
         )
-        self.out_linear = Linear(
-            intermediate_dim, embd_dim, scaled_variance=scaled_variance
+        self.out_linear = nn.Linear(
+            intermediate_dim, embd_dim
         )
         self.resid_dropout = nn.Dropout(resid_dropout)
         self.relu = nn.ReLU()
@@ -153,17 +151,16 @@ class GPT2SelfAttention(nn.Module):
         attn_dropout: float = 0.1,
         resid_dropout: float = 0.1,
         max_pos: int = 1024,
-        scaled_variance: bool = True,
     ):
         super(GPT2SelfAttention, self).__init__()
         self.num_heads = num_heads
         self.head_dim = embd_dim // num_heads
         self.max_pos = max_pos
 
-        self.in_linear = Linear(embd_dim, 3 * embd_dim, scaled_variance=scaled_variance)
+        self.in_linear = nn.Linear(embd_dim, 3 * embd_dim)
         self.attn_dropout = nn.Dropout(attn_dropout)
 
-        self.out_linear = Linear(embd_dim, embd_dim, scaled_variance=scaled_variance)
+        self.out_linear = nn.Linear(embd_dim, embd_dim)
         self.resid_dropout = nn.Dropout(resid_dropout)
 
     def forward(self, x, attn_mask):
@@ -209,7 +206,6 @@ class GPT2Block(nn.Module):
         intermediate_dim: int = 256,
         max_pos: int = 1024,
         eps: float = 1e-05,
-        scaled_variance: bool = True,
     ):
         super(GPT2Block, self).__init__()
         self.layer_norm_0 = nn.LayerNorm(embd_dim, eps)
@@ -219,14 +215,12 @@ class GPT2Block(nn.Module):
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
             max_pos=max_pos,
-            scaled_variance=scaled_variance,
         )
         self.layer_norm_1 = nn.LayerNorm(embd_dim, eps)
         self.mlp = GPT2MLP(
             embd_dim=embd_dim,
             intermediate_dim=intermediate_dim,
             resid_dropout=resid_dropout,
-            scaled_variance=scaled_variance,
         )
 
     def forward(self, x, attn_mask):
@@ -253,7 +247,6 @@ class GPT2Model(nn.Module):
         embd_dropout: float = 0.1,
         max_pos: int = 1024,
         eps: float = 1e-05,
-        scaled_variance: bool = True,
     ):
         super(GPT2Model, self).__init__()
         self.dropout = nn.Dropout(embd_dropout)
@@ -267,7 +260,6 @@ class GPT2Model(nn.Module):
                     intermediate_dim=intermediate_dim,
                     max_pos=max_pos,
                     eps=eps,
-                    scaled_variance=scaled_variance,
                 )
             )
         self.layer_norm = nn.LayerNorm(embd_dim, eps)
@@ -303,15 +295,14 @@ class PT(nn.Module):
         embd_dropout: float = 0.1,
         max_pos: int = 1024,
         eps: float = 1e-05,
-        scaled_variance: bool = True,
     ):
         super(PT, self).__init__()
         self.embd_dim = embd_dim
         self.pref_attn_embd_dim = pref_attn_embd_dim
 
-        self.state_linear = Linear(state_dim, embd_dim, scaled_variance=scaled_variance)
-        self.action_linear = Linear(
-            action_dim, embd_dim, scaled_variance=scaled_variance
+        self.state_linear = nn.Linear(state_dim, embd_dim)
+        self.action_linear = nn.Linear(
+            action_dim, embd_dim
         )
         self.timestep_embed = nn.Embedding(max_episode_steps + 1, embd_dim)
         self.stacked_layer_norm = nn.LayerNorm(embd_dim, eps)
@@ -325,10 +316,9 @@ class PT(nn.Module):
             embd_dropout=embd_dropout,
             max_pos=max_pos,
             eps=eps,
-            scaled_variance=scaled_variance,
         )
-        self.pref_linear = Linear(
-            embd_dim, 2 * pref_attn_embd_dim + 1, scaled_variance=scaled_variance
+        self.pref_linear = nn.Linear(
+            embd_dim, 2 * pref_attn_embd_dim + 1
         )
         self.attn_dropout = nn.Dropout(0.0)
 
