@@ -90,7 +90,7 @@ def train(config: TrainConfig):
     dataset = osp.expanduser(config.dataset)
     dataset = util.Pref_H5Dataset(dataset)
     state_shape, action_shape = dataset.shapes()
-    state_dim = state_shape[2]
+    _, query_len, state_dim = state_shape
     action_dim = action_shape[2]
     training_data, test_data = random_split(
         dataset, [config.training_split, 1 - config.training_split]
