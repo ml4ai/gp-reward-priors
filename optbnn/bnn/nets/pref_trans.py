@@ -5,6 +5,7 @@ import torch.nn.functional as F
 
 from ..activation_fns import *
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def split_heads(x, num_heads, head_dim):
     """
@@ -126,12 +127,8 @@ class GPT2MLP(nn.Module):
         resid_dropout: float = 0.1,
     ):
         super(GPT2MLP, self).__init__()
-        self.in_linear = nn.Linear(
-            embd_dim, intermediate_dim
-        )
-        self.out_linear = nn.Linear(
-            intermediate_dim, embd_dim
-        )
+        self.in_linear = nn.Linear(embd_dim, intermediate_dim)
+        self.out_linear = nn.Linear(intermediate_dim, embd_dim)
         self.resid_dropout = nn.Dropout(resid_dropout)
         self.relu = nn.ReLU()
 
@@ -176,7 +173,7 @@ class GPT2SelfAttention(nn.Module):
         casual_mask = torch.tril(torch.ones((1, 1, self.max_pos, self.max_pos)))[
             :, :, key_len - query_len : key_len, :key_len
         ]
-        casual_mask = casual_mask.to(torch.bool)
+        casual_mask = casual_mask.to(torch.bool).to(device)
 
         out, _attn_weights = attention(
             query,
@@ -301,9 +298,7 @@ class PT(nn.Module):
         self.pref_attn_embd_dim = pref_attn_embd_dim
 
         self.state_linear = nn.Linear(state_dim, embd_dim)
-        self.action_linear = nn.Linear(
-            action_dim, embd_dim
-        )
+        self.action_linear = nn.Linear(action_dim, embd_dim)
         self.timestep_embed = nn.Embedding(max_episode_steps + 1, embd_dim)
         self.stacked_layer_norm = nn.LayerNorm(embd_dim, eps)
         self.gpt = GPT2Model(
@@ -317,9 +312,7 @@ class PT(nn.Module):
             max_pos=max_pos,
             eps=eps,
         )
-        self.pref_linear = nn.Linear(
-            embd_dim, 2 * pref_attn_embd_dim + 1
-        )
+        self.pref_linear = nn.Linear(embd_dim, 2 * pref_attn_embd_dim + 1)
         self.attn_dropout = nn.Dropout(0.0)
 
     def forward(self, states, actions, timesteps, attn_mask):
@@ -371,7 +364,7 @@ class PT(nn.Module):
         casual_mask = torch.ones((1, 1, seq_length, seq_length))[
             :, :, key_len - query_len : key_len, :key_len
         ]
-        casual_mask = casual_mask.to(torch.bool)
+        casual_mask = casual_mask.to(torch.bool).to(device)
 
         new_attn_mask = get_attention_mask(attn_mask, batch_size)
         out, last_attn_weights = attention(
