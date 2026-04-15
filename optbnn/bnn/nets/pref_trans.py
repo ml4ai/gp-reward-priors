@@ -127,6 +127,7 @@ class GPT2MLP(nn.Module):
         resid_dropout: float = 0.1,
         scaled_variance: bool = True,
     ):
+        super(GPT2MLP, self).__init__()
         self.in_linear = Linear(
             embd_dim, intermediate_dim, scaled_variance=scaled_variance
         )
@@ -154,6 +155,7 @@ class GPT2SelfAttention(nn.Module):
         max_pos: int = 1024,
         scaled_variance: bool = True,
     ):
+        super(GPT2SelfAttention, self).__init__()
         self.num_heads = num_heads
         self.head_dim = embd_dim // num_heads
         self.max_pos = max_pos
@@ -209,6 +211,7 @@ class GPT2Block(nn.Module):
         eps: float = 1e-05,
         scaled_variance: bool = True,
     ):
+        super(GPT2Block, self).__init__()
         self.layer_norm_0 = nn.LayerNorm(embd_dim, eps)
         self.attention = GPT2SelfAttention(
             embd_dim=embd_dim,
@@ -252,6 +255,7 @@ class GPT2Model(nn.Module):
         eps: float = 1e-05,
         scaled_variance: bool = True,
     ):
+        super(GPT2Model, self).__init__()
         self.dropout = nn.Dropout(embd_dropout)
         self.layers = nn.ModuleList()
         for i in range(num_layers):
