@@ -128,6 +128,8 @@ def train(config: TrainConfig):
                 config.prior, "ckpts", "it-{}.ckpt".format(config.prior)
             )
             prior = OptimGaussianPrior(ckpt_path).to(device)
+    else:
+        prior = None
     net_optimizer = torch.optim.Adam(net.parameters(), lr=config.lr)
     model = MRTrainer(
         net,
