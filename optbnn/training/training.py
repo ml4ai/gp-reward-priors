@@ -162,13 +162,13 @@ class PTTrainer:
         trans_pred_1, _ = self.net(
             states,
             actions,
-            timesteps,
+            timesteps.to(torch.int),
             attn_mask,
         )
         trans_pred_2, _ = self.net(
             states_2,
             actions_2,
-            timesteps_2,
+            timesteps_2.to(torch.int),
             attn_mask_2,
         )
 
@@ -214,13 +214,13 @@ class PTTrainer:
             trans_pred_1, _ = self.net(
                 states,
                 actions,
-                timesteps,
+                timesteps.to(torch.int),
                 attn_mask,
             )
             trans_pred_2, _ = self.net(
                 states_2,
                 actions_2,
-                timesteps_2,
+                timesteps_2.to(torch.int),
                 attn_mask_2,
             )
 
