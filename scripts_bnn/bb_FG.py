@@ -15,12 +15,12 @@ import matplotlib as mpl
 import pyrallis
 
 mpl.use("Agg")
+import arviz_stats as azs
+import h5py
 import matplotlib.pylab as plt
 import numpy as np
 import torch
 import wandb
-
-import h5py
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -36,7 +36,6 @@ os.chdir("..")
 from optbnn.bnn.likelihoods import LikCE
 from optbnn.bnn.nets.mlp import MLP
 from optbnn.bnn.priors import FixedGaussianPrior
-from optbnn.metrics.sampling import compute_rhat_regression
 from optbnn.sgmcmc_bayes_net.pref_net import PrefNet
 from optbnn.utils import util
 from optbnn.utils.rand_generators import DataSetSampler
@@ -116,10 +115,9 @@ def train(config: TrainConfig):
 
     # In[18]:
 
-    X_train, y_train, X_test, _ = util.load_pref_data(
+    X_train, y_train, X_test, y_test = util.load_pref_data(
         config.dataset, config.training_split
     )
-    X_test = X_test[:, :, :, :28].reshape(-1, 28)
 
     # In[19]:
 
@@ -128,36 +126,48 @@ def train(config: TrainConfig):
     prior = FixedGaussianPrior(std=1.0)
 
     # Setup likelihood
-    net = MLP(28, 1, [width] * depth, transfer_fn)
+    net = MLP(24, 1, [width] * depth, transfer_fn)
     likelihood = LikCE()
 
     # Initialize the sampler
     saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
     util.ensure_dir(saved_dir)
-    bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=1, name="FG")
+    bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=4, name="FG")
     # Start sampling
     bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
-
-    # In[20]:
-
-    # Make predictions
-    util.set_seed(config.seed)
-    _, _, bnn_std_preds = bayes_net_std.predict(X_test, True)
-    # Convergence diagnostics using the R-hat statistic
-    r_hat = compute_rhat_regression(bnn_std_preds, sampling_configs["num_chains"])
-    wandb.log(
-        {"FG_mean_R_hat": float(r_hat.mean()), "FG_std_R_hat": float(r_hat.std())}
-    )
-    print(
-        r"R-hat: mean {:.4f} std {:.4f}".format(
-            float(r_hat.mean()), float(r_hat.std())
+    mean_ce = []
+    mean_acc = []
+    params_chains = []
+    for i in range(config.num_chains):
+        bayes_net_std.sampled_weights = bayes_net_std._load_sampled_weights(
+            os.path.join(
+                saved_dir, "sampled_weights", "sampled_weights_{0:07d}".format(i)
+            )
         )
-    )
-    bnn_std_preds = bnn_std_preds.squeeze().T
+        ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train)
+        mean_ce.append(ce)
+        mean_acc.append(acc)
 
-    # Save the predictions
-    posterior_std_path = os.path.join(config.OUT_DIR, "posterior_std.npz")
-    np.savez(posterior_std_path, bnn_samples=bnn_std_preds)
+        params_chains.append(
+            np.stack(
+                [
+                    np.hstack([arr.ravel() for arr in arrays])
+                    for arrays in bayes_net_std.sampled_weights
+                ]
+            )
+        )
+    params_chains = np.stack(params_chains)
+    rhat = azs.rhat(params_chains)
+    summary = {
+        "test_mean_cross_entropy": np.mean(mean_ce),
+        "test_mean_accuracy": np.mean(mean_acc)
+        "max": np.max(rhats),
+        "95th_pct": np.percentile(rhats, 95),
+        "median": np.median(rhats),
+        "mean": np.mean(rhats)
+        "pct_over_1.01": np.mean(rhats > 1.01) * 100
+    }
+    wandb.log(summary)
 
 # In[ ]:
 if __name__ == "__main__":
