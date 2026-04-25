@@ -160,7 +160,7 @@ def train(config: TrainConfig):
     rhat = azs.rhat(params_chains)
     summary = {
         "test_mean_cross_entropy": np.mean(mean_ce),
-        "test_mean_accuracy": np.mean(mean_acc)
+        "test_mean_accuracy": np.mean(mean_acc),
         "max": np.max(rhats),
         "95th_pct": np.percentile(rhats, 95),
         "median": np.median(rhats),
