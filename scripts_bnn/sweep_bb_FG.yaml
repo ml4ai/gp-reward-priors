@@ -4,7 +4,7 @@ method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_FG.yaml"
+    value: "scripts_bnn/bb_FG.yaml"
   dataset: 
     value: "data/bb/t0012_pref.hdf5"
   width:
