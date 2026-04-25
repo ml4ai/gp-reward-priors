@@ -1,18 +1,17 @@
 """Define a base class of Bayesian Neural Network."""
 
+import copy
 import glob
 import os
-import copy
+from itertools import islice
+
 import numpy as np
 import torch
 import torch.utils.data as data_utils
 
-
-from itertools import islice
-
 from ..samplers.adaptive_sghmc import AdaptiveSGHMC
 from ..samplers.sghmc import SGHMC
-from ..utils.util import inf_loop, ensure_dir, prepare_device
+from ..utils.util import ensure_dir, inf_loop, prepare_device
 
 
 class BayesNet:
@@ -180,8 +179,7 @@ class BayesNet:
         self.num_saved_sets_weights += 1
 
     def save_map(self):
-        """Save map estimate to file.
-        """
+        """Save map estimate to file."""
         file_path = os.path.join(
             self.sampled_weights_dir,
             "map_estimate",
@@ -211,7 +209,7 @@ class BayesNet:
         """
         checkpoint = torch.load(file_path, weights_only=False)
         self.map = checkpoint["map_estimate"]
-    
+
     def _load_all_sampled_weights(self):
         """Load all the sampled weights from files.
 
@@ -225,9 +223,7 @@ class BayesNet:
             return sampled_weights
 
         def sampled_weights_loader(sampled_weights_dir):
-            file_paths = glob.glob(
-                os.path.join(sampled_weights_dir, "sampled_weights*")
-            )
+            file_paths = glob.glob(os.path.join(sampled_weights_dir, "sampled_weights*"))
             for file_path in file_paths:
                 for weights in load_weights(file_path):
                     yield weights
@@ -311,12 +307,9 @@ class BayesNet:
                 resample_prior_every=resample_prior_every,
                 eval_map=eval_map,
             )
-            if self.task == "classification":
+            if self.task == "classification" or self.task == "pref":
                 self._save_sampled_weights()
                 self.sampled_weights.clear()
-                self._save_checkpoint(mode="last")
-            if self.task == "pref":
-                self._save_sampled_weights()
                 self._save_checkpoint(mode="last")
 
     def train(

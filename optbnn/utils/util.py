@@ -1,15 +1,15 @@
-import json
-import pandas as pd
-import pickle
-import numpy as np
-import torch
-import os
 import argparse
-import h5py
-
-from pathlib import Path
-from itertools import repeat
+import json
+import os
+import pickle
 from collections import OrderedDict
+from itertools import repeat
+from pathlib import Path
+
+import h5py
+import numpy as np
+import pandas as pd
+import torch
 from torch.utils.data import Dataset
 
 
@@ -110,7 +110,7 @@ def load_pref_data(pref_dir, training_ratio=0.8):
 
 
 class Pref_H5Dataset(Dataset):
-    def __init__(self, datafile, max_episode_length=None):
+    def __init__(self, datafile, max_episode_length=None, label_flip=0.0):
         super(Pref_H5Dataset, self).__init__()
         with h5py.File(datafile, "r") as f:
             if max_episode_length is None:
@@ -131,7 +131,18 @@ class Pref_H5Dataset(Dataset):
             self.actions_2 = f["actions_2"][:]
             self.timesteps_2 = f["timesteps_2"][:]
             self.attn_mask_2 = f["attn_mask_2"][:]
-            self.labels = f["labels"][:]
+            if label_flip == 0.0:
+                self.labels = f["labels"][:]
+            else:
+                if label_flip == 1.0:
+                    self.labels = 1 - f["labels"][:]
+                else:
+                    num_to_flip = int(f["labels"].shape[1] * label_flip)
+                    indices_to_flip = np.random.choice(
+                        f["labels"].shape[1], num_to_flip, replace=False
+                    )
+                    self.labels = f["labels"][:]
+                    self.labels[indices_to_flip] = 1 - self.labels[indices_to_flip]
 
     def __getitem__(self, index):
         return (

@@ -240,8 +240,9 @@ class PrefNet(BayesNet):
                     step=self.num_samples,
                 )
                 self.print_info(
-                    "Samples # {:5d} : CE = {:.4f} "
-                    "ACC = {:.4f} ".format(self.num_samples, ce, acc)
+                    "Samples # {:5d} : CE = {:.4f} ACC = {:.4f} ".format(
+                        self.num_samples, ce, acc
+                    )
                 )
             else:
                 wandb.log(
@@ -299,8 +300,9 @@ class PrefNet(BayesNet):
                     step=self.num_samples,
                 )
                 self.print_info(
-                    "Samples # {:5d} : CE = {:.4f} "
-                    "ACC = {:.4f} ".format(self.num_samples, ce, acc)
+                    "Samples # {:5d} : CE = {:.4f} ACC = {:.4f} ".format(
+                        self.num_samples, ce, acc
+                    )
                 )
             else:
                 wandb.log(
@@ -361,16 +363,9 @@ class PrefNet(BayesNet):
                 .cpu()
                 .numpy()
             )
-
-            wandb.log(
-                {
-                    f"{self.name}_eval_mean_cross_entropy": ce,
-                    f"{self.name}_eval_mean_accuracy": acc,
-                }
-            )
-            self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
             self.map = None
             self.net.train()
+            return ce, acc
         else:
             B, _, T, d_dim = x.shape
             obs_dim = d_dim - 1
@@ -408,14 +403,8 @@ class PrefNet(BayesNet):
                 .numpy()
             )
 
-            wandb.log(
-                {
-                    f"{self.name}_eval_mean_cross_entropy": ce,
-                    f"{self.name}_eval_mean_accuracy": acc,
-                }
-            )
-            self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
             self.net.train()
+            return ce, acc
 
     def find_map(self, x, y):
         """find the map estimate given a set of data and set of sampled weights.
@@ -459,10 +448,7 @@ class PrefNet(BayesNet):
             torch.from_numpy(y.squeeze()).float().to(self.device),
         )
         losses = np.array(
-            [
-                network_loss(x_t, y_t, weights=weights)
-                for weights in self.sampled_weights
-            ]
+            [network_loss(x_t, y_t, weights=weights) for weights in self.sampled_weights]
         )
         self.map = self.sampled_weights[np.argmin(losses)]
 
@@ -487,10 +473,7 @@ class PrefNet(BayesNet):
 
         predictions = (
             torch.stack(
-                [
-                    network_predict(X, weights=weights)
-                    for weights in self.sampled_weights
-                ]
+                [network_predict(X, weights=weights) for weights in self.sampled_weights]
             )
             .squeeze()
             .T
