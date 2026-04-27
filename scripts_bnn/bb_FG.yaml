@@ -4,10 +4,10 @@ name: bb
 width: 128
 depth: 3
 batch_size: 256
-num_samples: 60
-n_discarded: 10
+num_samples: 1000
+n_discarded: 0
 num_burn_in_steps: 3000
-keep_every: 2000
+keep_every: 1
 sghmc_lr: 0.008
 num_chains: 4
 mdecay: 0.01
