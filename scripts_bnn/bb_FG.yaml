@@ -4,7 +4,7 @@ name: bb
 width: 128
 depth: 3
 batch_size: 256
-num_samples: 250
+num_samples: 50
 n_discarded: 0
 num_burn_in_steps: 3000
 keep_every: 1
