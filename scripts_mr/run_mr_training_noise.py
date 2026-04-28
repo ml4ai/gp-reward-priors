@@ -109,7 +109,7 @@ def train(config: TrainConfig):
             prior = FixedGaussianPrior(std=1.0).to(device)
         else:
             ckpt_path = os.path.join(
-                config.prior, "ckpts", "it-{}.ckpt".format(config.prior)
+                config.prior, "ckpts", "it-{}.ckpt".format(config.prior_ckpt)
             )
             prior = OptimGaussianPrior(ckpt_path).to(device)
     else:

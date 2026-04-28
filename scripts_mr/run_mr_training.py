@@ -7,21 +7,20 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 import pyrallis
 import torch
 import wandb
 from torch.utils.data import DataLoader, random_split
 
-import h5py
-
 sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
 
-from optbnn.utils import util
 from optbnn.bnn.nets.mlp import MLP
 from optbnn.bnn.priors import FixedGaussianPrior, OptimGaussianPrior
 from optbnn.training.training import MRTrainer
+from optbnn.utils import util
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -125,7 +124,7 @@ def train(config: TrainConfig):
             prior = FixedGaussianPrior(std=1.0).to(device)
         else:
             ckpt_path = os.path.join(
-                config.prior, "ckpts", "it-{}.ckpt".format(config.prior)
+                config.prior, "ckpts", "it-{}.ckpt".format(config.prior_ckpt)
             )
             prior = OptimGaussianPrior(ckpt_path).to(device)
     else:
