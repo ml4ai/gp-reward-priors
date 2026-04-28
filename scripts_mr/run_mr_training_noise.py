@@ -60,7 +60,7 @@ class TrainConfig:
             if self.prior != "FG":
                 self.prior = os.path.join(
                     osp.expanduser(self.prior),
-                    f"br-{self.dataset_id}-{self.width}-{self.depth}",
+                    f"br-{self.dataset_id[5:-3]}-{self.width}-{self.depth}",
                 )
 
 
