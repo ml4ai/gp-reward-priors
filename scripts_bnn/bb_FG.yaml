@@ -4,9 +4,9 @@ name: bb
 width: 128
 depth: 3
 batch_size: 256
-num_samples: 50
-n_discarded: 0
-num_burn_in_steps: 4000
+num_samples: 100
+n_discarded: 50
+num_burn_in_steps: 3000
 keep_every: 1
 sghmc_lr: 0.008
 num_chains: 4
