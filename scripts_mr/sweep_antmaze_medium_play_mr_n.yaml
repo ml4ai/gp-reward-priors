@@ -1,0 +1,19 @@
+project: MR-training
+program: run_mr_training_noise.py
+method: grid
+parameters:
+  # specify all configs to run for the choosen algorithm
+  config_path:
+    value: "scripts_mr/antmaze_medium_play_mr_n.yaml"
+  width:
+      value: 128
+  depth:
+      value: 4
+  epochs:
+    value: 5000
+  lr:
+    value: 0.03
+  label_flip:
+    values: [0.0, 0.1, 0.2, 0.3]
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

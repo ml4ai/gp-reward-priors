@@ -51,7 +51,9 @@ class TrainConfig:
     prior_ckpt: int = 1000
 
     def __post_init__(self):
-        self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
+        self.name = (
+            f"{self.name}-{self.label_flip}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
+        )
         if self.checkpoints_path is not None:
             self.checkpoints_path = os.path.join(
                 osp.expanduser(self.checkpoints_path), self.name
