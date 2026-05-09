@@ -120,7 +120,7 @@ def train(config: TrainConfig):
     model = MRTrainer(
         net,
         opt=net_optimizer,
-        num_datapoints=len(training_data),
+        num_datapoints=len(dataset),
         prior=prior,
         device=device,
     )
