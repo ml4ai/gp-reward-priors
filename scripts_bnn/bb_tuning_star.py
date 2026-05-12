@@ -48,7 +48,6 @@ mpl.rcParams["figure.dpi"] = 100
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.autograd.set_detect_anomaly(True)
 
 
 @dataclass
