@@ -169,13 +169,11 @@ class MapperWassersteinGP(object):
                     bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
 
                 if isinstance(self.bnn, torch.nn.DataParallel):
-                    target_K = self.gp.module.compute_covariance(
-                        X.double())
-                    ).to(self.device)
-                else:
-                    target_K = self.gp.compute_covariance(X.double()).to(
+                    target_K = self.gp.module.compute_covariance(X.double()).to(
                         self.device
                     )
+                else:
+                    target_K = self.gp.compute_covariance(X.double()).to(self.device)
 
                 if not self.gpu_gp:
                     X = X.to(self.device)
