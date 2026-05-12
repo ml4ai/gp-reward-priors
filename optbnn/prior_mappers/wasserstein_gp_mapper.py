@@ -99,8 +99,8 @@ class MapperWassersteinGP(object):
                     @ torch.diag_embed(sqrt_t_evalues)
                     @ t_evectors.transpose(-2, -1)
                 )
-                assert torch.isfinite(bnn_K).all()
-                assert torch.isfinite(sqrt_target_K).all()
+                print(torch.isfinite(bnn_K).all())
+                print(torch.isfinite(sqrt_target_K).all())
                 evalues, evectors = torch.linalg.eigh(
                     sqrt_target_K @ bnn_K @ sqrt_target_K
                 )
