@@ -136,7 +136,7 @@ class MapperWassersteinGP(object):
                 loss = losses.sum() / X_batch.size(0)
                 assert torch.isfinite(loss).all()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.5)
+                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.1)
                 check_gradients(self.bnn)
                 prior_optimizer.step()
                 with torch.no_grad():
@@ -203,7 +203,7 @@ class MapperWassersteinGP(object):
                 losses = torch.vmap(compute_sqw2)(X_batch)
                 loss = losses.sum() / X_batch.size(0)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.5)
+                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.1)
                 prior_optimizer.step()
                 with torch.no_grad():
                     wdist = torch.sqrt(losses).sum() / X_batch.size(0)
