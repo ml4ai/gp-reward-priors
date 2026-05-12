@@ -2,9 +2,9 @@ import itertools
 import os
 
 import numpy as np
-import wandb
 import torch
 import torch.nn as nn
+import wandb
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..utils.util import ensure_dir, prepare_device
@@ -72,10 +72,21 @@ class MapperWassersteinGP(object):
                     X = X.to("cpu")
                     aux_X = aux_X.to("cpu")
 
-                bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
-                target_K = self.gp.compute_covariance(X.double(), aux_X.double()).to(
-                    self.device
-                )
+                if isinstance(self.bnn, torch.nn.DataParallel):
+                    bnn_K = self.bnn.module.compute_covariance(X.double()).to(
+                        self.device
+                    )
+                else:
+                    bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
+
+                if isinstance(self.bnn, torch.nn.DataParallel):
+                    target_K = self.gp.module.compute_covariance(
+                        X.double(), aux_X.double()
+                    ).to(self.device)
+                else:
+                    target_K = self.gp.compute_covariance(X.double(), aux_X.double()).to(
+                        self.device
+                    )
 
                 if not self.gpu_gp:
                     X = X.to(self.device)
@@ -131,8 +142,21 @@ class MapperWassersteinGP(object):
                 if not self.gpu_gp:
                     X = X.to("cpu")
 
-                bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
-                target_K = self.gp.compute_covariance(X.double()).to(self.device)
+                if isinstance(self.bnn, torch.nn.DataParallel):
+                    bnn_K = self.bnn.module.compute_covariance(X.double()).to(
+                        self.device
+                    )
+                else:
+                    bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
+
+                if isinstance(self.bnn, torch.nn.DataParallel):
+                    target_K = self.gp.module.compute_covariance(
+                        X.double(), aux_X.double()
+                    ).to(self.device)
+                else:
+                    target_K = self.gp.compute_covariance(X.double(), aux_X.double()).to(
+                        self.device
+                    )
 
                 if not self.gpu_gp:
                     X = X.to(self.device)
