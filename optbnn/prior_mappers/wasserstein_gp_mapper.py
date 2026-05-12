@@ -10,6 +10,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from ..utils.util import ensure_dir, prepare_device
 
 
+def check_gradients(model):
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            if not torch.isfinite(param.grad).all():
+                print(f"Invalid gradient in {name}")
+
+
 class MapperWassersteinGP(object):
     def __init__(
         self,
@@ -128,6 +135,7 @@ class MapperWassersteinGP(object):
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
                 loss.backward()
+                check_gradients(self.bnn)
                 prior_optimizer.step()
                 with torch.no_grad():
                     wdist = torch.sqrt(losses).sum() / X_batch.size(0)
