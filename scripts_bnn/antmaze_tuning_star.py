@@ -15,12 +15,11 @@ import matplotlib as mpl
 import pyrallis
 
 mpl.use("Agg")
+import h5py
 import matplotlib.pylab as plt
 import numpy as np
 import torch
 import wandb
-
-import h5py
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -127,7 +126,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=f"{config.name}_tuning",
+        name=config.name,
         id=str(uuid.uuid4()),
         save_code=True,
     )

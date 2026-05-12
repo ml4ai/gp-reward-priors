@@ -15,12 +15,11 @@ import matplotlib as mpl
 import pyrallis
 
 mpl.use("Agg")
+import h5py
 import matplotlib.pylab as plt
 import numpy as np
 import torch
 import wandb
-
-import h5py
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -54,9 +53,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "BR-training"
-    group: str = "BR"
-    name: str = "br"
+    project: str = "BB-tuning-star"
+    group: str = "BB"
+    name: str = "bb"
     # model params
     width: int = 64
     depth: int = 3
@@ -69,15 +68,14 @@ class TrainConfig:
     save_ckpt_every: int = 50
     print_every: int = 20
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning/bb_tuning_star"  # Save path
+    OUT_DIR: str = "./exp/reward_learning/bb_tuning_star"  # Save path
 
     def __post_init__(self):
-        self.name = f"{self.name}-{str(uuid.uuid4())[:8]}"
-        if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
-            self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
-            util.ensure_dir(self.OUT_DIR)
-            util.ensure_dir(self.FIG_DIR)
+        self.name = f"{self.name}-{str(uuid.uuid4())[:8]}-{self.width}_{self.depth}"
+        self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+        self.FIG_DIR = os.path.join(self.OUT_DIR, "figures")
+        util.ensure_dir(self.OUT_DIR)
+        util.ensure_dir(self.FIG_DIR)
 
 
 # In[8]:
@@ -127,7 +125,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=f"{config.name}_tuning",
+        name=config.name,
         id=str(uuid.uuid4()),
         save_code=True,
     )
@@ -148,7 +146,7 @@ def train(config: TrainConfig):
 
     # Prior to be optimized
     opt_bnn = GaussianMLPReparameterization(
-        input_dim=28,
+        input_dim=24,
         output_dim=1,
         activation_fn=transfer_fn,
         hidden_dims=[width] * depth,
@@ -175,7 +173,7 @@ def train(config: TrainConfig):
         opt_bnn,
         data_generator,
         out_dir=config.OUT_DIR,
-        input_dim=28,
+        input_dim=24,
         n_data=config.n_data,
         n_gpu=1,
         gpu_gp=True,
@@ -202,7 +200,7 @@ def train(config: TrainConfig):
     fig = plt.figure(figsize=(6, 3.5))
     indices = np.arange(mapper_num_iters)[::5]
     plt.plot(indices, wdist_vals[indices], "-ko", ms=4)
-    plt.ylabel(r"$W_1(p_{gp}, p_{nn})$")
+    plt.ylabel(r"$W_2(p_{gp}, p_{nn})$")
     plt.xlabel("Iteration")
     wdist_fig = os.path.join(config.FIG_DIR, "bb_gp_wsr_plot.png")
     plt.savefig(wdist_fig)
@@ -211,55 +209,53 @@ def train(config: TrainConfig):
     # In[15]:
 
     # Load the optimize prior
-    util.set_seed(config.seed)
-    ckpt_path = os.path.join(
-        config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
-    )
-    opt_bnn.load_state_dict(torch.load(ckpt_path, weights_only=False))
+    # util.set_seed(config.seed)
+    # ckpt_path = os.path.join(
+    #     config.OUT_DIR, "ckpts", "it-{}.ckpt".format(mapper_num_iters)
+    # )
+    # opt_bnn.load_state_dict(torch.load(ckpt_path, weights_only=False))
 
-    # In[16]:
+    # # In[16]:
 
-    # Draw functions from the priors
-    n_plot = 4000
-    util.set_seed(config.seed + 7)
-    X, aux_X = data_generator.get(100)
-    X = X.to(device)
-    aux_X = aux_X.to(device)
-    gp_samples = (
-        bb_prior.sample_functions(X, n_plot, aux_X).detach().cpu().numpy().squeeze()
-    )
+    # # Draw functions from the priors
+    # n_plot = 4000
+    # util.set_seed(config.seed + 7)
+    # X, aux_X = data_generator.get(100)
+    # X = X.to(device)
+    # aux_X = aux_X.to(device)
+    # gp_samples = (
+    #     bb_prior.sample_functions(X, n_plot, aux_X).detach().cpu().numpy().squeeze()
+    # )
 
-    nngp_samples = (
-        opt_bnn.sample_nngp(X, n_plot, device).detach().cpu().numpy().squeeze()
-    )
+    # nngp_samples = (
+    #     opt_bnn.sample_nngp(X, n_plot, device).detach().cpu().numpy().squeeze()
+    # )
 
-    opt_bnn_samples = (
-        opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
-    )
+    # opt_bnn_samples = (
+    #     opt_bnn.sample_functions(X.float(), n_plot).detach().cpu().numpy().squeeze()
+    # )
 
-    seq = np.arange(100)
+    # seq = np.arange(100)
 
-    fig, axs = plt.subplots(1, 3, figsize=(14, 3))
-    plot_samples(seq, gp_samples, ax=axs[0], n_keep=5)
-    axs[0].set_title("GP Prior")
-    axs[0].set_ylim([int(np.min(gp_samples)) - 1, int(np.max(gp_samples)) + 1])
+    # fig, axs = plt.subplots(1, 3, figsize=(14, 3))
+    # plot_samples(seq, gp_samples, ax=axs[0], n_keep=5)
+    # axs[0].set_title("GP Prior")
+    # axs[0].set_ylim([int(np.min(gp_samples)) - 1, int(np.max(gp_samples)) + 1])
 
-    plot_samples(seq, nngp_samples, ax=axs[1], color="xkcd:grass", n_keep=5)
-    axs[1].set_title("NNGP Prior")
-    axs[1].set_ylim([int(np.min(nngp_samples)) - 1, int(np.max(nngp_samples)) + 1])
+    # plot_samples(seq, nngp_samples, ax=axs[1], color="xkcd:grass", n_keep=5)
+    # axs[1].set_title("NNGP Prior")
+    # axs[1].set_ylim([int(np.min(nngp_samples)) - 1, int(np.max(nngp_samples)) + 1])
 
-    plot_samples(
-        seq, opt_bnn_samples, ax=axs[2], color="xkcd:yellowish orange", n_keep=5
-    )
-    axs[2].set_title("BNN Prior (NNGP-induced)")
-    axs[2].set_ylim(
-        [int(np.min(opt_bnn_samples)) - 1, int(np.max(opt_bnn_samples)) + 1]
-    )
+    # plot_samples(
+    #     seq, opt_bnn_samples, ax=axs[2], color="xkcd:yellowish orange", n_keep=5
+    # )
+    # axs[2].set_title("BNN Prior (NNGP-induced)")
+    # axs[2].set_ylim([int(np.min(opt_bnn_samples)) - 1, int(np.max(opt_bnn_samples)) + 1])
 
-    plt.tight_layout()
-    prior_fig = os.path.join(config.FIG_DIR, "bb_gp_priors_plot.png")
-    plt.savefig(prior_fig)
-    plt.close(fig)
+    # plt.tight_layout()
+    # prior_fig = os.path.join(config.FIG_DIR, "bb_gp_priors_plot.png")
+    # plt.savefig(prior_fig)
+    # plt.close(fig)
 
 
 # In[ ]:
