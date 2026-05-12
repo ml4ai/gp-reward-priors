@@ -120,6 +120,7 @@ class MapperWassersteinGP(object):
                 return loss
 
             for it in range(1, num_iters + 1):
+                print(it)
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
                 )
@@ -135,8 +136,7 @@ class MapperWassersteinGP(object):
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
                 assert torch.isfinite(loss).all()
-                with torch.autograd.detect_anomaly():
-                    loss.backward()
+                loss.backward()
                 check_gradients(self.bnn)
                 prior_optimizer.step()
                 with torch.no_grad():
@@ -170,10 +170,10 @@ class MapperWassersteinGP(object):
 
                 if isinstance(self.bnn, torch.nn.DataParallel):
                     target_K = self.gp.module.compute_covariance(
-                        X.double(), aux_X.double()
+                        X.double())
                     ).to(self.device)
                 else:
-                    target_K = self.gp.compute_covariance(X.double(), aux_X.double()).to(
+                    target_K = self.gp.compute_covariance(X.double()).to(
                         self.device
                     )
 
@@ -181,7 +181,7 @@ class MapperWassersteinGP(object):
                     X = X.to(self.device)
 
                 t_evalues, t_evectors = torch.linalg.eigh(target_K)
-                sqrt_t_evalues = torch.sqrt(torch.clamp(t_evalues, min=0.0))
+                sqrt_t_evalues = torch.sqrt(torch.relu(t_evalues))
                 sqrt_target_K = (
                     t_evectors
                     @ torch.diag_embed(sqrt_t_evalues)
@@ -190,7 +190,7 @@ class MapperWassersteinGP(object):
                 evalues, evectors = torch.linalg.eigh(
                     sqrt_target_K @ bnn_K @ sqrt_target_K
                 )
-                sqrt_evalues = torch.sqrt(torch.clamp(evalues, min=0.0))
+                sqrt_evalues = torch.sqrt(torch.relu(evalues))
                 fidelity = (
                     evectors
                     @ torch.diag_embed(sqrt_evalues)
