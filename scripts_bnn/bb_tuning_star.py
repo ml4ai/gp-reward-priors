@@ -175,7 +175,7 @@ def train(config: TrainConfig):
         out_dir=config.OUT_DIR,
         input_dim=24,
         n_data=config.n_data,
-        n_gpu=1,
+        n_gpu=4,
         gpu_gp=True,
     )
 
