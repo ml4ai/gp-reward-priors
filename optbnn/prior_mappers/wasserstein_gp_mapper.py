@@ -134,6 +134,7 @@ class MapperWassersteinGP(object):
                 prior_optimizer.zero_grad()
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
+                assert torch.isfinite(loss).all()
                 loss.backward()
                 check_gradients(self.bnn)
                 prior_optimizer.step()
