@@ -67,7 +67,7 @@ class MapperWassersteinGP(object):
     ):
         wdist_hist = []
         prior_optimizer = torch.optim.Adam(self.bnn.parameters(), lr=lr)
-
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(prior_optimizer, gamma=0.9)
         # Prior loop
         # Draw X
         if self.data_generator.has_aux:
@@ -136,7 +136,7 @@ class MapperWassersteinGP(object):
                 loss = losses.sum() / X_batch.size(0)
                 assert torch.isfinite(loss).all()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.1)
+                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
                 check_gradients(self.bnn)
                 prior_optimizer.step()
                 with torch.no_grad():
@@ -153,6 +153,7 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
+                scheduler.step()
 
         else:
 
@@ -203,7 +204,7 @@ class MapperWassersteinGP(object):
                 losses = torch.vmap(compute_sqw2)(X_batch)
                 loss = losses.sum() / X_batch.size(0)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=0.1)
+                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
                 prior_optimizer.step()
                 with torch.no_grad():
                     wdist = torch.sqrt(losses).sum() / X_batch.size(0)
@@ -219,5 +220,5 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
-
+                scheduler.step()
         return wdist_hist
