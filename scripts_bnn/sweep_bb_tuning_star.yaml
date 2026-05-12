@@ -7,7 +7,7 @@ parameters:
     value: "scripts_bnn/bb_tuning_star.yaml"
   width:
     values: [64, 128, 256]
-  depths:
+  depth:
     values: [2, 3, 4]
   n_data: 
     value: 256
