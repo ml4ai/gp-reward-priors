@@ -120,7 +120,6 @@ class MapperWassersteinGP(object):
                 return loss
 
             for it in range(1, num_iters + 1):
-                print(it)
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
                 )
