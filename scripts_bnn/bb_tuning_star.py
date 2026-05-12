@@ -60,7 +60,7 @@ class TrainConfig:
     width: int = 64
     depth: int = 3
     # prior tuning params
-    tuning_set: str = "data/bb/bb_tuning_set.hdf5"
+    tuning_set: str = "data/bb/bbway_tuning_set.hdf5"
     mapper_num_iters: int = 1000
     n_data: int = 512
     batches: int = 10

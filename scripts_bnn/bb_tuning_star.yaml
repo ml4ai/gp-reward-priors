@@ -3,7 +3,7 @@ group: BB
 name: bb
 width: 64
 depth: 3
-tuning_set: data/bb/bb_tuning_set.hdf5
+tuning_set: data/bb/bbway_tuning_set.hdf5
 mapper_num_iters: 300
 n_data: 512
 batches: 10
