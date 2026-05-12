@@ -100,7 +100,7 @@ class MapperWassersteinGP(object):
                     @ t_evectors.transpose(-2, -1)
                 )
                 print(torch.isfinite(bnn_K).all())
-                print(torch.isfinite(sqrt_target_K).all())
+
                 evalues, evectors = torch.linalg.eigh(
                     sqrt_target_K @ bnn_K @ sqrt_target_K
                 )
