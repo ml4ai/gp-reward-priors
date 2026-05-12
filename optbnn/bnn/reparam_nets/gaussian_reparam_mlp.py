@@ -160,7 +160,7 @@ class GaussianMLPReparameterization(nn.Module):
 
         return X
 
-    def compute_covariance(self, X):
+    def compute_covariance(self, X, eps=1e-7):
         """
         Produces a covariance matrix over a set of inputs X.
         X must be a (n_samples, n_raw_features) 2D array
@@ -177,7 +177,9 @@ class GaussianMLPReparameterization(nn.Module):
             ) * (X @ X.T)
             for i in range(1, len(self.hidden_dims)):
                 K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
-                theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
+                theta = torch.acos(
+                    torch.clamp(K / K_norm, min=-1.0 + eps, max=1.0 - eps)
+                )
                 theta = (
                     theta - torch.diag_embed(torch.diagonal(theta))
                 ) + torch.diag_embed(torch.diagonal(theta) * 0.0)
@@ -185,7 +187,7 @@ class GaussianMLPReparameterization(nn.Module):
                     (layers[i].W_std * layers[i].W_std) / two_pi
                 ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
             K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
-            theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
+            theta = torch.acos(torch.clamp(K / K_norm, min=-1.0 + eps, max=1.0 - eps))
             theta = (theta - torch.diag_embed(torch.diagonal(theta))) + torch.diag_embed(
                 torch.diagonal(theta) * 0.0
             )

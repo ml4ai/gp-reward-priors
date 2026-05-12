@@ -100,7 +100,7 @@ class MapperWassersteinGP(object):
                     aux_X = aux_X.to(self.device)
 
                 t_evalues, t_evectors = torch.linalg.eigh(target_K)
-                sqrt_t_evalues = torch.sqrt(torch.clamp(t_evalues, min=0.0))
+                sqrt_t_evalues = torch.sqrt(torch.relu(t_evalues))
                 sqrt_target_K = (
                     t_evectors
                     @ torch.diag_embed(sqrt_t_evalues)
@@ -110,7 +110,7 @@ class MapperWassersteinGP(object):
                 evalues, evectors = torch.linalg.eigh(
                     sqrt_target_K @ bnn_K @ sqrt_target_K
                 )
-                sqrt_evalues = torch.sqrt(torch.clamp(evalues, min=0.0))
+                sqrt_evalues = torch.sqrt(torch.relu(evalues))
                 fidelity = (
                     evectors
                     @ torch.diag_embed(sqrt_evalues)
