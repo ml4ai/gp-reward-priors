@@ -173,8 +173,9 @@ class GaussianMLPReparameterization(nn.Module):
             two_pi = 2 * torch.pi
             layers = list(self.layers)
             K = (layers[0].b_std * layers[0].b_std) + (
-                (layers[0].W_std * layers[0].W_std)
+                layers[0].W_std * layers[0].W_std
             ) * (X @ X.T)
+            print(torch.isfinite(K).all())
             for i in range(1, len(self.hidden_dims)):
                 K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
                 theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
@@ -186,9 +187,9 @@ class GaussianMLPReparameterization(nn.Module):
                 ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
             K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
             theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))
-            theta = (
-                theta - torch.diag_embed(torch.diagonal(theta))
-            ) + torch.diag_embed(torch.diagonal(theta) * 0.0)
+            theta = (theta - torch.diag_embed(torch.diagonal(theta))) + torch.diag_embed(
+                torch.diagonal(theta) * 0.0
+            )
             K = (self.output_layer.b_std * self.output_layer.b_std) + (
                 (self.output_layer.W_std * self.output_layer.W_std) / two_pi
             ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
@@ -197,7 +198,7 @@ class GaussianMLPReparameterization(nn.Module):
         else:
             raise NotImplementedError
 
-    def sample_nngp(self, X, num_samples,device):
+    def sample_nngp(self, X, num_samples, device):
         """
         Produce samples from the prior latent functions at the points X.
         """
@@ -211,4 +212,4 @@ class GaussianMLPReparameterization(nn.Module):
         for i in range(self.output_dim):
             samples.append(weight_generator.sample(torch.Size([num_samples])))
 
-        return torch.stack(samples, dim=0).permute(2,1, 0)
+        return torch.stack(samples, dim=0).permute(2, 1, 0)
