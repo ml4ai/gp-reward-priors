@@ -1,15 +1,17 @@
-project: BR-tuning-star
-program: bb_gaussian_prior_tuning_star.py
+project: BB-tuning-star
+program: bb_tuning_star.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts/bb_gaussian_prior_tuning_star.yaml"
+    value: "scripts/bb_tuning_star.yaml"
   width:
-    value: 256
+    values: [64, 128, 256]
+  depths:
+    values: [2, 3, 4]
   n_data: 
     value: 256
   batches:
     value: 100
   lr:
-    values: [0.3, 0.03, 0.003, 0.0003]
+    values: [0.3, 0.03, 0.003, 0.0003, 0.00003]
