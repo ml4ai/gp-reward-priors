@@ -99,6 +99,8 @@ class MapperWassersteinGP(object):
                     @ torch.diag_embed(sqrt_t_evalues)
                     @ t_evectors.transpose(-2, -1)
                 )
+                assert torch.isfinite(bnn_K).all()
+                assert torch.isfinite(sqrt_target_K).all()
                 evalues, evectors = torch.linalg.eigh(
                     sqrt_target_K @ bnn_K @ sqrt_target_K
                 )
@@ -115,6 +117,8 @@ class MapperWassersteinGP(object):
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
                 )
+                assert torch.isfinite(X_batch).all()
+                assert torch.isfinite(aux_X_batch).all()
                 prior_optimizer.zero_grad()
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
