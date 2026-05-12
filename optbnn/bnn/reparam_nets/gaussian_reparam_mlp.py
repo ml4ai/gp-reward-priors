@@ -175,7 +175,6 @@ class GaussianMLPReparameterization(nn.Module):
             K = (layers[0].b_std * layers[0].b_std) + (
                 layers[0].W_std * layers[0].W_std
             ) * (X @ X.T)
-            print(torch.isfinite(K).all())
             for i in range(1, len(self.hidden_dims)):
                 K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
                 theta = torch.acos(torch.clamp(K / K_norm, -0.9999, 0.9999))

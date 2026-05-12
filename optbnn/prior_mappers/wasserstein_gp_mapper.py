@@ -118,6 +118,12 @@ class MapperWassersteinGP(object):
                 )
                 assert torch.isfinite(X_batch).all()
                 assert torch.isfinite(aux_X_batch).all()
+                is_invalid = not all(
+                    torch.isfinite(p).all() for p in self.bnn.parameters()
+                )
+
+                if is_invalid:
+                    print("Model contains NaN or Inf!")
                 prior_optimizer.zero_grad()
                 losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
                 loss = losses.sum() / X_batch.size(0)
