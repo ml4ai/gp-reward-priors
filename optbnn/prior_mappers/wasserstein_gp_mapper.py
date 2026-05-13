@@ -66,8 +66,10 @@ class MapperWassersteinGP(object):
         print_every=10,
     ):
         wdist_hist = []
-        prior_optimizer = torch.optim.Adam(self.bnn.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(prior_optimizer, gamma=0.7)
+        prior_optimizer = torch.optim.Adam(
+            self.bnn.parameters(), lr=lr, weight_decay=0.0001
+        )
+        # scheduler = torch.optim.lr_scheduler.ExponentialLR(prior_optimizer, gamma=0.99)
         # Prior loop
         # Draw X
         if self.data_generator.has_aux:
@@ -153,7 +155,7 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
-                scheduler.step()
+                # scheduler.step()
 
         else:
 
@@ -220,5 +222,5 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
-                scheduler.step()
+                # scheduler.step()
         return wdist_hist
