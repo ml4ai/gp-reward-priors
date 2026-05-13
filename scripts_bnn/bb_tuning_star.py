@@ -180,7 +180,7 @@ def train(config: TrainConfig):
     )
 
     # Start optimizing the prior
-    w_hist = mapper.optimize(
+    w_hist, it = mapper.optimize(
         num_iters=mapper_num_iters,
         batches=config.batches,
         lr=config.lr,
@@ -198,7 +198,7 @@ def train(config: TrainConfig):
     wdist_vals = np.loadtxt(wdist_file)
 
     fig = plt.figure(figsize=(6, 3.5))
-    indices = np.arange(mapper_num_iters)[::5]
+    indices = np.arange(it)[::5]
     plt.plot(indices, wdist_vals[indices], "-ko", ms=4)
     plt.ylabel(r"$W_2(p_{gp}, p_{nn})$")
     plt.xlabel("Iteration")

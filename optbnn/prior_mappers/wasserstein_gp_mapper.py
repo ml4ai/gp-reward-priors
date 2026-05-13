@@ -239,4 +239,4 @@ class MapperWassersteinGP(object):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
                     scheduler.step(wdist)
-        return wdist_hist
+        return wdist_hist, it
