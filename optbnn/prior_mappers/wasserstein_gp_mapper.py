@@ -69,7 +69,9 @@ class MapperWassersteinGP(object):
         prior_optimizer = torch.optim.Adam(
             self.bnn.parameters(), lr=lr, weight_decay=0.001
         )
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(prior_optimizer)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            prior_optimizer, factor=0.01
+        )
         # Prior loop
         # Draw X
         if self.data_generator.has_aux:
