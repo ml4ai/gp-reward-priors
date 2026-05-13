@@ -15,6 +15,7 @@ import matplotlib as mpl
 import pyrallis
 
 mpl.use("Agg")
+import arviz_stats as azs
 import h5py
 import matplotlib.pylab as plt
 import numpy as np
@@ -35,7 +36,6 @@ os.chdir("..")
 from optbnn.bnn.likelihoods import LikCE
 from optbnn.bnn.nets.mlp import MLP
 from optbnn.bnn.priors import OptimGaussianPrior
-from optbnn.metrics.sampling import compute_rhat_regression
 from optbnn.sgmcmc_bayes_net.pref_net import PrefNet
 from optbnn.utils import util
 from optbnn.utils.rand_generators import DataSetSampler
@@ -54,9 +54,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "BR-training-optim"
-    group: str = "BR"
-    name: str = "br_optim"
+    project: str = "BB-training"
+    group: str = "BB"
+    name: str = "bb"
     # model params
     width: int = 64
     depth: int = 3
@@ -75,15 +75,14 @@ class TrainConfig:
     training_split: float = 0.8
     # general params
     seed: int = 1
-    OUT_DIR: str = "./exp/reward_learning/bb_optim"  # Save path
+    OUT_DIR: Optional[str] = "./exp/reward_learning/bb_optim_star"  # Save path
     prior_dir: str = "./exp/reward_learning/bb_tuning_star"
-    prior_ckpt: int = 300
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
-        self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
-        util.ensure_dir(self.OUT_DIR)
-
+        if self.OUT_DIR is not None:
+            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+            util.ensure_dir(self.OUT_DIR)
         self.prior_dir = os.path.join(
             osp.expanduser(self.prior_dir),
             f"bb-{self.width}_{self.depth}",
@@ -96,7 +95,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=config.name,
+        name=f"{config.name}_FG_training",
         id=str(uuid.uuid4()),
         save_code=True,
     )
@@ -117,7 +116,6 @@ def train(config: TrainConfig):
         "num_chains": config.num_chains,  # Number of chains
         "mdecay": config.mdecay,  # Momentum coefficient
         "print_every_n_samples": config.print_every_n_samples,
-        "eval_map": False,
     }
 
     # In[18]:
@@ -125,45 +123,57 @@ def train(config: TrainConfig):
     X_train, y_train, X_test, y_test = util.load_pref_data(
         config.dataset, config.training_split
     )
-    X_test_con = X_test[:, :, :, :28].reshape(-1, 28)
 
-    # Load the optimized prior
-    ckpt_path = os.path.join(
-        config.prior_dir, "ckpts", "it-{}.ckpt".format(config.prior_ckpt)
-    )
+    # In[19]:
+
+    # Initialize the prior
+    util.set_seed(config.seed)
+    ckpt_path = os.path.join(config.prior_dir, "ckpts", "best.ckpt")
     prior = OptimGaussianPrior(ckpt_path)
 
     # Setup likelihood
-    net = MLP(28, 1, [width] * depth, transfer_fn)
+    net = MLP(24, 1, [width] * depth, transfer_fn)
     likelihood = LikCE()
 
     # Initialize the sampler
-    saved_dir = os.path.join(config.OUT_DIR, "sampling_optim")
+    saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
     util.ensure_dir(saved_dir)
-    bayes_net_optim = PrefNet(net, likelihood, prior, saved_dir, n_gpu=4, name="optim")
+    bayes_net_std = PrefNet(net, likelihood, prior, saved_dir, n_gpu=4, name="FG")
+    # Start sampling
+    bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
+    mean_ce = []
+    mean_acc = []
+    params_chains = []
+    for i in range(config.num_chains):
+        bayes_net_std.sampled_weights = bayes_net_std._load_sampled_weights(
+            os.path.join(
+                saved_dir, "sampled_weights", "sampled_weights_{0:07d}".format(i)
+            )
+        )
+        ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train)
+        mean_ce.append(ce)
+        mean_acc.append(acc)
 
-    bayes_net_optim.sample_multi_chains(X_train, y_train, **sampling_configs)
-    bayes_net_optim.eval_test_data(X_test, y_test, X_train, y_train)
-    # In[22]:
-
-    # Make predictions
-    util.set_seed(config.seed)
-    _, _, bnn_optim_preds = bayes_net_optim.predict(X_test_con, True)
-
-    # Convergence diagnostics using the R-hat statistic
-    r_hat = compute_rhat_regression(bnn_optim_preds, sampling_configs["num_chains"])
-    wandb.log(
-        {"optim_mean_R_hat": float(r_hat.mean()), "optim_std_R_hat": float(r_hat.std())}
-    )
-    print(
-        r"R-hat: mean {:.4f} std {:.4f}".format(float(r_hat.mean()), float(r_hat.std()))
-    )
-
-    bnn_optim_preds = bnn_optim_preds.squeeze().T
-
-    # Save the predictions
-    posterior_optim_path = os.path.join(config.OUT_DIR, "posterior_optim.npz")
-    np.savez(posterior_optim_path, bnn_samples=bnn_optim_preds)
+        params_chains.append(
+            np.stack(
+                [
+                    np.hstack([arr.ravel() for arr in arrays])
+                    for arrays in bayes_net_std.sampled_weights
+                ]
+            )
+        )
+    params_chains = np.stack(params_chains)
+    rhats = azs.rhat(params_chains)
+    summary = {
+        "test_mean_cross_entropy": np.mean(mean_ce),
+        "test_mean_accuracy": np.mean(mean_acc),
+        "max": np.max(rhats),
+        "95th_pct": np.percentile(rhats, 95),
+        "median": np.median(rhats),
+        "mean": np.mean(rhats),
+        "pct_over_1.01": np.mean(rhats > 1.01) * 100,
+    }
+    wandb.log(summary)
 
 
 # In[ ]:
