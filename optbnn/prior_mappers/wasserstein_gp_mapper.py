@@ -67,7 +67,7 @@ class MapperWassersteinGP(object):
     ):
         wdist_hist = []
         prior_optimizer = torch.optim.Adam(self.bnn.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(prior_optimizer, gamma=0.8)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(prior_optimizer, gamma=0.7)
         # Prior loop
         # Draw X
         if self.data_generator.has_aux:
