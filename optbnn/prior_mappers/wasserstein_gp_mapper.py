@@ -155,7 +155,7 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
-                scheduler.step()
+                    scheduler.step(wdist)
 
         else:
 
@@ -222,5 +222,5 @@ class MapperWassersteinGP(object):
                     if ((it) % save_ckpt_every == 0) or (it == num_iters):
                         path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
                         torch.save(self.bnn.state_dict(), path)
-                scheduler.step()
+                    scheduler.step(wdist)
         return wdist_hist
