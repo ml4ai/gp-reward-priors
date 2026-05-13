@@ -10,11 +10,12 @@ from torch.utils.data import DataLoader, TensorDataset
 from ..utils.util import ensure_dir, prepare_device
 
 
-def check_gradients(model):
+def gradient_explosion(model):
     for name, param in model.named_parameters():
         if param.grad is not None:
             if not torch.isfinite(param.grad).all():
                 print(f"Invalid gradient in {name}")
+                return True
 
 
 class MapperWassersteinGP(object):
@@ -123,6 +124,7 @@ class MapperWassersteinGP(object):
                 loss = torch.trace(target_K + bnn_K - 2 * fidelity)
                 return loss
 
+            best_wdist = np.inf
             for it in range(1, num_iters + 1):
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
@@ -141,16 +143,21 @@ class MapperWassersteinGP(object):
                 assert torch.isfinite(loss).all()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
-                check_gradients(self.bnn)
+                if gradient_explosion(self.bnn):
+                    break
                 prior_optimizer.step()
                 with torch.no_grad():
-                    wdist = torch.sqrt(losses).sum() / X_batch.size(0)
-                    wdist_hist.append(float(wdist))
-                    wandb.log({"avg_2_W_dist": float(wdist)}, step=it)
+                    wdist = float(torch.sqrt(losses).sum() / X_batch.size(0))
+                    if wdist < best_wdist:
+                        best_wdist = wdist
+                        path = os.path.join(self.ckpt_dir, "best.ckpt")
+                        torch.save(self.bnn.state_dict(), path)
+                    wdist_hist.append(wdist)
+                    wandb.log({"avg_2_W_dist": wdist}, step=it)
                     if (it % print_every == 0) or it == 1:
                         self.print_info(
                             ">>> Iteration # {:3d}: "
-                            "Avg 2-Wasserstein Dist {:.4f}".format(it, float(wdist))
+                            "Avg 2-Wasserstein Dist {:.4f}".format(it, wdist)
                         )
 
                     # Save checkpoint
@@ -202,6 +209,7 @@ class MapperWassersteinGP(object):
                 loss = torch.trace(target_K + bnn_K - 2 * fidelity)
                 return loss
 
+            best_wdist = np.inf
             for it in range(1, num_iters + 1):
                 X_batch = self.data_generator.get_batches(self.n_data, batches)
                 prior_optimizer.zero_grad()
@@ -209,15 +217,21 @@ class MapperWassersteinGP(object):
                 loss = losses.sum() / X_batch.size(0)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
+                if gradient_explosion(self.bnn):
+                    break
                 prior_optimizer.step()
                 with torch.no_grad():
-                    wdist = torch.sqrt(losses).sum() / X_batch.size(0)
-                    wdist_hist.append(float(wdist))
-                    wandb.log({"avg_2_W_dist": float(wdist)}, step=it)
+                    wdist = float(torch.sqrt(losses).sum() / X_batch.size(0))
+                    if wdist < best_wdist:
+                        best_wdist = wdist
+                        path = os.path.join(self.ckpt_dir, "best.ckpt")
+                        torch.save(self.bnn.state_dict(), path)
+                    wdist_hist.append(wdist)
+                    wandb.log({"avg_2_W_dist": wdist}, step=it)
                     if (it % print_every == 0) or it == 1:
                         self.print_info(
                             ">>> Iteration # {:3d}: "
-                            "Avg 2-Wasserstein Dist {:.4f}".format(it, float(wdist))
+                            "Avg 2-Wasserstein Dist {:.4f}".format(it, wdist)
                         )
 
                     # Save checkpoint
