@@ -8,8 +8,8 @@ parameters:
   dataset: 
     value: "data/bb/t0012_pref.hdf5"
   width:
-    values: [64, 128, 256]
+    values: [64, 128, 256, 512]
   depth:
-    values: [2, 3, 4]
+    values: [4, 5, 6]
   sghmc_lr:
-    values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]
+    value: 0.003

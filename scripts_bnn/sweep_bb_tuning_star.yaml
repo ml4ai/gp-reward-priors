@@ -6,9 +6,9 @@ parameters:
   config_path:
     value: "scripts_bnn/bb_tuning_star.yaml"
   width:
-    values: [64, 128, 256]
+    values: [64, 128, 256, 512]
   depth:
-    values: [2, 3, 4]
+    values: [4, 5, 6]
   n_data: 
     value: 256
   batches:
