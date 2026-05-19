@@ -139,7 +139,7 @@ def train(config: TrainConfig):
     saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
     util.ensure_dir(saved_dir)
     bayes_net_std = PrefNet(
-        net, likelihood, prior, saved_dir, n_gpu=4, name="optim_star"
+        net, likelihood, prior, saved_dir, n_gpu=6, name="optim_star"
     )
     # Start sampling
     bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
