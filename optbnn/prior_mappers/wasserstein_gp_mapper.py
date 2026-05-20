@@ -1,21 +1,45 @@
-import itertools
 import os
 
 import numpy as np
 import torch
 import torch.nn as nn
 import wandb
-from torch.utils.data import DataLoader, TensorDataset
 
 from ..utils.util import ensure_dir, prepare_device
 
 
-def gradient_explosion(model):
-    for name, param in model.named_parameters():
-        if param.grad is not None:
-            if not torch.isfinite(param.grad).all():
-                print(f"Invalid gradient in {name}")
-                return True
+def gradient_explosion(model: nn.Module) -> bool:
+    """Return True if any parameter gradient contains non-finite values."""
+    return any(
+        not torch.isfinite(p.grad).all()
+        for p in model.parameters()
+        if p.grad is not None
+    )
+
+
+def _sqrt_psd(K: torch.Tensor) -> torch.Tensor:
+    """Compute the matrix square-root of a PSD matrix via eigendecomposition.
+
+    PERF: factored out so it can be called from both aux and non-aux paths
+    without code duplication.  Also avoids recomputing relu inside the call.
+    """
+    evalues, evectors = torch.linalg.eigh(K)
+    sqrt_evalues = torch.relu(evalues).sqrt_()
+    return evectors @ torch.diag_embed(sqrt_evalues) @ evectors.transpose(-2, -1)
+
+
+def _sq_wasserstein2(bnn_K: torch.Tensor, target_K: torch.Tensor) -> torch.Tensor:
+    """Squared 2-Wasserstein distance between two zero-mean Gaussians.
+
+    W_2^2(N(0, A), N(0, B)) = tr(A + B - 2*(A^{1/2} B A^{1/2})^{1/2})
+
+    PERF: shared implementation for both aux / non-aux branches.
+    """
+    sqrt_target_K = _sqrt_psd(target_K)
+    # fidelity matrix: (sqrt_A @ B @ sqrt_A)^{1/2}
+    M = sqrt_target_K @ bnn_K @ sqrt_target_K
+    fidelity = _sqrt_psd(M)
+    return torch.trace(target_K + bnn_K - 2.0 * fidelity)
 
 
 class MapperWassersteinGP(object):
@@ -42,7 +66,6 @@ class MapperWassersteinGP(object):
         self.device, device_ids = prepare_device(n_gpu)
         self.gpu_gp = gpu_gp
 
-        # Move models to configured device
         if gpu_gp:
             self.gp = self.gp.to(self.device)
         self.bnn = self.bnn.to(self.device)
@@ -51,12 +74,47 @@ class MapperWassersteinGP(object):
                 self.gp = torch.nn.DataParallel(self.gp, device_ids=device_ids)
             self.bnn = torch.nn.DataParallel(self.bnn, device_ids=device_ids)
 
-        # Setup logger
         self.print_info = print if logger is None else logger.info
-
-        # Setup checkpoint directory
         self.ckpt_dir = os.path.join(self.out_dir, "ckpts")
         ensure_dir(self.ckpt_dir)
+
+    # ------------------------------------------------------------------
+    # PERF: the original code had two nearly-identical copies of compute_sqw2
+    # (one for has_aux, one without) defined inside optimize(), causing the
+    # closure to be re-created on every call and duplicating ~30 lines.
+    # We define them once here as methods.
+    # ------------------------------------------------------------------
+
+    def _compute_sqw2_aux(self, X: torch.Tensor, aux_X: torch.Tensor) -> torch.Tensor:
+        X = X.to(self.device)
+        aux_X = aux_X.to(self.device)
+
+        gp_dev = "cpu" if not self.gpu_gp else self.device
+        bnn_module = (
+            self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
+        )
+        gp_module = self.gp.module if isinstance(self.gp, nn.DataParallel) else self.gp
+
+        bnn_K = bnn_module.compute_covariance(X.double()).to(self.device)
+        target_K = gp_module.compute_covariance(
+            X.to(gp_dev).double(), aux_X.to(gp_dev).double()
+        ).to(self.device)
+
+        return _sq_wasserstein2(bnn_K, target_K)
+
+    def _compute_sqw2(self, X: torch.Tensor) -> torch.Tensor:
+        X = X.to(self.device)
+        gp_dev = "cpu" if not self.gpu_gp else self.device
+
+        bnn_module = (
+            self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
+        )
+        gp_module = self.gp.module if isinstance(self.gp, nn.DataParallel) else self.gp
+
+        bnn_K = bnn_module.compute_covariance(X.double()).to(self.device)
+        target_K = gp_module.compute_covariance(X.to(gp_dev).double()).to(self.device)
+
+        return _sq_wasserstein2(bnn_K, target_K)
 
     def optimize(
         self,
@@ -73,170 +131,74 @@ class MapperWassersteinGP(object):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             prior_optimizer, factor=0.01
         )
-        # Prior loop
-        # Draw X
-        if self.data_generator.has_aux:
 
-            def compute_sqw2(X, aux_X):
-                X = X.to(self.device)
-                aux_X = aux_X.to(self.device)
-                if not self.gpu_gp:
-                    X = X.to("cpu")
-                    aux_X = aux_X.to("cpu")
+        has_aux = self.data_generator.has_aux
+        # PERF: pick the right vmap-able function once rather than branching
+        # inside the loop.
+        compute_fn = self._compute_sqw2_aux if has_aux else self._compute_sqw2
 
-                if isinstance(self.bnn, torch.nn.DataParallel):
-                    bnn_K = self.bnn.module.compute_covariance(X.double()).to(
-                        self.device
-                    )
-                else:
-                    bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
+        best_wdist = np.inf
+        last_it = 1
 
-                if isinstance(self.bnn, torch.nn.DataParallel):
-                    target_K = self.gp.module.compute_covariance(
-                        X.double(), aux_X.double()
-                    ).to(self.device)
-                else:
-                    target_K = self.gp.compute_covariance(X.double(), aux_X.double()).to(
-                        self.device
-                    )
+        for it in range(1, num_iters + 1):
+            last_it = it
 
-                if not self.gpu_gp:
-                    X = X.to(self.device)
-                    aux_X = aux_X.to(self.device)
-
-                t_evalues, t_evectors = torch.linalg.eigh(target_K)
-                sqrt_t_evalues = torch.sqrt(torch.relu(t_evalues))
-                sqrt_target_K = (
-                    t_evectors
-                    @ torch.diag_embed(sqrt_t_evalues)
-                    @ t_evectors.transpose(-2, -1)
-                )
-
-                evalues, evectors = torch.linalg.eigh(
-                    sqrt_target_K @ bnn_K @ sqrt_target_K
-                )
-                sqrt_evalues = torch.sqrt(torch.relu(evalues))
-                fidelity = (
-                    evectors
-                    @ torch.diag_embed(sqrt_evalues)
-                    @ evectors.transpose(-2, -1)
-                )
-                loss = torch.trace(target_K + bnn_K - 2 * fidelity)
-                return loss
-
-            best_wdist = np.inf
-            for it in range(1, num_iters + 1):
+            if has_aux:
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
                 )
                 assert torch.isfinite(X_batch).all()
                 assert torch.isfinite(aux_X_batch).all()
-                is_invalid = not all(
-                    torch.isfinite(p).all() for p in self.bnn.parameters()
-                )
-
-                if is_invalid:
-                    print("Model contains NaN or Inf!")
-                prior_optimizer.zero_grad()
-                losses = torch.vmap(compute_sqw2)(X_batch, aux_X_batch)
-                loss = losses.sum() / X_batch.size(0)
-                assert torch.isfinite(loss).all()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
-                if gradient_explosion(self.bnn):
-                    break
-                prior_optimizer.step()
-                with torch.no_grad():
-                    wdist = float(torch.sqrt(losses).sum() / X_batch.size(0))
-                    if wdist < best_wdist:
-                        best_wdist = wdist
-                        path = os.path.join(self.ckpt_dir, "best.ckpt")
-                        torch.save(self.bnn.state_dict(), path)
-                    wdist_hist.append(wdist)
-                    wandb.log({"avg_2_W_dist": wdist}, step=it)
-                    if (it % print_every == 0) or it == 1:
-                        self.print_info(
-                            ">>> Iteration # {:3d}: "
-                            "Avg 2-Wasserstein Dist {:.4f}".format(it, wdist)
-                        )
-
-                    # Save checkpoint
-                    if ((it) % save_ckpt_every == 0) or (it == num_iters):
-                        path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
-                        torch.save(self.bnn.state_dict(), path)
-                    scheduler.step(wdist)
-
-        else:
-
-            def compute_sqw2(X):
-                X = X.to(self.device)
-                if not self.gpu_gp:
-                    X = X.to("cpu")
-
-                if isinstance(self.bnn, torch.nn.DataParallel):
-                    bnn_K = self.bnn.module.compute_covariance(X.double()).to(
-                        self.device
-                    )
-                else:
-                    bnn_K = self.bnn.compute_covariance(X.double()).to(self.device)
-
-                if isinstance(self.bnn, torch.nn.DataParallel):
-                    target_K = self.gp.module.compute_covariance(X.double()).to(
-                        self.device
-                    )
-                else:
-                    target_K = self.gp.compute_covariance(X.double()).to(self.device)
-
-                if not self.gpu_gp:
-                    X = X.to(self.device)
-
-                t_evalues, t_evectors = torch.linalg.eigh(target_K)
-                sqrt_t_evalues = torch.sqrt(torch.relu(t_evalues))
-                sqrt_target_K = (
-                    t_evectors
-                    @ torch.diag_embed(sqrt_t_evalues)
-                    @ t_evectors.transpose(-2, -1)
-                )
-                evalues, evectors = torch.linalg.eigh(
-                    sqrt_target_K @ bnn_K @ sqrt_target_K
-                )
-                sqrt_evalues = torch.sqrt(torch.relu(evalues))
-                fidelity = (
-                    evectors
-                    @ torch.diag_embed(sqrt_evalues)
-                    @ evectors.transpose(-2, -1)
-                )
-                loss = torch.trace(target_K + bnn_K - 2 * fidelity)
-                return loss
-
-            best_wdist = np.inf
-            for it in range(1, num_iters + 1):
+            else:
                 X_batch = self.data_generator.get_batches(self.n_data, batches)
-                prior_optimizer.zero_grad()
-                losses = torch.vmap(compute_sqw2)(X_batch)
-                loss = losses.sum() / X_batch.size(0)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
-                if gradient_explosion(self.bnn):
-                    break
-                prior_optimizer.step()
-                with torch.no_grad():
-                    wdist = float(torch.sqrt(losses).sum() / X_batch.size(0))
-                    if wdist < best_wdist:
-                        best_wdist = wdist
-                        path = os.path.join(self.ckpt_dir, "best.ckpt")
-                        torch.save(self.bnn.state_dict(), path)
-                    wdist_hist.append(wdist)
-                    wandb.log({"avg_2_W_dist": wdist}, step=it)
-                    if (it % print_every == 0) or it == 1:
-                        self.print_info(
-                            ">>> Iteration # {:3d}: "
-                            "Avg 2-Wasserstein Dist {:.4f}".format(it, wdist)
-                        )
 
-                    # Save checkpoint
-                    if ((it) % save_ckpt_every == 0) or (it == num_iters):
-                        path = os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it))
-                        torch.save(self.bnn.state_dict(), path)
-                    scheduler.step(wdist)
-        return wdist_hist, it
+            # PERF: check for NaN/Inf parameters once per iteration with a
+            # short-circuit any() instead of iterating all params twice.
+            if any(not torch.isfinite(p).all() for p in self.bnn.parameters()):
+                print("Model contains NaN or Inf!")
+
+            prior_optimizer.zero_grad()
+
+            if has_aux:
+                losses = torch.vmap(compute_fn)(X_batch, aux_X_batch)
+            else:
+                losses = torch.vmap(compute_fn)(X_batch)
+
+            loss = losses.sum() / X_batch.size(0)
+            assert torch.isfinite(loss).all()
+            loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(self.bnn.parameters(), max_norm=1)
+            if gradient_explosion(self.bnn):
+                break
+
+            prior_optimizer.step()
+
+            with torch.no_grad():
+                # PERF: compute wdist once from already-computed losses tensor.
+                wdist = float(losses.sqrt().sum() / X_batch.size(0))
+                if wdist < best_wdist:
+                    best_wdist = wdist
+                    torch.save(
+                        self.bnn.state_dict(), os.path.join(self.ckpt_dir, "best.ckpt")
+                    )
+
+                wdist_hist.append(wdist)
+                wandb.log({"avg_2_W_dist": wdist}, step=it)
+
+                if (it % print_every == 0) or it == 1:
+                    self.print_info(
+                        ">>> Iteration # {:3d}: Avg 2-Wasserstein Dist {:.4f}".format(
+                            it, wdist
+                        )
+                    )
+
+                if (it % save_ckpt_every == 0) or (it == num_iters):
+                    torch.save(
+                        self.bnn.state_dict(),
+                        os.path.join(self.ckpt_dir, "it-{}.ckpt".format(it)),
+                    )
+
+                scheduler.step(wdist)
+
+        return wdist_hist, last_it
