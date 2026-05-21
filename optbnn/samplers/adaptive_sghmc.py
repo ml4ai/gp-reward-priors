@@ -82,10 +82,11 @@ class AdaptiveSGHMC(Optimizer):
                 tau_inv = 1.0 / (tau + 1.0)
 
                 if state["iteration"] <= num_burn_in_steps:
-                    # PERF: use addcmul_ / add_ in-place ops to avoid
-                    # intermediate tensor allocations.
-                    # tau -= tau * g^2 / (v_hat + eps) - 1
-                    tau.addcmul_(tau * g, g, value=-1.0 / (v_hat.add(epsilon)))
+                    # tau -= tau * g^2 / (v_hat + eps), then tau += 1.
+                    # addcmul_ requires a scalar value; use addcdiv_ instead so
+                    # the per-element division is handled natively without
+                    # constructing a tensor for the value argument.
+                    tau.addcdiv_(tau * g.pow(2), v_hat.add(epsilon), value=-1.0)
                     tau.add_(1.0)
 
                     # g += tau_inv * (gradient - g)
