@@ -176,21 +176,23 @@ class GaussianMLPReparameterization(nn.Module):
                 layers[0].W_std * layers[0].W_std
             ) * (X @ X.T)
             for i in range(1, len(self.hidden_dims)):
-                K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
+                # PERF: sqrt n diagonal elements first, then outer-product them,
+                # instead of outer-producting n² elements and then sqrt-ing all of them.
+                d = K.diagonal().sqrt()
+                K_norm = d.unsqueeze(-1) * d.unsqueeze(-2)
                 theta = torch.acos(
                     torch.clamp(K / K_norm, min=-1.0 + eps, max=1.0 - eps)
                 )
-                theta = (
-                    theta - torch.diag_embed(torch.diagonal(theta))
-                ) + torch.diag_embed(torch.diagonal(theta) * 0.0)
+                # PERF: the second diag_embed term is always zero (scalar * 0.0);
+                # drop it to save one n×n allocation and add.
+                theta = theta - torch.diag_embed(theta.diagonal())
                 K = (layers[i].b_std * layers[i].b_std) + (
                     (layers[i].W_std * layers[i].W_std) / two_pi
                 ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))
-            K_norm = torch.sqrt(torch.outer(torch.diag(K), torch.diag(K)))
+            d = K.diagonal().sqrt()
+            K_norm = d.unsqueeze(-1) * d.unsqueeze(-2)
             theta = torch.acos(torch.clamp(K / K_norm, min=-1.0 + eps, max=1.0 - eps))
-            theta = (theta - torch.diag_embed(torch.diagonal(theta))) + torch.diag_embed(
-                torch.diagonal(theta) * 0.0
-            )
+            theta = theta - torch.diag_embed(theta.diagonal())
             K = (self.output_layer.b_std * self.output_layer.b_std) + (
                 (self.output_layer.W_std * self.output_layer.W_std) / two_pi
             ) * K_norm * (torch.sin(theta) + (torch.pi - theta) * torch.cos(theta))

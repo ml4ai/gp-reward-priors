@@ -39,7 +39,9 @@ def _sq_wasserstein2(bnn_K: torch.Tensor, target_K: torch.Tensor) -> torch.Tenso
     # fidelity matrix: (sqrt_A @ B @ sqrt_A)^{1/2}
     M = sqrt_target_K @ bnn_K @ sqrt_target_K
     fidelity = _sqrt_psd(M)
-    return torch.trace(target_K + bnn_K - 2.0 * fidelity)
+    # PERF: compute three separate traces instead of allocating a full n×n sum
+    # matrix just to trace it.  Saves one O(n²) allocation + two n² adds.
+    return target_K.trace() + bnn_K.trace() - 2.0 * fidelity.trace()
 
 
 class MapperWassersteinGP(object):
@@ -86,33 +88,30 @@ class MapperWassersteinGP(object):
     # ------------------------------------------------------------------
 
     def _compute_sqw2_aux(self, X: torch.Tensor, aux_X: torch.Tensor) -> torch.Tensor:
-        X = X.to(self.device)
-        aux_X = aux_X.to(self.device)
-
-        gp_dev = "cpu" if not self.gpu_gp else self.device
-        bnn_module = (
-            self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
-        )
+        # PERF: X and aux_X are already on self.device (moved once before vmap).
+        bnn_module = self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
         gp_module = self.gp.module if isinstance(self.gp, nn.DataParallel) else self.gp
 
-        bnn_K = bnn_module.compute_covariance(X.double()).to(self.device)
-        target_K = gp_module.compute_covariance(
-            X.to(gp_dev).double(), aux_X.to(gp_dev).double()
-        ).to(self.device)
+        bnn_K = bnn_module.compute_covariance(X.double())
+        if self.gpu_gp:
+            target_K = gp_module.compute_covariance(X.double(), aux_X.double())
+        else:
+            target_K = gp_module.compute_covariance(
+                X.cpu().double(), aux_X.cpu().double()
+            ).to(self.device)
 
         return _sq_wasserstein2(bnn_K, target_K)
 
     def _compute_sqw2(self, X: torch.Tensor) -> torch.Tensor:
-        X = X.to(self.device)
-        gp_dev = "cpu" if not self.gpu_gp else self.device
-
-        bnn_module = (
-            self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
-        )
+        # PERF: X is already on self.device (moved once before vmap).
+        bnn_module = self.bnn.module if isinstance(self.bnn, nn.DataParallel) else self.bnn
         gp_module = self.gp.module if isinstance(self.gp, nn.DataParallel) else self.gp
 
-        bnn_K = bnn_module.compute_covariance(X.double()).to(self.device)
-        target_K = gp_module.compute_covariance(X.to(gp_dev).double()).to(self.device)
+        bnn_K = bnn_module.compute_covariance(X.double())
+        if self.gpu_gp:
+            target_K = gp_module.compute_covariance(X.double())
+        else:
+            target_K = gp_module.compute_covariance(X.cpu().double()).to(self.device)
 
         return _sq_wasserstein2(bnn_K, target_K)
 
@@ -143,21 +142,28 @@ class MapperWassersteinGP(object):
         for it in range(1, num_iters + 1):
             last_it = it
 
+            # PERF: move the full batch to device once here rather than
+            # transferring each slice inside the vmapped function (which would
+            # issue one CPU→GPU transfer per batch element).
             if has_aux:
                 X_batch, aux_X_batch = self.data_generator.get_batches(
                     self.n_data, batches
                 )
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                aux_X_batch = aux_X_batch.to(self.device, non_blocking=True)
                 assert torch.isfinite(X_batch).all()
                 assert torch.isfinite(aux_X_batch).all()
             else:
                 X_batch = self.data_generator.get_batches(self.n_data, batches)
+                X_batch = X_batch.to(self.device, non_blocking=True)
 
             # PERF: check for NaN/Inf parameters once per iteration with a
             # short-circuit any() instead of iterating all params twice.
             if any(not torch.isfinite(p).all() for p in self.bnn.parameters()):
                 print("Model contains NaN or Inf!")
 
-            prior_optimizer.zero_grad()
+            # set_to_none=True avoids zeroing memory and is faster than fill_(0)
+            prior_optimizer.zero_grad(set_to_none=True)
 
             if has_aux:
                 losses = torch.vmap(compute_fn)(X_batch, aux_X_batch)

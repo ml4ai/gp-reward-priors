@@ -147,10 +147,12 @@ class DataSetSampler(object):
         indices = torch.randperm(self.X.shape[0])[:n_real]
 
         X = self.X[indices, ...]
-        X_batch = torch.stack(list(torch.chunk(X, batches, dim=0)))
+        # PERF: fancy indexing produces a contiguous tensor, so reshape returns
+        # a zero-copy view instead of the stack(chunk(...)) copy.
+        X_batch = X.reshape(batches, -1, X.shape[-1])
         if self.aux_X is not None:
             aux_X = self.aux_X[indices, ...]
-            aux_X_batch = torch.stack(list(torch.chunk(aux_X, batches, dim=0)))
+            aux_X_batch = aux_X.reshape(batches, -1, aux_X.shape[-1])
 
             return X_batch, aux_X_batch
         return X_batch
