@@ -431,8 +431,11 @@ class BayesNet:
                 x_batch_1 = x_batch[:, 0, :, :obs_dim].reshape(-1, obs_dim)
                 x_batch_2 = x_batch[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-                pred_1 = self.net(x_batch_1).view(B, T) * am_1
-                pred_2 = self.net(x_batch_2).view(B, T) * am_2
+                # Run both arms through the network in one forward pass instead
+                # of two, doubling GPU utilisation on this small MLP.
+                pred_both = self.net(torch.cat([x_batch_1, x_batch_2], dim=0)).view(2, B, T)
+                pred_1 = pred_both[0] * am_1
+                pred_2 = pred_both[1] * am_2
 
                 sum_pred_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
                 sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)

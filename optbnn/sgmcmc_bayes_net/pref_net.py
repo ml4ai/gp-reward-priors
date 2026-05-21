@@ -195,10 +195,10 @@ class PrefNet(BayesNet):
             x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
             x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-            _, _, pred_mean_1 = self.predict(x_1, use_map=True)
-            _, _, pred_mean_2 = self.predict(x_2, use_map=True)
-            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+            n1 = x_1.shape[0]
+            _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
+            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
             sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
             sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
@@ -255,10 +255,10 @@ class PrefNet(BayesNet):
             x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
             x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-            pred_mean_1, _ = self.predict(x_1)
-            pred_mean_2, _ = self.predict(x_2)
-            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+            n1 = x_1.shape[0]
+            pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
+            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
             sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
             sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
@@ -328,10 +328,10 @@ class PrefNet(BayesNet):
             x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
             x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-            _, _, pred_mean_1 = self.predict(x_1, use_map=True)
-            _, _, pred_mean_2 = self.predict(x_2, use_map=True)
-            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+            n1 = x_1.shape[0]
+            _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
+            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
             sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
             sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
@@ -367,10 +367,10 @@ class PrefNet(BayesNet):
             x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
             x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-            pred_mean_1, _ = self.predict(x_1)
-            pred_mean_2, _ = self.predict(x_2)
-            pred_mean_1 = pred_mean_1.reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_2.reshape(B, T) * am_2
+            n1 = x_1.shape[0]
+            pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
+            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
+            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
             sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
             sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
@@ -419,8 +419,9 @@ class PrefNet(BayesNet):
                 x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
                 x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-                pred_1 = self.net(x_1).view(B, T) * am_1
-                pred_2 = self.net(x_2).view(B, T) * am_2
+                pred_both = self.net(torch.cat([x_1, x_2], dim=0)).view(2, B, T)
+                pred_1 = pred_both[0] * am_1
+                pred_2 = pred_both[1] * am_2
 
                 sum_pred_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
                 sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
