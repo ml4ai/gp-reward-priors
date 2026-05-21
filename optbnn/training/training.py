@@ -148,7 +148,8 @@ class PTTrainer:
             attn_mask_2,
             labels,
         ) = batch
-        self.net.train()
+        if not self.net.training:
+            self.net.train()
         log_dict = {}
 
         B, T, _ = states.size()
@@ -171,7 +172,7 @@ class PTTrainer:
 
         sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
         sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
-        fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
+        fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
         loss = self.like(fX_batch, labels)
 
@@ -179,11 +180,11 @@ class PTTrainer:
         loss.backward()
         self.opt.step()
         with torch.no_grad():
-            log_dict["training_loss"] = loss.detach().cpu().numpy()
+            log_dict["training_loss"] = loss.item()
             predicted_class = torch.argmax(fX_batch, dim=1)
             target_class = torch.argmax(labels, dim=1)
             log_dict["training_acc"] = (
-                (predicted_class == target_class).float().mean().detach().cpu().numpy()
+                (predicted_class == target_class).float().mean().item()
             )
             return log_dict
 
@@ -199,7 +200,8 @@ class PTTrainer:
             attn_mask_2,
             labels,
         ) = batch
-        self.net.eval()
+        if self.net.training:
+            self.net.eval()
         with torch.no_grad():
             log_dict = {}
 
@@ -223,15 +225,15 @@ class PTTrainer:
 
             sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
             sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
-            fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
+            fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
             loss = self.like(fX_batch, labels)
 
-            log_dict["eval_loss"] = loss.detach().cpu().numpy()
+            log_dict["eval_loss"] = loss.item()
             predicted_class = torch.argmax(fX_batch, dim=1)
             target_class = torch.argmax(labels, dim=1)
             log_dict["eval_acc"] = (
-                (predicted_class == target_class).float().mean().detach().cpu().numpy()
+                (predicted_class == target_class).float().mean().item()
             )
 
             return log_dict
