@@ -140,29 +140,22 @@ class PrefNet(BayesNet):
         """
 
         x_test_ = np.asarray(x_test)
+        x_tensor = torch.from_numpy(x_test_).float().to(self.device)
 
-        def network_predict(x_test_, weights):
+        def network_predict(weights):
             with torch.no_grad():
                 self.network_weights = weights
-                return (
-                    self.net(torch.from_numpy(x_test_).float().to(self.device))
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+                return self.net(x_tensor).detach().cpu().numpy()
 
         if map_only:
             assert self.map is not None
-            pred_map = network_predict(x_test_, weights=self.map)
+            pred_map = network_predict(weights=self.map)
             return pred_map
         else:
             # Make predictions for each sampled weights
             # the shape for this is (n_weights,samples,1)
             predictions = np.array(
-                [
-                    network_predict(x_test_, weights=weights)
-                    for weights in self.sampled_weights
-                ]
+                [network_predict(weights=weights) for weights in self.sampled_weights]
             )
 
             # Calculates the predictive mean and variance
@@ -173,13 +166,13 @@ class PrefNet(BayesNet):
             if return_individual_predictions:
                 if use_map:
                     assert self.map is not None
-                    pred_map = network_predict(x_test_, weights=self.map)
+                    pred_map = network_predict(weights=self.map)
                     return pred_mean, pred_var, pred_map, predictions
                 return pred_mean, pred_var, predictions
 
             if use_map:
                 assert self.map is not None
-                pred_map = network_predict(x_test_, weights=self.map)
+                pred_map = network_predict(weights=self.map)
                 return pred_mean, pred_var, pred_map
             return pred_mean, pred_var
 

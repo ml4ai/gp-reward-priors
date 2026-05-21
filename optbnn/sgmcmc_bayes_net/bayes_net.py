@@ -1,6 +1,5 @@
 """Define a base class of Bayesian Neural Network."""
 
-import copy
 import glob
 import os
 from itertools import islice
@@ -110,6 +109,11 @@ class BayesNet:
         elif self.weights_format == "state_dict":
             self.net.load_state_dict(weights)
 
+    @property
+    def _bare_net(self):
+        """Return the underlying module, unwrapping DataParallel if present."""
+        return self.net.module if isinstance(self.net, torch.nn.DataParallel) else self.net
+
     def _neg_log_joint(self, fx_batch, y_batch, num_datapoints):
         """Calculate model's negative log joint density.
 
@@ -128,7 +132,7 @@ class BayesNet:
         """
         return (self.lik_module(fx_batch, y_batch)) / y_batch.shape[
             0
-        ] + self.prior_module(self.net) / num_datapoints
+        ] + self.prior_module(self._bare_net) / num_datapoints
 
     def _initialize_sampler(
         self,
@@ -385,6 +389,8 @@ class BayesNet:
                     data_utils.TensorDataset(x_train_, y_train_),
                     batch_size=batch_size,
                     shuffle=True,
+                    pin_memory=(self.device.type == "cuda"),
+                    num_workers=0,
                 )
             )
 
@@ -408,7 +414,7 @@ class BayesNet:
         self.net.train()
         n_samples = 0  # used to discard first samples
         for step, (x_batch, y_batch) in batch_generator:
-            x_batch, y_batch = x_batch.to(self.device), y_batch.to(self.device)
+            x_batch, y_batch = x_batch.to(self.device, non_blocking=True), y_batch.to(self.device, non_blocking=True)
 
             # Forward pass
             if self.task == "regression":
@@ -448,10 +454,10 @@ class BayesNet:
             if self.prior_module.hyperprior:
                 if step % resample_prior_every == 0:
                     if resample_hyper_prior_burn_in:
-                        self.prior_module.resample(self.net)
+                        self.prior_module.resample(self._bare_net)
                     else:
                         if step > num_burn_in_steps:
-                            self.prior_module.resample(self.net)
+                            self.prior_module.resample(self._bare_net)
 
             # Save the sampled weight
             if (step > num_burn_in_steps) and (
@@ -459,7 +465,8 @@ class BayesNet:
             ):
                 n_samples += 1
                 if n_samples > n_discarded:
-                    self.sampled_weights.append(copy.deepcopy(self.network_weights))
+                    # network_weights getter already returns fresh numpy arrays; deepcopy is redundant
+                    self.sampled_weights.append(self.network_weights)
                     self.num_samples += 1
 
                     # Print evaluation on training data

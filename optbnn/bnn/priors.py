@@ -363,6 +363,7 @@ class OptimGaussianPrior(PriorModule):
         super(OptimGaussianPrior, self).__init__()
         self.params = {}
         self.device = device
+        self._logp_cache = None
 
         data = torch.load(saved_path, map_location=torch.device(self.device),weights_only=False)
         for name, param in data.items():
@@ -373,6 +374,8 @@ class OptimGaussianPrior(PriorModule):
         """
         for name in self.params.keys():
             self.params[name] = self.params[name].to(device)
+        # Invalidate cached logp tensors so they're rebuilt on the new device.
+        self._logp_cache = None
         return self
 
     def sample(self, name, param):
@@ -412,22 +415,38 @@ class OptimGaussianPrior(PriorModule):
 
         return mu, std
 
-    def logp(self, net):
-        """Compute the log likelihood
+    def _build_logp_cache(self, net):
+        """Pre-compute per-parameter (mu, neg_half_inv_var) tensors.
 
-        Args:
-            net: nn.Module, the input network needs to be evaluated.
+        Called once on first logp invocation (or after to() moves devices).
+        Eliminates F.softplus, string replacements, and dict lookups from the
+        hot sampling loop.
         """
-        res = 0.
+        cache = []
         for name, param in net.named_parameters():
             mu, std = self._get_params_by_name(name)
             if std is None:
                 continue
-            assert std.device == param.device, "Must reconfigure the device for prior to {}".format(param.device)
+            assert std.device == param.device, (
+                "Must reconfigure the device for prior to {}".format(param.device)
+            )
+            neg_half_inv_var = (-0.5 / std.pow(2)).detach()
+            mu_c = mu.detach() if mu is not None else None
+            cache.append((name, mu_c, neg_half_inv_var))
+        self._logp_cache = cache
 
-            var = std ** 2
-            if mu is None:
-                res -= torch.sum(((param) ** 2) / (2 * var))
-            else:
-                res -= torch.sum(((param - mu) ** 2) / (2 * var))
+    def logp(self, net):
+        """Compute the log likelihood.
+
+        Args:
+            net: nn.Module, the input network needs to be evaluated.
+        """
+        if not self._logp_cache:
+            self._build_logp_cache(net)
+        params = dict(net.named_parameters())
+        res = 0.
+        for name, mu, neg_half_inv_var in self._logp_cache:
+            param = params[name]
+            diff = param if mu is None else (param - mu)
+            res = res + neg_half_inv_var * diff.pow(2).sum()
         return res
