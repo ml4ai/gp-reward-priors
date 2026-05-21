@@ -1,13 +1,10 @@
-import copy
 import os
 import os.path as osp
-import random
 import sys
 import uuid
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from dataclasses import asdict, dataclass
+from typing import Optional
 
-import h5py
 import numpy as np
 import pyrallis
 import torch
@@ -43,6 +40,7 @@ class TrainConfig:
     batch_size: int = 256  # Batch size for all networks
     lr: float = 3e-4
     criteria_key: str = "acc"
+    num_workers: int = 4  # DataLoader worker processes
     pin_memory: bool = True
     # general params
     seed: int = 0
@@ -90,18 +88,15 @@ def train(config: TrainConfig):
     state_dim = state_shape[2]
     action_dim = action_shape[2]
 
+    persistent = config.num_workers > 0
     training_data_loader = DataLoader(
         dataset,
         batch_size=config.batch_size,
         shuffle=True,
+        num_workers=config.num_workers,
         pin_memory=config.pin_memory,
+        persistent_workers=persistent,
     )
-
-    interval = len(dataset) / config.batch_size
-    if int(interval) < interval:
-        interval = int(interval + 1)
-    else:
-        interval = int(interval)
 
     net = MLP(
         state_dim + action_dim, 1, [config.width] * config.depth, config.activations
@@ -139,7 +134,7 @@ def train(config: TrainConfig):
             ),
         }
         for train_batch in training_data_loader:
-            train_batch = [b.to(torch.float32).to(device) for b in train_batch]
+            train_batch = [b.to(device, non_blocking=True) for b in train_batch]
             for key, val in model.train(train_batch).items():
                 metrics[key].append(val)
 

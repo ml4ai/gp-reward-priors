@@ -35,24 +35,21 @@ class MRTrainer:
             attn_mask_2,
             labels,
         ) = batch
-        self.net.train()
+        if not self.net.training:
+            self.net.train()
         log_dict = {}
 
         B, T, s_dim = states.size()
         _, _, a_dim = actions.size()
-        X_batch_1 = torch.concatenate([states, actions], dim=-1).reshape(
-            -1, s_dim + a_dim
-        )
-        X_batch_2 = torch.concatenate([states_2, actions_2], dim=-1).reshape(
-            -1, s_dim + a_dim
-        )
+        X_batch_1 = torch.cat([states, actions], dim=-1).reshape(-1, s_dim + a_dim)
+        X_batch_2 = torch.cat([states_2, actions_2], dim=-1).reshape(-1, s_dim + a_dim)
 
         pred_1 = self.net(X_batch_1).reshape(B, T) * attn_mask
         pred_2 = self.net(X_batch_2).reshape(B, T) * attn_mask_2
 
         sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
         sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
-        fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
+        fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
         if self.prior is None:
             loss = self.like(fX_batch, labels)
         else:
@@ -63,11 +60,11 @@ class MRTrainer:
         loss.backward()
         self.opt.step()
         with torch.no_grad():
-            log_dict["training_loss"] = loss.detach().cpu().numpy()
+            log_dict["training_loss"] = loss.item()
             predicted_class = torch.argmax(fX_batch, dim=1)
             target_class = torch.argmax(labels, dim=1)
             log_dict["training_acc"] = (
-                (predicted_class == target_class).float().mean().detach().cpu().numpy()
+                (predicted_class == target_class).float().mean().item()
             )
             return log_dict
 
@@ -83,25 +80,22 @@ class MRTrainer:
             attn_mask_2,
             labels,
         ) = batch
-        self.net.eval()
+        if self.net.training:
+            self.net.eval()
         with torch.no_grad():
             log_dict = {}
 
             B, T, s_dim = states.size()
             _, _, a_dim = actions.size()
-            X_batch_1 = torch.concatenate([states, actions], dim=-1).reshape(
-                -1, s_dim + a_dim
-            )
-            X_batch_2 = torch.concatenate([states_2, actions_2], dim=-1).reshape(
-                -1, s_dim + a_dim
-            )
+            X_batch_1 = torch.cat([states, actions], dim=-1).reshape(-1, s_dim + a_dim)
+            X_batch_2 = torch.cat([states_2, actions_2], dim=-1).reshape(-1, s_dim + a_dim)
 
             pred_1 = self.net(X_batch_1).reshape(B, T) * attn_mask
             pred_2 = self.net(X_batch_2).reshape(B, T) * attn_mask_2
 
             sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
             sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
-            fX_batch = torch.concatenate([sum_pred_1, sum_pred_2], dim=1)
+            fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
             if self.prior is None:
                 loss = self.like(fX_batch, labels)
             else:
@@ -110,11 +104,11 @@ class MRTrainer:
                     + self.prior(self.net) / self.num_datapoints
                 )
 
-            log_dict["eval_loss"] = loss.detach().cpu().numpy()
+            log_dict["eval_loss"] = loss.item()
             predicted_class = torch.argmax(fX_batch, dim=1)
             target_class = torch.argmax(labels, dim=1)
             log_dict["eval_acc"] = (
-                (predicted_class == target_class).float().mean().detach().cpu().numpy()
+                (predicted_class == target_class).float().mean().item()
             )
 
             return log_dict

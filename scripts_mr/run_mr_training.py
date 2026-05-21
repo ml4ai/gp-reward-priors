@@ -1,13 +1,10 @@
-import copy
 import os
 import os.path as osp
-import random
 import sys
 import uuid
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from dataclasses import asdict, dataclass
+from typing import Optional
 
-import h5py
 import numpy as np
 import pyrallis
 import torch
@@ -44,6 +41,7 @@ class TrainConfig:
     lr: float = 3e-4
     eval_every: int = 1  # How often (time steps) we evaluate
     criteria_key: str = "acc"
+    num_workers: int = 4  # DataLoader worker processes
     pin_memory: bool = True
     # general params
     seed: int = 0
@@ -91,30 +89,24 @@ def train(config: TrainConfig):
     training_data, test_data = random_split(
         dataset, [config.training_split, 1 - config.training_split]
     )
+
+    persistent = config.num_workers > 0
     training_data_loader = DataLoader(
         training_data,
         batch_size=config.batch_size,
         shuffle=True,
+        num_workers=config.num_workers,
         pin_memory=config.pin_memory,
+        persistent_workers=persistent,
     )
     test_data_loader = DataLoader(
         test_data,
         batch_size=config.batch_size,
         shuffle=False,
+        num_workers=config.num_workers,
         pin_memory=config.pin_memory,
+        persistent_workers=persistent,
     )
-
-    interval = len(training_data) / config.batch_size
-    if int(interval) < interval:
-        interval = int(interval + 1)
-    else:
-        interval = int(interval)
-
-    eval_interval = len(test_data) / config.batch_size
-    if int(eval_interval) < eval_interval:
-        eval_interval = int(eval_interval + 1)
-    else:
-        eval_interval = int(eval_interval)
 
     net = MLP(
         state_dim + action_dim, 1, [config.width] * config.depth, config.activations
@@ -155,7 +147,7 @@ def train(config: TrainConfig):
         }
         if epoch:
             for train_batch in training_data_loader:
-                train_batch = [b.to(torch.float32).to(device) for b in train_batch]
+                train_batch = [b.to(device, non_blocking=True) for b in train_batch]
                 for key, val in model.train(train_batch).items():
                     metrics[key].append(val)
         else:
@@ -165,7 +157,7 @@ def train(config: TrainConfig):
         # eval phase
         if epoch % config.eval_every == 0:
             for test_batch in test_data_loader:
-                test_batch = [b.to(torch.float32).to(device) for b in test_batch]
+                test_batch = [b.to(device, non_blocking=True) for b in test_batch]
                 for key, val in model.evaluation(test_batch).items():
                     metrics[key].append(val)
 

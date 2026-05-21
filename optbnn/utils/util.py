@@ -122,26 +122,26 @@ class Pref_H5Dataset(Dataset):
 
             self._sts_shape = f["states"].shape
             self._acts_shape = f["actions"].shape
-            self.states = f["states"][:]
-            self.actions = f["actions"][:]
+            self.states = f["states"][:].astype(np.float32)
+            self.actions = f["actions"][:].astype(np.float32)
             self.timesteps = f["timesteps"][:]
-            self.attn_mask = f["attn_mask"][:]
+            self.attn_mask = f["attn_mask"][:].astype(np.float32)
 
-            self.states_2 = f["states_2"][:]
-            self.actions_2 = f["actions_2"][:]
+            self.states_2 = f["states_2"][:].astype(np.float32)
+            self.actions_2 = f["actions_2"][:].astype(np.float32)
             self.timesteps_2 = f["timesteps_2"][:]
-            self.attn_mask_2 = f["attn_mask_2"][:]
+            self.attn_mask_2 = f["attn_mask_2"][:].astype(np.float32)
             if label_flip == 0.0:
-                self.labels = f["labels"][:]
+                self.labels = f["labels"][:].astype(np.float32)
             else:
                 if label_flip == 1.0:
-                    self.labels = 1 - f["labels"][:]
+                    self.labels = (1 - f["labels"][:]).astype(np.float32)
                 else:
                     num_to_flip = int(f["labels"].shape[1] * label_flip)
                     indices_to_flip = np.random.choice(
                         f["labels"].shape[1], num_to_flip, replace=False
                     )
-                    self.labels = f["labels"][:]
+                    self.labels = f["labels"][:].astype(np.float32)
                     self.labels[indices_to_flip] = 1 - self.labels[indices_to_flip]
 
     def __getitem__(self, index):
