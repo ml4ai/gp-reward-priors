@@ -42,6 +42,8 @@ class TrainConfig:
     eval_every: int = 1  # How often (time steps) we evaluate
     criteria_key: str = "acc"
     num_workers: int = 4  # DataLoader worker processes
+    prefetch_factor: int = 2  # Batches pre-loaded per worker (ignored when num_workers=0)
+    compile_model: bool = False  # Wrap net with torch.compile for kernel fusion
     pin_memory: bool = True
     # general params
     seed: int = 0
@@ -91,26 +93,22 @@ def train(config: TrainConfig):
     )
 
     persistent = config.num_workers > 0
-    training_data_loader = DataLoader(
-        training_data,
+    loader_kwargs = dict(
         batch_size=config.batch_size,
-        shuffle=True,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
         persistent_workers=persistent,
     )
-    test_data_loader = DataLoader(
-        test_data,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
-        persistent_workers=persistent,
-    )
+    if config.num_workers > 0:
+        loader_kwargs["prefetch_factor"] = config.prefetch_factor
+    training_data_loader = DataLoader(training_data, shuffle=True, **loader_kwargs)
+    test_data_loader = DataLoader(test_data, shuffle=False, **loader_kwargs)
 
     net = MLP(
         state_dim + action_dim, 1, [config.width] * config.depth, config.activations
     ).to(device)
+    if config.compile_model:
+        net = torch.compile(net)
     if config.prior:
         if config.prior == "FG":
             prior = FixedGaussianPrior(std=1.0).to(device)

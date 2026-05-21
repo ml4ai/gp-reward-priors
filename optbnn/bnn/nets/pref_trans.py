@@ -5,7 +5,6 @@ import torch.nn.functional as F
 
 from ..activation_fns import *
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def split_heads(x, num_heads, head_dim):
     """
@@ -39,58 +38,6 @@ def get_attention_mask(attn_mask, batch_size):
     attn_mask = attn_mask[:, None, None, ...]
     attn_mask = (1.0 - attn_mask) * -10000.0
     return attn_mask
-
-
-def attention(
-    query,
-    key,
-    value,
-    casual_mask,
-    masked_bias,
-    dropout,
-    scale_attn_weights,
-    attn_mask=None,
-):
-    """
-    Computes Dot-Product Attention for the given query, key and value.
-
-    Args:
-        query (tensor): Query, shape [B, num_heads, seq_len, embd_dim].
-        key (tensor): Key, shape [B, num_heads, seq_len, embd_dim].
-        value (tensor): Value, shape [B, num_heads, seq_len, embd_dim].
-        casual_mask (tensor): Mask to ensure that attention is only applied to the left of the input sequence,
-                              shape [1, 1, key_len - query_len :key_len, :key_len].
-        masked_bias (float): Value to insert for masked part of the sequence.
-        dropout (nn.Dropout): Dropout module that is applied to the attention output.
-        scale_attn_weights (bool): If True, scale the attention weights.
-        training (bool): Training mode.
-        attn_mask (tensor): Mask to avoid performing attention on padded tokens indices, shape [B, seq_len].
-        head_mask (tensor): Mask to nullify selected heads of the self-attention modules, shape [num_heads,] or [num_layers, num_heads].
-        feedback (tensor): external feedback with marked points.
-
-    Returns:
-        (tensor): Attention output, shape [B, num_heads, seq_len, embd_dim].
-        (tensor): Attention weights, shape [B, num_heads, seq_len, seq_len].
-        (tensor): KLD loss with external feedback, float.
-    """
-    query = query.to(torch.bfloat16)
-    key = key.to(torch.bfloat16)
-    attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
-    if scale_attn_weights:
-        attn_weights = attn_weights / (float(value.shape[-1]) ** 0.5)
-
-    attn_weights = torch.where(casual_mask, attn_weights, masked_bias)
-
-    if attn_mask is not None:
-        attn_weights = attn_weights + attn_mask
-
-    _attn_weights = F.softmax(attn_weights, dim=-1)
-    attn_weights = _attn_weights.to(value.dtype)
-    attn_weights = dropout(attn_weights)
-
-    out = torch.matmul(attn_weights, value)
-    return out, _attn_weights
 
 
 def merge_heads(x, num_heads, head_dim):
@@ -152,13 +99,21 @@ class GPT2SelfAttention(nn.Module):
         super(GPT2SelfAttention, self).__init__()
         self.num_heads = num_heads
         self.head_dim = embd_dim // num_heads
-        self.max_pos = max_pos
 
         self.in_linear = nn.Linear(embd_dim, 3 * embd_dim)
         self.attn_dropout = nn.Dropout(attn_dropout)
 
         self.out_linear = nn.Linear(embd_dim, embd_dim)
         self.resid_dropout = nn.Dropout(resid_dropout)
+
+        # Additive causal bias: 0 where attention is allowed, -inf where masked.
+        # Registered as a buffer so it moves with the model on .to(device) calls.
+        self.register_buffer(
+            "causal_bias",
+            torch.triu(
+                torch.full((max_pos, max_pos), float("-inf")), diagonal=1
+            ).view(1, 1, max_pos, max_pos),
+        )
 
     def forward(self, x, attn_mask):
         x = self.in_linear(x)
@@ -170,27 +125,23 @@ class GPT2SelfAttention(nn.Module):
         key = split_heads(key, self.num_heads, self.head_dim)
 
         query_len, key_len = query.shape[-2], key.shape[-2]
-        casual_mask = torch.tril(torch.ones((1, 1, self.max_pos, self.max_pos)))[
-            :, :, key_len - query_len : key_len, :key_len
-        ]
-        casual_mask = casual_mask.to(torch.bool).to(device)
+        # Slice the pre-computed causal bias to the current sequence lengths and
+        # add the additive padding mask (already shaped [B, 1, 1, key_len]).
+        combined_mask = self.causal_bias[:, :, key_len - query_len : key_len, :key_len]
+        if attn_mask is not None:
+            combined_mask = combined_mask + attn_mask
 
-        out, _attn_weights = attention(
-            query,
-            key,
-            value,
-            casual_mask,
-            -1e4,
-            self.attn_dropout,
-            True,
-            attn_mask,
+        out = F.scaled_dot_product_attention(
+            query, key, value,
+            attn_mask=combined_mask,
+            dropout_p=self.attn_dropout.p if self.training else 0.0,
         )
         out = merge_heads(out, self.num_heads, self.head_dim)
 
         out = self.out_linear(out)
 
         out = self.resid_dropout(out)
-        return out, _attn_weights
+        return out, None
 
 
 class GPT2Block(nn.Module):
@@ -360,24 +311,14 @@ class PT(nn.Module):
         key = split_heads(key, num_heads, self.pref_attn_embd_dim)
         value = split_heads(value, num_heads, 1)
 
-        query_len, key_len = query.shape[-2], key.shape[-2]
-        casual_mask = torch.ones((1, 1, seq_length, seq_length))[
-            :, :, key_len - query_len : key_len, :key_len
-        ]
-        casual_mask = casual_mask.to(torch.bool).to(device)
-
+        # Preference attention is full (non-causal); only the padding mask applies.
         new_attn_mask = get_attention_mask(attn_mask, batch_size)
-        out, last_attn_weights = attention(
-            query,
-            key,
-            value,
-            casual_mask,
-            -1e-4,
-            self.attn_dropout,
-            scale_attn_weights=True,
+        out = F.scaled_dot_product_attention(
+            query, key, value,
             attn_mask=new_attn_mask,
+            dropout_p=0.0,  # self.attn_dropout already has p=0.0
         )
-        attn_weights_list.append(last_attn_weights)
+        attn_weights_list.append(None)
 
         output = merge_heads(out, num_heads, 1)
 

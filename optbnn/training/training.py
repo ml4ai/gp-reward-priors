@@ -41,11 +41,16 @@ class MRTrainer:
 
         B, T, s_dim = states.size()
         _, _, a_dim = actions.size()
-        X_batch_1 = torch.cat([states, actions], dim=-1).reshape(-1, s_dim + a_dim)
-        X_batch_2 = torch.cat([states_2, actions_2], dim=-1).reshape(-1, s_dim + a_dim)
-
-        pred_1 = self.net(X_batch_1).reshape(B, T) * attn_mask
-        pred_2 = self.net(X_batch_2).reshape(B, T) * attn_mask_2
+        # Run both trajectory segments in a single forward pass by doubling the
+        # batch dimension, then split the result. This halves dispatch overhead
+        # and gives the GPU a larger matrix multiply to work with.
+        X_batch = torch.cat([
+            torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+            torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
+        ], dim=0)  # (2*B*T, s_dim+a_dim)
+        pred = self.net(X_batch)  # (2*B*T, 1)
+        pred_1 = pred[: B * T].reshape(B, T) * attn_mask
+        pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
         sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
         sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
@@ -56,7 +61,7 @@ class MRTrainer:
             loss = (
                 self.like(fX_batch, labels) + self.prior(self.net) / self.num_datapoints
             )
-        self.opt.zero_grad()
+        self.opt.zero_grad(set_to_none=True)
         loss.backward()
         self.opt.step()
         with torch.no_grad():
@@ -87,11 +92,13 @@ class MRTrainer:
 
             B, T, s_dim = states.size()
             _, _, a_dim = actions.size()
-            X_batch_1 = torch.cat([states, actions], dim=-1).reshape(-1, s_dim + a_dim)
-            X_batch_2 = torch.cat([states_2, actions_2], dim=-1).reshape(-1, s_dim + a_dim)
-
-            pred_1 = self.net(X_batch_1).reshape(B, T) * attn_mask
-            pred_2 = self.net(X_batch_2).reshape(B, T) * attn_mask_2
+            X_batch = torch.cat([
+                torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+                torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
+            ], dim=0)  # (2*B*T, s_dim+a_dim)
+            pred = self.net(X_batch)  # (2*B*T, 1)
+            pred_1 = pred[: B * T].reshape(B, T) * attn_mask
+            pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
             sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
             sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
@@ -154,29 +161,22 @@ class PTTrainer:
 
         B, T, _ = states.size()
 
-        trans_pred_1, _ = self.net(
-            states,
-            actions,
-            timesteps.to(torch.int),
-            attn_mask,
+        # Concatenate both trajectory segments along the batch dimension so the
+        # transformer runs a single forward pass of size 2B instead of two of B.
+        out, _ = self.net(
+            torch.cat([states, states_2], dim=0),
+            torch.cat([actions, actions_2], dim=0),
+            torch.cat([timesteps, timesteps_2], dim=0).to(torch.int),
+            torch.cat([attn_mask, attn_mask_2], dim=0),
         )
-        trans_pred_2, _ = self.net(
-            states_2,
-            actions_2,
-            timesteps_2.to(torch.int),
-            attn_mask_2,
-        )
-
-        trans_pred_1 = trans_pred_1["weighted_sum"]
-        trans_pred_2 = trans_pred_2["weighted_sum"]
-
-        sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
-        sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
+        pred = out["weighted_sum"]  # (2B, T, 1)
+        sum_pred_1 = pred[:B].reshape(B, T).mean(dim=1, keepdim=True)
+        sum_pred_2 = pred[B:].reshape(B, T).mean(dim=1, keepdim=True)
         fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
         loss = self.like(fX_batch, labels)
 
-        self.opt.zero_grad()
+        self.opt.zero_grad(set_to_none=True)
         loss.backward()
         self.opt.step()
         with torch.no_grad():
@@ -207,24 +207,15 @@ class PTTrainer:
 
             B, T, _ = states.size()
 
-            trans_pred_1, _ = self.net(
-                states,
-                actions,
-                timesteps.to(torch.int),
-                attn_mask,
+            out, _ = self.net(
+                torch.cat([states, states_2], dim=0),
+                torch.cat([actions, actions_2], dim=0),
+                torch.cat([timesteps, timesteps_2], dim=0).to(torch.int),
+                torch.cat([attn_mask, attn_mask_2], dim=0),
             )
-            trans_pred_2, _ = self.net(
-                states_2,
-                actions_2,
-                timesteps_2.to(torch.int),
-                attn_mask_2,
-            )
-
-            trans_pred_1 = trans_pred_1["weighted_sum"]
-            trans_pred_2 = trans_pred_2["weighted_sum"]
-
-            sum_pred_1 = torch.mean(trans_pred_1.reshape(B, T), dim=1).reshape(-1, 1)
-            sum_pred_2 = torch.mean(trans_pred_2.reshape(B, T), dim=1).reshape(-1, 1)
+            pred = out["weighted_sum"]  # (2B, T, 1)
+            sum_pred_1 = pred[:B].reshape(B, T).mean(dim=1, keepdim=True)
+            sum_pred_2 = pred[B:].reshape(B, T).mean(dim=1, keepdim=True)
             fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
             loss = self.like(fX_batch, labels)
