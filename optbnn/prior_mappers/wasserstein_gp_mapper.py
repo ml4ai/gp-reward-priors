@@ -24,7 +24,7 @@ def _sqrt_psd(K: torch.Tensor) -> torch.Tensor:
     without code duplication.  Also avoids recomputing relu inside the call.
     """
     evalues, evectors = torch.linalg.eigh(K)
-    sqrt_evalues = torch.relu(evalues).sqrt_()
+    sqrt_evalues = torch.relu(evalues).sqrt()
     return evectors @ torch.diag_embed(sqrt_evalues) @ evectors.transpose(-2, -1)
 
 
