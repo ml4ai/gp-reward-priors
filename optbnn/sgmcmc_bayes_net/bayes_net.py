@@ -287,6 +287,36 @@ class BayesNet:
                 before resampling prior.
             eval_map: bool, uses map estimate to evaluate if true, otherwise posterior predictive mean
         """
+        # Pre-build a single DataLoader to share across all chains.  Building a
+        # TensorDataset + DataLoader inside train() on every chain restart
+        # repeats the numpy→tensor conversion and DataLoader initialisation
+        # num_chains times for identical data.  train() already has a fast path
+        # when data_loader is not None (skips the rebuild), so we just need to
+        # construct it once here and pass it through.
+        if data_loader is None and x_train is not None:
+            if self.task == "regression":
+                # Normalization must happen before the DataLoader is built so
+                # that the stored mean/std are available for prediction.
+                x_sq, y_sq = x_train.squeeze(), y_train.squeeze()
+                x_t, y_t = self._normalize_data(x_sq, y_sq)
+            elif self.task == "pref":
+                x_t = torch.from_numpy(x_train.squeeze()).float()
+                y_t = torch.from_numpy(y_train.squeeze()).float()
+            else:
+                # Generic fallback (e.g. classification with raw numpy arrays).
+                x_t = torch.from_numpy(x_train.squeeze()).float()
+                y_t = torch.from_numpy(y_train.squeeze()).float()
+            shared_loader = data_utils.DataLoader(
+                data_utils.TensorDataset(x_t, y_t),
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=(self.device.type == "cuda"),
+                num_workers=0,
+            )
+        else:
+            # Caller already provided a DataLoader, or no array data was given.
+            shared_loader = data_loader
+
         for chain in range(num_chains):
             self.print_info("Chain: {}".format(chain))
             if isinstance(self.net, torch.nn.DataParallel):
@@ -296,7 +326,7 @@ class BayesNet:
             self.train(
                 x_train,
                 y_train,
-                data_loader,
+                shared_loader,  # pre-built; train() skips DataLoader rebuild
                 num_samples,
                 keep_every,
                 n_discarded,
