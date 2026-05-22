@@ -168,8 +168,21 @@ def train(config: TrainConfig):
         mdecay=config.mdecay,
         print_every_n_samples=config.print_every_n_samples,
     )
+    # Fixed observation set used for prediction-based R-hat.
+    # We pull raw observations out of the first arm of up to 64 test pairs.
+    # Shape after reshape: (min(64, N_test) * T, obs_dim).
+    _B_rhat = min(64, X_test.shape[0])
+    _obs_dim = X_test.shape[-1] - 1  # last column is the attention mask
+    x_rhat = (
+        X_test[:_B_rhat, 0, :, :_obs_dim]
+        .reshape(-1, _obs_dim)
+        .astype(np.float32)
+    )
+    x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_std.device)
+
     mean_ce = []
     mean_acc = []
+    pred_chains = []
     params_chains = []
     for i in range(config.num_chains):
         # Each chain wrote to its own subdirectory as chain_<i>.
@@ -181,6 +194,17 @@ def train(config: TrainConfig):
         mean_ce.append(ce)
         mean_acc.append(acc)
 
+        # Per-sample predicted rewards on the fixed observation set.
+        # Shape: (num_samples, n_obs) where n_obs = _B_rhat * T.
+        bayes_net_std.net.eval()
+        with torch.no_grad():
+            chain_preds = []
+            for weights in bayes_net_std.sampled_weights:
+                bayes_net_std.network_weights = weights
+                pred = bayes_net_std.net(x_rhat_t).detach().cpu().numpy().ravel()
+                chain_preds.append(pred)
+        pred_chains.append(np.stack(chain_preds))
+
         params_chains.append(
             np.stack(
                 [
@@ -189,16 +213,34 @@ def train(config: TrainConfig):
                 ]
             )
         )
+
+    # pred_chains: (num_chains, num_samples, n_obs)
+    # params_chains: (num_chains, num_samples, n_params)
+    pred_chains = np.stack(pred_chains)
     params_chains = np.stack(params_chains)
-    rhats = azs.rhat(params_chains)
+
+    # Prediction R-hat is the primary convergence diagnostic: it is immune to
+    # weight-space symmetries (permutation of hidden units, sign flips) that
+    # inflate parameter R-hat even when all chains sample the same function.
+    rhats_pred = azs.rhat(pred_chains)
+    # Parameter R-hat is retained for reference.
+    rhats_param = azs.rhat(params_chains)
+
     summary = {
         "test_mean_cross_entropy": np.mean(mean_ce),
         "test_mean_accuracy": np.mean(mean_acc),
-        "max": np.max(rhats),
-        "95th_pct": np.percentile(rhats, 95),
-        "median": np.median(rhats),
-        "mean": np.mean(rhats),
-        "pct_over_1.01": np.mean(rhats > 1.01) * 100,
+        # --- prediction R-hat (primary diagnostic) ---
+        "pred_rhat_max": float(np.max(rhats_pred)),
+        "pred_rhat_95th_pct": float(np.percentile(rhats_pred, 95)),
+        "pred_rhat_median": float(np.median(rhats_pred)),
+        "pred_rhat_mean": float(np.mean(rhats_pred)),
+        "pred_rhat_pct_over_1.01": float(np.mean(rhats_pred > 1.01) * 100),
+        # --- parameter R-hat (reference; inflated by weight symmetries) ---
+        "param_rhat_max": float(np.max(rhats_param)),
+        "param_rhat_95th_pct": float(np.percentile(rhats_param, 95)),
+        "param_rhat_median": float(np.median(rhats_param)),
+        "param_rhat_mean": float(np.mean(rhats_param)),
+        "param_rhat_pct_over_1.01": float(np.mean(rhats_param > 1.01) * 100),
     }
     wandb.log(summary)
 
