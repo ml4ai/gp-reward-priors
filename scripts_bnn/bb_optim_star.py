@@ -128,7 +128,9 @@ def train(config: TrainConfig):
 
     # Initialize the prior
     util.set_seed(config.seed)
-    ckpt_path = os.path.join(config.prior_dir, "ckpts", "best.ckpt")
+    # Resolve to an absolute path so the worker processes (spawned with a fresh
+    # interpreter that may have a different CWD) can always locate the file.
+    ckpt_path = os.path.abspath(os.path.join(config.prior_dir, "ckpts", "best.ckpt"))
     prior = OptimGaussianPrior(ckpt_path)
 
     # net_args is kept as a dict so it can be forwarded to _pref_chain_worker
@@ -143,7 +145,8 @@ def train(config: TrainConfig):
     likelihood = LikCE()
 
     # Initialize the sampler
-    saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
+    # Absolute path for the same reason as ckpt_path above.
+    saved_dir = os.path.abspath(os.path.join(config.OUT_DIR, "sampling_std"))
     util.ensure_dir(saved_dir)
     # n_gpu=1: this instance is used only for orchestration and post-hoc
     # evaluation; the actual training runs in per-chain worker processes,
