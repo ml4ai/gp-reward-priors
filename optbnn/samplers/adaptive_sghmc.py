@@ -79,15 +79,16 @@ class AdaptiveSGHMC(Optimizer):
                 # a new tensor each step.
                 gradient = parameter.grad.data.mul(scale_grad)
 
-                tau_inv = 1.0 / (tau + 1.0)
-
                 if state["iteration"] <= num_burn_in_steps:
-                    # tau -= tau * g^2 / (v_hat + eps), then tau += 1.
-                    # addcmul_ requires a scalar value; use addcdiv_ instead so
-                    # the per-element division is handled natively without
-                    # constructing a tensor for the value argument.
+                    # Update tau first, then derive tau_inv from the new value.
+                    # The reference algorithm (Springenberg et al. 2016, Alg. 1)
+                    # computes α_t = 1/τ_t *after* the τ update, so that g and
+                    # v_hat use the correct, current step size.  Computing it
+                    # from tau_old + 1 (as was done before) underestimates the
+                    # step size and slows down burn-in adaptation.
                     tau.addcdiv_(tau * g.pow(2), v_hat.add(epsilon), value=-1.0)
                     tau.add_(1.0)
+                    tau_inv = tau.reciprocal()
 
                     # g += tau_inv * (gradient - g)
                     g.add_(tau_inv * (gradient - g))
