@@ -48,6 +48,13 @@ def _pref_chain_worker(
     torch.cuda.set_device(rank)
     set_seed(seed + chain_idx)
 
+    # Workers are spawned as fresh processes with no wandb session.  Disable
+    # wandb so that the wandb.log() calls inside _print_evaluations become
+    # silent no-ops.  The parent process logs all final metrics after the
+    # workers finish.
+    import wandb as _wandb
+    _wandb.init(mode="disabled")
+
     net = MLP(**net_args)
     prior = OptimGaussianPrior(ckpt_path)
     likelihood = LikCE()
