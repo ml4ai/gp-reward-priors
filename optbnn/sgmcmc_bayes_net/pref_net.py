@@ -1,6 +1,7 @@
 """Bayesian Neural Network for regression."""
 
 import copy
+import os
 
 import numpy as np
 import torch
@@ -8,6 +9,59 @@ import wandb
 
 from ..metrics.metrics_tensor import accuracy
 from .bayes_net import BayesNet
+
+
+def _pref_chain_worker(
+    rank, batch_start, base_ckpt_dir, net_args, ckpt_path,
+    x_train, y_train, seed, train_kwargs,
+):
+    """Worker for one parallel PrefNet chain, called by mp.spawn.
+
+    Defined at module level (not inside a class or function) so it is
+    picklable under the ``spawn`` start method that CUDA requires.  All
+    arguments are plain Python objects (no lambdas, no ``__main__``
+    references) so they survive the pickle/unpickle round-trip intact.
+
+    Args:
+        rank: process rank within the current batch — also the CUDA device
+            index assigned to this worker.
+        batch_start: chain index of rank 0 in this batch.
+        base_ckpt_dir: root directory; chain i writes to
+            ``<base_ckpt_dir>/chain_<i>/``.
+        net_args: dict of keyword arguments forwarded to MLP(...).
+        ckpt_path: path to the OptimGaussianPrior checkpoint file.
+        x_train: numpy array, training inputs.
+        y_train: numpy array, training targets.
+        seed: base random seed; chain i uses seed + i.
+        train_kwargs: dict forwarded verbatim to BayesNet.train().
+    """
+    # Local imports: the spawned process starts fresh and needs its own
+    # import chain.  Keeping them here also makes the function self-contained.
+    from optbnn.bnn.likelihoods import LikCE
+    from optbnn.bnn.nets.mlp import MLP
+    from optbnn.bnn.priors import OptimGaussianPrior
+    from optbnn.sgmcmc_bayes_net.pref_net import PrefNet
+    from optbnn.utils.util import set_seed
+
+    chain_idx = batch_start + rank
+    # Bind this process to one GPU before any CUDA allocations.
+    torch.cuda.set_device(rank)
+    set_seed(seed + chain_idx)
+
+    net = MLP(**net_args)
+    prior = OptimGaussianPrior(ckpt_path)
+    likelihood = LikCE()
+
+    chain_dir = os.path.join(base_ckpt_dir, f"chain_{chain_idx}")
+    os.makedirs(chain_dir, exist_ok=True)
+
+    # n_gpu=1: each worker owns exactly one GPU (the one set above).
+    bayes_net = PrefNet(
+        net, likelihood, prior, chain_dir,
+        n_gpu=1, name=f"chain_{chain_idx}",
+    )
+    bayes_net.train(x_train, y_train, **train_kwargs)
+    bayes_net._save_sampled_weights()
 
 
 class PrefNet(BayesNet):
@@ -474,3 +528,99 @@ class PrefNet(BayesNet):
         )
 
         return torch.cov(predictions).double()
+
+    def sample_multi_chains_parallel(
+        self,
+        x_train,
+        y_train,
+        net_args,
+        ckpt_path,
+        num_samples=None,
+        num_chains=1,
+        keep_every=100,
+        n_discarded=0,
+        num_burn_in_steps=3000,
+        lr=1e-2,
+        batch_size=32,
+        epsilon=1e-10,
+        mdecay=0.05,
+        print_every_n_samples=10,
+        resample_prior_every=1000,
+        eval_map=False,
+        seed=1,
+    ):
+        """Run multiple chains in parallel, one process per GPU.
+
+        If ``num_chains > torch.cuda.device_count()``, chains are dispatched
+        in consecutive batches of ``min(num_chains, num_gpus)`` chains.  Each
+        batch runs fully in parallel (all processes on separate GPUs) before
+        the next batch begins.
+
+        Sampled weights for chain i are written to::
+
+            <self.ckpt_dir>/chain_<i>/sampled_weights/sampled_weights_0000000
+
+        After this method returns, load each chain with::
+
+            self._load_sampled_weights(
+                os.path.join(self.ckpt_dir, f"chain_{i}",
+                             "sampled_weights", "sampled_weights_0000000")
+            )
+
+        Args:
+            x_train: numpy array, training inputs.
+            y_train: numpy array, training targets.
+            net_args: dict of keyword arguments for MLP (input_dim,
+                output_dim, hidden_dims, activation_fn, …).  Must be
+                picklable (plain Python types only).
+            ckpt_path: str, path to the OptimGaussianPrior checkpoint.
+            num_chains: int, total number of chains to run.
+            seed: int, base random seed.  Chain i uses ``seed + i``.
+            (remaining args forwarded to BayesNet.train())
+        """
+        import torch.multiprocessing as mp
+
+        num_gpus = torch.cuda.device_count()
+        if num_gpus == 0:
+            raise RuntimeError(
+                "sample_multi_chains_parallel requires at least one CUDA device."
+            )
+
+        train_kwargs = dict(
+            num_samples=num_samples,
+            keep_every=keep_every,
+            n_discarded=n_discarded,
+            num_burn_in_steps=num_burn_in_steps,
+            lr=lr,
+            batch_size=batch_size,
+            epsilon=epsilon,
+            mdecay=mdecay,
+            print_every_n_samples=print_every_n_samples,
+            continue_training=False,
+            clear_sampled_weights=True,
+            resample_prior_every=resample_prior_every,
+            eval_map=eval_map,
+        )
+
+        for batch_start in range(0, num_chains, num_gpus):
+            n_parallel = min(num_gpus, num_chains - batch_start)
+            self.print_info(
+                "Launching chains {:d}–{:d} in parallel on {:d} GPU(s)".format(
+                    batch_start, batch_start + n_parallel - 1, n_parallel
+                )
+            )
+            mp.spawn(
+                _pref_chain_worker,
+                args=(
+                    batch_start,
+                    self.ckpt_dir,
+                    net_args,
+                    ckpt_path,
+                    x_train,
+                    y_train,
+                    seed,
+                    train_kwargs,
+                ),
+                nprocs=n_parallel,
+                join=True,  # block until all chains in this batch finish
+            )

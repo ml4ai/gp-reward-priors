@@ -131,26 +131,51 @@ def train(config: TrainConfig):
     ckpt_path = os.path.join(config.prior_dir, "ckpts", "best.ckpt")
     prior = OptimGaussianPrior(ckpt_path)
 
-    # Setup likelihood
-    net = MLP(24, 1, [width] * depth, transfer_fn)
+    # net_args is kept as a dict so it can be forwarded to _pref_chain_worker
+    # (which must reconstruct the net inside each spawned process).
+    net_args = dict(
+        input_dim=24,
+        output_dim=1,
+        hidden_dims=[width] * depth,
+        activation_fn=transfer_fn,
+    )
+    net = MLP(**net_args)
     likelihood = LikCE()
 
     # Initialize the sampler
     saved_dir = os.path.join(config.OUT_DIR, "sampling_std")
     util.ensure_dir(saved_dir)
+    # n_gpu=1: this instance is used only for orchestration and post-hoc
+    # evaluation; the actual training runs in per-chain worker processes,
+    # each owning one GPU.
     bayes_net_std = PrefNet(
-        net, likelihood, prior, saved_dir, n_gpu=6, name="optim_star"
+        net, likelihood, prior, saved_dir, n_gpu=1, name="optim_star"
     )
-    # Start sampling
-    bayes_net_std.sample_multi_chains(X_train, y_train, **sampling_configs)
+    # Run chains in parallel — one process per GPU, batched if num_chains > GPUs.
+    bayes_net_std.sample_multi_chains_parallel(
+        X_train,
+        y_train,
+        net_args=net_args,
+        ckpt_path=ckpt_path,
+        num_chains=config.num_chains,
+        seed=config.seed,
+        batch_size=config.batch_size,
+        num_samples=config.num_samples,
+        n_discarded=config.n_discarded,
+        num_burn_in_steps=config.num_burn_in_steps,
+        keep_every=config.keep_every,
+        lr=config.sghmc_lr,
+        mdecay=config.mdecay,
+        print_every_n_samples=config.print_every_n_samples,
+    )
     mean_ce = []
     mean_acc = []
     params_chains = []
     for i in range(config.num_chains):
+        # Each chain wrote to its own subdirectory as chain_<i>.
+        chain_dir = os.path.join(saved_dir, f"chain_{i}")
         bayes_net_std.sampled_weights = bayes_net_std._load_sampled_weights(
-            os.path.join(
-                saved_dir, "sampled_weights", "sampled_weights_{0:07d}".format(i)
-            )
+            os.path.join(chain_dir, "sampled_weights", "sampled_weights_0000000")
         )
         ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train)
         mean_ce.append(ce)
