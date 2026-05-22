@@ -7,10 +7,10 @@ batch_size: 256
 num_samples: 100
 n_discarded: 0
 num_burn_in_steps: 3000
-keep_every: 500
+keep_every: 300
 sghmc_lr: 0.003
 num_chains: 4
-mdecay: 0.01
+mdecay: 0.05
 print_every_n_samples: 10
 dataset: data/bb/t0012_pref.hdf5
 dataset_id: bb_t0012
