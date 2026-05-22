@@ -154,6 +154,29 @@ def train(config: TrainConfig):
     bayes_net_std = PrefNet(
         net, likelihood, prior, saved_dir, n_gpu=1, name="optim_star"
     )
+
+    # Compute a shared starting point for all chains.
+    #
+    # Without this, each worker creates a fresh MLP with a different random
+    # seed, which drives it into a different basin during burn-in — the primary
+    # cause of high prediction R-hat.  Running a warm-up burn-in here (in the
+    # parent process, on one GPU) moves the network from its random
+    # initialization into a single low-loss region.  All chains then start
+    # from that point and diverge only due to their per-chain SGHMC noise.
+    util.set_seed(config.seed)
+    bayes_net_std.train(
+        X_train,
+        y_train,
+        num_samples=None,               # burn-in only; no weights collected
+        num_burn_in_steps=config.num_burn_in_steps,
+        lr=config.sghmc_lr,
+        mdecay=config.mdecay,
+        batch_size=config.batch_size,
+    )
+    # network_weights returns a tuple of CPU numpy arrays — picklable and safe
+    # to pass across the mp.spawn process boundary.
+    initial_weights = bayes_net_std.network_weights
+
     # Run chains in parallel — one process per GPU, batched if num_chains > GPUs.
     bayes_net_std.sample_multi_chains_parallel(
         X_train,
@@ -170,6 +193,7 @@ def train(config: TrainConfig):
         lr=config.sghmc_lr,
         mdecay=config.mdecay,
         print_every_n_samples=config.print_every_n_samples,
+        initial_weights=initial_weights,
     )
     # Fixed observation set used for prediction-based R-hat.
     # We pull raw observations out of the first arm of up to 64 test pairs.

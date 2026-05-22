@@ -13,7 +13,7 @@ from .bayes_net import BayesNet
 
 def _pref_chain_worker(
     rank, batch_start, base_ckpt_dir, net_args, ckpt_path,
-    x_train, y_train, seed, train_kwargs,
+    x_train, y_train, seed, train_kwargs, initial_weights=None,
 ):
     """Worker for one parallel PrefNet chain, called by mp.spawn.
 
@@ -34,6 +34,12 @@ def _pref_chain_worker(
         y_train: numpy array, training targets.
         seed: base random seed; chain i uses seed + i.
         train_kwargs: dict forwarded verbatim to BayesNet.train().
+        initial_weights: optional tuple of numpy arrays (one per parameter
+            tensor, matching net.parameters() order).  When provided, all
+            chains are loaded with these weights before sampling begins, so
+            they start from the same basin rather than independent random
+            initializations.  Each chain still uses a unique seed for SGHMC
+            noise, so the trajectories diverge in a controlled way.
     """
     # Local imports: the spawned process starts fresh and needs its own
     # import chain.  Keeping them here also makes the function self-contained.
@@ -56,6 +62,15 @@ def _pref_chain_worker(
     _wandb.init(mode="disabled")
 
     net = MLP(**net_args)
+    # Override random initialization with the shared starting point computed
+    # by the parent process.  Without this, each chain starts in a different
+    # random basin and the chains never mix — the dominant cause of high R-hat.
+    # The per-chain seed (set above) still controls SGHMC noise, so trajectories
+    # diverge from this common point in a controlled, reproducible way.
+    if initial_weights is not None:
+        with torch.no_grad():
+            for param, w in zip(net.parameters(), initial_weights):
+                param.copy_(torch.from_numpy(w))
     prior = OptimGaussianPrior(ckpt_path)
     likelihood = LikCE()
 
@@ -555,6 +570,7 @@ class PrefNet(BayesNet):
         resample_prior_every=1000,
         eval_map=False,
         seed=1,
+        initial_weights=None,
     ):
         """Run multiple chains in parallel, one process per GPU.
 
@@ -583,6 +599,11 @@ class PrefNet(BayesNet):
             ckpt_path: str, path to the OptimGaussianPrior checkpoint.
             num_chains: int, total number of chains to run.
             seed: int, base random seed.  Chain i uses ``seed + i``.
+            initial_weights: optional tuple of numpy arrays (one per
+                parameter tensor) to use as the shared starting point for
+                all chains.  Compute this in the parent process via a short
+                warm-up burn-in and pass the result here to avoid chains
+                being trapped in different random basins.
             (remaining args forwarded to BayesNet.train())
         """
         import torch.multiprocessing as mp
@@ -627,6 +648,7 @@ class PrefNet(BayesNet):
                     y_train,
                     seed,
                     train_kwargs,
+                    initial_weights,
                 ),
                 nprocs=n_parallel,
                 join=True,  # block until all chains in this batch finish
