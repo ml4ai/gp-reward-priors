@@ -112,7 +112,9 @@ class BayesNet:
     @property
     def _bare_net(self):
         """Return the underlying module, unwrapping DataParallel if present."""
-        return self.net.module if isinstance(self.net, torch.nn.DataParallel) else self.net
+        return (
+            self.net.module if isinstance(self.net, torch.nn.DataParallel) else self.net
+        )
 
     def _neg_log_joint(self, fx_batch, y_batch, num_datapoints):
         """Calculate model's negative log joint density.
@@ -444,7 +446,10 @@ class BayesNet:
         self.net.train()
         n_samples = 0  # used to discard first samples
         for step, (x_batch, y_batch) in batch_generator:
-            x_batch, y_batch = x_batch.to(self.device, non_blocking=True), y_batch.to(self.device, non_blocking=True)
+            x_batch, y_batch = (
+                x_batch.to(self.device, non_blocking=True),
+                y_batch.to(self.device, non_blocking=True),
+            )
 
             # Forward pass
             if self.task == "regression":
@@ -463,7 +468,9 @@ class BayesNet:
 
                 # Run both arms through the network in one forward pass instead
                 # of two, doubling GPU utilisation on this small MLP.
-                pred_both = self.net(torch.cat([x_batch_1, x_batch_2], dim=0)).view(2, B, T)
+                pred_both = self.net(torch.cat([x_batch_1, x_batch_2], dim=0)).view(
+                    2, B, T
+                )
                 pred_1 = pred_both[0] * am_1
                 pred_2 = pred_both[1] * am_2
 
@@ -502,14 +509,14 @@ class BayesNet:
                     self.sampled_weights.append(self.network_weights)
                     self.num_samples += 1
 
-                    # Print evaluation on training data
-                    if self.num_samples % print_every_n_samples == 0:
-                        self.net.eval()
-                        if (x_train is not None) and (y_train is not None):
-                            self._print_evaluations(x_train, y_train, True, eval_map)
-                        else:
-                            self._print_evaluations(x_batch, y_batch, True, eval_map)
-                        self.net.train()
+                    # # Print evaluation on training data
+                    # if self.num_samples % print_every_n_samples == 0:
+                    #     self.net.eval()
+                    #     if (x_train is not None) and (y_train is not None):
+                    #         self._print_evaluations(x_train, y_train, True, eval_map)
+                    #     else:
+                    #         self._print_evaluations(x_batch, y_batch, True, eval_map)
+                    #     self.net.train()
 
     def _save_checkpoint(self, mode="best"):
         """Save sampled weights, sampler state into a single checkpoint file.
