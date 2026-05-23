@@ -75,9 +75,9 @@ class TrainConfig:
     # cool phase (sghmc_lr, sampling).  One sample is collected at the end of
     # each cool phase.  Set use_cyclical_lr=False to revert to fixed-lr mode.
     use_cyclical_lr: bool = True
-    sghmc_lr_max: float = 0.03      # hot-phase lr; ~10× sghmc_lr
-    cycle_length: int = 1000        # total steps per cycle (hot + cool)
-    fraction_cool: float = 0.25     # fraction of cycle spent in cool/sampling phase
+    sghmc_lr_max: float = 0.03  # hot-phase lr; ~10× sghmc_lr
+    cycle_length: int = 1000  # total steps per cycle (hot + cool)
+    fraction_cool: float = 0.25  # fraction of cycle spent in cool/sampling phase
     dataset: str = "data/bb/t0012_pref.hdf5"
     dataset_id: str = "bb_t0012"
     training_split: float = 0.8
@@ -196,7 +196,7 @@ def train(config: TrainConfig):
     bayes_net_std.train(
         X_train,
         y_train,
-        num_samples=None,               # burn-in only; no weights collected
+        num_samples=None,  # burn-in only; no weights collected
         num_burn_in_steps=config.num_burn_in_steps,
         lr=config.sghmc_lr,
         mdecay=config.mdecay,
@@ -206,11 +206,12 @@ def train(config: TrainConfig):
     # Near-zero weight norms (total L2 < 0.1) indicate the prior is dominating
     # the likelihood — all chains will inherit a degenerate starting point.
     _w_norms = np.array([float(p.norm()) for p in bayes_net_std.net.parameters()])
-    _total_norm = float(np.sqrt(np.sum(_w_norms ** 2)))
+    _total_norm = float(np.sqrt(np.sum(_w_norms**2)))
     print(f"[warm-up] weight L2 norms per layer: {[f'{n:.4f}' for n in _w_norms]}")
     print(f"[warm-up] total weight L2 norm: {_total_norm:.4f}")
     if _total_norm < 0.1:
         import warnings
+
         warnings.warn(
             f"Warm-up weight norm is very small ({_total_norm:.4e}).  "
             "The prior may be dominating — check the prior checkpoint and "
@@ -250,11 +251,7 @@ def train(config: TrainConfig):
     # Shape after reshape: (min(64, N_test) * T, obs_dim).
     _B_rhat = min(64, X_test.shape[0])
     _obs_dim = X_test.shape[-1] - 1  # last column is the attention mask
-    x_rhat = (
-        X_test[:_B_rhat, 0, :, :_obs_dim]
-        .reshape(-1, _obs_dim)
-        .astype(np.float32)
-    )
+    x_rhat = X_test[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
     x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_std.device)
 
     mean_ce = []
@@ -271,6 +268,7 @@ def train(config: TrainConfig):
         print(f"[chain {i}] loaded {n_loaded} samples (expected {config.num_samples})")
         if n_loaded < 2:
             import warnings
+
             warnings.warn(
                 f"Chain {i} has only {n_loaded} sample(s) — R-hat and ESS will be NaN.  "
                 "Check that the worker completed successfully and that num_samples > n_discarded.",
@@ -289,6 +287,7 @@ def train(config: TrainConfig):
             print(f"[chain {i}] max |w[0] - w[1]| = {_diff:.3e}")
             if _diff < 1e-8:
                 import warnings
+
                 warnings.warn(
                     f"Chain {i}: first two samples are numerically identical "
                     f"(max diff {_diff:.2e}).  SGHMC may be stuck at a flat region.  "
@@ -297,7 +296,7 @@ def train(config: TrainConfig):
                 )
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
 
-        ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train)
+        ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train, 4096)
         mean_ce.append(ce)
         mean_acc.append(acc)
 
