@@ -475,15 +475,25 @@ class PrefNet(BayesNet):
             self.net.train()
             return ce, acc
 
-    def find_map(self, x, y):
+    def find_map(self, x, y, max_map_samples=512):
         """find the map estimate given a set of data and set of sampled weights.
            Asserts that self.sampled_weights is not empty
 
         Args:
-            x: numpy array, shape [batch_size, num_features], the input data.
-            y: numpy array, shape [batch_size, 1], the corresponding targets.
+            x: numpy array, shape [N, 2, T, d_dim], the preference-pair inputs.
+            y: numpy array, shape [N] or [N, 1], the corresponding labels.
+            max_map_samples: int, maximum number of pairs to use when computing
+                the loss for each candidate weight set.  Only the ranking of
+                losses matters (not their absolute values), so a random subset
+                is sufficient and avoids OOM for large training sets whose full
+                forward pass would exceed GPU memory.
         """
         assert self.sampled_weights
+
+        # Subsample along the pair axis before moving anything to the GPU.
+        if x.shape[0] > max_map_samples:
+            idx = np.random.choice(x.shape[0], max_map_samples, replace=False)
+            x, y = x[idx], y[idx]
 
         def network_loss(x, y, weights):
             with torch.no_grad():
