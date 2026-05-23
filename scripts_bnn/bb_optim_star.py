@@ -70,6 +70,14 @@ class TrainConfig:
     num_chains: int = 4
     mdecay: float = 0.01
     print_every_n_samples: int = 5
+    # Cyclical step-size schedule (Zhang et al. 2020)
+    # Each cycle alternates between a hot phase (lr_max, exploration) and a
+    # cool phase (sghmc_lr, sampling).  One sample is collected at the end of
+    # each cool phase.  Set use_cyclical_lr=False to revert to fixed-lr mode.
+    use_cyclical_lr: bool = True
+    sghmc_lr_max: float = 0.03      # hot-phase lr; ~10× sghmc_lr
+    cycle_length: int = 1000        # total steps per cycle (hot + cool)
+    fraction_cool: float = 0.25     # fraction of cycle spent in cool/sampling phase
     dataset: str = "data/bb/t0012_pref.hdf5"
     dataset_id: str = "bb_t0012"
     training_split: float = 0.8
@@ -194,6 +202,10 @@ def train(config: TrainConfig):
         mdecay=config.mdecay,
         print_every_n_samples=config.print_every_n_samples,
         initial_weights=initial_weights,
+        use_cyclical_lr=config.use_cyclical_lr,
+        lr_max=config.sghmc_lr_max,
+        cycle_length=config.cycle_length,
+        fraction_cool=config.fraction_cool,
     )
     # Fixed observation set used for prediction-based R-hat.
     # We pull raw observations out of the first arm of up to 64 test pairs.

@@ -1,6 +1,7 @@
 """Define a base class of Bayesian Neural Network."""
 
 import glob
+import math
 import os
 from itertools import islice
 
@@ -367,6 +368,10 @@ class BayesNet:
         resample_prior_every=1000,
         resample_hyper_prior_burn_in=True,
         eval_map=False,
+        use_cyclical_lr=False,
+        lr_max=None,
+        cycle_length=None,
+        fraction_cool=0.25,
     ):
         """
         Train a BNN using a given dataset.
@@ -426,8 +431,20 @@ class BayesNet:
                 )
             )
 
-        # Estimate the number of update steps
-        num_steps = 0 if num_samples is None else (num_samples + 1) * keep_every
+        # Pre-compute cyclical schedule parameters.  These are always defined so
+        # the loop body can reference them unconditionally; when use_cyclical_lr
+        # is False they are never actually used.
+        _cycle_len = int(cycle_length) if cycle_length is not None else int(keep_every)
+        _lr_max = float(lr_max) if lr_max is not None else float(lr) * 10.0
+        _lr_min = float(lr)
+
+        # Estimate the number of update steps.
+        # Cyclical mode: each cycle of length _cycle_len produces one posterior
+        # sample; n_discarded cycles are run first without collecting.
+        if use_cyclical_lr and num_samples is not None:
+            num_steps = (num_samples + n_discarded) * _cycle_len
+        else:
+            num_steps = 0 if num_samples is None else (num_samples + 1) * keep_every
 
         # Initialize the sampler
         if not continue_training:
@@ -450,6 +467,31 @@ class BayesNet:
                 x_batch.to(self.device, non_blocking=True),
                 y_batch.to(self.device, non_blocking=True),
             )
+
+            # --- Cyclical learning-rate schedule (Zhang et al. 2020) ----------
+            # After burn-in the AdaptiveSGHMC preconditioner (τ, ĝ, v̂) is
+            # frozen (iteration > num_burn_in_steps stops adaptation).  We then
+            # cycle lr between _lr_min (cool/sampling phase) and _lr_max
+            # (hot/exploration phase) using a cosine schedule.  Momentum is
+            # zeroed at the start of each hot phase so the chain can escape
+            # the current basin and explore new modes.
+            if use_cyclical_lr and step >= num_burn_in_steps:
+                _post_burn = step - num_burn_in_steps
+                _cycle_step = _post_burn % _cycle_len
+                _cycle_lr = _lr_min + 0.5 * (_lr_max - _lr_min) * (
+                    1.0 + math.cos(math.pi * _cycle_step / _cycle_len)
+                )
+                for _pg in self.sampler.param_groups:
+                    _pg["lr"] = np.float32(_cycle_lr)
+                if _cycle_step == 0:
+                    # Start of a new hot phase: zero momentum so the chain
+                    # launches from rest toward unexplored regions.
+                    for _pg in self.sampler.param_groups:
+                        for _p in _pg["params"]:
+                            _s = self.sampler.state.get(_p)
+                            if _s is not None and "momentum" in _s:
+                                _s["momentum"].zero_()
+            # -----------------------------------------------------------------
 
             # Forward pass
             if self.task == "regression":
@@ -499,8 +541,19 @@ class BayesNet:
                         if step > num_burn_in_steps:
                             self.prior_module.resample(self._bare_net)
 
-            # Save the sampled weight
-            if (step > num_burn_in_steps) and (
+            # Save the sampled weight.
+            # Cyclical mode: collect one sample at the very end of each cycle
+            # (final step of the cool phase, when lr is at its minimum).
+            # Fixed-lr mode: original keep_every thinning.
+            if use_cyclical_lr and step >= num_burn_in_steps:
+                _post_burn = step - num_burn_in_steps
+                _cycle_step = _post_burn % _cycle_len
+                if _cycle_step == _cycle_len - 1:
+                    n_samples += 1
+                    if n_samples > n_discarded:
+                        self.sampled_weights.append(self.network_weights)
+                        self.num_samples += 1
+            elif (not use_cyclical_lr) and (step > num_burn_in_steps) and (
                 (step - num_burn_in_steps) % keep_every == 0
             ):
                 n_samples += 1

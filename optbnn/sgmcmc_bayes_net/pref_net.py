@@ -571,6 +571,10 @@ class PrefNet(BayesNet):
         eval_map=False,
         seed=1,
         initial_weights=None,
+        use_cyclical_lr=False,
+        lr_max=None,
+        cycle_length=None,
+        fraction_cool=0.25,
     ):
         """Run multiple chains in parallel, one process per GPU.
 
@@ -628,6 +632,10 @@ class PrefNet(BayesNet):
             clear_sampled_weights=True,
             resample_prior_every=resample_prior_every,
             eval_map=eval_map,
+            use_cyclical_lr=use_cyclical_lr,
+            lr_max=lr_max,
+            cycle_length=cycle_length,
+            fraction_cool=fraction_cool,
         )
 
         for batch_start in range(0, num_chains, num_gpus):
