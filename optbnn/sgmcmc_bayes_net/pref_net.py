@@ -262,16 +262,19 @@ class PrefNet(BayesNet):
             train: bool, indicate whether we're evaluating on the training data.
         """
         self.net.eval()
+        B, _, T, d_dim = x.shape
+        obs_dim = d_dim - 1
+        am_1 = x[:, 0, :, obs_dim]
+        am_2 = x[:, 1, :, obs_dim]
+        # Masked timesteps are represented as NaN in the observation features.
+        # Replace with 0 before passing to the network — the attention mask
+        # zeroes out their reward contribution, so the substitution is safe.
+        x_1 = np.nan_to_num(x[:, 0, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        x_2 = np.nan_to_num(x[:, 1, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        n1 = x_1.shape[0]
+
         if eval_map:
             self.find_map(x, y)
-            B, _, T, d_dim = x.shape
-            obs_dim = d_dim - 1
-            am_1 = x[:, 0, :, obs_dim]
-            am_2 = x[:, 1, :, obs_dim]
-            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-
-            n1 = x_1.shape[0]
             _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
             pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
             pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
@@ -324,14 +327,6 @@ class PrefNet(BayesNet):
             self.map = None
             self.net.train()
         else:
-            B, _, T, d_dim = x.shape
-            obs_dim = d_dim - 1
-            am_1 = x[:, 0, :, obs_dim]
-            am_2 = x[:, 1, :, obs_dim]
-            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-
-            n1 = x_1.shape[0]
             pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
             pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
             pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
@@ -395,16 +390,18 @@ class PrefNet(BayesNet):
             y_map: numpy array, shape [training_size, 1], the targets used to find map
         """
         self.net.eval()
+        B, _, T, d_dim = x.shape
+        obs_dim = d_dim - 1
+        am_1 = x[:, 0, :, obs_dim]
+        am_2 = x[:, 1, :, obs_dim]
+        # Replace NaN sentinel values (masked timesteps) with 0 so the network
+        # receives finite inputs.  The attention mask zeros out masked rewards.
+        x_1 = np.nan_to_num(x[:, 0, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        x_2 = np.nan_to_num(x[:, 1, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        n1 = x_1.shape[0]
+
         if (x_map is not None) and (y_map is not None):
             self.find_map(x_map, y_map)
-            B, _, T, d_dim = x.shape
-            obs_dim = d_dim - 1
-            am_1 = x[:, 0, :, obs_dim]
-            am_2 = x[:, 1, :, obs_dim]
-            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-
-            n1 = x_1.shape[0]
             _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
             pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
             pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
@@ -436,14 +433,6 @@ class PrefNet(BayesNet):
             self.net.train()
             return ce, acc
         else:
-            B, _, T, d_dim = x.shape
-            obs_dim = d_dim - 1
-            am_1 = x[:, 0, :, obs_dim]
-            am_2 = x[:, 1, :, obs_dim]
-            x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-            x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-
-            n1 = x_1.shape[0]
             pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
             pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
             pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
@@ -502,8 +491,8 @@ class PrefNet(BayesNet):
                 obs_dim = d_dim - 1
                 am_1 = x[:, 0, :, obs_dim]
                 am_2 = x[:, 1, :, obs_dim]
-                x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-                x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+                x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim).nan_to_num(0.0)
+                x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim).nan_to_num(0.0)
 
                 pred_both = self.net(torch.cat([x_1, x_2], dim=0)).view(2, B, T)
                 pred_1 = pred_both[0] * am_1

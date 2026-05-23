@@ -508,6 +508,14 @@ class BayesNet:
                 x_batch_1 = x_batch[:, 0, :, :obs_dim].reshape(-1, obs_dim)
                 x_batch_2 = x_batch[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
+                # Masked / padded timesteps are stored as NaN in the
+                # observation features.  Replace with 0 before the forward
+                # pass so gradients remain finite.  The attention mask
+                # (am_1 / am_2) already zeros out masked contributions to
+                # the reward sum, so this substitution is mathematically safe.
+                x_batch_1 = x_batch_1.nan_to_num(0.0)
+                x_batch_2 = x_batch_2.nan_to_num(0.0)
+
                 # Run both arms through the network in one forward pass instead
                 # of two, doubling GPU utilisation on this small MLP.
                 pred_both = self.net(torch.cat([x_batch_1, x_batch_2], dim=0)).view(
