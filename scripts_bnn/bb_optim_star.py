@@ -181,6 +181,23 @@ def train(config: TrainConfig):
         mdecay=config.mdecay,
         batch_size=config.batch_size,
     )
+    # Sanity-check the warm-up result before sharing it with all chains.
+    # Near-zero weight norms (total L2 < 0.1) indicate the prior is dominating
+    # the likelihood — all chains will inherit a degenerate starting point.
+    _w_norms = np.array([float(p.norm()) for p in bayes_net_std.net.parameters()])
+    _total_norm = float(np.sqrt(np.sum(_w_norms ** 2)))
+    print(f"[warm-up] weight L2 norms per layer: {[f'{n:.4f}' for n in _w_norms]}")
+    print(f"[warm-up] total weight L2 norm: {_total_norm:.4f}")
+    if _total_norm < 0.1:
+        import warnings
+        warnings.warn(
+            f"Warm-up weight norm is very small ({_total_norm:.4e}).  "
+            "The prior may be dominating — check the prior checkpoint and "
+            "consider reducing the prior weight or increasing num_burn_in_steps.",
+            RuntimeWarning,
+        )
+    wandb.log({"warmup_total_weight_norm": _total_norm})
+
     # network_weights returns a tuple of CPU numpy arrays — picklable and safe
     # to pass across the mp.spawn process boundary.
     initial_weights = bayes_net_std.network_weights
@@ -229,6 +246,36 @@ def train(config: TrainConfig):
         bayes_net_std.sampled_weights = bayes_net_std._load_sampled_weights(
             os.path.join(chain_dir, "sampled_weights", "sampled_weights_0000000")
         )
+        n_loaded = len(bayes_net_std.sampled_weights)
+        print(f"[chain {i}] loaded {n_loaded} samples (expected {config.num_samples})")
+        if n_loaded < 2:
+            import warnings
+            warnings.warn(
+                f"Chain {i} has only {n_loaded} sample(s) — R-hat and ESS will be NaN.  "
+                "Check that the worker completed successfully and that num_samples > n_discarded.",
+                RuntimeWarning,
+            )
+        # Detect frozen sampler: if the first two samples are numerically identical
+        # (max abs diff < 1e-8 across all parameters), SGHMC is stuck.
+        if n_loaded >= 2:
+            _diff = max(
+                float(np.abs(a - b).max())
+                for a, b in zip(
+                    bayes_net_std.sampled_weights[0],
+                    bayes_net_std.sampled_weights[1],
+                )
+            )
+            print(f"[chain {i}] max |w[0] - w[1]| = {_diff:.3e}")
+            if _diff < 1e-8:
+                import warnings
+                warnings.warn(
+                    f"Chain {i}: first two samples are numerically identical "
+                    f"(max diff {_diff:.2e}).  SGHMC may be stuck at a flat region.  "
+                    "Try increasing lr_max or checking the prior strength.",
+                    RuntimeWarning,
+                )
+            wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
+
         ce, acc = bayes_net_std.eval_test_data(X_test, y_test, X_train, y_train)
         mean_ce.append(ce)
         mean_acc.append(acc)
@@ -258,6 +305,14 @@ def train(config: TrainConfig):
     pred_chains = np.stack(pred_chains)
     params_chains = np.stack(params_chains)
 
+    # Within-chain variance: the primary early-warning diagnostic.
+    # Near-zero means SGHMC is stuck (all samples identical) — R-hat and ESS
+    # will then be NaN.  Values < 1e-6 warrant investigation.
+    pred_within_chain_var = float(np.mean(pred_chains.var(axis=1)))
+    param_within_chain_var = float(np.mean(params_chains.var(axis=1)))
+    print(f"[diag] pred within-chain var  = {pred_within_chain_var:.4e}")
+    print(f"[diag] param within-chain var = {param_within_chain_var:.4e}")
+
     # Prediction R-hat is the primary convergence diagnostic: it is immune to
     # weight-space symmetries (permutation of hidden units, sign flips) that
     # inflate parameter R-hat even when all chains sample the same function.
@@ -275,32 +330,44 @@ def train(config: TrainConfig):
     ess_pred = azs.ess(pred_chains)
     ess_param = azs.ess(params_chains)
 
+    # Helper: compute "% over threshold" correctly when R-hat values may be NaN.
+    # np.nanmean ignores NaN entries; if ALL are NaN it returns NaN (correct).
+    def _pct_over(arr, threshold):
+        arr = np.asarray(arr, dtype=float)
+        valid = arr[~np.isnan(arr)]
+        if valid.size == 0:
+            return float("nan")
+        return float(np.mean(valid > threshold) * 100)
+
     summary = {
         "test_mean_cross_entropy": np.mean(mean_ce),
         "test_mean_accuracy": np.mean(mean_acc),
+        # --- within-chain variance (near-zero → SGHMC stuck) ---
+        "pred_within_chain_var": pred_within_chain_var,
+        "param_within_chain_var": param_within_chain_var,
         # --- prediction R-hat (convergence: do chains agree?) ---
-        "pred_rhat_max": float(np.max(rhats_pred)),
-        "pred_rhat_95th_pct": float(np.percentile(rhats_pred, 95)),
-        "pred_rhat_median": float(np.median(rhats_pred)),
-        "pred_rhat_mean": float(np.mean(rhats_pred)),
-        "pred_rhat_pct_over_1.01": float(np.mean(rhats_pred > 1.01) * 100),
+        "pred_rhat_max": float(np.nanmax(rhats_pred)),
+        "pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
+        "pred_rhat_median": float(np.nanmedian(rhats_pred)),
+        "pred_rhat_mean": float(np.nanmean(rhats_pred)),
+        "pred_rhat_pct_over_1.01": _pct_over(rhats_pred, 1.01),
         # --- prediction ESS (independence: are samples within chains uncorrelated?) ---
         # Normalised by total samples so the value is in [0, 1]; >0.5 is good.
-        "pred_ess_min": float(np.min(ess_pred)),
-        "pred_ess_median": float(np.median(ess_pred)),
-        "pred_ess_mean": float(np.mean(ess_pred)),
-        "pred_ess_min_norm": float(np.min(ess_pred)) / total_samples,
-        "pred_ess_median_norm": float(np.median(ess_pred)) / total_samples,
+        "pred_ess_min": float(np.nanmin(ess_pred)),
+        "pred_ess_median": float(np.nanmedian(ess_pred)),
+        "pred_ess_mean": float(np.nanmean(ess_pred)),
+        "pred_ess_min_norm": float(np.nanmin(ess_pred)) / total_samples,
+        "pred_ess_median_norm": float(np.nanmedian(ess_pred)) / total_samples,
         # --- parameter R-hat (reference; inflated by weight symmetries) ---
-        "param_rhat_max": float(np.max(rhats_param)),
-        "param_rhat_95th_pct": float(np.percentile(rhats_param, 95)),
-        "param_rhat_median": float(np.median(rhats_param)),
-        "param_rhat_mean": float(np.mean(rhats_param)),
-        "param_rhat_pct_over_1.01": float(np.mean(rhats_param > 1.01) * 100),
+        "param_rhat_max": float(np.nanmax(rhats_param)),
+        "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
+        "param_rhat_median": float(np.nanmedian(rhats_param)),
+        "param_rhat_mean": float(np.nanmean(rhats_param)),
+        "param_rhat_pct_over_1.01": _pct_over(rhats_param, 1.01),
         # --- parameter ESS (reference) ---
-        "param_ess_min": float(np.min(ess_param)),
-        "param_ess_median": float(np.median(ess_param)),
-        "param_ess_min_norm": float(np.min(ess_param)) / total_samples,
+        "param_ess_min": float(np.nanmin(ess_param)),
+        "param_ess_median": float(np.nanmedian(ess_param)),
+        "param_ess_min_norm": float(np.nanmin(ess_param)) / total_samples,
     }
     wandb.log(summary)
 
