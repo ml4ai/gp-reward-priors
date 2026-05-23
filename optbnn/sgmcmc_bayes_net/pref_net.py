@@ -252,212 +252,163 @@ class PrefNet(BayesNet):
                 return pred_mean, pred_var, pred_map
             return pred_mean, pred_var
 
-    def _print_evaluations(self, x, y, train=True, eval_map=False):
+    def _predict_pairs_batched(self, x_1, x_2, am_1, am_2, T, use_map=False, batch_size=256):
+        """Run network predictions over preference pairs in mini-batches.
+
+        Processes ``batch_size`` pairs at a time so that the GPU only
+        ever holds ``2 * batch_size * T`` observation vectors, preventing
+        OOM on large (N × T) datasets.  The summed rewards that are
+        returned are numerically identical to what a single full-dataset
+        forward pass would produce.
+
+        Args:
+            x_1: numpy (N*T, obs_dim) — arm-1 observations, already flattened.
+            x_2: numpy (N*T, obs_dim) — arm-2 observations.
+            am_1: numpy (N, T)        — arm-1 attention mask.
+            am_2: numpy (N, T)        — arm-2 attention mask.
+            T: int, number of timesteps per trajectory.
+            use_map: bool, use the MAP weight set instead of the posterior mean.
+            batch_size: int, number of preference pairs per mini-batch.
+
+        Returns:
+            sum_pred_1: numpy (N,) — masked reward sums for arm 1.
+            sum_pred_2: numpy (N,) — masked reward sums for arm 2.
+        """
+        N = am_1.shape[0]
+        parts_1, parts_2 = [], []
+
+        for start in range(0, N, batch_size):
+            end = min(start + batch_size, N)
+            b = end - start
+
+            x1_b = x_1[start * T : end * T]          # (b*T, obs_dim)
+            x2_b = x_2[start * T : end * T]
+            x_both = np.concatenate([x1_b, x2_b], axis=0)   # (2*b*T, obs_dim)
+
+            if use_map:
+                _, _, pred = self.predict(x_both, use_map=True)
+            else:
+                pred, _ = self.predict(x_both)
+
+            pred_1 = pred[: b * T].reshape(b, T) * am_1[start:end]
+            pred_2 = pred[b * T :].reshape(b, T) * am_2[start:end]
+
+            parts_1.append(np.nansum(pred_1, axis=1))
+            parts_2.append(np.nansum(pred_2, axis=1))
+
+        return np.concatenate(parts_1), np.concatenate(parts_2)
+
+    def _ce_and_acc(self, sum_pred_1, sum_pred_2, y):
+        """Compute cross-entropy and accuracy from per-pair reward sums."""
+        fx = np.stack([sum_pred_1, sum_pred_2], axis=1).astype(np.float32)
+        fx_t = torch.from_numpy(fx).to(self.device)
+        y_t  = torch.from_numpy(y).float().to(self.device)
+        ce  = torch.nn.CrossEntropyLoss()(fx_t, y_t).detach().cpu().numpy()
+        acc = accuracy(fx_t, y_t).detach().cpu().numpy()
+        return ce, acc
+
+    def _print_evaluations(self, x, y, train=True, eval_map=False, eval_batch_size=256):
         """Evaluate the sampled weights on training/validation data and
             during the training log the results.
 
         Args:
-            x: numpy array, shape [batch_size, num_features], the input data.
-            y: numpy array, shape [batch_size, 1], the corresponding targets.
+            x: numpy array, shape [N, 2, T, d_dim], the input data.
+            y: numpy array, shape [N], the corresponding labels.
             train: bool, indicate whether we're evaluating on the training data.
+            eval_map: bool, use MAP estimate if True, posterior mean otherwise.
+            eval_batch_size: int, number of pairs per prediction mini-batch.
         """
         self.net.eval()
         B, _, T, d_dim = x.shape
         obs_dim = d_dim - 1
         am_1 = x[:, 0, :, obs_dim]
         am_2 = x[:, 1, :, obs_dim]
-        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-        n1 = x_1.shape[0]
+        x_1  = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2  = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
         if eval_map:
             self.find_map(x, y)
-            _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
-            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
-            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
-            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
-            # shape is (B,2)
-            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
-            loss = torch.nn.CrossEntropyLoss()
-            ce = (
-                loss(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
-            acc = (
-                accuracy(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
+        sum_1, sum_2 = self._predict_pairs_batched(
+            x_1, x_2, am_1, am_2, T,
+            use_map=eval_map,
+            batch_size=eval_batch_size,
+        )
+        ce, acc = self._ce_and_acc(sum_1, sum_2, y)
 
-            if train:
-                wandb.log(
-                    {
-                        f"{self.name}_training_mean_cross_entropy": ce,
-                        f"{self.name}_training_mean_accuracy": acc,
-                    },
-                    step=self.num_samples,
-                )
-                self.print_info(
-                    "Samples # {:5d} : CE = {:.4f} ACC = {:.4f} ".format(
-                        self.num_samples, ce, acc
-                    )
-                )
-            else:
-                wandb.log(
-                    {
-                        f"{self.name}_eval_mean_cross_entropy": ce,
-                        f"{self.name}_eval_mean_accuracy": acc,
-                    }
-                )
-                self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
+        if eval_map:
             self.map = None
-            self.net.train()
+
+        if train:
+            wandb.log(
+                {
+                    f"{self.name}_training_mean_cross_entropy": ce,
+                    f"{self.name}_training_mean_accuracy": acc,
+                },
+                step=self.num_samples,
+            )
+            self.print_info(
+                "Samples # {:5d} : CE = {:.4f} ACC = {:.4f} ".format(
+                    self.num_samples, ce, acc
+                )
+            )
         else:
-            pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
-            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
-
-            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
-            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
-            # shape is (B,2)
-            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
-            loss = torch.nn.CrossEntropyLoss()
-            ce = (
-                loss(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
+            wandb.log(
+                {
+                    f"{self.name}_eval_mean_cross_entropy": ce,
+                    f"{self.name}_eval_mean_accuracy": acc,
+                }
             )
-            acc = (
-                accuracy(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
+            self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
 
-            if train:
-                wandb.log(
-                    {
-                        f"{self.name}_training_mean_cross_entropy": ce,
-                        f"{self.name}_training_mean_accuracy": acc,
-                    },
-                    step=self.num_samples,
-                )
-                self.print_info(
-                    "Samples # {:5d} : CE = {:.4f} ACC = {:.4f} ".format(
-                        self.num_samples, ce, acc
-                    )
-                )
-            else:
-                wandb.log(
-                    {
-                        f"{self.name}_eval_mean_cross_entropy": ce,
-                        f"{self.name}_eval_mean_accuracy": acc,
-                    }
-                )
-                self.print_info("Validation: CE = {:.4f} ACC = {:.4f}".format(ce, acc))
-            self.net.train()
+        self.net.train()
 
-    def eval_test_data(self, x, y, x_map=None, y_map=None):
-        """Evaluate the sampled weights on training/validation data and
-            during the training log the results. If x_map and y_map are not None, then
-            the eval is done using map estimate computed from x_map and y_map.
+    def eval_test_data(self, x, y, x_map=None, y_map=None, eval_batch_size=256):
+        """Evaluate the sampled weights on test data.
+
+        Predictions are run in mini-batches of ``eval_batch_size`` pairs to
+        cap GPU memory usage at ``O(2 * eval_batch_size * T)`` observations
+        per forward pass, regardless of total dataset size.
+
+        If ``x_map`` and ``y_map`` are provided, the MAP weight estimate
+        (selected from ``self.sampled_weights``) is used for prediction;
+        otherwise the posterior predictive mean over all sampled weights is
+        used.
 
         Args:
-            x: numpy array, shape [batch_size, num_features], the input data.
-            y: numpy array, shape [batch_size, 1], the corresponding targets.
-            x_map: numpy array, shape [training_size, num_features], input data used to find map
-            y_map: numpy array, shape [training_size, 1], the targets used to find map
+            x: numpy array, shape [N, 2, T, d_dim], the test inputs.
+            y: numpy array, shape [N], the preference labels.
+            x_map: numpy array, shape [M, 2, T, d_dim], data for MAP selection.
+            y_map: numpy array, shape [M], labels for MAP selection.
+            eval_batch_size: int, number of preference pairs per mini-batch.
+
+        Returns:
+            ce:  float, mean cross-entropy over the test set.
+            acc: float, mean accuracy over the test set.
         """
         self.net.eval()
         B, _, T, d_dim = x.shape
         obs_dim = d_dim - 1
         am_1 = x[:, 0, :, obs_dim]
         am_2 = x[:, 1, :, obs_dim]
-        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-        n1 = x_1.shape[0]
+        x_1  = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2  = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-        if (x_map is not None) and (y_map is not None):
+        use_map = (x_map is not None) and (y_map is not None)
+        if use_map:
             self.find_map(x_map, y_map)
-            _, _, pred_mean_both = self.predict(np.concatenate([x_1, x_2], axis=0), use_map=True)
-            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
 
-            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
-            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
-            # shape is (B,2)
-            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
-            loss = torch.nn.CrossEntropyLoss()
-            ce = (
-                loss(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
-            acc = (
-                accuracy(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
+        sum_1, sum_2 = self._predict_pairs_batched(
+            x_1, x_2, am_1, am_2, T,
+            use_map=use_map,
+            batch_size=eval_batch_size,
+        )
+        ce, acc = self._ce_and_acc(sum_1, sum_2, y)
+
+        if use_map:
             self.map = None
-            self.net.train()
-            return ce, acc
-        else:
-            pred_mean_both, _ = self.predict(np.concatenate([x_1, x_2], axis=0))
-            pred_mean_1 = pred_mean_both[:n1].reshape(B, T) * am_1
-            pred_mean_2 = pred_mean_both[n1:].reshape(B, T) * am_2
-
-            sum_pred_1 = np.nansum(pred_mean_1, axis=1).reshape(-1, 1)
-            sum_pred_2 = np.nansum(pred_mean_2, axis=1).reshape(-1, 1)
-            # shape is (B,2)
-            fx_batch = np.concatenate([sum_pred_1, sum_pred_2], axis=1)
-            loss = torch.nn.CrossEntropyLoss()
-            ce = (
-                loss(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
-            acc = (
-                accuracy(
-                    torch.from_numpy(fx_batch).float().to(self.device),
-                    torch.from_numpy(y).float().to(self.device),
-                )
-                .detach()
-                .cpu()
-                .numpy()
-            )
-
-            self.net.train()
-            return ce, acc
+        self.net.train()
+        return ce, acc
 
     def find_map(self, x, y, max_map_samples=512):
         """find the map estimate given a set of data and set of sampled weights.
