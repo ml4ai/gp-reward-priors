@@ -78,6 +78,18 @@ class TrainConfig:
     sghmc_lr_max: float = 0.03  # hot-phase lr; ~10× sghmc_lr
     cycle_length: int = 1000  # total steps per cycle (hot + cool)
     fraction_cool: float = 0.25  # fraction of cycle spent in cool/sampling phase
+    # max_param_step: per-element momentum clamp applied before each parameter
+    # update.  The normal SGHMC steady-state step size is O(lr²/mdecay) per
+    # element; set max_param_step well above that to act only as a safety net
+    # against catastrophic updates (e.g. dead-ReLU neurons whose v_hat never
+    # adapted during burn-in, then receive a large gradient in the hot phase).
+    # With the defaults lr=0.008, lr_max=0.03, mdecay=0.01:
+    #   normal burn-in step  ≈  lr²/mdecay      = 6.4e-3
+    #   normal hot-phase step ≈ lr_max²/mdecay  = 0.09
+    # Setting max_param_step=0.5 gives ≈5× headroom above the hot-phase value
+    # while hard-capping the truly explosive cases (steps of O(1e6+)).
+    # Set to None to disable clipping (not recommended for cyclical SGHMC).
+    max_param_step: Optional[float] = 0.5
     dataset: str = "data/bb/t0012_pref.hdf5"
     dataset_id: str = "bb_t0012"
     training_split: float = 0.8
@@ -201,24 +213,43 @@ def train(config: TrainConfig):
         lr=config.sghmc_lr,
         mdecay=config.mdecay,
         batch_size=config.batch_size,
+        max_param_step=config.max_param_step,
     )
     # Sanity-check the warm-up result before sharing it with all chains.
     # Near-zero weight norms (total L2 < 0.1) indicate the prior is dominating
     # the likelihood — all chains will inherit a degenerate starting point.
     _w_norms = np.array([float(p.norm()) for p in bayes_net_std.net.parameters()])
     _total_norm = float(np.sqrt(np.sum(_w_norms**2)))
+    _n_params = sum(p.numel() for p in bayes_net_std.net.parameters())
+    _avg_weight_mag = _total_norm / math.sqrt(_n_params)
     print(f"[warm-up] weight L2 norms per layer: {[f'{n:.4f}' for n in _w_norms]}")
-    print(f"[warm-up] total weight L2 norm: {_total_norm:.4f}")
+    print(f"[warm-up] total weight L2 norm: {_total_norm:.4f}  "
+          f"(avg |w| = {_avg_weight_mag:.4f} over {_n_params} params)")
     if _total_norm < 0.1:
-        import warnings
-
         warnings.warn(
             f"Warm-up weight norm is very small ({_total_norm:.4e}).  "
             "The prior may be dominating — check the prior checkpoint and "
             "consider reducing the prior weight or increasing num_burn_in_steps.",
             RuntimeWarning,
         )
-    wandb.log({"warmup_total_weight_norm": _total_norm})
+    elif _avg_weight_mag > 5.0:
+        # Large weights cause reward predictions to scale as w^(depth+1), so
+        # logit differences grow exponentially with depth and can reach 1e10+
+        # for a 128×2 MLP with avg |w|≈40.  This directly causes the
+        # "CE = 25 trillion" failure mode seen when weights aren't sufficiently
+        # regularised by the prior.
+        warnings.warn(
+            f"Warm-up average weight magnitude is large ({_avg_weight_mag:.2f}).  "
+            f"For a {width}×{depth} MLP, network outputs scale as w^{depth+1}; "
+            f"at avg |w|={_avg_weight_mag:.1f} reward logits may reach "
+            f"O({_avg_weight_mag**(depth+1):.1e}), causing astronomical CE.  "
+            "Consider: (1) verifying the prior checkpoint std is reasonable, "
+            "(2) reducing sghmc_lr and sghmc_lr_max, "
+            "(3) increasing mdecay to damp weight growth.",
+            RuntimeWarning,
+        )
+    wandb.log({"warmup_total_weight_norm": _total_norm,
+               "warmup_avg_weight_mag": _avg_weight_mag})
 
     # network_weights returns a tuple of CPU numpy arrays — picklable and safe
     # to pass across the mp.spawn process boundary.
@@ -245,6 +276,7 @@ def train(config: TrainConfig):
         lr_max=config.sghmc_lr_max,
         cycle_length=config.cycle_length,
         fraction_cool=config.fraction_cool,
+        max_param_step=config.max_param_step,
     )
     # Fixed observation set used for prediction-based R-hat.
     # We pull raw observations out of the first arm of up to 64 test pairs.
@@ -267,8 +299,6 @@ def train(config: TrainConfig):
         n_loaded = len(bayes_net_std.sampled_weights)
         print(f"[chain {i}] loaded {n_loaded} samples (expected {config.num_samples})")
         if n_loaded < 2:
-            import warnings
-
             warnings.warn(
                 f"Chain {i} has only {n_loaded} sample(s) — R-hat and ESS will be NaN.  "
                 "Check that the worker completed successfully and that num_samples > n_discarded.",
@@ -286,8 +316,6 @@ def train(config: TrainConfig):
             )
             print(f"[chain {i}] max |w[0] - w[1]| = {_diff:.3e}")
             if _diff < 1e-8:
-                import warnings
-
                 warnings.warn(
                     f"Chain {i}: first two samples are numerically identical "
                     f"(max diff {_diff:.2e}).  SGHMC may be stuck at a flat region.  "

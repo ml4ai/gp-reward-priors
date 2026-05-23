@@ -20,6 +20,8 @@ class AdaptiveSGHMC(Optimizer):
         epsilon=1e-16,
         mdecay=0.05,
         scale_grad=1.0,
+        v_hat_min=1e-4,
+        max_param_step=None,
     ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -32,6 +34,22 @@ class AdaptiveSGHMC(Optimizer):
             num_burn_in_steps=num_burn_in_steps,
             mdecay=mdecay,
             epsilon=epsilon,
+            # v_hat_min: minimum allowed value for the variance estimate v_hat.
+            # During burn-in, any weight with near-zero gradient (e.g. a dead ReLU
+            # neuron) accumulates v_hat → 0.  With epsilon=1e-16, minv_t can reach
+            # 1/sqrt(1e-16) = 1e8, causing catastrophic parameter updates when that
+            # weight first receives a non-zero gradient (e.g. at the start of a hot
+            # phase in cyclical SGHMC).  v_hat_min bounds minv_t ≤ 1/sqrt(v_hat_min),
+            # which for the default 1e-4 gives minv_t ≤ 100 — enough damping to
+            # prevent explosion while still allowing strong preconditioning.
+            v_hat_min=float(v_hat_min),
+            # max_param_step: if set, each element of the momentum vector is
+            # clamped to [-max_param_step, +max_param_step] before the parameter
+            # update.  This bounds the per-step per-element parameter change and
+            # acts as a safety net against runaway updates when the preconditioner
+            # is calibrated for a different gradient scale (e.g. at the transition
+            # from burn-in to the hot phase of cyclical SGHMC).  None = no clipping.
+            max_param_step=max_param_step,
         )
         super().__init__(params, defaults)
 
@@ -54,6 +72,8 @@ class AdaptiveSGHMC(Optimizer):
             # construction on every parameter when it never changes shape.
             scale_grad = float(group["scale_grad"])
             num_burn_in_steps = group["num_burn_in_steps"]
+            v_hat_min = group["v_hat_min"]
+            max_param_step = group["max_param_step"]
 
             for parameter in group["params"]:
                 if parameter.grad is None:
@@ -103,9 +123,17 @@ class AdaptiveSGHMC(Optimizer):
                     # v_hat += tau_inv * (gradient^2 - v_hat)
                     v_hat.add_(tau_inv * (gradient.pow(2) - v_hat))
                     # v_hat is a variance estimate and must remain positive.
-                    # Clamp to epsilon so that sqrt(v_hat) and 1/sqrt(v_hat)
-                    # never produce NaN or Inf.
-                    v_hat.clamp_(min=epsilon)
+                    # We clamp to v_hat_min (not the tiny epsilon used in the
+                    # tau denominator) because the floor on v_hat directly
+                    # controls the maximum preconditioning gain:
+                    #   minv_t_max = 1 / sqrt(v_hat_min)
+                    # With the default v_hat_min=1e-4, minv_t ≤ 100, so a
+                    # weight with zero gradient during burn-in (e.g. a dead
+                    # ReLU neuron) cannot produce catastrophic hot-phase
+                    # updates.  Using epsilon=1e-16 here would give
+                    # minv_t = 1e8 — enough to cause 2e8-magnitude parameter
+                    # jumps on the first non-zero gradient.
+                    v_hat.clamp_(min=v_hat_min)
 
                 # Preconditioner: minv_t = 1 / (sqrt(v_hat) + eps)
                 minv_t = v_hat.sqrt().add_(epsilon).reciprocal_()
@@ -126,6 +154,15 @@ class AdaptiveSGHMC(Optimizer):
                     .add_(momentum.mul(-mdecay))
                     .add_(sample_t)
                 )
+
+                # Optionally clip each momentum element to bound the per-step
+                # parameter change.  Normal SGHMC steady-state momentum is
+                # O(lr²/mdecay); max_param_step should be set above that level
+                # so it only fires during pathological phases (e.g. the first
+                # hot-phase steps when the preconditioner was calibrated for a
+                # much smaller gradient scale).
+                if max_param_step is not None:
+                    momentum.clamp_(-max_param_step, max_param_step)
 
                 # parameter += momentum
                 parameter.data.add_(momentum)

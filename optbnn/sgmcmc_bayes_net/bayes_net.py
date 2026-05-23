@@ -144,6 +144,7 @@ class BayesNet:
         mdecay=0.05,
         num_burn_in_steps=3000,
         epsilon=1e-10,
+        max_param_step=None,
     ):
         """Initialize a stochastic gradient MCMC sampler.
 
@@ -154,7 +155,13 @@ class BayesNet:
             num_burn_in_steps: int, number of burn-in steps to perform.
                 This value is passed to the given `sampler` if it supports
                 special burn-in specific behavior like that of Adaptive SGHMC.
-            epsilon: float, epsilon for numerical stability.
+            epsilon: float, epsilon for numerical stability in the tau update
+                denominator.  Note: the v_hat floor uses AdaptiveSGHMC's own
+                v_hat_min (default 1e-4), which is separate from this epsilon.
+            max_param_step: float or None.  When set, each element of the SGHMC
+                momentum is clamped to [-max_param_step, +max_param_step] before
+                the parameter update, bounding the per-step parameter change.
+                None (default) disables clipping.
         """
         dtype = np.float32
         self.sampler_params = {}
@@ -167,6 +174,8 @@ class BayesNet:
         if self.sampling_method == "adaptive_sghmc":
             self.sampler_params["num_burn_in_steps"] = num_burn_in_steps
             self.sampler_params["epsilon"] = dtype(epsilon)
+            if max_param_step is not None:
+                self.sampler_params["max_param_step"] = float(max_param_step)
 
             self.sampler = AdaptiveSGHMC(self.net.parameters(), **self.sampler_params)
         elif self.sampling_method == "sghmc":
@@ -372,6 +381,7 @@ class BayesNet:
         lr_max=None,
         cycle_length=None,
         fraction_cool=0.25,
+        max_param_step=None,
     ):
         """
         Train a BNN using a given dataset.
@@ -452,7 +462,8 @@ class BayesNet:
                 self.sampled_weights.clear()
             self.net = self.net.float()
             self._initialize_sampler(
-                num_datapoints, lr, mdecay, num_burn_in_steps, epsilon
+                num_datapoints, lr, mdecay, num_burn_in_steps, epsilon,
+                max_param_step=max_param_step,
             )
             num_steps += num_burn_in_steps
 
