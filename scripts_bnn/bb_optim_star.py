@@ -265,21 +265,42 @@ def train(config: TrainConfig):
     # Parameter R-hat is retained for reference.
     rhats_param = azs.rhat(params_chains)
 
+    # Effective Sample Size (ESS) measures within-chain sample independence.
+    # With cyclical SGHMC, consecutive samples are separated by a hot phase
+    # that breaks autocorrelation, so ESS should be a large fraction of
+    # num_chains * num_samples.  Low ESS indicates the hot phase is not
+    # moving the chain (lr_max too small or cycle_length too short).
+    # Maximum possible ESS = num_chains * num_samples.
+    total_samples = config.num_chains * config.num_samples
+    ess_pred = azs.ess(pred_chains)
+    ess_param = azs.ess(params_chains)
+
     summary = {
         "test_mean_cross_entropy": np.mean(mean_ce),
         "test_mean_accuracy": np.mean(mean_acc),
-        # --- prediction R-hat (primary diagnostic) ---
+        # --- prediction R-hat (convergence: do chains agree?) ---
         "pred_rhat_max": float(np.max(rhats_pred)),
         "pred_rhat_95th_pct": float(np.percentile(rhats_pred, 95)),
         "pred_rhat_median": float(np.median(rhats_pred)),
         "pred_rhat_mean": float(np.mean(rhats_pred)),
         "pred_rhat_pct_over_1.01": float(np.mean(rhats_pred > 1.01) * 100),
+        # --- prediction ESS (independence: are samples within chains uncorrelated?) ---
+        # Normalised by total samples so the value is in [0, 1]; >0.5 is good.
+        "pred_ess_min": float(np.min(ess_pred)),
+        "pred_ess_median": float(np.median(ess_pred)),
+        "pred_ess_mean": float(np.mean(ess_pred)),
+        "pred_ess_min_norm": float(np.min(ess_pred)) / total_samples,
+        "pred_ess_median_norm": float(np.median(ess_pred)) / total_samples,
         # --- parameter R-hat (reference; inflated by weight symmetries) ---
         "param_rhat_max": float(np.max(rhats_param)),
         "param_rhat_95th_pct": float(np.percentile(rhats_param, 95)),
         "param_rhat_median": float(np.median(rhats_param)),
         "param_rhat_mean": float(np.mean(rhats_param)),
         "param_rhat_pct_over_1.01": float(np.mean(rhats_param > 1.01) * 100),
+        # --- parameter ESS (reference) ---
+        "param_ess_min": float(np.min(ess_param)),
+        "param_ess_median": float(np.median(ess_param)),
+        "param_ess_min_norm": float(np.min(ess_param)) / total_samples,
     }
     wandb.log(summary)
 
