@@ -88,6 +88,13 @@ class AdaptiveSGHMC(Optimizer):
                     # step size and slows down burn-in adaptation.
                     tau.addcdiv_(tau * g.pow(2), v_hat.add(epsilon), value=-1.0)
                     tau.add_(1.0)
+                    # tau is a positive time-constant (≥ 1 by construction in
+                    # the paper).  Floating-point rounding can drive it below 1
+                    # when gradients are small (v_hat → 0 makes the subtracted
+                    # term dominate).  Clamp to prevent negative tau_inv, which
+                    # would reverse the g / v_hat update directions and send
+                    # v_hat negative → sqrt(v_hat) = NaN.
+                    tau.clamp_(min=1.0)
                     tau_inv = tau.reciprocal()
 
                     # g += tau_inv * (gradient - g)
@@ -95,6 +102,10 @@ class AdaptiveSGHMC(Optimizer):
 
                     # v_hat += tau_inv * (gradient^2 - v_hat)
                     v_hat.add_(tau_inv * (gradient.pow(2) - v_hat))
+                    # v_hat is a variance estimate and must remain positive.
+                    # Clamp to epsilon so that sqrt(v_hat) and 1/sqrt(v_hat)
+                    # never produce NaN or Inf.
+                    v_hat.clamp_(min=epsilon)
 
                 # Preconditioner: minv_t = 1 / (sqrt(v_hat) + eps)
                 minv_t = v_hat.sqrt().add_(epsilon).reciprocal_()

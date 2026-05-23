@@ -132,50 +132,26 @@ def train(config: TrainConfig):
         config.dataset, config.training_split
     )
 
-    # Verify data integrity.
-    #
-    # Observation features (all columns except the last) may legitimately
-    # contain NaN — they are used as a sentinel for masked / padded timesteps,
-    # and are replaced with 0 before every network forward pass.  What must
-    # never contain NaN or Inf is:
-    #   • the attention mask column (last column of X) — must be 0 or 1
-    #   • the labels (y) — must be finite class indices
-    #
-    # We also warn when the NaN fraction in the observation features is
-    # unexpectedly high (> 90 %), which likely indicates a data pipeline bug.
+    # Verify data integrity.  Padded timesteps use zeros (not NaN sentinels),
+    # so every value in X and y must be finite.  Non-finite values propagate
+    # through the network and corrupt the AdaptiveSGHMC preconditioner,
+    # eventually producing NaN weights via sqrt(v_hat < 0).
     for _split, _X, _y in [("train", X_train, y_train), ("test", X_test, y_test)]:
-        _mask_col = _X[..., -1]          # attention mask: shape (N, 2, T)
-        _obs_cols = _X[..., :-1]         # observation features: shape (N, 2, T, d-1)
-
-        # Attention mask must be finite.
-        if not np.isfinite(_mask_col).all():
+        _n_nan_X = int(np.isnan(_X).sum())
+        _n_inf_X = int(np.isinf(_X).sum())
+        _n_nan_y = int(np.isnan(_y).sum())
+        _n_inf_y = int(np.isinf(_y).sum())
+        if _n_nan_X or _n_inf_X:
             raise ValueError(
-                f"X_{_split}: attention mask column contains "
-                f"{int(~np.isfinite(_mask_col).sum())} non-finite value(s).  "
-                "Expected values in {0, 1}."
+                f"X_{_split}: {_n_nan_X} NaN and {_n_inf_X} Inf values detected.  "
+                "All input features must be finite."
             )
-
-        # Labels must be finite.
-        if not np.isfinite(_y).all():
+        if _n_nan_y or _n_inf_y:
             raise ValueError(
-                f"y_{_split}: labels contain "
-                f"{int(~np.isfinite(_y).sum())} non-finite value(s)."
+                f"y_{_split}: {_n_nan_y} NaN and {_n_inf_y} Inf values detected.  "
+                "Labels must be finite class indices."
             )
-
-        # Warn if the NaN fraction in observation features is suspiciously high.
-        _nan_frac = float(np.isnan(_obs_cols).mean())
-        if _nan_frac > 0.90:
-            import warnings
-            warnings.warn(
-                f"X_{_split}: {_nan_frac:.1%} of observation feature values "
-                "are NaN — much higher than expected from normal padding.  "
-                "Check the dataset pipeline.",
-                RuntimeWarning,
-            )
-        print(
-            f"[data] {_split}: {_X.shape[0]} pairs, "
-            f"{_nan_frac:.1%} obs-feature NaN (masked timesteps)"
-        )
+        print(f"[data] {_split}: {_X.shape[0]} pairs — all values finite ✓")
 
     # In[19]:
 

@@ -266,11 +266,8 @@ class PrefNet(BayesNet):
         obs_dim = d_dim - 1
         am_1 = x[:, 0, :, obs_dim]
         am_2 = x[:, 1, :, obs_dim]
-        # Masked timesteps are represented as NaN in the observation features.
-        # Replace with 0 before passing to the network — the attention mask
-        # zeroes out their reward contribution, so the substitution is safe.
-        x_1 = np.nan_to_num(x[:, 0, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
-        x_2 = np.nan_to_num(x[:, 1, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
         n1 = x_1.shape[0]
 
         if eval_map:
@@ -394,10 +391,8 @@ class PrefNet(BayesNet):
         obs_dim = d_dim - 1
         am_1 = x[:, 0, :, obs_dim]
         am_2 = x[:, 1, :, obs_dim]
-        # Replace NaN sentinel values (masked timesteps) with 0 so the network
-        # receives finite inputs.  The attention mask zeros out masked rewards.
-        x_1 = np.nan_to_num(x[:, 0, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
-        x_2 = np.nan_to_num(x[:, 1, :, :obs_dim].reshape(-1, obs_dim), nan=0.0)
+        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
         n1 = x_1.shape[0]
 
         if (x_map is not None) and (y_map is not None):
@@ -491,8 +486,8 @@ class PrefNet(BayesNet):
                 obs_dim = d_dim - 1
                 am_1 = x[:, 0, :, obs_dim]
                 am_2 = x[:, 1, :, obs_dim]
-                x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim).nan_to_num(0.0)
-                x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim).nan_to_num(0.0)
+                x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+                x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
                 pred_both = self.net(torch.cat([x_1, x_2], dim=0)).view(2, B, T)
                 pred_1 = pred_both[0] * am_1
