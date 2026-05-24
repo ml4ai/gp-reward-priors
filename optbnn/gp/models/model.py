@@ -201,34 +201,32 @@ class GPModel(torch.nn.Module):
 
 class LCFModel(torch.nn.Module):
     """
-    A class for Gaussian Process in the form of a linear combination
-    of functions (LCF)
+    A Gaussian Process defined as a linear combination of functions (LCF).
 
-    They take two main initial arguments, a covariance matrix and a function that
-    takes inputs and evaluates them over a vector of functions
+    The GP is parameterised by a weight distribution w ~ N(p_mean, p_covariance)
+    and a feature map Φ: X → R^d (provided by `function_vect`).  The resulting
+    random function is f(x) = Φ(x)^T w, which induces the GP
 
-    The p_covariance arg can take a (n_concepts, ) 1D array or a symmetric (n_concepts,n_concepts) 2D array
+        m(x)         = Φ(x)^T p_mean
+        K(x, x')     = Φ(x)^T p_covariance Φ(x')
 
-    The function_vect arg takes a function that takes (n_samples,n_raw_features) 2D array
-    as input and outputs a (n_samples,n_concepts) 2D array
-
-    Its up to the function_vect arg to provide a row of ones for an intercept term
-
-    Optionally, a (n_concepts,) 1D array for the p_mean argument can be given
-
-    If p_mean is not given, a (n_concepts,) 1D array of zeros is automatically generated
-
-    Note that p_covariance and p_mean correspond to the coefficients for the linear combination,
-    but are not the same as the mean and covariance of the resulting Gaussian Process
-
-    This does not have working forward function (for now)
+    Args:
+        p_covariance: (d,) or (d, d) array/tensor — weight prior covariance.
+            A 1-D input is interpreted as the diagonal of a diagonal covariance.
+        function_vect: callable (X, device) or (X, aux_X, device) → (n, d) tensor.
+            Evaluates the feature map over a batch of inputs.  The function is
+            responsible for including any intercept column.
+        device: torch device for all internal tensors.
+        p_mean: optional (d,) array/tensor — weight prior mean.  Defaults to zeros.
+        name: optional string label (informational only).
     """
 
-    def __init__(self, p_covariance, function_vect, device,p_mean=None, name=None):
+    def __init__(self, p_covariance, function_vect, device, p_mean=None, name=None):
         super(LCFModel, self).__init__()
         self.name = name
         self.function_vect = function_vect
-        self.device=device
+        self.device = device
+
         if isinstance(p_covariance, np.ndarray):
             if p_covariance.ndim == 1:
                 p_covariance = np.diag(p_covariance)
@@ -242,44 +240,219 @@ class LCFModel(torch.nn.Module):
                 p_mean = torch.from_numpy(p_mean).float().to(device)
         else:
             p_mean = torch.zeros(p_covariance.size(0)).float().to(device)
+
         self.weight_generator = (
             torch.distributions.multivariate_normal.MultivariateNormal(
                 p_mean, p_covariance
             )
         )
-
         self.p_mean = p_mean
         self.p_covariance = p_covariance
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _feature_matrix(self, X, aux_X=None):
+        """
+        Evaluate the feature map Φ(X) via function_vect.
+
+        Returns a (n, d) double tensor where n = X.shape[0] and d = n_concepts.
+        Avoids the repeated if/else scattered across public methods.
+        """
+        if aux_X is not None:
+            return self.function_vect(X, aux_X, self.device)
+        return self.function_vect(X, self.device)
+
+    def _alpha_from_phi(self, Phi, f, jitter=1e-6):
+        """
+        Given the pre-computed feature matrix Phi (n, d) and function values f
+        (n,) or (n, 1), compute α = K^{-1}(f - m) via a Cholesky solve.
+
+        This avoids calling function_vect a second time when both Phi and α are
+        needed in the same operation (e.g. functional_prior_grad).
+
+        Returns a (n,) double tensor.
+        """
+        Sigma = self.p_covariance.double()
+        m = torch.mv(Phi, self.p_mean.double())              # (n,)
+        K = torch.mm(torch.mm(Phi, Sigma), Phi.T)           # (n, n)
+        K.diagonal().add_(jitter)                            # regularise in-place
+        L = torch.linalg.cholesky(K)                        # lower-triangular factor
+        residual = f.double().view(-1) - m                   # (n,)
+        alpha = torch.cholesky_solve(residual.unsqueeze(1), L).squeeze(1)  # (n,)
+        return alpha
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def forward(self, X=None, Y=None):
         pass
 
-    def sample_functions(self, X, num_samples, aux_X=None):
+    def compute_mean(self, X, aux_X=None):
         """
-        Produce samples from the prior latent functions at the points X.
-        X must be a (n_samples, n_raw_features) 2D array
-        If given, its assumed aux_X.shape[0] == X.shape[0]
+        Compute the GP prior mean m(X) = Φ(X) @ p_mean.
+
+        Args:
+            X: (n, d_raw) input tensor or array.
+            aux_X: optional auxiliary inputs (n, d_aux).
+
+        Returns:
+            (n,) double tensor of prior mean values.
         """
-        if aux_X is not None:
-            Y = self.function_vect(X, aux_X,self.device)
-        else:
-            Y = self.function_vect(X,self.device)
-        return torch.mm(
-            Y,
-            self.weight_generator.sample(torch.Size([num_samples])).T.double(),
-        ).unsqueeze(-1)
+        Phi = self._feature_matrix(X, aux_X)
+        return torch.mv(Phi, self.p_mean.double())
 
     def compute_covariance(self, X, aux_X=None):
         """
-        Produces a covariance matrix over a set of inputs X.
-        X must be a (n_samples, n_raw_features) 2D array
-        If given, its assumed aux_X.shape[0] == X.shape[0]
-        """
-        if aux_X is not None:
-            Y = self.function_vect(X, aux_X,self.device)
-        else:
-            Y = self.function_vect(X,self.device)
+        Compute the GP prior covariance K(X, X) = Φ(X) @ p_covariance @ Φ(X)^T.
 
-        return torch.mm(
-            torch.mm(Y, self.p_covariance.double()), Y.T
+        Args:
+            X: (n, d_raw) input tensor or array.
+            aux_X: optional auxiliary inputs (n, d_aux).
+
+        Returns:
+            (n, n) double tensor — the prior covariance matrix over X.
+        """
+        Phi = self._feature_matrix(X, aux_X)
+        return torch.mm(torch.mm(Phi, self.p_covariance.double()), Phi.T)
+
+    def sample_functions(self, X, num_samples, aux_X=None):
+        """
+        Draw prior function samples at the inputs X.
+
+        Each sample is drawn by sampling a weight vector w ~ N(p_mean, p_covariance)
+        and computing f(X) = Φ(X) w.
+
+        Args:
+            X: (n, d_raw) input tensor or array.
+            num_samples: number of independent function samples to draw.
+            aux_X: optional auxiliary inputs (n, d_aux).
+
+        Returns:
+            (n, num_samples, 1) double tensor of sampled function values.
+        """
+        Phi = self._feature_matrix(X, aux_X)                         # (n, d)
+        weights = self.weight_generator.sample(                       # (d, S)
+            torch.Size([num_samples])
+        ).T.double()
+        return torch.mm(Phi, weights).unsqueeze(-1)                   # (n, S, 1)
+
+    def solve_prior(self, X_M, f_XM, aux_X=None, jitter=1e-6):
+        """
+        Compute α = K_{X_M}^{-1}(f_{X_M} - m(X_M)) via Cholesky solve.
+
+        This is the 'alpha' vector required by the fSGHMC functional prior
+        gradient.  Pass the BNN outputs at the inducing points as f_XM
+        (detached from the computational graph if gradients are not needed here).
+
+        Args:
+            X_M: (n_M, d_raw) inducing-point inputs.
+            f_XM: (n_M,) or (n_M, 1) BNN function values at X_M.
+            aux_X: optional auxiliary inputs (n_M, d_aux).
+            jitter: scalar added to the diagonal of K before factorisation.
+
+        Returns:
+            alpha: (n_M,) double tensor = K_{X_M}^{-1}(f_{X_M} - m(X_M)).
+        """
+        Phi = self._feature_matrix(X_M, aux_X)
+        return self._alpha_from_phi(Phi, f_XM, jitter)
+
+    def log_prior(self, X_M, f_XM, aux_X=None, jitter=1e-6):
+        """
+        Evaluate the functional GP prior log-density at the given BNN outputs.
+
+            log p_GP(f_{X_M}) = -1/2 (f-m)^T K^{-1} (f-m)
+                                 - 1/2 log det K
+                                 - n/2 log(2π)
+
+        Useful for monitoring convergence and acceptance decisions.
+
+        Args:
+            X_M: (n_M, d_raw) inducing-point inputs.
+            f_XM: (n_M,) or (n_M, 1) BNN function values at X_M.
+            aux_X: optional auxiliary inputs (n_M, d_aux).
+            jitter: scalar diagonal regularisation before Cholesky.
+
+        Returns:
+            Scalar double tensor — the log-density value.
+        """
+        Phi = self._feature_matrix(X_M, aux_X)
+        Sigma = self.p_covariance.double()
+        m = torch.mv(Phi, self.p_mean.double())
+        K = torch.mm(torch.mm(Phi, Sigma), Phi.T)
+        K.diagonal().add_(jitter)
+        L = torch.linalg.cholesky(K)
+        residual = f_XM.double().view(-1) - m                         # (n,)
+        alpha = torch.cholesky_solve(residual.unsqueeze(1), L).squeeze(1)
+        n = residual.size(0)
+        log_det = L.diagonal().log().sum()                            # log|L| = 1/2 log|K|
+        return (
+            -0.5 * (residual @ alpha)
+            - log_det
+            - 0.5 * n * torch.log(torch.tensor(2.0 * np.pi, dtype=torch.float64))
         )
+
+    def functional_prior_grad(self, net, X_M, aux_X=None, jitter=1e-6):
+        """
+        Compute the fSGHMC functional GP prior gradient w.r.t. ``net``'s parameters:
+
+            ∇_w log p_GP(f(·; w)) = -J_w(X_M)^T K_{X_M}^{-1}(f(X_M; w) - m(X_M))
+
+        where J_w(X_M) is the Jacobian of the BNN outputs at X_M w.r.t. the
+        network weights w.  The computation uses a single vector-Jacobian product
+        (VJP / reverse-mode AD), so the cost is one backward pass — independent
+        of the number of parameters.
+
+        The return value is ∇_w log p_GP, i.e. it is ready to be **added** to the
+        likelihood gradient.  It replaces the weight-space Gaussian prior gradient
+        −(w − μ)/σ² used in standard SGHMC.
+
+        Note: ``net`` must be in the same dtype/device as X_M.  The internal
+        Cholesky solve is performed in float64 and the VJP grad_outputs are cast
+        back to match ``net``'s output dtype before the backward pass.
+
+        Args:
+            net: torch.nn.Module — the BNN whose parameters we differentiate.
+            X_M: (n_M, d_raw) inducing-point inputs (must be on net's device).
+            aux_X: optional auxiliary inputs (n_M, d_aux).
+            jitter: scalar diagonal regularisation for the Cholesky solve.
+
+        Returns:
+            grads: tuple of tensors, one per element of ``net.parameters()``,
+                   giving ∇_w log p_GP(f(·; w)).  Parameters that do not
+                   contribute to f(X_M) (e.g. unused branches) receive
+                   a zero gradient tensor.
+        """
+        # --- BNN forward pass: keep graph so autograd can propagate through it ---
+        f_XM = net(X_M)                                               # (n_M,) or (n_M, 1)
+
+        # --- Compute α = K^{-1}(f - m) purely numerically (no grad needed) ---
+        Phi = self._feature_matrix(X_M, aux_X)                       # (n_M, d)
+        with torch.no_grad():
+            alpha = self._alpha_from_phi(Phi, f_XM.detach(), jitter) # (n_M,) double
+
+        # Cast α to the BNN's output dtype and reshape to match f_XM for VJP
+        grad_out = alpha.to(f_XM.dtype)
+        if f_XM.dim() > 1:
+            grad_out = grad_out.view_as(f_XM)
+
+        # --- VJP: J_w(X_M)^T α ---
+        # torch.autograd.grad(f, params, v) computes sum_i v_i * ∂f_i/∂params,
+        # i.e. J^T v.  The prior log-density gradient is -J^T α, so we negate.
+        vjp = torch.autograd.grad(
+            outputs=f_XM,
+            inputs=list(net.parameters()),
+            grad_outputs=grad_out,
+            retain_graph=False,
+            create_graph=False,
+            allow_unused=True,
+        )
+
+        # Negate to get ∇_w log p_GP = -J^T α; replace None (unused params) with zeros
+        grads = tuple(
+            (-g if g is not None else torch.zeros_like(p))
+            for g, p in zip(vjp, net.parameters())
+        )
+        return grads
