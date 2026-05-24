@@ -109,6 +109,71 @@ def load_pref_data(pref_dir, training_ratio=0.8):
     return X_train, y_train, X_test, y_test
 
 
+def load_measurement_data(
+    meas_path,
+    state_key="states",
+    action_key="actions",
+    mask_key="attn_mask",
+):
+    """Load raw observations from an HDF5 file for use as fSGHMC measurement points.
+
+    The file may store either individual timesteps (N, dim) or trajectories
+    (N, T, dim).  Trajectory format is automatically flattened to individual
+    timesteps.  If an attention mask is present, padded timesteps (mask == 0)
+    are discarded so that only real observations reach the GP feature map.
+
+    The function returns two arrays:
+    - ``x_meas``  — concatenation of states and actions (if present), suitable
+      as BNN input.  Shape (M, obs_dim) where obs_dim = state_dim [+ act_dim].
+    - ``aux_meas`` — raw states only, passed as ``aux_X`` to the LCFModel
+      feature function (e.g. ``bb_reward_prior`` reads state columns for the
+      GP features and ignores the action columns).
+
+    Args:
+        meas_path: str, path to the HDF5 measurement file.
+        state_key: str, HDF5 dataset key for states (default "states").
+        action_key: str, HDF5 dataset key for actions (default "actions").
+            If the key is absent the BNN input will be states-only.
+        mask_key: str, HDF5 dataset key for attention/validity mask
+            (default "attn_mask").  Values > 0 are kept.  If the key is
+            absent all timesteps are treated as valid.
+
+    Returns:
+        x_meas:   numpy float32 array (M, obs_dim).
+        aux_meas: numpy float32 array (M, state_dim).
+    """
+    with h5py.File(meas_path, "r") as f:
+        states = f[state_key][:]
+        actions = f[action_key][:] if action_key in f else None
+        mask = f[mask_key][:] if mask_key in f else None
+
+    # ---- Flatten trajectory format (N, T, dim) → (N*T, dim) ------------
+    if states.ndim == 3:
+        N, T, sdim = states.shape
+        states = states.reshape(N * T, sdim)
+        if actions is not None:
+            actions = actions.reshape(N * T, -1)
+        if mask is not None:
+            mask = mask.reshape(N * T)
+
+    # ---- Drop padded / invalid timesteps --------------------------------
+    if mask is not None:
+        valid = mask.astype(bool)
+        states = states[valid]
+        if actions is not None:
+            actions = actions[valid]
+
+    states = states.astype(np.float32)
+    if actions is not None:
+        actions = actions.astype(np.float32)
+        x_meas = np.concatenate([states, actions], axis=-1)
+    else:
+        x_meas = states
+
+    aux_meas = states   # raw states for GP feature computation
+    return x_meas, aux_meas
+
+
 class Pref_H5Dataset(Dataset):
     def __init__(self, datafile, max_episode_length=None, label_flip=0.0):
         super(Pref_H5Dataset, self).__init__()
