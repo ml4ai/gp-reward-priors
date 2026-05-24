@@ -807,5 +807,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 exp/*
-.hdf5
+*.hdf5
 .csv
