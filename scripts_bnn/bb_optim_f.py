@@ -2,20 +2,19 @@
 # coding: utf-8
 """bb_optim_f.py — scale-adapted cyclical fSGHMC for the BB preference task.
 
-Identical to bb_optim_star.py in structure and evaluation, but replaces the
-weight-space Gaussian prior with a functional GP prior built from LCFModel
+Uses FPrefNet (f_pref_net.py) with a functional GP prior built from LCFModel
 and bb_reward_prior (Wu et al. 2025 fSGHMC).
 
 Key differences from bb_optim_star.py
 --------------------------------------
-1. Imports FPrefNet (f_pref_net.py) instead of PrefNet.
-2. Loads a separate measurement dataset (HDF5) whose raw observations serve as
-   the inducing/measurement points for the GP prior gradient.
-3. Constructs an LCFModel from bb_reward_prior + identity covariance.
-4. Passes gp_prior_args + meas_kwargs to FPrefNet.sample_multi_chains_parallel.
+1. No OptimGaussianPrior — no prior tuning checkpoint required.
+2. No prior_dir config field.
+3. Uses FPrefNet (standalone, no weight-space prior) instead of PrefNet.
+4. Loads a separate measurement dataset (HDF5) for the GP prior gradient.
+5. Constructs an LCFModel from bb_reward_prior + scaled identity covariance.
 
 All SGHMC hyper-parameters, warm-up logic, R-hat / ESS diagnostics, and
-wandb logging are unchanged.
+wandb logging are otherwise identical to bb_optim_star.py.
 """
 
 import math
@@ -24,16 +23,14 @@ import os.path as osp
 import sys
 import uuid
 import warnings
-from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from dataclasses import asdict, dataclass
+from typing import Optional
 
 import matplotlib as mpl
 import pyrallis
 
 mpl.use("Agg")
 import arviz_stats as azs
-import h5py
-import matplotlib.pylab as plt
 import numpy as np
 import torch
 import wandb
@@ -45,7 +42,6 @@ os.chdir("..")
 
 from optbnn.bnn.likelihoods import LikCE
 from optbnn.bnn.nets.mlp import MLP
-from optbnn.bnn.priors import OptimGaussianPrior
 from optbnn.gp.models.model import LCFModel
 from optbnn.gp.reward_functions import bb_reward_prior
 from optbnn.sgmcmc_bayes_net.f_pref_net import FPrefNet
@@ -79,41 +75,33 @@ class TrainConfig:
     sghmc_lr_max: float = 0.03
     cycle_length: int = 1000
     fraction_cool: float = 0.25
-    # max_param_step: element-wise momentum clamp (safety net against
-    # catastrophic updates).  See bb_optim_star.py for full comment.
+    # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
     # Preference training dataset
     dataset: str = "data/bb/t0012_pref.hdf5"
     dataset_id: str = "bb_t0012"
     training_split: float = 0.8
-    # Measurement dataset for fSGHMC functional GP prior
-    # Must be an HDF5 file with "states" (and optionally "actions") keys.
-    # Raw observations are used as inducing/measurement points at every step.
+    # Measurement dataset for the fSGHMC functional GP prior.
+    # Must be an HDF5 file readable by load_measurement_data() — keys "states"
+    # (required) and "actions" (optional) with shape (N, dim) or (N, T, dim).
     measurement_dataset: str = "data/bb/t0012_meas.hdf5"
-    # Number of measurement points sampled per training step.  Larger values
-    # give a more accurate functional prior gradient but increase GPU memory
-    # and compute.  Wu et al. (2025) use M = 100.
+    # Number of measurement points sampled per training step from the pool.
+    # Wu et al. (2025) use M = 100.
     n_meas: int = 100
     # Diagonal jitter added to K_{X_M} before the Cholesky solve.
     meas_jitter: float = 1e-6
     # GP prior covariance = gp_cov_scale * I_{n_concepts}.
-    # The GP prior weights each feature linearly; scaling by gp_cov_scale
-    # controls the prior variance on the reward function.
+    # Controls prior variance on reward-function coefficients.
     gp_cov_scale: float = 1.0
     # general params
     seed: int = 1
     OUT_DIR: Optional[str] = "./exp/reward_learning/bb_optim_f"
-    prior_dir: str = "./exp/reward_learning/bb_tuning_star"
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
             self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
             util.ensure_dir(self.OUT_DIR)
-        self.prior_dir = os.path.join(
-            osp.expanduser(self.prior_dir),
-            f"bb-{self.width}_{self.depth}",
-        )
 
 
 @pyrallis.wrap()
@@ -131,18 +119,6 @@ def train(config: TrainConfig):
     width = config.width
     depth = config.depth
     transfer_fn = "relu"
-
-    sampling_configs = {
-        "batch_size": config.batch_size,
-        "num_samples": config.num_samples,
-        "n_discarded": config.n_discarded,
-        "num_burn_in_steps": config.num_burn_in_steps,
-        "keep_every": config.keep_every,
-        "lr": config.sghmc_lr,
-        "num_chains": config.num_chains,
-        "mdecay": config.mdecay,
-        "print_every_n_samples": config.print_every_n_samples,
-    }
 
     # ------------------------------------------------------------------ #
     # Load preference training / test data
@@ -174,9 +150,9 @@ def train(config: TrainConfig):
     print(f"[fSGHMC] Loading measurement dataset: {config.measurement_dataset}")
     x_meas, aux_meas = load_measurement_data(config.measurement_dataset)
     print(
-        f"[fSGHMC] Measurement pool: {x_meas.shape[0]} observations  "
-        f"(obs_dim={x_meas.shape[1]}, state_dim={aux_meas.shape[1]})  "
-        f"n_meas per step={config.n_meas}"
+        f"[fSGHMC] Measurement pool: {x_meas.shape[0]} observations "
+        f"(obs_dim={x_meas.shape[1]}, state_dim={aux_meas.shape[1]}, "
+        f"n_meas per step={config.n_meas})"
     )
     if x_meas.shape[0] < config.n_meas:
         warnings.warn(
@@ -184,7 +160,6 @@ def train(config: TrainConfig):
             f"({config.n_meas}).  All pool points will be used every step.",
             RuntimeWarning,
         )
-    # Finite check on measurement data
     if np.isnan(x_meas).any() or np.isinf(x_meas).any():
         raise ValueError(
             "Measurement dataset contains NaN or Inf values.  "
@@ -194,25 +169,19 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     # Build the GP functional prior (LCFModel + bb_reward_prior)
     # ------------------------------------------------------------------ #
-    # bb_reward_prior maps (X, aux_X, device) → (n, 3) feature matrix
-    # [intercept, -goal_distance, min_obs_dist].
-    # p_covariance = gp_cov_scale * I_3 gives an isotropic GP prior.
-    n_concepts = 3  # number of features returned by bb_reward_prior
+    # bb_reward_prior(X, aux_X, device) → (n, 3) feature matrix:
+    #   [intercept, -goal_distance, min_obs_dist]
+    # p_covariance = gp_cov_scale * I_3 — isotropic GP weight prior.
+    n_concepts = 3
     p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
 
-    # gp_prior_args must be pickle-safe (all numpy arrays + module-level fn)
+    # gp_prior_args must survive pickle across mp.spawn:
+    #   numpy arrays are picklable; bb_reward_prior is a module-level fn.
     gp_prior_args = {
-        "p_covariance": p_covariance,   # (3, 3) numpy
-        "function_vect": bb_reward_prior,  # module-level → picklable
-        "p_mean": None,                 # zeros (default in LCFModel)
+        "p_covariance": p_covariance,
+        "function_vect": bb_reward_prior,
+        "p_mean": None,               # zeros (LCFModel default)
     }
-
-    # LCFModel for the parent process (warm-up diagnostic, not for training)
-    bb_prior = LCFModel(
-        p_covariance=p_covariance,
-        function_vect=bb_reward_prior,
-        device=device,
-    ).to(device)
 
     meas_kwargs = {
         "x_meas": x_meas,
@@ -221,15 +190,18 @@ def train(config: TrainConfig):
         "meas_jitter": config.meas_jitter,
     }
 
+    # Parent-process LCFModel (used only during warm-up; workers reconstruct
+    # their own from gp_prior_args)
+    bb_prior = LCFModel(
+        p_covariance=p_covariance,
+        function_vect=bb_reward_prior,
+        device=device,
+    ).to(device)
+
     # ------------------------------------------------------------------ #
-    # Initialize prior and BNN
+    # Build BNN and FPrefNet (no OptimGaussianPrior needed)
     # ------------------------------------------------------------------ #
     util.set_seed(config.seed)
-    ckpt_path = os.path.abspath(
-        os.path.join(config.prior_dir, "ckpts", "best.ckpt")
-    )
-    prior = OptimGaussianPrior(ckpt_path)
-
     net_args = dict(
         input_dim=24,
         output_dim=1,
@@ -242,11 +214,9 @@ def train(config: TrainConfig):
     saved_dir = os.path.abspath(os.path.join(config.OUT_DIR, "sampling_f"))
     util.ensure_dir(saved_dir)
 
-    # Use FPrefNet for orchestration and warm-up
     bayes_net_f = FPrefNet(
         net=net,
         likelihood=likelihood,
-        prior=prior,
         ckpt_dir=saved_dir,
         gp_prior=bb_prior,
         x_meas=x_meas,
@@ -258,15 +228,14 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Warm-up burn-in (shared starting point for all chains)
+    # Warm-up burn-in — shared starting point for all chains
     # ------------------------------------------------------------------ #
-    # The warm-up uses fSGHMC (functional prior) too, so the starting point
-    # already reflects the GP prior.
+    # Warm-up runs fSGHMC so the starting point already reflects the GP prior.
     util.set_seed(config.seed)
     bayes_net_f.train(
         X_train,
         y_train,
-        num_samples=None,       # burn-in only; no weights collected
+        num_samples=None,           # burn-in only; no weights collected
         num_burn_in_steps=config.num_burn_in_steps,
         lr=config.sghmc_lr,
         mdecay=config.mdecay,
@@ -287,8 +256,7 @@ def train(config: TrainConfig):
     if _total_norm < 0.1:
         warnings.warn(
             f"Warm-up weight norm is very small ({_total_norm:.4e}).  "
-            "The prior may be dominating — check the prior checkpoint and "
-            "consider reducing the prior weight or increasing num_burn_in_steps.",
+            "Consider increasing num_burn_in_steps or adjusting gp_cov_scale.",
             RuntimeWarning,
         )
     elif _avg_weight_mag > 5.0:
@@ -297,9 +265,7 @@ def train(config: TrainConfig):
             f"For a {width}×{depth} MLP, network outputs scale as w^{depth+1}; "
             f"at avg |w|={_avg_weight_mag:.1f} reward logits may reach "
             f"O({_avg_weight_mag**(depth+1):.1e}), causing astronomical CE.  "
-            "Consider: (1) verifying the prior checkpoint std is reasonable, "
-            "(2) reducing sghmc_lr and sghmc_lr_max, "
-            "(3) increasing mdecay to damp weight growth.",
+            "Consider reducing sghmc_lr / sghmc_lr_max or increasing mdecay.",
             RuntimeWarning,
         )
     wandb.log(
@@ -318,7 +284,6 @@ def train(config: TrainConfig):
         X_train,
         y_train,
         net_args=net_args,
-        ckpt_path=ckpt_path,
         gp_prior_args=gp_prior_args,
         meas_kwargs=meas_kwargs,
         num_chains=config.num_chains,
@@ -340,11 +305,15 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Evaluation (identical to bb_optim_star.py)
+    # Evaluation — identical to bb_optim_star.py
     # ------------------------------------------------------------------ #
     _B_rhat = min(64, X_test.shape[0])
     _obs_dim = X_test.shape[-1] - 1
-    x_rhat = X_test[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+    x_rhat = (
+        X_test[:_B_rhat, 0, :, :_obs_dim]
+        .reshape(-1, _obs_dim)
+        .astype(np.float32)
+    )
     x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
 
     mean_ce = []
@@ -362,7 +331,7 @@ def train(config: TrainConfig):
         if n_loaded < 2:
             warnings.warn(
                 f"Chain {i} has only {n_loaded} sample(s) — R-hat and ESS will be NaN.  "
-                "Check that the worker completed successfully and that num_samples > n_discarded.",
+                "Check that the worker completed and num_samples > n_discarded.",
                 RuntimeWarning,
             )
 
@@ -378,8 +347,8 @@ def train(config: TrainConfig):
             if _diff < 1e-8:
                 warnings.warn(
                     f"Chain {i}: first two samples are numerically identical "
-                    f"(max diff {_diff:.2e}).  SGHMC may be stuck at a flat region.  "
-                    "Try increasing lr_max or checking the prior strength.",
+                    f"(max diff {_diff:.2e}).  SGHMC may be stuck.  "
+                    "Try increasing lr_max or gp_cov_scale.",
                     RuntimeWarning,
                 )
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})

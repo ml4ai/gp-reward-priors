@@ -1,9 +1,9 @@
-"""Functional SGHMC PrefNet (fSGHMC, Wu et al. 2025).
+"""Functional SGHMC sampler for preference learning (fSGHMC, Wu et al. 2025).
 
-Replaces the weight-space Gaussian prior gradient with a functional GP prior
-gradient computed via a single vector-Jacobian product (VJP) at each step.
-The rest of the infrastructure — AdaptiveSGHMC preconditioner, cyclical LR,
-burn-in, parallel chain management — is inherited from PrefNet unchanged.
+FPrefNet is a *standalone* class — it does not inherit from BayesNet or
+PrefNet and requires no weight-space prior (OptimGaussianPrior).  The only
+regularisation comes from the functional GP prior (LCFModel), whose gradient
+is injected at every sampler step via a single VJP backward pass.
 
 Gradient accounting
 -------------------
@@ -15,18 +15,16 @@ AdaptiveSGHMC then scales by scale_grad = N, giving an effective gradient of:
 
     N/batch_size · (-∂log_lik/∂w)  +  ∂prior_energy/∂w   ≈  ∇U(w)
 
-where U = -log p(w|D).
+Here we use a likelihood-only loss and add the functional GP prior gradient:
 
-Here we drop the weight-space prior and add the functional GP prior instead:
+    parameter.grad  +=  -∇_w log p_GP(f(·;w)) / N
+                     =  +J_w(X_M)ᵀ K_{X_M}⁻¹(f(X_M;w) − m(X_M)) / N
 
-    parameter.grad  +=  +J_w(X_M)ᵀ K_{X_M}⁻¹ (f(X_M;w) − m(X_M)) / N
-                     =  -∇_w log p_GP(f(·;w)) / N     [negated for ∇U sign]
-
-After N-scaling by AdaptiveSGHMC the contribution is O(1) — the same order as
-the weight-space prior it replaces.
+After N-scaling the effective contribution is O(1) — matching the weight-space
+prior it replaces.
 
 See Wu et al. (2025) "Functional Stochastic Gradient MCMC for Bayesian Neural
-Networks", AISTATS 2025, for the full derivation.
+Networks", AISTATS 2025.
 """
 
 import math
@@ -37,12 +35,14 @@ import numpy as np
 import torch
 import torch.utils.data as data_utils
 
-from ..utils.util import ensure_dir, inf_loop
-from .pref_net import PrefNet
+from ..metrics.metrics_tensor import accuracy
+from ..samplers.adaptive_sghmc import AdaptiveSGHMC
+from ..samplers.sghmc import SGHMC
+from ..utils.util import ensure_dir, inf_loop, prepare_device
 
 
 # ---------------------------------------------------------------------------
-# Module-level worker (must be picklable for mp.spawn)
+# Module-level worker — must be defined at module scope for mp.spawn pickle
 # ---------------------------------------------------------------------------
 
 def _fpref_chain_worker(
@@ -50,7 +50,6 @@ def _fpref_chain_worker(
     batch_start,
     base_ckpt_dir,
     net_args,
-    ckpt_path,
     x_train,
     y_train,
     seed,
@@ -61,34 +60,33 @@ def _fpref_chain_worker(
 ):
     """Worker for one parallel FPrefNet chain, called by mp.spawn.
 
-    Defined at module level so it is picklable under the ``spawn`` start
-    method that CUDA requires.
+    All arguments are plain Python objects (numpy arrays, dicts, module-level
+    callables) so they survive the pickle/unpickle round-trip intact.
 
     Args:
-        rank: process rank within the current batch — the CUDA device index.
-        batch_start: chain index of rank 0 in this batch.
-        base_ckpt_dir: root directory; chain i writes to
+        rank: int, process rank in this batch — maps to CUDA device index.
+        batch_start: int, chain index of rank 0 in this batch.
+        base_ckpt_dir: str, root directory; chain i writes to
             ``<base_ckpt_dir>/chain_<i>/``.
-        net_args: dict forwarded to MLP(**net_args).
-        ckpt_path: path to the OptimGaussianPrior checkpoint.
-        x_train: numpy (N, 2, T, d_dim) training inputs.
+        net_args: dict of keyword arguments forwarded to MLP(**net_args).
+        x_train: numpy (N, 2, T, d_dim) preference training inputs.
         y_train: numpy (N,) training targets.
-        seed: base random seed; chain i uses seed + i.
+        seed: int, base random seed; chain i uses seed + i.
         train_kwargs: dict forwarded verbatim to FPrefNet.train().
         gp_prior_args: dict with keys:
-            ``p_covariance`` (numpy array), ``function_vect`` (callable),
-            ``p_mean`` (numpy array or None).
+            ``p_covariance`` — numpy (d,) or (d, d) weight prior covariance,
+            ``function_vect`` — module-level callable (must be picklable),
+            ``p_mean``        — numpy (d,) or None (→ zeros).
         meas_kwargs: dict with keys:
-            ``x_meas`` (numpy, N_meas × obs_dim),
-            ``aux_meas`` (numpy, N_meas × state_dim, or None),
-            ``n_meas`` (int),
-            ``meas_jitter`` (float).
+            ``x_meas``      — numpy (N_meas, obs_dim),
+            ``aux_meas``    — numpy (N_meas, aux_dim) or None,
+            ``n_meas``      — int, measurement points per step,
+            ``meas_jitter`` — float, Cholesky diagonal regularisation.
         initial_weights: optional tuple of numpy arrays (one per parameter),
-            shared starting point for all chains.
+            giving the shared warm-up starting point for all chains.
     """
     from optbnn.bnn.likelihoods import LikCE
     from optbnn.bnn.nets.mlp import MLP
-    from optbnn.bnn.priors import OptimGaussianPrior
     from optbnn.gp.models.model import LCFModel
     from optbnn.sgmcmc_bayes_net.f_pref_net import FPrefNet
     from optbnn.utils.util import set_seed
@@ -108,10 +106,8 @@ def _fpref_chain_worker(
             for param, w in zip(net.parameters(), initial_weights):
                 param.copy_(torch.from_numpy(w))
 
-    prior = OptimGaussianPrior(ckpt_path)
     likelihood = LikCE()
 
-    # Reconstruct the LCFModel from plain-Python args (pickle-safe)
     gp_prior = LCFModel(
         p_covariance=gp_prior_args["p_covariance"],
         function_vect=gp_prior_args["function_vect"],
@@ -125,7 +121,6 @@ def _fpref_chain_worker(
     bayes_net = FPrefNet(
         net=net,
         likelihood=likelihood,
-        prior=prior,
         ckpt_dir=chain_dir,
         gp_prior=gp_prior,
         x_meas=meas_kwargs["x_meas"],
@@ -140,46 +135,55 @@ def _fpref_chain_worker(
 
 
 # ---------------------------------------------------------------------------
-# FPrefNet
+# FPrefNet — standalone functional SGHMC sampler
 # ---------------------------------------------------------------------------
 
-class FPrefNet(PrefNet):
-    """PrefNet with a functional GP prior (fSGHMC).
+class FPrefNet:
+    """Standalone functional SGHMC sampler for preference learning.
 
-    The weight-space Gaussian prior used in standard PrefNet is replaced by a
-    functional GP prior defined by an LCFModel.  At every sampler step the
-    functional prior gradient
+    Does **not** inherit from BayesNet or PrefNet and requires **no**
+    weight-space prior (OptimGaussianPrior).  Regularisation comes entirely
+    from the functional GP prior defined by ``gp_prior`` (an LCFModel).
 
-        ∇_w log p_GP(f(·; w))  =  -J_w(X_M)ᵀ K_{X_M}⁻¹ (f(X_M; w) − m(X_M))
+    At every sampler step:
 
-    is computed via a single VJP backward pass (cost: one extra forward +
-    backward through the BNN at n_meas measurement points) and added to the
-    gradient before the AdaptiveSGHMC update.
+    1. Preference forward pass → fx_batch (twin-network sum of masked rewards).
+    2. Likelihood-only loss backward → parameter.grad from data.
+    3. Functional GP prior gradient computed via one VJP backward pass at
+       ``n_meas`` randomly-sampled measurement points.
+    4. Prior gradient added to parameter.grad (scaled 1/N so AdaptiveSGHMC's
+       N-scaling keeps it O(1), matching the weight-space prior it replaces).
+    5. Gradient clip + AdaptiveSGHMC step.
+
+    All SGHMC infrastructure (AdaptiveSGHMC preconditioner, cyclical LR,
+    burn-in, parallel chain dispatch via mp.spawn) is implemented directly,
+    without delegating to BayesNet.
 
     Args:
-        net: torch.nn.Module, the BNN.
-        likelihood: LikelihoodModule.
-        prior: PriorModule (its weight-space gradient is NOT used; the
-            checkpoint is kept only to set the BNN architecture/dtype).
-        ckpt_dir: str, checkpoint directory.
-        gp_prior: LCFModel instance defining the functional GP prior.
-        x_meas: numpy (N_meas, obs_dim) — pool of measurement observations.
+        net: torch.nn.Module, the BNN (e.g. MLP).
+        likelihood: LikelihoodModule (e.g. LikCE).
+        ckpt_dir: str, directory for sampled-weight checkpoints.
+        gp_prior: LCFModel, the functional GP prior.
+        x_meas: numpy float32 (N_meas, obs_dim) — measurement-point pool.
             At each step ``n_meas`` rows are sampled uniformly without
-            replacement and fed to the BNN + GP feature map.
-        aux_meas: numpy (N_meas, aux_dim) or None — auxiliary inputs for the
-            GP feature map (e.g. raw states when the feature function ignores
-            actions).  Must satisfy ``aux_meas.shape[0] == x_meas.shape[0]``.
-        n_meas: int, number of measurement points per step (default 100).
-        meas_jitter: float, diagonal regularisation for the Cholesky solve in
-            ``LCFModel.solve_prior`` (default 1e-6).
-        (remaining kwargs forwarded to PrefNet.__init__)
+            replacement and used for the VJP backward pass.
+        aux_meas: numpy (N_meas, aux_dim) or None — auxiliary feature inputs
+            passed as ``aux_X`` to the LCFModel feature map (e.g. raw states
+            for ``bb_reward_prior`` which ignores action columns).
+        n_meas: int, measurement points per step (default 100).
+        meas_jitter: float, Cholesky diagonal jitter in ``solve_prior``
+            (default 1e-6).
+        temperature: float, posterior temperature (default 1.0).
+        sampling_method: str, ``"adaptive_sghmc"`` (default) or ``"sghmc"``.
+        logger: optional logging.Logger; falls back to print.
+        n_gpu: int, number of GPUs (0 = CPU).
+        name: str, label for logging.
     """
 
     def __init__(
         self,
         net,
         likelihood,
-        prior,
         ckpt_dir,
         gp_prior,
         x_meas,
@@ -192,17 +196,36 @@ class FPrefNet(PrefNet):
         n_gpu=0,
         name="fpref",
     ):
-        super().__init__(
-            net=net,
-            likelihood=likelihood,
-            prior=prior,
-            ckpt_dir=ckpt_dir,
-            temperature=temperature,
-            sampling_method=sampling_method,
-            logger=logger,
-            n_gpu=n_gpu,
-            name=name,
-        )
+        self.net = net
+        self.lik_module = likelihood
+        self.ckpt_dir = ckpt_dir
+        self.sampling_method = sampling_method
+        self.temperature = temperature
+        self.name = name
+        self.n_gpu = n_gpu
+
+        self.print_info = print if logger is None else logger.info
+
+        # Sampler / sampling state
+        self.step = 0
+        self.sampler = None
+        self.sampler_params = {}
+        self.sampled_weights = []
+        self.num_samples = 0
+        self.num_saved_sets_weights = 0
+        self.map = None
+
+        # Checkpoint directory
+        self.sampled_weights_dir = os.path.join(ckpt_dir, "sampled_weights")
+        ensure_dir(self.sampled_weights_dir)
+
+        # Device setup
+        self.device, device_ids = prepare_device(n_gpu)
+        self.net = self.net.to(self.device)
+        if len(device_ids) > 1:
+            self.net = torch.nn.DataParallel(net, device_ids=device_ids)
+
+        # Functional GP prior
         self._gp_prior = gp_prior.to(self.device)
         self._x_meas = x_meas        # numpy (N_meas, obs_dim)
         self._aux_meas = aux_meas    # numpy (N_meas, aux_dim) or None
@@ -210,7 +233,232 @@ class FPrefNet(PrefNet):
         self._meas_jitter = float(meas_jitter)
 
     # ------------------------------------------------------------------
-    # Training loop (overrides BayesNet.train)
+    # Network weight access
+    # ------------------------------------------------------------------
+
+    @property
+    def network_weights(self):
+        """Current network weights as a tuple of CPU numpy arrays."""
+        return tuple(
+            np.asarray(p.data.clone().detach().cpu().numpy())
+            for p in self.net.parameters()
+        )
+
+    @network_weights.setter
+    def network_weights(self, weights):
+        """Load a tuple of numpy arrays into the network parameters."""
+        for param, w in zip(self.net.parameters(), weights):
+            param.copy_(torch.from_numpy(w))
+
+    @property
+    def _bare_net(self):
+        """Underlying module, unwrapped from DataParallel if present."""
+        return (
+            self.net.module
+            if isinstance(self.net, torch.nn.DataParallel)
+            else self.net
+        )
+
+    # ------------------------------------------------------------------
+    # Sampler initialisation
+    # ------------------------------------------------------------------
+
+    def _initialize_sampler(
+        self,
+        num_datapoints,
+        lr=1e-2,
+        mdecay=0.05,
+        num_burn_in_steps=3000,
+        epsilon=1e-10,
+        max_param_step=None,
+    ):
+        """Instantiate AdaptiveSGHMC (or SGHMC) with scale_grad = N / T."""
+        dtype = np.float32
+        self.sampler_params = {}
+        self.sampler_params["scale_grad"] = dtype(num_datapoints) / self.temperature
+        self.sampler_params["lr"] = dtype(lr)
+        self.sampler_params["mdecay"] = dtype(mdecay)
+
+        if self.sampling_method == "adaptive_sghmc":
+            self.sampler_params["num_burn_in_steps"] = num_burn_in_steps
+            self.sampler_params["epsilon"] = dtype(epsilon)
+            if max_param_step is not None:
+                self.sampler_params["max_param_step"] = float(max_param_step)
+            self.sampler = AdaptiveSGHMC(
+                self.net.parameters(), **self.sampler_params
+            )
+        elif self.sampling_method == "sghmc":
+            self.sampler = SGHMC(self.net.parameters(), **self.sampler_params)
+
+    # ------------------------------------------------------------------
+    # Checkpoint I/O
+    # ------------------------------------------------------------------
+
+    def _save_sampled_weights(self):
+        """Save the current sampled_weights list to a numbered file."""
+        file_path = os.path.join(
+            self.sampled_weights_dir,
+            "sampled_weights_{:07d}".format(self.num_saved_sets_weights),
+        )
+        torch.save({"sampled_weights": self.sampled_weights}, file_path)
+        self.num_saved_sets_weights += 1
+
+    def _load_sampled_weights(self, file_path):
+        """Load a sampled_weights file and return the list."""
+        checkpoint = torch.load(file_path, weights_only=False)
+        return checkpoint["sampled_weights"]
+
+    # ------------------------------------------------------------------
+    # Prediction helpers (adapted from PrefNet)
+    # ------------------------------------------------------------------
+
+    def predict(self, x_test, use_map=False, map_only=False):
+        """Posterior predictive mean and variance over sampled weights.
+
+        Args:
+            x_test: numpy (n, obs_dim) or tensor — single-timestep inputs.
+            use_map: also return the MAP prediction alongside the mean/var.
+            map_only: return only the MAP prediction (assert self.map is set).
+
+        Returns:
+            (pred_mean, pred_var) — or with map variants; see PrefNet.predict.
+        """
+        x_tensor = torch.from_numpy(np.asarray(x_test)).float().to(self.device)
+
+        def _fwd(weights):
+            with torch.no_grad():
+                self.network_weights = weights
+                return self.net(x_tensor).detach().cpu().numpy()
+
+        if map_only:
+            assert self.map is not None
+            return _fwd(self.map)
+
+        predictions = np.array([_fwd(w) for w in self.sampled_weights])
+        pred_mean = np.mean(predictions, axis=0)
+        pred_var = np.var(predictions, axis=0)
+
+        if use_map:
+            assert self.map is not None
+            return pred_mean, pred_var, _fwd(self.map)
+        return pred_mean, pred_var
+
+    def _predict_pairs_batched(self, x_1, x_2, am_1, am_2, T,
+                                use_map=False, batch_size=256):
+        """Mini-batched preference-pair prediction (GPU-memory safe).
+
+        Identical logic to PrefNet._predict_pairs_batched.
+        """
+        N = am_1.shape[0]
+        parts_1, parts_2 = [], []
+        for start in range(0, N, batch_size):
+            end = min(start + batch_size, N)
+            b = end - start
+            x1_b = x_1[start * T : end * T]
+            x2_b = x_2[start * T : end * T]
+            x_both = np.concatenate([x1_b, x2_b], axis=0)
+
+            if use_map:
+                _, _, pred = self.predict(x_both, use_map=True)
+            else:
+                pred, _ = self.predict(x_both)
+
+            pred_1 = pred[: b * T].reshape(b, T) * am_1[start:end]
+            pred_2 = pred[b * T :].reshape(b, T) * am_2[start:end]
+            parts_1.append(np.nansum(pred_1, axis=1))
+            parts_2.append(np.nansum(pred_2, axis=1))
+
+        return np.concatenate(parts_1), np.concatenate(parts_2)
+
+    def _ce_and_acc(self, sum_pred_1, sum_pred_2, y):
+        """Cross-entropy and accuracy from per-pair reward sums."""
+        fx = np.stack([sum_pred_1, sum_pred_2], axis=1).astype(np.float32)
+        fx_t = torch.from_numpy(fx).to(self.device)
+        y_t = torch.from_numpy(y).float().to(self.device)
+        ce = torch.nn.CrossEntropyLoss()(fx_t, y_t).detach().cpu().numpy()
+        acc = accuracy(fx_t, y_t).detach().cpu().numpy()
+        return ce, acc
+
+    def find_map(self, x, y, max_map_samples=512):
+        """Select the MAP weight set by minimum likelihood loss.
+
+        Uses the likelihood (NLL) alone as the MAP criterion — appropriate
+        since fSGHMC carries no weight-space prior.
+
+        Args:
+            x: numpy (N, 2, T, d_dim) preference-pair inputs.
+            y: numpy (N,) or (N, 1) labels.
+            max_map_samples: maximum pairs to evaluate (subset for speed).
+        """
+        assert self.sampled_weights, "No sampled weights to select MAP from."
+
+        if x.shape[0] > max_map_samples:
+            idx = np.random.choice(x.shape[0], max_map_samples, replace=False)
+            x, y = x[idx], y[idx]
+
+        x_t = torch.from_numpy(x.squeeze()).float().to(self.device)
+        y_t = torch.from_numpy(y.squeeze()).float().to(self.device)
+
+        def _nll(weights):
+            with torch.no_grad():
+                self.network_weights = weights
+                B, _, T, d_dim = x_t.size()
+                obs_dim = d_dim - 1
+                am_1 = x_t[:, 0, :, obs_dim]
+                am_2 = x_t[:, 1, :, obs_dim]
+                x_1 = x_t[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+                x_2 = x_t[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+                pred_both = self.net(
+                    torch.cat([x_1, x_2], dim=0)
+                ).view(2, B, T)
+                pred_1 = pred_both[0] * am_1
+                pred_2 = pred_both[1] * am_2
+                sum_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
+                sum_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+                fx = torch.cat([sum_1, sum_2], dim=1)
+                return float(self.lik_module(fx, y_t).detach().cpu())
+
+        losses = np.array([_nll(w) for w in self.sampled_weights])
+        self.map = self.sampled_weights[int(np.argmin(losses))]
+
+    def eval_test_data(self, x, y, x_map=None, y_map=None, eval_batch_size=256):
+        """Evaluate on test data; identical signature to PrefNet.eval_test_data.
+
+        Args:
+            x: numpy (N, 2, T, d_dim) test preference pairs.
+            y: numpy (N,) labels.
+            x_map, y_map: optional training data for MAP weight selection.
+            eval_batch_size: mini-batch size for _predict_pairs_batched.
+
+        Returns:
+            (ce, acc): float cross-entropy and accuracy.
+        """
+        self.net.eval()
+        B, _, T, d_dim = x.shape
+        obs_dim = d_dim - 1
+        am_1 = x[:, 0, :, obs_dim]
+        am_2 = x[:, 1, :, obs_dim]
+        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+        use_map = (x_map is not None) and (y_map is not None)
+        if use_map:
+            self.find_map(x_map, y_map)
+
+        sum_1, sum_2 = self._predict_pairs_batched(
+            x_1, x_2, am_1, am_2, T,
+            use_map=use_map,
+            batch_size=eval_batch_size,
+        )
+        ce, acc = self._ce_and_acc(sum_1, sum_2, y)
+
+        if use_map:
+            self.map = None
+        self.net.train()
+        return ce, acc
+
+    # ------------------------------------------------------------------
+    # Training loop — fSGHMC with functional GP prior
     # ------------------------------------------------------------------
 
     def train(
@@ -229,8 +477,9 @@ class FPrefNet(PrefNet):
         print_every_n_samples=10,
         continue_training=False,
         clear_sampled_weights=True,
+        # kept for API compatibility with train_kwargs from the standard sampler;
+        # not used (no weight-space hyperprior to resample, no separate MAP eval)
         resample_prior_every=1000,
-        resample_hyper_prior_burn_in=True,
         eval_map=False,
         use_cyclical_lr=False,
         lr_max=None,
@@ -238,22 +487,24 @@ class FPrefNet(PrefNet):
         fraction_cool=0.25,
         max_param_step=None,
     ):
-        """Train using fSGHMC: likelihood gradient + functional GP prior gradient.
+        """Run the fSGHMC training loop.
 
-        Signature is identical to BayesNet.train() so the same train_kwargs dict
-        can be used for both PrefNet and FPrefNet runs.
+        Signature is a superset of BayesNet.train() so the same train_kwargs
+        dict works for both PrefNet and FPrefNet runs.  ``resample_prior_every``
+        and ``eval_map`` are accepted but silently ignored (no weight-space
+        hyperprior; MAP selection is available via eval_test_data).
         """
-        # ---- Data loader setup (pref task only) -------------------------
+        # ---- Data loader ------------------------------------------------
         if data_loader is not None:
             num_datapoints = len(data_loader.sampler)
             train_loader = inf_loop(data_loader)
         else:
             num_datapoints = x_train.shape[0]
-            x_train_ = torch.from_numpy(x_train.squeeze()).float()
-            y_train_ = torch.from_numpy(y_train.squeeze()).float()
+            x_t = torch.from_numpy(x_train.squeeze()).float()
+            y_t = torch.from_numpy(y_train.squeeze()).float()
             train_loader = inf_loop(
                 data_utils.DataLoader(
-                    data_utils.TensorDataset(x_train_, y_train_),
+                    data_utils.TensorDataset(x_t, y_t),
                     batch_size=batch_size,
                     shuffle=True,
                     pin_memory=(self.device.type == "cuda"),
@@ -261,7 +512,7 @@ class FPrefNet(PrefNet):
                 )
             )
 
-        # ---- Cyclical LR parameters -------------------------------------
+        # ---- Cyclical LR schedule parameters ----------------------------
         _cycle_len = int(cycle_length) if cycle_length is not None else int(keep_every)
         _lr_max = float(lr_max) if lr_max is not None else float(lr) * 10.0
         _lr_min = float(lr)
@@ -290,7 +541,7 @@ class FPrefNet(PrefNet):
                 f"n_meas ({self._n_meas}); using all pool points every step."
             )
 
-        # ---- Main training loop -----------------------------------------
+        # ---- Main loop --------------------------------------------------
         batch_generator = islice(enumerate(train_loader), num_steps)
         self.net.train()
         n_samples = 0
@@ -299,7 +550,7 @@ class FPrefNet(PrefNet):
             x_batch = x_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
 
-            # ---- Cyclical LR schedule -----------------------------------
+            # ---- Cyclical LR --------------------------------------------
             if use_cyclical_lr and step >= num_burn_in_steps:
                 _post_burn = step - num_burn_in_steps
                 _cycle_step = _post_burn % _cycle_len
@@ -309,7 +560,7 @@ class FPrefNet(PrefNet):
                 for _pg in self.sampler.param_groups:
                     _pg["lr"] = np.float32(_cycle_lr)
                 if _cycle_step == 0:
-                    # Zero momentum at the start of each hot phase
+                    # Zero momentum at the start of each new hot phase
                     for _pg in self.sampler.param_groups:
                         for _p in _pg["params"]:
                             _s = self.sampler.state.get(_p)
@@ -333,30 +584,24 @@ class FPrefNet(PrefNet):
             sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
             fx_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
-            # ---- Gradient computation -----------------------------------
+            # ---- Likelihood gradient ------------------------------------
             self.sampler.zero_grad()
-
-            # Likelihood-only loss — the functional GP prior handles the prior
             lik_loss = self.lik_module(fx_batch, y_batch) / y_batch.shape[0]
             lik_loss.backward()
 
             # ---- Functional GP prior gradient ---------------------------
-            # Sample n_meas measurement points uniformly from the pool
-            meas_idx = np.random.choice(
-                len(self._x_meas), n_meas_actual, replace=False
+            # Sample n_meas points from the measurement pool
+            meas_idx = np.random.choice(len(self._x_meas), n_meas_actual, replace=False)
+            x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
+            aux_meas_t = (
+                torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
+                if self._aux_meas is not None
+                else None
             )
-            x_meas_t = torch.from_numpy(
-                self._x_meas[meas_idx]
-            ).float().to(self.device)
-            aux_meas_t = None
-            if self._aux_meas is not None:
-                aux_meas_t = torch.from_numpy(
-                    self._aux_meas[meas_idx]
-                ).to(self.device)
 
-            # Returns ∇_w log p_GP = -J_w^T K^{-1}(f_M - m_M) per parameter.
-            # This is a NEW forward+backward through _bare_net; it does NOT
-            # touch parameter.grad (torch.autograd.grad is used, not .backward()).
+            # functional_prior_grad returns ∇_w log p_GP = -J_w^T K^{-1}(f-m).
+            # This uses torch.autograd.grad (not .backward()), so it does NOT
+            # touch parameter.grad — we add the result manually below.
             func_grads = self._gp_prior.functional_prior_grad(
                 self._bare_net,
                 x_meas_t,
@@ -364,30 +609,19 @@ class FPrefNet(PrefNet):
                 jitter=self._meas_jitter,
             )
 
-            # Add the functional prior's contribution to ∇U = -∇ log p(w|D).
-            # ∇U_prior = -∇_w log p_GP = +J_w^T α.
-            # Divide by num_datapoints so that after AdaptiveSGHMC's
-            # scale_grad = num_datapoints, the effective contribution is O(1)
-            # — the same scale as the weight-space prior it replaces.
+            # Add ∇U_prior = -∇_w log p_GP to parameter.grad, scaled by 1/N.
+            # After AdaptiveSGHMC's scale_grad = N multiplication the effective
+            # contribution is O(1) — the same order as the weight-space prior.
             for param, fg in zip(self._bare_net.parameters(), func_grads):
                 if param.grad is not None:
-                    # fg = ∇_w log p_GP  →  -fg = ∇_w U_prior
                     param.grad.add_(-fg.to(param.grad.dtype) / num_datapoints)
 
-            # ---- Clip and update ----------------------------------------
+            # ---- Clip and step ------------------------------------------
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), 100.0)
             self.sampler.step()
             self.step += 1
 
-            # ---- Resample prior hyper-parameters (if any) ---------------
-            if self.prior_module.hyperprior:
-                if step % resample_prior_every == 0:
-                    if resample_hyper_prior_burn_in:
-                        self.prior_module.resample(self._bare_net)
-                    elif step > num_burn_in_steps:
-                        self.prior_module.resample(self._bare_net)
-
-            # ---- Sample collection --------------------------------------
+            # ---- Sample collection (cyclical or fixed-interval) ----------
             if use_cyclical_lr and step >= num_burn_in_steps:
                 _post_burn = step - num_burn_in_steps
                 _cycle_step = _post_burn % _cycle_len
@@ -405,7 +639,7 @@ class FPrefNet(PrefNet):
                     self.num_samples += 1
 
     # ------------------------------------------------------------------
-    # Parallel chain orchestration (overrides PrefNet.sample_multi_chains_parallel)
+    # Parallel chain dispatch
     # ------------------------------------------------------------------
 
     def sample_multi_chains_parallel(
@@ -413,7 +647,6 @@ class FPrefNet(PrefNet):
         x_train,
         y_train,
         net_args,
-        ckpt_path,
         gp_prior_args,
         meas_kwargs,
         num_samples=None,
@@ -438,19 +671,23 @@ class FPrefNet(PrefNet):
     ):
         """Run multiple fSGHMC chains in parallel, one process per GPU.
 
-        Extends PrefNet.sample_multi_chains_parallel with two extra arguments:
+        Sampled weights for chain i are written to::
+
+            <self.ckpt_dir>/chain_<i>/sampled_weights/sampled_weights_0000000
 
         Args:
-            gp_prior_args: dict with keys:
-                ``p_covariance`` (numpy array, shape (d,) or (d, d)),
-                ``function_vect`` (module-level callable, must be picklable),
-                ``p_mean``        (numpy array shape (d,), or None → zeros).
-            meas_kwargs: dict with keys:
-                ``x_meas``    (numpy (N_meas, obs_dim)),
-                ``aux_meas``  (numpy (N_meas, aux_dim) or None),
-                ``n_meas``    (int, measurement points per step),
-                ``meas_jitter`` (float, Cholesky jitter).
-            (all other args are identical to PrefNet.sample_multi_chains_parallel)
+            x_train: numpy (N, 2, T, d_dim) training inputs.
+            y_train: numpy (N,) training targets.
+            net_args: dict of kwargs for MLP(**net_args).
+            gp_prior_args: dict with keys ``p_covariance``, ``function_vect``,
+                ``p_mean`` (see _fpref_chain_worker docstring).
+            meas_kwargs: dict with keys ``x_meas``, ``aux_meas``, ``n_meas``,
+                ``meas_jitter`` (see _fpref_chain_worker docstring).
+            num_chains: int, total number of chains.
+            seed: int, base seed; chain i uses seed + i.
+            initial_weights: optional tuple of numpy arrays — shared warm-up
+                starting point to prevent chains from diverging at init.
+            (remaining args forwarded verbatim to FPrefNet.train())
         """
         import torch.multiprocessing as mp
 
@@ -494,7 +731,6 @@ class FPrefNet(PrefNet):
                     batch_start,
                     self.ckpt_dir,
                     net_args,
-                    ckpt_path,
                     x_train,
                     y_train,
                     seed,
