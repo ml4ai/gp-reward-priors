@@ -84,10 +84,10 @@ class TrainConfig:
     # Measurement dataset for the fSGHMC functional GP prior.
     # Must be an HDF5 file readable by load_measurement_data() — keys "states"
     # (required) and "actions" (optional) with shape (N, dim) or (N, T, dim).
-    measurement_dataset: str = "data/bb/t0012_meas.hdf5"
+    measurement_dataset: str = "data/bb/bbway_tuning_set.hdf5"
     # Number of measurement points sampled per training step from the pool.
     # Wu et al. (2025) use M = 100.
-    n_meas: int = 100
+    n_meas: int = 256
     # Diagonal jitter added to K_{X_M} before the Cholesky solve.
     meas_jitter: float = 1e-6
     # GP prior covariance = gp_cov_scale * I_{n_concepts}.
@@ -175,13 +175,13 @@ def train(config: TrainConfig):
     # p_covariance = gp_cov_scale * I_3 — isotropic GP weight prior.
     n_concepts = 3
     p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
-
+    p_mean = np.ones(n_concepts, dtype=np.float32)
     # gp_prior_args must survive pickle across mp.spawn:
     #   numpy arrays are picklable; bb_reward_prior is a module-level fn.
     gp_prior_args = {
         "p_covariance": p_covariance,
         "function_vect": bb_reward_prior,
-        "p_mean": None,               # zeros (LCFModel default)
+        "p_mean": p_mean,  # zeros (LCFModel default)
     }
 
     meas_kwargs = {
@@ -197,6 +197,7 @@ def train(config: TrainConfig):
         p_covariance=p_covariance,
         function_vect=bb_reward_prior,
         device=device,
+        p_mean=p_mean,
     ).to(device)
 
     # ------------------------------------------------------------------ #
@@ -236,7 +237,7 @@ def train(config: TrainConfig):
     bayes_net_f.train(
         X_train,
         y_train,
-        num_samples=None,           # burn-in only; no weights collected
+        num_samples=None,  # burn-in only; no weights collected
         num_burn_in_steps=config.num_burn_in_steps,
         lr=config.sghmc_lr,
         mdecay=config.mdecay,
@@ -263,9 +264,9 @@ def train(config: TrainConfig):
     elif _avg_weight_mag > 5.0:
         warnings.warn(
             f"Warm-up average weight magnitude is large ({_avg_weight_mag:.2f}).  "
-            f"For a {width}×{depth} MLP, network outputs scale as w^{depth+1}; "
+            f"For a {width}×{depth} MLP, network outputs scale as w^{depth + 1}; "
             f"at avg |w|={_avg_weight_mag:.1f} reward logits may reach "
-            f"O({_avg_weight_mag**(depth+1):.1e}), causing astronomical CE.  "
+            f"O({_avg_weight_mag ** (depth + 1):.1e}), causing astronomical CE.  "
             "Consider reducing sghmc_lr / sghmc_lr_max or increasing mdecay.",
             RuntimeWarning,
         )
@@ -310,11 +311,7 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     _B_rhat = min(64, X_test.shape[0])
     _obs_dim = X_test.shape[-1] - 1
-    x_rhat = (
-        X_test[:_B_rhat, 0, :, :_obs_dim]
-        .reshape(-1, _obs_dim)
-        .astype(np.float32)
-    )
+    x_rhat = X_test[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
     x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
 
     mean_ce = []
