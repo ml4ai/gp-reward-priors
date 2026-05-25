@@ -149,9 +149,10 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     print(f"[fSGHMC] Loading measurement dataset: {config.measurement_dataset}")
     x_meas, aux_meas = load_measurement_data(config.measurement_dataset)
+    _aux_dim_str = str(aux_meas.shape[1]) if aux_meas is not None else "none"
     print(
         f"[fSGHMC] Measurement pool: {x_meas.shape[0]} observations "
-        f"(obs_dim={x_meas.shape[1]}, state_dim={aux_meas.shape[1]}, "
+        f"(obs_dim={x_meas.shape[1]}, aux_dim={_aux_dim_str}, "
         f"n_meas per step={config.n_meas})"
     )
     if x_meas.shape[0] < config.n_meas:
