@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""bb_optim_f.py — scale-adapted cyclical fSGHMC for the BB preference task.
+"""run_bnn_training_f.py — domain-agnostic scale-adapted cyclical fSGHMC.
 
-Uses FPrefNet (f_pref_net.py) with a functional GP prior built from LCFModel
-and bb_reward_prior (Wu et al. 2025 fSGHMC).
+Trains a preference-BNN using FPrefNet (f_pref_net.py) with a functional GP
+prior built from LCFModel and any source function in optbnn/gp/reward_functions.py.
+The reward source function is chosen at runtime via the ``reward_function``
+config field.
 
 Key differences from bb_optim_star.py
 --------------------------------------
@@ -11,7 +13,10 @@ Key differences from bb_optim_star.py
 2. No prior_dir config field.
 3. Uses FPrefNet (standalone, no weight-space prior) instead of PrefNet.
 4. Loads a separate measurement dataset (HDF5) for the GP prior gradient.
-5. Constructs an LCFModel from bb_reward_prior + scaled identity covariance.
+5. ``reward_function`` selects any function from reward_functions.py by name.
+6. ``input_dim`` is inferred automatically from the training data.
+7. ``n_concepts`` (GP feature dimension) is inferred by probing the source
+   function on a dummy input, or can be set explicitly in the config.
 
 All SGHMC hyper-parameters, warm-up logic, R-hat / ESS diagnostics, and
 wandb logging are otherwise identical to bb_optim_star.py.
@@ -40,10 +45,10 @@ warnings.simplefilter("ignore", UserWarning)
 sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
 
+import optbnn.gp.reward_functions as _reward_fns
 from optbnn.bnn.likelihoods import LikCE
 from optbnn.bnn.nets.mlp import MLP
 from optbnn.gp.models.model import LCFModel
-from optbnn.gp.reward_functions import bb_reward_prior
 from optbnn.sgmcmc_bayes_net.f_pref_net import FPrefNet
 from optbnn.utils import util
 from optbnn.utils.util import load_measurement_data
@@ -54,9 +59,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 @dataclass
 class TrainConfig:
     # wandb params
-    project: str = "BB-training"
-    group: str = "BB"
-    name: str = "bb"
+    project: str = "BNN-training"
+    group: str = "fSGHMC"
+    name: str = "run"
     # model params
     width: int = 64
     depth: int = 3
@@ -78,24 +83,33 @@ class TrainConfig:
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
     # Preference training dataset
-    dataset: str = "data/bb/t0012_pref.hdf5"
-    dataset_id: str = "bb_t0012"
+    dataset: str = "data/pref.hdf5"
+    dataset_id: str = "run"
     training_split: float = 0.8
     # Measurement dataset for the fSGHMC functional GP prior.
-    # Must be an HDF5 file readable by load_measurement_data() — keys "states"
-    # (required) and "actions" (optional) with shape (N, dim) or (N, T, dim).
-    measurement_dataset: str = "data/bb/bbway_tuning_set.hdf5"
+    # Must be an HDF5 file with keys:
+    #   "obs"     — (N, obs_dim)  required.  BNN inputs (state + action concatenated).
+    #   "aux_obs" — (N, K)        optional.  Auxiliary GP feature inputs.
+    # The presence of "aux_obs" is detected automatically by load_measurement_data().
+    measurement_dataset: str = "data/meas.hdf5"
     # Number of measurement points sampled per training step from the pool.
     # Wu et al. (2025) use M = 100.
     n_meas: int = 256
     # Diagonal jitter added to K_{X_M} before the Cholesky solve.
     meas_jitter: float = 1e-6
+    # Name of a module-level function in optbnn/gp/reward_functions.py.
+    # The function must have signature f(X, device) or f(X, aux_X, device)
+    # and return a (n, n_concepts) double tensor.
+    reward_function: str = "bb_reward_prior"
+    # GP feature dimension.  When None (default), inferred automatically by
+    # calling reward_function on a 1-row dummy input before training starts.
+    n_concepts: Optional[int] = None
     # GP prior covariance = gp_cov_scale * I_{n_concepts}.
     # Controls prior variance on reward-function coefficients.
     gp_cov_scale: float = 1.0
     # general params
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning/bb_optim_f"
+    OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_training_f"
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
@@ -110,7 +124,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=f"{config.name}_optim_f_training",
+        name=f"{config.name}_bnn_training_f",
         id=str(uuid.uuid4()),
         save_code=True,
     )
@@ -119,6 +133,18 @@ def train(config: TrainConfig):
     width = config.width
     depth = config.depth
     transfer_fn = "relu"
+
+    # ------------------------------------------------------------------ #
+    # Resolve reward source function
+    # ------------------------------------------------------------------ #
+    if not hasattr(_reward_fns, config.reward_function):
+        raise ValueError(
+            f"reward_function={config.reward_function!r} not found in "
+            "optbnn/gp/reward_functions.py.  "
+            f"Available: {[n for n in dir(_reward_fns) if not n.startswith('_')]}"
+        )
+    function_vect = getattr(_reward_fns, config.reward_function)
+    print(f"[GP prior] reward_function = {config.reward_function!r}")
 
     # ------------------------------------------------------------------ #
     # Load preference training / test data
@@ -144,6 +170,11 @@ def train(config: TrainConfig):
             )
         print(f"[data] {_split}: {_X.shape[0]} pairs — all values finite ✓")
 
+    # X_train has shape (N, 2, T, d_dim); the last column of d_dim is the
+    # attention mask, so obs_dim = state_dim + action_dim = d_dim - 1.
+    input_dim = X_train.shape[-1] - 1
+    print(f"[model] inferred input_dim = {input_dim}")
+
     # ------------------------------------------------------------------ #
     # Load measurement dataset (separate HDF5, raw observations)
     # ------------------------------------------------------------------ #
@@ -168,20 +199,36 @@ def train(config: TrainConfig):
         )
 
     # ------------------------------------------------------------------ #
-    # Build the GP functional prior (LCFModel + bb_reward_prior)
+    # Infer n_concepts from a dummy forward pass through the source function
     # ------------------------------------------------------------------ #
-    # bb_reward_prior(X, aux_X, device) → (n, 3) feature matrix:
-    #   [intercept, -goal_distance, min_obs_dist]
-    # p_covariance = gp_cov_scale * I_3 — isotropic GP weight prior.
-    n_concepts = 3
-    p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
-    p_mean = np.ones(n_concepts, dtype=np.float32)
+    if config.n_concepts is not None:
+        n_concepts = config.n_concepts
+        print(f"[GP prior] n_concepts = {n_concepts} (from config)")
+    else:
+        with torch.no_grad():
+            _dummy_X = torch.zeros(1, input_dim, device=device, dtype=torch.float64)
+            if aux_meas is not None:
+                _dummy_aux = torch.zeros(
+                    1, aux_meas.shape[1], device=device, dtype=torch.float64
+                )
+                _phi_dummy = function_vect(_dummy_X, _dummy_aux, device)
+            else:
+                _phi_dummy = function_vect(_dummy_X, device)
+        n_concepts = int(_phi_dummy.shape[-1])
+        print(f"[GP prior] inferred n_concepts = {n_concepts}")
+
+    # ------------------------------------------------------------------ #
+    # Build the GP functional prior (LCFModel + selected source function)
+    # ------------------------------------------------------------------ #
+    # p_covariance = gp_cov_scale * I_{n_concepts} — isotropic GP weight prior.
+    # p_mean = None → zero-mean GP (LCFModel default).
     # gp_prior_args must survive pickle across mp.spawn:
-    #   numpy arrays are picklable; bb_reward_prior is a module-level fn.
+    #   numpy arrays are picklable; function_vect is a module-level fn.
+    p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
     gp_prior_args = {
         "p_covariance": p_covariance,
-        "function_vect": bb_reward_prior,
-        "p_mean": p_mean,  # zeros (LCFModel default)
+        "function_vect": function_vect,
+        "p_mean": None,
     }
 
     meas_kwargs = {
@@ -193,11 +240,11 @@ def train(config: TrainConfig):
 
     # Parent-process LCFModel (used only during warm-up; workers reconstruct
     # their own from gp_prior_args)
-    bb_prior = LCFModel(
+    gp_prior = LCFModel(
         p_covariance=p_covariance,
-        function_vect=bb_reward_prior,
+        function_vect=function_vect,
         device=device,
-        p_mean=p_mean,
+        p_mean=None,
     ).to(device)
 
     # ------------------------------------------------------------------ #
@@ -205,7 +252,7 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     util.set_seed(config.seed)
     net_args = dict(
-        input_dim=24,
+        input_dim=input_dim,
         output_dim=1,
         hidden_dims=[width] * depth,
         activation_fn=transfer_fn,
@@ -220,13 +267,13 @@ def train(config: TrainConfig):
         net=net,
         likelihood=likelihood,
         ckpt_dir=saved_dir,
-        gp_prior=bb_prior,
+        gp_prior=gp_prior,
         x_meas=x_meas,
         aux_meas=aux_meas,
         n_meas=config.n_meas,
         meas_jitter=config.meas_jitter,
         n_gpu=1,
-        name="optim_f",
+        name="bnn_f",
     )
 
     # ------------------------------------------------------------------ #
