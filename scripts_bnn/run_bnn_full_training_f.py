@@ -101,6 +101,11 @@ class TrainConfig:
     # GP prior covariance = gp_cov_scale * I_{n_concepts}.
     # Controls prior variance on reward-function coefficients.
     gp_cov_scale: float = 1.0
+    # Warm-up monitoring: log NLL and accuracy every this many steps.
+    # 0 = disabled.  Set to e.g. 100 to get a live convergence curve during
+    # burn-in.  Evaluation uses a random 512-pair subsample of the training set
+    # (the only data available when there is no held-out split).
+    warmup_log_every: int = 0
     # general params
     seed: int = 1
     OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_full_training_f"
@@ -278,6 +283,9 @@ def train(config: TrainConfig):
     # Warm-up burn-in — shared starting point for all chains
     # ------------------------------------------------------------------ #
     # Warm-up runs fSGHMC so the starting point already reflects the GP prior.
+    # When warmup_log_every > 0, NLL and accuracy are evaluated every
+    # warmup_log_every steps on a 512-pair subsample of the training set and
+    # logged to stdout + wandb under the "warmup/" prefix.
     util.set_seed(config.seed)
     bayes_net_f.train(
         X_train,
@@ -288,6 +296,8 @@ def train(config: TrainConfig):
         mdecay=config.mdecay,
         batch_size=config.batch_size,
         max_param_step=config.max_param_step,
+        log_every=config.warmup_log_every,
+        eval_data=(X_train, y_train) if config.warmup_log_every > 0 else None,
     )
 
     # Sanity-check warm-up weight magnitudes
@@ -399,7 +409,7 @@ def train(config: TrainConfig):
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
 
         # eval_test_data called on the full training set (in-sample)
-        ce, acc = bayes_net_f.eval_test_data(X_train, y_train, X_train, y_train, 4096)
+        ce, acc = bayes_net_f.eval_test_data(X_train, y_train, eval_batch_size=4096)
         mean_ce.append(ce)
         mean_acc.append(acc)
 

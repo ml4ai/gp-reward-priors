@@ -213,7 +213,6 @@ class FPrefNet:
         self.sampled_weights = []
         self.num_samples = 0
         self.num_saved_sets_weights = 0
-        self.map = None
 
         # Checkpoint directory
         self.sampled_weights_dir = os.path.join(ckpt_dir, "sampled_weights")
@@ -312,16 +311,14 @@ class FPrefNet:
     # Prediction helpers (adapted from PrefNet)
     # ------------------------------------------------------------------
 
-    def predict(self, x_test, use_map=False, map_only=False):
+    def predict(self, x_test):
         """Posterior predictive mean and variance over sampled weights.
 
         Args:
             x_test: numpy (n, obs_dim) or tensor — single-timestep inputs.
-            use_map: also return the MAP prediction alongside the mean/var.
-            map_only: return only the MAP prediction (assert self.map is set).
 
         Returns:
-            (pred_mean, pred_var) — or with map variants; see PrefNet.predict.
+            (pred_mean, pred_var): posterior predictive mean and variance.
         """
         x_tensor = torch.from_numpy(np.asarray(x_test)).float().to(self.device)
 
@@ -330,25 +327,13 @@ class FPrefNet:
                 self.network_weights = weights
                 return self.net(x_tensor).detach().cpu().numpy()
 
-        if map_only:
-            assert self.map is not None
-            return _fwd(self.map)
-
         predictions = np.array([_fwd(w) for w in self.sampled_weights])
         pred_mean = np.mean(predictions, axis=0)
         pred_var = np.var(predictions, axis=0)
-
-        if use_map:
-            assert self.map is not None
-            return pred_mean, pred_var, _fwd(self.map)
         return pred_mean, pred_var
 
-    def _predict_pairs_batched(self, x_1, x_2, am_1, am_2, T,
-                                use_map=False, batch_size=256):
-        """Mini-batched preference-pair prediction (GPU-memory safe).
-
-        Identical logic to PrefNet._predict_pairs_batched.
-        """
+    def _predict_pairs_batched(self, x_1, x_2, am_1, am_2, T, batch_size=256):
+        """Mini-batched preference-pair prediction using posterior predictive mean."""
         N = am_1.shape[0]
         parts_1, parts_2 = [], []
         for start in range(0, N, batch_size):
@@ -358,10 +343,7 @@ class FPrefNet:
             x2_b = x_2[start * T : end * T]
             x_both = np.concatenate([x1_b, x2_b], axis=0)
 
-            if use_map:
-                _, _, pred = self.predict(x_both, use_map=True)
-            else:
-                pred, _ = self.predict(x_both)
+            pred, _ = self.predict(x_both)
 
             pred_1 = pred[: b * T].reshape(b, T) * am_1[start:end]
             pred_2 = pred[b * T :].reshape(b, T) * am_2[start:end]
@@ -379,55 +361,59 @@ class FPrefNet:
         acc = accuracy(fx_t, y_t).detach().cpu().numpy()
         return ce, acc
 
-    def find_map(self, x, y, max_map_samples=512):
-        """Select the MAP weight set by minimum likelihood loss.
+    def _eval_current_weights(self, x, y, max_pairs=512):
+        """Evaluate NLL and accuracy using the current (single) network weights.
 
-        Uses the likelihood (NLL) alone as the MAP criterion — appropriate
-        since fSGHMC carries no weight-space prior.
+        Called periodically during warm-up burn-in to give a live convergence
+        signal.  Uses one forward pass at the current weight point, not the
+        posterior predictive (no samples exist yet during burn-in).
 
         Args:
-            x: numpy (N, 2, T, d_dim) preference-pair inputs.
-            y: numpy (N,) or (N, 1) labels.
-            max_map_samples: maximum pairs to evaluate (subset for speed).
-        """
-        assert self.sampled_weights, "No sampled weights to select MAP from."
+            x: numpy (N, 2, T, d_dim) preference pairs.
+            y: numpy (N,) labels.
+            max_pairs: subsample if N > max_pairs, for speed.
 
-        if x.shape[0] > max_map_samples:
-            idx = np.random.choice(x.shape[0], max_map_samples, replace=False)
+        Returns:
+            (nll, acc): float NLL and accuracy.
+        """
+        if x.shape[0] > max_pairs:
+            idx = np.random.choice(x.shape[0], max_pairs, replace=False)
             x, y = x[idx], y[idx]
 
-        x_t = torch.from_numpy(x.squeeze()).float().to(self.device)
-        y_t = torch.from_numpy(y.squeeze()).float().to(self.device)
+        B, _, T, d_dim = x.shape
+        obs_dim = d_dim - 1
+        am_1 = x[:, 0, :, obs_dim].astype(np.float32)
+        am_2 = x[:, 1, :, obs_dim].astype(np.float32)
+        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
+        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
 
-        def _nll(weights):
-            with torch.no_grad():
-                self.network_weights = weights
-                B, _, T, d_dim = x_t.size()
-                obs_dim = d_dim - 1
-                am_1 = x_t[:, 0, :, obs_dim]
-                am_2 = x_t[:, 1, :, obs_dim]
-                x_1 = x_t[:, 0, :, :obs_dim].reshape(-1, obs_dim)
-                x_2 = x_t[:, 1, :, :obs_dim].reshape(-1, obs_dim)
-                pred_both = self.net(
-                    torch.cat([x_1, x_2], dim=0)
-                ).view(2, B, T)
-                pred_1 = pred_both[0] * am_1
-                pred_2 = pred_both[1] * am_2
-                sum_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
-                sum_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
-                fx = torch.cat([sum_1, sum_2], dim=1)
-                return float(self.lik_module(fx, y_t).detach().cpu())
+        self.net.eval()
+        with torch.no_grad():
+            x1_t = torch.from_numpy(x_1).to(self.device)
+            x2_t = torch.from_numpy(x_2).to(self.device)
+            am1_t = torch.from_numpy(am_1).to(self.device)
+            am2_t = torch.from_numpy(am_2).to(self.device)
+            y_t = torch.from_numpy(y.reshape(-1).astype(np.float32)).to(self.device)
 
-        losses = np.array([_nll(w) for w in self.sampled_weights])
-        self.map = self.sampled_weights[int(np.argmin(losses))]
+            pred_both = self.net(torch.cat([x1_t, x2_t], dim=0)).view(2, B, T)
+            pred_1 = pred_both[0] * am1_t
+            pred_2 = pred_both[1] * am2_t
+            sum_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
+            sum_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+            fx = torch.cat([sum_1, sum_2], dim=1)
 
-    def eval_test_data(self, x, y, x_map=None, y_map=None, eval_batch_size=256):
-        """Evaluate on test data; identical signature to PrefNet.eval_test_data.
+            nll = torch.nn.CrossEntropyLoss()(fx, y_t).item()
+            acc = float(accuracy(fx, y_t).detach().cpu())
+
+        self.net.train()
+        return nll, acc
+
+    def eval_test_data(self, x, y, eval_batch_size=256):
+        """Evaluate using the posterior predictive mean over sampled weights.
 
         Args:
-            x: numpy (N, 2, T, d_dim) test preference pairs.
+            x: numpy (N, 2, T, d_dim) preference pairs.
             y: numpy (N,) labels.
-            x_map, y_map: optional training data for MAP weight selection.
             eval_batch_size: mini-batch size for _predict_pairs_batched.
 
         Returns:
@@ -441,19 +427,11 @@ class FPrefNet:
         x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
         x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
 
-        use_map = (x_map is not None) and (y_map is not None)
-        if use_map:
-            self.find_map(x_map, y_map)
-
         sum_1, sum_2 = self._predict_pairs_batched(
             x_1, x_2, am_1, am_2, T,
-            use_map=use_map,
             batch_size=eval_batch_size,
         )
         ce, acc = self._ce_and_acc(sum_1, sum_2, y)
-
-        if use_map:
-            self.map = None
         self.net.train()
         return ce, acc
 
@@ -477,22 +455,46 @@ class FPrefNet:
         print_every_n_samples=10,
         continue_training=False,
         clear_sampled_weights=True,
-        # kept for API compatibility with train_kwargs from the standard sampler;
-        # not used (no weight-space hyperprior to resample, no separate MAP eval)
-        resample_prior_every=1000,
-        eval_map=False,
         use_cyclical_lr=False,
         lr_max=None,
         cycle_length=None,
         fraction_cool=0.25,
         max_param_step=None,
+        log_every=0,
+        eval_data=None,
     ):
         """Run the fSGHMC training loop.
 
-        Signature is a superset of BayesNet.train() so the same train_kwargs
-        dict works for both PrefNet and FPrefNet runs.  ``resample_prior_every``
-        and ``eval_map`` are accepted but silently ignored (no weight-space
-        hyperprior; MAP selection is available via eval_test_data).
+        Args:
+            x_train: numpy (N, 2, T, d_dim) training inputs (or None if
+                ``data_loader`` is provided).
+            y_train: numpy (N,) training labels.
+            data_loader: optional DataLoader (used instead of x_train/y_train).
+            num_samples: number of posterior weight samples to collect.
+                Pass ``None`` for burn-in only (no weights collected).
+            keep_every: collect one sample every this many post-burn-in steps
+                (ignored when use_cyclical_lr=True).
+            n_discarded: discard the first n_discarded samples after burn-in.
+            num_burn_in_steps: number of AdaptiveSGHMC burn-in steps.
+            lr: base learning rate (also lr_min when use_cyclical_lr=True).
+            batch_size: mini-batch size.
+            epsilon: AdaptiveSGHMC numerical stabiliser.
+            mdecay: momentum decay coefficient.
+            print_every_n_samples: (accepted, currently informational only).
+            continue_training: if True, skip sampler re-initialisation.
+            clear_sampled_weights: if True (default), clear sampled_weights
+                before starting.
+            use_cyclical_lr: enable cosine cyclical step-size schedule.
+            lr_max: peak learning rate for the cyclical schedule.
+            cycle_length: number of steps per cycle.
+            fraction_cool: (unused; kept for signature compatibility).
+            max_param_step: optional per-element momentum clamp.
+            log_every: if > 0 and ``eval_data`` is provided, evaluate NLL and
+                accuracy every this many steps and log to stdout + wandb.
+                Intended for warm-up monitoring (uses current weights, not
+                posterior predictive, since no samples exist during burn-in).
+            eval_data: optional ``(X_eval, y_eval)`` numpy tuple used for
+                periodic evaluation when ``log_every`` > 0.
         """
         # ---- Data loader ------------------------------------------------
         if data_loader is not None:
@@ -621,6 +623,24 @@ class FPrefNet:
             self.sampler.step()
             self.step += 1
 
+            # ---- Periodic evaluation (warm-up monitoring) ---------------
+            if log_every > 0 and eval_data is not None and (step + 1) % log_every == 0:
+                _nll, _acc = self._eval_current_weights(eval_data[0], eval_data[1])
+                self.print_info(
+                    f"[{self.name}] step {step + 1:5d}  "
+                    f"warmup/nll={_nll:.4f}  warmup/acc={_acc:.4f}"
+                )
+                try:
+                    import wandb as _wandb
+                    if _wandb.run is not None:
+                        _wandb.log({
+                            "warmup/nll": _nll,
+                            "warmup/acc": _acc,
+                            "warmup/step": step + 1,
+                        })
+                except Exception:
+                    pass
+
             # ---- Sample collection (cyclical or fixed-interval) ----------
             if use_cyclical_lr and step >= num_burn_in_steps:
                 _post_burn = step - num_burn_in_steps
@@ -659,8 +679,6 @@ class FPrefNet:
         epsilon=1e-10,
         mdecay=0.05,
         print_every_n_samples=10,
-        resample_prior_every=1000,
-        eval_map=False,
         seed=1,
         initial_weights=None,
         use_cyclical_lr=False,
@@ -709,8 +727,6 @@ class FPrefNet:
             print_every_n_samples=print_every_n_samples,
             continue_training=False,
             clear_sampled_weights=True,
-            resample_prior_every=resample_prior_every,
-            eval_map=eval_map,
             use_cyclical_lr=use_cyclical_lr,
             lr_max=lr_max,
             cycle_length=cycle_length,
