@@ -1,5 +1,5 @@
 project: BB-training
-program: bb_optim_f.py
+program: run_bnn_training_f.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
