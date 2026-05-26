@@ -221,14 +221,15 @@ def train(config: TrainConfig):
     # Build the GP functional prior (LCFModel + selected source function)
     # ------------------------------------------------------------------ #
     # p_covariance = gp_cov_scale * I_{n_concepts} — isotropic GP weight prior.
-    # p_mean = None → zero-mean GP (LCFModel default).
+    # p_mean = ones(n_concepts) — unit prior mean on reward-function coefficients.
     # gp_prior_args must survive pickle across mp.spawn:
     #   numpy arrays are picklable; function_vect is a module-level fn.
     p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
+    p_mean = np.ones(n_concepts, dtype=np.float32)
     gp_prior_args = {
         "p_covariance": p_covariance,
         "function_vect": function_vect,
-        "p_mean": None,
+        "p_mean": p_mean,
     }
 
     meas_kwargs = {
@@ -244,7 +245,7 @@ def train(config: TrainConfig):
         p_covariance=p_covariance,
         function_vect=function_vect,
         device=device,
-        p_mean=None,
+        p_mean=p_mean,
     ).to(device)
 
     # ------------------------------------------------------------------ #
