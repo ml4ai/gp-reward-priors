@@ -122,6 +122,11 @@ def train(config: TrainConfig):
         id=str(uuid.uuid4()),
         save_code=True,
     )
+
+    if config.OUT_DIR is not None:
+        with open(os.path.join(config.OUT_DIR, "config.yaml"), "w") as f:
+            pyrallis.dump(config, f)
+
     util.set_seed(config.seed)
 
     width = config.width
