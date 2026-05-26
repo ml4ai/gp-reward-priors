@@ -45,10 +45,13 @@ class MRTrainer:
         # Run both trajectory segments in a single forward pass by doubling the
         # batch dimension, then split the result. This halves dispatch overhead
         # and gives the GPU a larger matrix multiply to work with.
-        X_batch = torch.cat([
-            torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
-            torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
-        ], dim=0)  # (2*B*T, s_dim+a_dim)
+        X_batch = torch.cat(
+            [
+                torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+                torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
+            ],
+            dim=0,
+        )  # (2*B*T, s_dim+a_dim)
         pred = self.net(X_batch)  # (2*B*T, 1)
         pred_1 = pred[: B * T].reshape(B, T) * attn_mask
         pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
@@ -93,10 +96,15 @@ class MRTrainer:
 
             B, T, s_dim = states.size()
             _, _, a_dim = actions.size()
-            X_batch = torch.cat([
-                torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
-                torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
-            ], dim=0)  # (2*B*T, s_dim+a_dim)
+            X_batch = torch.cat(
+                [
+                    torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+                    torch.cat([states_2, actions_2], dim=-1).reshape(
+                        B * T, s_dim + a_dim
+                    ),
+                ],
+                dim=0,
+            )  # (2*B*T, s_dim+a_dim)
             pred = self.net(X_batch)  # (2*B*T, 1)
             pred_1 = pred[: B * T].reshape(B, T) * attn_mask
             pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
@@ -104,13 +112,7 @@ class MRTrainer:
             sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
             sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
             fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
-            if self.prior is None:
-                loss = self.like(fX_batch, labels)
-            else:
-                loss = (
-                    self.like(fX_batch, labels)
-                    + self.prior(self.net) / self.num_datapoints
-                )
+            loss = self.like(fX_batch, labels)
 
             log_dict["eval_loss"] = loss.item()
             predicted_class = torch.argmax(fX_batch, dim=1)
@@ -188,10 +190,13 @@ class MRTrainerF:
         B, T, s_dim = states.size()
         _, _, a_dim = actions.size()
         # Single forward pass over both trajectory segments.
-        X_batch = torch.cat([
-            torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
-            torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
-        ], dim=0)  # (2*B*T, s_dim+a_dim)
+        X_batch = torch.cat(
+            [
+                torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+                torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
+            ],
+            dim=0,
+        )  # (2*B*T, s_dim+a_dim)
         pred = self.net(X_batch)  # (2*B*T, 1)
         pred_1 = pred[: B * T].reshape(B, T) * attn_mask
         pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
@@ -230,7 +235,14 @@ class MRTrainerF:
         self.opt.step()
 
         with torch.no_grad():
-            log_dict["training_loss"] = loss.item()
+            f_xm = self.net(x_meas_t)
+            prior_val = self.prior.log_prior(
+                x_meas_t, f_xm, aux_X=aux_meas_t, jitter=jitter
+            )
+            # Full potential energy: U(f)/N = CE_loss - log p_GP / N
+            log_dict["training_loss"] = (
+                loss.item() - prior_val.item() / self.num_datapoints
+            )
             predicted_class = torch.argmax(fX_batch, dim=1)
             target_class = torch.argmax(labels, dim=1)
             log_dict["training_acc"] = (
@@ -257,10 +269,15 @@ class MRTrainerF:
 
             B, T, s_dim = states.size()
             _, _, a_dim = actions.size()
-            X_batch = torch.cat([
-                torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
-                torch.cat([states_2, actions_2], dim=-1).reshape(B * T, s_dim + a_dim),
-            ], dim=0)  # (2*B*T, s_dim+a_dim)
+            X_batch = torch.cat(
+                [
+                    torch.cat([states, actions], dim=-1).reshape(B * T, s_dim + a_dim),
+                    torch.cat([states_2, actions_2], dim=-1).reshape(
+                        B * T, s_dim + a_dim
+                    ),
+                ],
+                dim=0,
+            )  # (2*B*T, s_dim+a_dim)
             pred = self.net(X_batch)  # (2*B*T, 1)
             pred_1 = pred[: B * T].reshape(B, T) * attn_mask
             pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
