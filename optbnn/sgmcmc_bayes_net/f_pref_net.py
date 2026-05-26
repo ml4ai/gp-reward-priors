@@ -393,7 +393,7 @@ class FPrefNet:
             x2_t = torch.from_numpy(x_2).to(self.device)
             am1_t = torch.from_numpy(am_1).to(self.device)
             am2_t = torch.from_numpy(am_2).to(self.device)
-            y_t = torch.from_numpy(y.reshape(-1).astype(np.float32)).to(self.device)
+            y_t = torch.from_numpy(y.squeeze().astype(np.float32)).to(self.device)
 
             pred_both = self.net(torch.cat([x1_t, x2_t], dim=0)).view(2, B, T)
             pred_1 = pred_both[0] * am1_t
