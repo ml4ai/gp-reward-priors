@@ -105,7 +105,7 @@ class TrainConfig:
     # 0 = disabled.  Set to e.g. 100 to get a live convergence curve during
     # burn-in.  Evaluation uses a random 512-pair subsample of the training set
     # (the only data available when there is no held-out split).
-    warmup_log_every: int = 0
+    warmup_log_every: int = 100
     # general params
     seed: int = 1
     OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_full_training_f"
