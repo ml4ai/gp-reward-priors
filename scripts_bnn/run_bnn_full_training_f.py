@@ -227,7 +227,10 @@ def train(config: TrainConfig):
     # gp_prior_args must survive pickle across mp.spawn:
     #   numpy arrays are picklable; function_vect is a module-level fn.
     p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
+    # First feature is the intercept (when present) — no prior bias on its sign.
+    # All other coefficients default to 1 (positive weights on reward-relevant features).
     p_mean = np.ones(n_concepts, dtype=np.float32)
+    p_mean[0] = 0.0
     gp_prior_args = {
         "p_covariance": p_covariance,
         "function_vect": function_vect,
