@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 # These functions represent prior reward functions decomposed into a vector reward functions
 # They take an input array (and optionally an auxiliary array)
@@ -11,7 +11,7 @@ import numpy as np
 # X, the set of state-action pairs is not actually considered here. This reward
 # function is based on the next state only. But we keep X to conform with how the
 # LCFmodel class works
-def pen_task_reward_prior(X, aux_X,device):
+def pen_task_reward_prior(X, aux_X, device):
     if isinstance(aux_X, np.ndarray):
         aux_X = torch.from_numpy(aux_X).to(device)
 
@@ -29,12 +29,20 @@ def pen_task_reward_prior(X, aux_X,device):
     dropped = (aux_X[:, 26] < 0.075).double()
 
     return torch.stack(
-        [intercept, -1.0*goal_distance, orien_similarity, 10.0*close, 50.0*closer, -5*dropped], dim=1
+        [
+            intercept,
+            -1.0 * goal_distance,
+            orien_similarity,
+            10.0 * close,
+            50.0 * closer,
+            -5 * dropped,
+        ],
+        dim=1,
     ).double()
 
 
 # Same as above, no intercept
-def pen_task_reward_prior_no_intercept(X, aux_X,device):
+def pen_task_reward_prior_no_intercept(X, aux_X, device):
     if isinstance(aux_X, np.ndarray):
         aux_X = torch.from_numpy(aux_X).to(device)
 
@@ -55,7 +63,7 @@ def pen_task_reward_prior_no_intercept(X, aux_X,device):
 
 
 # BB reward function. Again, just aux_X is used here. Assumes the state contains 6 closest obstacles
-def bb_reward_prior(X, aux_X,device):
+def bb_reward_prior(X, aux_X, device):
     if isinstance(aux_X, np.ndarray):
         aux_X = torch.from_numpy(aux_X).to(device)
 
@@ -69,25 +77,21 @@ def bb_reward_prior(X, aux_X,device):
         (aux_X[:, 2] - aux_X[:, 0]) ** 2 + (aux_X[:, 3] - aux_X[:, 1]) ** 2
     ).double()
 
-    return torch.stack(
-        [intercept, -goal_distance, min_obs_dist], dim=1
-    ).double()
+    return torch.stack([intercept, -1.0 * goal_distance, min_obs_dist], dim=1).double()
 
-# antmaze reward function. This combines the sparse and dense reward with a intercept. 
+
+# antmaze reward function. This combines the sparse and dense reward with a intercept.
 # The sparse reward is a binary 1 or 0 depending on if the ants xy-position has a euclidean distance less than or
-# equal to 0.5 from the goal. The dense reward is the negative euclidean distance from the goal. 
-# Overall this function only uses aux_X but keeps X to conform with standards set by other classes. 
-def antmaze_task_reward_prior(X, aux_X,device):
+# equal to 0.5 from the goal. The dense reward is the negative euclidean distance from the goal.
+# Overall this function only uses aux_X but keeps X to conform with standards set by other classes.
+def antmaze_task_reward_prior(X, aux_X, device):
     if isinstance(aux_X, np.ndarray):
         aux_X = torch.from_numpy(aux_X).to(device)
 
     intercept = torch.ones(aux_X.size(0)).double().to(device)
-    
-    
+
     goal_distance = torch.linalg.norm(aux_X[:, 0:2] - aux_X[:, 2:], dim=1).double()
 
     reached_goal = (goal_distance <= 0.5).double()
 
-    return torch.stack(
-        [intercept, -1.0*goal_distance, reached_goal], dim=1
-    ).double()
+    return torch.stack([intercept, -1.0 * goal_distance, reached_goal], dim=1).double()
