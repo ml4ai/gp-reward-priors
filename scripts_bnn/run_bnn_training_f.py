@@ -111,15 +111,15 @@ class TrainConfig:
     # 0 = disabled.  Set to e.g. 100 to get a live convergence curve during
     # burn-in.  Evaluation uses a random 512-pair subsample of the test set.
     warmup_log_every: int = 100
-    # Early-stop threshold on warm-up NLL.  After warm-up, NLL is evaluated on
-    # the test set; if it is not strictly below this threshold, parallel chain
-    # sampling is skipped and the run finishes cleanly (no exception raised, so
-    # a wandb sweep records a completed run rather than a crash).  The default
-    # ln(2) ≈ 0.6931 is the random-chance cross-entropy for binary preferences:
-    # failing to beat it means the model has not learned to discriminate, and
-    # the chains (same posterior, same start) are very unlikely to recover.
-    # Set to None to disable the check.
-    early_stop_nll_threshold: Optional[float] = math.log(2)
+    # Early-stop threshold on warm-up preference accuracy.  After warm-up,
+    # accuracy is evaluated on the test set; if it is below this threshold,
+    # parallel chain sampling is skipped and the run finishes cleanly (no
+    # exception raised, so a wandb sweep records a completed run rather than a
+    # crash).  Accuracy is used rather than NLL because the trajectory-sum
+    # Bradley-Terry logit saturates the softmax, inflating NLL well above ln(2)
+    # even for an accurate model — accuracy is the directly meaningful signal.
+    # 0.5 is random chance for binary preferences.  Set to None to disable.
+    early_stop_acc_threshold: Optional[float] = 0.6
     # general params
     seed: int = 1
     OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_training_f"
@@ -352,14 +352,14 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Early-stop check — skip chain sampling if warm-up NLL is too high
+    # Early-stop check — skip chain sampling if warm-up accuracy is too low
     # ------------------------------------------------------------------ #
     warmup_final_nll, warmup_final_acc = bayes_net_f._eval_current_weights(
         X_test, y_test
     )
     print(
         f"[warm-up] final NLL = {warmup_final_nll:.4f}, "
-        f"acc = {warmup_final_acc:.4f}  (random-chance NLL = {math.log(2):.4f})"
+        f"acc = {warmup_final_acc:.4f}  (random-chance acc = 0.5)"
     )
     wandb.log(
         {
@@ -368,12 +368,12 @@ def train(config: TrainConfig):
         }
     )
     if (
-        config.early_stop_nll_threshold is not None
-        and warmup_final_nll >= config.early_stop_nll_threshold
+        config.early_stop_acc_threshold is not None
+        and warmup_final_acc < config.early_stop_acc_threshold
     ):
         print(
-            f"[early-stop] warm-up NLL {warmup_final_nll:.4f} did not fall below "
-            f"threshold {config.early_stop_nll_threshold:.4f}.  "
+            f"[early-stop] warm-up accuracy {warmup_final_acc:.4f} is below "
+            f"threshold {config.early_stop_acc_threshold:.4f}.  "
             "Skipping parallel chain sampling and finishing run cleanly."
         )
         wandb.log({"early_stopped": 1})
