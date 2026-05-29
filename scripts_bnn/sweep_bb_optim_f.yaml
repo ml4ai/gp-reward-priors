@@ -14,4 +14,4 @@ parameters:
   gp_cov_scale:
     value: 1000.0
   n_meas:
-    values: [16, 32]
+    value: 0
