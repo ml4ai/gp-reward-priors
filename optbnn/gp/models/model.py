@@ -264,23 +264,75 @@ class LCFModel(torch.nn.Module):
             return self.function_vect(X, aux_X, self.device)
         return self.function_vect(X, self.device)
 
+    def _woodbury_solve(self, Phi, residual, jitter=1e-6):
+        """
+        Solve α = (K + εI)^{-1} residual for the degenerate kernel
+        K = Φ Σ Φ^T, and return the regularised log-determinant log|K + εI|.
+
+        K has rank ≤ d = n_concepts, so for n_M > d it is singular and a direct
+        (n_M, n_M) Cholesky is numerically fragile — its trailing pivots rest
+        entirely on the nugget and go negative once the feature scale grows.
+        The Woodbury identity reduces the problem to an exact, well-conditioned
+        (d, d) solve:
+
+            (εI + ΦΣΦ^T)^{-1} = (1/ε)I - (1/ε^2) Φ (Σ^{-1} + (1/ε)Φ^TΦ)^{-1} Φ^T
+
+        The nugget ε is scaled relative to the mean magnitude of diag(K)
+        (= trace(Σ Φ^TΦ) / n_M), so it stays an effective regulariser for any
+        feature scale without retuning.  This is the standard "GP + nugget":
+        k_eff(x, x') = Φ(x)^T Σ Φ(x') + ε·δ(x, x'), still a valid GP.
+
+        Args:
+            Phi: (n_M, d) feature matrix.
+            residual: (n_M,) tensor = f - m.
+            jitter: relative nugget coefficient.
+
+        Returns:
+            alpha:  (n_M,) double tensor = (K + εI)^{-1} residual.
+            logdet: scalar double tensor = log|K + εI|.
+        """
+        Phi = Phi.double()
+        residual = residual.double().view(-1)                # (n_M,)
+        Sigma = self.p_covariance.double()                   # (d, d)
+        n = Phi.shape[0]
+
+        PtP = Phi.T @ Phi                                     # (d, d)
+
+        # Relative nugget: ε = jitter · max(mean(diag K), 1),
+        # where mean(diag K) = trace(Σ Φ^TΦ) / n_M.
+        k_diag_mean = torch.einsum("ij,ij->", Sigma, PtP) / n
+        eps = jitter * torch.clamp(k_diag_mean, min=1.0)
+
+        # (d, d) inner system A = Σ^{-1} + (1/ε) Φ^TΦ  (PD, well-conditioned)
+        Sigma_inv = torch.linalg.inv(Sigma)
+        A = Sigma_inv + PtP / eps
+        LA = torch.linalg.cholesky(A)
+
+        # alpha = (1/ε)[ residual - (1/ε) Φ A^{-1} Φ^T residual ]
+        b = Phi.T @ residual                                 # (d,)
+        z = torch.cholesky_solve(b.unsqueeze(1), LA).squeeze(1)
+        alpha = (residual - (Phi @ z) / eps) / eps           # (n_M,)
+
+        # Matrix determinant lemma:
+        #   log|εI + ΦΣΦ^T| = log|A| + log|Σ| + n_M·log ε
+        logdet_A = 2.0 * torch.log(torch.diagonal(LA)).sum()
+        _, logdet_Sigma = torch.linalg.slogdet(Sigma)
+        logdet = logdet_A + logdet_Sigma + n * torch.log(eps)
+        return alpha, logdet
+
     def _alpha_from_phi(self, Phi, f, jitter=1e-6):
         """
-        Given the pre-computed feature matrix Phi (n, d) and function values f
-        (n,) or (n, 1), compute α = K^{-1}(f - m) via a Cholesky solve.
+        Given the feature matrix Phi (n, d) and function values f (n,) or
+        (n, 1), compute α = (K + εI)^{-1}(f - m) where K = Φ Σ Φ^T.
 
-        This avoids calling function_vect a second time when both Phi and α are
-        needed in the same operation (e.g. functional_prior_grad).
-
-        Returns a (n,) double tensor.
+        Delegates to _woodbury_solve so the degenerate (rank ≤ d) kernel is
+        solved in the d-dimensional weight space rather than by an (n, n)
+        Cholesky.  Returns a (n,) double tensor.
         """
-        Sigma = self.p_covariance.double()
+        Phi = Phi.double()
         m = torch.mv(Phi, self.p_mean.double())              # (n,)
-        K = torch.mm(torch.mm(Phi, Sigma), Phi.T)           # (n, n)
-        K.diagonal().add_(jitter)                            # regularise in-place
-        L = torch.linalg.cholesky(K)                        # lower-triangular factor
         residual = f.double().view(-1) - m                   # (n,)
-        alpha = torch.cholesky_solve(residual.unsqueeze(1), L).squeeze(1)  # (n,)
+        alpha, _ = self._woodbury_solve(Phi, residual, jitter)
         return alpha
 
     # ------------------------------------------------------------------
@@ -378,19 +430,14 @@ class LCFModel(torch.nn.Module):
         Returns:
             Scalar double tensor — the log-density value.
         """
-        Phi = self._feature_matrix(X_M, aux_X)
-        Sigma = self.p_covariance.double()
+        Phi = self._feature_matrix(X_M, aux_X).double()
         m = torch.mv(Phi, self.p_mean.double())
-        K = torch.mm(torch.mm(Phi, Sigma), Phi.T)
-        K.diagonal().add_(jitter)
-        L = torch.linalg.cholesky(K)
         residual = f_XM.double().view(-1) - m                         # (n,)
-        alpha = torch.cholesky_solve(residual.unsqueeze(1), L).squeeze(1)
+        alpha, logdet = self._woodbury_solve(Phi, residual, jitter)
         n = residual.size(0)
-        log_det = L.diagonal().log().sum()                            # log|L| = 1/2 log|K|
         return (
             -0.5 * (residual @ alpha)
-            - log_det
+            - 0.5 * logdet
             - 0.5 * n * torch.log(torch.tensor(2.0 * np.pi, dtype=torch.float64))
         )
 
