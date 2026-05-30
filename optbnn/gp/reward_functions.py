@@ -84,6 +84,10 @@ def bb_reward_prior(X, aux_X, device):
     c_min_obs_dist = torch.sqrt(
         (X[:, 2] - X[:, 0]) ** 2 + (X[:, 3] - X[:, 1]) ** 2
     ).double()
+    # Guard the ratio denominator away from zero so the feature can never
+    # produce inf/nan: a single inf makes the GP covariance undefined and the
+    # downstream solve fail.  The floor is small relative to typical distances.
+    c_min_obs_dist = c_min_obs_dist.clamp(min=1e-3)
 
     # +1 when within 1.3 of the goal, 0 otherwise
     near_goal = (goal_distance <= 1.3).double()
