@@ -77,7 +77,16 @@ def bb_reward_prior(X, aux_X, device):
         (aux_X[:, 2] - aux_X[:, 0]) ** 2 + (aux_X[:, 3] - aux_X[:, 1]) ** 2
     ).double()
 
-    return torch.stack([intercept, -1.0 * goal_distance, min_obs_dist], dim=1).double()
+    # +1 when within 1.3 of the goal, 0 otherwise
+    near_goal = (goal_distance <= 1.3).double()
+
+    # -1 when within 0.6 of the nearest obstacle, 0 otherwise
+    near_obstacle = -1.0 * (min_obs_dist <= 0.6).double()
+
+    return torch.stack(
+        [intercept, -1.0 * goal_distance, min_obs_dist, near_goal, near_obstacle],
+        dim=1,
+    ).double()
 
 
 # antmaze reward function. This combines the sparse and dense reward with a intercept.
