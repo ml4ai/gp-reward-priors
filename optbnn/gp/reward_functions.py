@@ -73,8 +73,16 @@ def bb_reward_prior(X, aux_X, device):
         (aux_X[:, 20] - aux_X[:, 0]) ** 2 + (aux_X[:, 21] - aux_X[:, 1]) ** 2
     ).double()
 
+    c_goal_distance = torch.sqrt(
+        (X[:, 20] - X[:, 0]) ** 2 + (X[:, 21] - X[:, 1]) ** 2
+    ).double()
+
     min_obs_dist = torch.sqrt(
         (aux_X[:, 2] - aux_X[:, 0]) ** 2 + (aux_X[:, 3] - aux_X[:, 1]) ** 2
+    ).double()
+
+    c_min_obs_dist = torch.sqrt(
+        (X[:, 2] - X[:, 0]) ** 2 + (X[:, 3] - X[:, 1]) ** 2
     ).double()
 
     # +1 when within 1.3 of the goal, 0 otherwise
@@ -84,7 +92,13 @@ def bb_reward_prior(X, aux_X, device):
     near_obstacle = -1.0 * (min_obs_dist <= 0.6).double()
 
     return torch.stack(
-        [intercept, -1.0 * goal_distance, min_obs_dist, near_goal, near_obstacle],
+        [
+            intercept,
+            c_goal_distance - goal_distance,
+            min_obs_dist / c_min_obs_dist - 1.0,
+            near_goal,
+            near_obstacle,
+        ],
         dim=1,
     ).double()
 
