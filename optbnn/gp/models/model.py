@@ -296,6 +296,14 @@ class LCFModel(torch.nn.Module):
         Sigma = self.p_covariance.double()                   # (d, d)
         n = Phi.shape[0]
 
+        # Empty measurement set (n_M = 0): no points to condition on.  Return an
+        # empty alpha and logdet 0 (= log|·| of the 0×0 identity).  Guards the
+        # relative nugget, which divides trace(K)/n_M and is undefined for n_M=0.
+        if n == 0:
+            alpha = residual.new_zeros(0)
+            logdet = residual.new_zeros(())
+            return alpha, logdet
+
         PtP = Phi.T @ Phi                                     # (d, d)
 
         # Relative nugget: ε = jitter · max(mean(diag K), 1),

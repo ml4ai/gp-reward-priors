@@ -592,31 +592,38 @@ class FPrefNet:
             lik_loss.backward()
 
             # ---- Functional GP prior gradient ---------------------------
-            # Sample n_meas points from the measurement pool
-            meas_idx = np.random.choice(len(self._x_meas), n_meas_actual, replace=False)
-            x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
-            aux_meas_t = (
-                torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
-                if self._aux_meas is not None
-                else None
-            )
+            # n_meas_actual == 0 means no measurement points: the functional GP
+            # prior is dropped entirely and this reduces to pure-likelihood
+            # SGHMC.  Skip the solve (an empty measurement set has no prior
+            # gradient, and the Woodbury nugget is undefined for n_M = 0).
+            if n_meas_actual > 0:
+                # Sample n_meas points from the measurement pool
+                meas_idx = np.random.choice(
+                    len(self._x_meas), n_meas_actual, replace=False
+                )
+                x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
+                aux_meas_t = (
+                    torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
+                    if self._aux_meas is not None
+                    else None
+                )
 
-            # functional_prior_grad returns ∇_w log p_GP = -J_w^T K^{-1}(f-m).
-            # This uses torch.autograd.grad (not .backward()), so it does NOT
-            # touch parameter.grad — we add the result manually below.
-            func_grads = self._gp_prior.functional_prior_grad(
-                self._bare_net,
-                x_meas_t,
-                aux_X=aux_meas_t,
-                jitter=self._meas_jitter,
-            )
+                # functional_prior_grad returns ∇_w log p_GP = -J_w^T K^{-1}(f-m).
+                # This uses torch.autograd.grad (not .backward()), so it does NOT
+                # touch parameter.grad — we add the result manually below.
+                func_grads = self._gp_prior.functional_prior_grad(
+                    self._bare_net,
+                    x_meas_t,
+                    aux_X=aux_meas_t,
+                    jitter=self._meas_jitter,
+                )
 
-            # Add ∇U_prior = -∇_w log p_GP to parameter.grad, scaled by 1/N.
-            # After AdaptiveSGHMC's scale_grad = N multiplication the effective
-            # contribution is O(1) — the same order as the weight-space prior.
-            for param, fg in zip(self._bare_net.parameters(), func_grads):
-                if param.grad is not None:
-                    param.grad.add_(-fg.to(param.grad.dtype) / num_datapoints)
+                # Add ∇U_prior = -∇_w log p_GP to parameter.grad, scaled by 1/N.
+                # After AdaptiveSGHMC's scale_grad = N multiplication the effective
+                # contribution is O(1) — the same order as the weight-space prior.
+                for param, fg in zip(self._bare_net.parameters(), func_grads):
+                    if param.grad is not None:
+                        param.grad.add_(-fg.to(param.grad.dtype) / num_datapoints)
 
             # ---- Clip and step ------------------------------------------
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), 100.0)
