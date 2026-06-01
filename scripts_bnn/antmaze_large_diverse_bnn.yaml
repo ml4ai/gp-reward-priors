@@ -1,0 +1,56 @@
+project: antmaze-training
+group: antmaze
+name: antmaze_large_diverse
+
+# --- Model architecture ---
+width: 6                 # log2 exponent; actual width = 2**width (6 → 64)
+depth: 3
+
+# --- Sampling budget ---
+num_chains: 4
+num_samples: 50          # samples per chain; one per cycle with cyclical lr
+n_discarded: 5           # discard first N cycles as extra post-burn-in warm-up
+num_burn_in_steps: 3000  # steps for preconditioner adaptation (shared warm-up
+                         # + per-chain burn-in each run this many steps)
+
+# --- SGHMC core hyperparameters ---
+sghmc_lr: 0.003          # cool-phase (sampling) step size; tuned empirically
+mdecay: 0.01             # low friction → long momentum → better barrier crossing
+                         # in hot phase; 1/mdecay ≈ 100-step decorrelation length
+batch_size: 32
+max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
+n_meas: 8
+meas_jitter: .000001
+gp_cov_scale: 1.0
+reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
+n_concepts: null         # GP feature dim; null = infer from reward_function
+
+# --- Cyclical step-size schedule (Zhang et al. 2020) ---
+# Hot phase (lr_max → sghmc_lr, cosine): momentum zeroed at onset so the
+# chain escapes the current basin.  Cool phase (near sghmc_lr): one sample
+# collected at the final step.  The adaptive preconditioner is frozen after
+# burn-in, so only lr cycles.
+use_cyclical_lr: true
+sghmc_lr_max: 0.03       # hot-phase peak lr (~10× sghmc_lr)
+cycle_length: 1000       # total steps per cycle (hot + cool)
+fraction_cool: 0.25      # 250 cool steps / 750 hot steps per cycle
+
+# keep_every is used only when use_cyclical_lr: false
+keep_every: 1000
+
+# --- Data ---
+dataset: data/antmaze/antmaze-large-diverse-v2_pref_nt.hdf5
+dataset_id: D4RL_antmaze-large-diverse-v2
+training_split: 0.8      # 1.0 = full dataset, in-sample metrics (train_*)
+label_flip: 0.0          # fraction of TRAINING labels to flip (test stays clean)
+data_reduction: 0.0      # fraction of TRAINING pairs to discard (test unaffected)
+measurement_dataset: data/antmaze/antmaze-large-diverse-v2_tuning_set.hdf5
+
+# --- Warm-up monitoring / early stop ---
+warmup_log_every: 100        # eval NLL+acc every N burn-in steps (0 = disabled)
+early_stop_acc_threshold: 0.98  # skip chains if warm-up acc below this (null = off)
+
+# --- Misc ---
+print_every_n_samples: 10
+seed: 0
+OUT_DIR: ./exp/reward_learning/antmaze_large_diverse_bnn
