@@ -1,10 +1,10 @@
 project: BB-training
-program: run_bnn_training_f.py
+program: run_bnn_training.py
 method: grid
 parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
-    value: "scripts_bnn/bb_optim_f.yaml"
+    value: "scripts_bnn/bb_bnn.yaml"
   dataset: 
     value: "data/bb/t0012_pref.hdf5"
   # width is a log2 exponent: actual width = 2**width (8→256 ... 11→2048)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""run_bnn_training_f.py — domain-agnostic scale-adapted cyclical fSGHMC.
+"""run_bnn_training.py — domain-agnostic scale-adapted cyclical fSGHMC.
 
 Trains a preference-BNN using FPrefNet (f_pref_net.py) with a functional GP
 prior built from LCFModel and any source function in optbnn/gp/reward_functions.py.
@@ -147,7 +147,7 @@ class TrainConfig:
     early_stop_acc_threshold: Optional[float] = 0.6
     # general params
     seed: int = 1
-    OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_training_f"
+    OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_training"
 
     def __post_init__(self):
         # width is given as a log2 exponent so WandB Bayesian sweeps can range
@@ -165,7 +165,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         project=config.project,
         group=config.group,
-        name=f"{config.name}_bnn_training_f",
+        name=f"{config.name}_bnn_training",
         id=str(uuid.uuid4()),
         save_code=True,
     )

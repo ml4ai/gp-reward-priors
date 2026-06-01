@@ -53,4 +53,4 @@ early_stop_acc_threshold: 0.98  # skip chains if warm-up acc below this (null = 
 # --- Misc ---
 print_every_n_samples: 10
 seed: 0
-OUT_DIR: ./exp/reward_learning/bb_optim_f
+OUT_DIR: ./exp/reward_learning/bb_bnn
