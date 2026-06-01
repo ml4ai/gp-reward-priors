@@ -7,8 +7,9 @@ parameters:
     value: "scripts_bnn/bb_optim_f.yaml"
   dataset: 
     value: "data/bb/t0012_pref.hdf5"
+  # width is a log2 exponent: actual width = 2**width (8→256 ... 11→2048)
   width:
-    values: [256, 512, 1024, 2048]
+    values: [8, 9, 10, 11]
   depth:
     values: [5, 6, 7, 8]
   gp_cov_scale:

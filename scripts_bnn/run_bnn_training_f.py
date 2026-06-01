@@ -76,7 +76,7 @@ class TrainConfig:
     group: str = "fSGHMC"
     name: str = "run"
     # model params
-    width: int = 64
+    width: int = 6  # log2 exponent; actual width = 2**width (e.g. 6 → 64)
     depth: int = 3
     # SGHMC Hyper-parameters
     batch_size: int = 256
@@ -150,6 +150,9 @@ class TrainConfig:
     OUT_DIR: Optional[str] = "./exp/reward_learning/bnn_training_f"
 
     def __post_init__(self):
+        # width is given as a log2 exponent so WandB Bayesian sweeps can range
+        # over a small contiguous integer space; convert to the actual width.
+        self.width = 2 ** self.width
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
             self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
