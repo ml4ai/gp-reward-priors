@@ -28,7 +28,7 @@ class TrainConfig:
     group: str = "PT"
     name: str = "pt"
     # model params
-    embd_dim: int = 256
+    embd_dim: int = 8  # log2 exponent; actual embd_dim = 2**embd_dim (e.g. 8 → 256)
     pref_attn_embd_dim: Optional[int] = None
     num_heads: int = 4
     attn_dropout: float = 0.1
@@ -59,6 +59,7 @@ class TrainConfig:
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
 
     def __post_init__(self):
+        self.embd_dim = 2 ** self.embd_dim
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
             self.checkpoints_path = os.path.join(

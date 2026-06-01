@@ -28,7 +28,7 @@ class TrainConfig:
     group: str = "MR"
     name: str = "mr"
     # model params
-    width: int = 64
+    width: int = 6  # log2 exponent; actual width = 2**width (e.g. 6 → 64)
     depth: int = 3
     activations: str = "relu"
     # training params
@@ -51,6 +51,7 @@ class TrainConfig:
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
 
     def __post_init__(self):
+        self.width = 2 ** self.width
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
             self.checkpoints_path = os.path.join(
