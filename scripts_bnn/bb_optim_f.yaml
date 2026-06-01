@@ -2,6 +2,10 @@ project: BB-training
 group: BB
 name: bb
 
+# --- Model architecture ---
+width: 6                 # log2 exponent; actual width = 2**width (6 → 64)
+depth: 3
+
 # --- Sampling budget ---
 num_chains: 4
 num_samples: 50          # samples per chain; one per cycle with cyclical lr
@@ -14,9 +18,12 @@ sghmc_lr: 0.003          # cool-phase (sampling) step size; tuned empirically
 mdecay: 0.01             # low friction → long momentum → better barrier crossing
                          # in hot phase; 1/mdecay ≈ 100-step decorrelation length
 batch_size: 256
+max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
 n_meas: 256
 meas_jitter: .000001
 gp_cov_scale: 1.0
+reward_function: bb_reward_prior  # source fn in optbnn/gp/reward_functions.py
+n_concepts: null         # GP feature dim; null = infer from reward_function
 
 # --- Cyclical step-size schedule (Zhang et al. 2020) ---
 # Hot phase (lr_max → sghmc_lr, cosine): momentum zeroed at onset so the
@@ -34,8 +41,14 @@ keep_every: 1000
 # --- Data ---
 dataset: data/bb/t0012_pref.hdf5
 dataset_id: bb_t0012
-training_split: 0.8
+training_split: 0.8      # 1.0 = full dataset, in-sample metrics (train_*)
+label_flip: 0.0          # fraction of TRAINING labels to flip (test stays clean)
+data_reduction: 0.0      # fraction of TRAINING pairs to discard (test unaffected)
 measurement_dataset: data/bb/bbway_tuning_set.hdf5
+
+# --- Warm-up monitoring / early stop ---
+warmup_log_every: 100        # eval NLL+acc every N burn-in steps (0 = disabled)
+early_stop_acc_threshold: 0.6  # skip chains if warm-up acc below this (null = off)
 
 # --- Misc ---
 print_every_n_samples: 10
