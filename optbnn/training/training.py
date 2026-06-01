@@ -1,8 +1,7 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import torch
 import torch.nn as nn
-from optbnn.bnn.priors import PriorModule
 from optbnn.gp.models.model import LCFModel
 
 TensorBatch = List[torch.Tensor]
@@ -14,12 +13,10 @@ class MRTrainer:
         net: nn.Module,
         opt: torch.optim.Optimizer,
         num_datapoints: int,
-        prior: Optional[PriorModule] = None,
         device: str = "cpu",
     ):
         self.net = net
         self.opt = opt
-        self.prior = prior
         self.device = device
         self.like = torch.nn.CrossEntropyLoss(reduction="mean")
         self.num_datapoints = num_datapoints
@@ -59,12 +56,7 @@ class MRTrainer:
         sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
         sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
         fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
-        if self.prior is None:
-            loss = self.like(fX_batch, labels)
-        else:
-            loss = (
-                self.like(fX_batch, labels) + self.prior(self.net) / self.num_datapoints
-            )
+        loss = self.like(fX_batch, labels)
         self.opt.zero_grad(set_to_none=True)
         loss.backward()
         self.opt.step()

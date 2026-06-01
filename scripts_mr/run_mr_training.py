@@ -15,7 +15,6 @@ sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
 
 from optbnn.bnn.nets.mlp import MLP
-from optbnn.bnn.priors import FixedGaussianPrior, OptimGaussianPrior
 from optbnn.training.training import MRTrainer
 from optbnn.utils import util
 
@@ -48,8 +47,6 @@ class TrainConfig:
     # general params
     seed: int = 0
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
-    prior: Optional[str] = None
-    prior_ckpt: int = 1000
 
     def __post_init__(self):
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
@@ -57,12 +54,6 @@ class TrainConfig:
             self.checkpoints_path = os.path.join(
                 osp.expanduser(self.checkpoints_path), self.name
             )
-        if self.prior:
-            if self.prior != "FG":
-                self.prior = os.path.join(
-                    osp.expanduser(self.prior),
-                    f"br-{self.dataset_id[5:-3].replace('-', '_')}-{self.width}-{self.depth}",
-                )
 
 
 @pyrallis.wrap()
@@ -109,22 +100,11 @@ def train(config: TrainConfig):
     ).to(device)
     if config.compile_model:
         net = torch.compile(net)
-    if config.prior:
-        if config.prior == "FG":
-            prior = FixedGaussianPrior(std=1.0).to(device)
-        else:
-            ckpt_path = os.path.join(
-                config.prior, "ckpts", "it-{}.ckpt".format(config.prior_ckpt)
-            )
-            prior = OptimGaussianPrior(ckpt_path).to(device)
-    else:
-        prior = None
     net_optimizer = torch.optim.Adam(net.parameters(), lr=config.lr)
     model = MRTrainer(
         net,
         opt=net_optimizer,
         num_datapoints=len(training_data),
-        prior=prior,
         device=device,
     )
     c_best_epoch = 0
