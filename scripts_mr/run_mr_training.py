@@ -9,7 +9,7 @@ import numpy as np
 import pyrallis
 import torch
 import wandb
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset, random_split
 
 sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
@@ -36,6 +36,7 @@ class TrainConfig:
     dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref.hdf5"
     training_split: float = 0.7
     label_flip: float = 0.0  # fraction of training labels to flip (0 = none, 1 = all)
+    data_reduction: float = 0.0  # fraction of training data to remove after split (0 = none, 1 = all)
     epochs: int = 10
     batch_size: int = 256  # Batch size for all networks
     lr: float = 3e-4
@@ -105,6 +106,20 @@ def train(config: TrainConfig):
                 flip_positions = np.random.choice(len(train_indices), num_to_flip, replace=False)
                 indices_to_flip = train_indices[flip_positions]
                 dataset.labels[indices_to_flip] = 1.0 - dataset.labels[indices_to_flip]
+
+    # Randomly discard data_reduction fraction of training points (test data unaffected).
+    if config.data_reduction > 0.0:
+        if config.data_reduction == 1.0:
+            print("data_reduction=1.0: no training data remains. Exiting.")
+            sys.exit(0)
+        n_train = len(training_data)
+        n_keep = int(n_train * (1.0 - config.data_reduction))
+        keep_positions = np.random.choice(n_train, n_keep, replace=False)
+        if full_training:
+            training_data = Subset(dataset, keep_positions)
+        else:
+            keep_indices = np.array(training_data.indices)[keep_positions]
+            training_data = Subset(dataset, keep_indices)
 
     persistent = config.num_workers > 0
     loader_kwargs = dict(
