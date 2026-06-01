@@ -1,6 +1,7 @@
 project: MR-training
 program: run_mr_training.py
 method: bayes
+run_cap: 40
 metric:
   name: eval_acc_best
   goal: maximize
