@@ -1,9 +1,9 @@
 project: PT-training
 group: PT
 name: pt
-embd_dim: 256
+embd_dim: 8
 pref_attn_embd_dim: null
-num_heads: 4
+num_heads: 5
 attn_dropout: 0.1
 resid_dropout: 0.1
 intermediate_dim: null
@@ -20,6 +20,7 @@ batch_size: 256
 lr: 0.0003
 eval_every: 1
 criteria_key: acc
+compile_model: true
 pin_memory: true
 seed: 0
 checkpoints_path: ./exp/reward_learning/antmaze_large_diverse_pt
