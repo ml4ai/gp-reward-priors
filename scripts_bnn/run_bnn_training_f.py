@@ -18,6 +18,19 @@ Key differences from bb_optim_star.py
 7. ``n_concepts`` (GP feature dimension) is inferred by probing the source
    function on a dummy input, or can be set explicitly in the config.
 
+Train/test split vs. full-dataset training
+------------------------------------------
+``training_split`` controls how the dataset is used:
+
+* ``0 < training_split < 1`` — the data is split; the model is trained on the
+  training partition and all post-sampling metrics (CE, accuracy) are computed
+  on the held-out test partition and logged as ``test_*``.
+* ``training_split == 1.0`` — the *entire* dataset is used for posterior
+  sampling (no held-out split).  Warm-up monitoring, the early-stop check, and
+  post-sampling CE / accuracy are then computed in-sample on the training data
+  and logged as ``train_*``.  R-hat and ESS measure MCMC convergence and are
+  unaffected by the absence of a split.
+
 All SGHMC hyper-parameters, warm-up logic, R-hat / ESS diagnostics, and
 wandb logging are otherwise identical to bb_optim_star.py.
 """
@@ -85,6 +98,10 @@ class TrainConfig:
     # Preference training dataset
     dataset: str = "data/pref.hdf5"
     dataset_id: str = "run"
+    # Fraction of the dataset used for training.  0 < training_split < 1 holds
+    # out the remainder as a test set (metrics logged as test_*).  Set to 1.0 to
+    # train on the FULL dataset with no held-out split — metrics are then
+    # computed in-sample on the training data and logged as train_*.
     training_split: float = 0.8
     # Measurement dataset for the fSGHMC functional GP prior.
     # Must be an HDF5 file with keys:
@@ -165,13 +182,27 @@ def train(config: TrainConfig):
     print(f"[GP prior] reward_function = {config.reward_function!r}")
 
     # ------------------------------------------------------------------ #
-    # Load preference training / test data
+    # Load preference data (optionally split into train / test)
     # ------------------------------------------------------------------ #
-    X_train, y_train, X_test, y_test = util.load_pref_data(
-        config.dataset, config.training_split
-    )
+    # training_split == 1.0 -> load_pref_data returns (X, y) (no split); the full
+    # dataset is used for sampling and all metrics are computed in-sample.
+    full_dataset = config.training_split >= 1.0
+    if full_dataset:
+        X_train, y_train = util.load_pref_data(config.dataset, training_ratio=1.0)
+        # Evaluate in-sample: eval set is the training set itself.
+        X_eval, y_eval = X_train, y_train
+        eval_label = "train"
+        _splits = [("train", X_train, y_train)]
+        print("[data] training_split=1.0 — using FULL dataset (no held-out test set)")
+    else:
+        X_train, y_train, X_test, y_test = util.load_pref_data(
+            config.dataset, config.training_split
+        )
+        X_eval, y_eval = X_test, y_test
+        eval_label = "test"
+        _splits = [("train", X_train, y_train), ("test", X_test, y_test)]
 
-    for _split, _X, _y in [("train", X_train, y_train), ("test", X_test, y_test)]:
+    for _split, _X, _y in _splits:
         _n_nan_X = int(np.isnan(_X).sum())
         _n_inf_X = int(np.isinf(_X).sum())
         _n_nan_y = int(np.isnan(_y).sum())
@@ -303,8 +334,9 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     # Warm-up runs fSGHMC so the starting point already reflects the GP prior.
     # When warmup_log_every > 0, NLL and accuracy are evaluated every
-    # warmup_log_every steps on a 512-pair subsample of the test set and
-    # logged to stdout + wandb under the "warmup/" prefix.
+    # warmup_log_every steps on a 512-pair subsample of the eval set (test set,
+    # or the training set when training_split=1.0) and logged to stdout + wandb
+    # under the "warmup/" prefix.
     util.set_seed(config.seed)
     bayes_net_f.train(
         X_train,
@@ -316,7 +348,7 @@ def train(config: TrainConfig):
         batch_size=config.batch_size,
         max_param_step=config.max_param_step,
         log_every=config.warmup_log_every,
-        eval_data=(X_test, y_test) if config.warmup_log_every > 0 else None,
+        eval_data=(X_eval, y_eval) if config.warmup_log_every > 0 else None,
     )
 
     # Sanity-check warm-up weight magnitudes
@@ -355,7 +387,7 @@ def train(config: TrainConfig):
     # Early-stop check — skip chain sampling if warm-up accuracy is too low
     # ------------------------------------------------------------------ #
     warmup_final_nll, warmup_final_acc = bayes_net_f._eval_current_weights(
-        X_test, y_test
+        X_eval, y_eval
     )
     print(
         f"[warm-up] final NLL = {warmup_final_nll:.4f}, "
@@ -411,11 +443,13 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Evaluation — identical to bb_optim_star.py
+    # Evaluation — on the eval set (held-out test set, or the training set
+    # in-sample when training_split=1.0).  R-hat and ESS measure MCMC
+    # convergence and are independent of the train/test distinction.
     # ------------------------------------------------------------------ #
-    _B_rhat = min(64, X_test.shape[0])
-    _obs_dim = X_test.shape[-1] - 1
-    x_rhat = X_test[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+    _B_rhat = min(64, X_eval.shape[0])
+    _obs_dim = X_eval.shape[-1] - 1
+    x_rhat = X_eval[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
     x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
 
     mean_ce = []
@@ -455,7 +489,7 @@ def train(config: TrainConfig):
                 )
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
 
-        ce, acc = bayes_net_f.eval_test_data(X_test, y_test, eval_batch_size=4096)
+        ce, acc = bayes_net_f.eval_test_data(X_eval, y_eval, eval_batch_size=4096)
         mean_ce.append(ce)
         mean_acc.append(acc)
 
@@ -500,8 +534,8 @@ def train(config: TrainConfig):
         return float(np.mean(valid > threshold) * 100)
 
     summary = {
-        "test_mean_cross_entropy": np.mean(mean_ce),
-        "test_mean_accuracy": np.mean(mean_acc),
+        f"{eval_label}_mean_cross_entropy": np.mean(mean_ce),
+        f"{eval_label}_mean_accuracy": np.mean(mean_acc),
         "pred_within_chain_var": pred_within_chain_var,
         "param_within_chain_var": param_within_chain_var,
         "pred_rhat_max": float(np.nanmax(rhats_pred)),
