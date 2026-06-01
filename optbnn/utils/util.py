@@ -136,7 +136,7 @@ def load_measurement_data(meas_path):
 
 
 class Pref_H5Dataset(Dataset):
-    def __init__(self, datafile, max_episode_length=None, label_flip=0.0):
+    def __init__(self, datafile, max_episode_length=None):
         super(Pref_H5Dataset, self).__init__()
         with h5py.File(datafile, "r") as f:
             if max_episode_length is None:
@@ -157,18 +157,7 @@ class Pref_H5Dataset(Dataset):
             self.actions_2 = f["actions_2"][:].astype(np.float32)
             self.timesteps_2 = f["timesteps_2"][:]
             self.attn_mask_2 = f["attn_mask_2"][:].astype(np.float32)
-            if label_flip == 0.0:
-                self.labels = f["labels"][:].astype(np.float32)
-            else:
-                if label_flip == 1.0:
-                    self.labels = (1 - f["labels"][:]).astype(np.float32)
-                else:
-                    num_to_flip = int(f["labels"].shape[1] * label_flip)
-                    indices_to_flip = np.random.choice(
-                        f["labels"].shape[1], num_to_flip, replace=False
-                    )
-                    self.labels = f["labels"][:].astype(np.float32)
-                    self.labels[indices_to_flip] = 1 - self.labels[indices_to_flip]
+            self.labels = f["labels"][:].astype(np.float32)
 
     def __getitem__(self, index):
         return (

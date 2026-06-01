@@ -43,6 +43,7 @@ class TrainConfig:
     dataset_id: str = "D4RL/pen-v2"
     dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref.hdf5"
     training_split: float = 0.7
+    label_flip: float = 0.0  # fraction of training labels to flip (0 = none, 1 = all)
     epochs: int = 10
     batch_size: int = 256  # Batch size for all networks
     lr: float = 3e-4
@@ -94,6 +95,18 @@ def train(config: TrainConfig):
     training_data, test_data = random_split(
         dataset, [config.training_split, 1 - config.training_split]
     )
+
+    # Apply label flipping to the training split only, so test labels stay clean.
+    # training_data.indices holds the integer positions into the underlying dataset.
+    if config.label_flip > 0.0:
+        train_indices = np.array(training_data.indices)
+        if config.label_flip == 1.0:
+            dataset.labels[train_indices] = 1.0 - dataset.labels[train_indices]
+        else:
+            num_to_flip = int(len(train_indices) * config.label_flip)
+            flip_positions = np.random.choice(len(train_indices), num_to_flip, replace=False)
+            indices_to_flip = train_indices[flip_positions]
+            dataset.labels[indices_to_flip] = 1.0 - dataset.labels[indices_to_flip]
 
     persistent = config.num_workers > 0
     loader_kwargs = dict(
