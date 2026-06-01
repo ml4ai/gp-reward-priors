@@ -1,6 +1,6 @@
-project: antmaze-training
-group: antmaze
-name: antmaze_large_diverse
+project: BNN-training
+group: BNN
+name: bnn
 
 # --- Model architecture ---
 width: 6                 # log2 exponent; actual width = 2**width (6 → 64)
