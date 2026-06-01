@@ -103,6 +103,14 @@ class TrainConfig:
     # train on the FULL dataset with no held-out split — metrics are then
     # computed in-sample on the training data and logged as train_*.
     training_split: float = 0.8
+    # Fraction of TRAINING labels to flip (0 = none, 1 = all).  Applied only to
+    # the training partition so any held-out test labels stay clean.  Flipping a
+    # preference label swaps the two trajectories' win/loss assignment.
+    label_flip: float = 0.0
+    # Fraction of TRAINING pairs to randomly discard after the split (0 = none,
+    # 1 = all).  Test data is unaffected.  data_reduction=1.0 leaves no training
+    # data and the run exits cleanly.
+    data_reduction: float = 0.0
     # Measurement dataset for the fSGHMC functional GP prior.
     # Must be an HDF5 file with keys:
     #   "obs"     — (N, obs_dim)  required.  BNN inputs (state + action concatenated).
@@ -218,6 +226,47 @@ def train(config: TrainConfig):
                 "Labels must be finite class indices."
             )
         print(f"[data] {_split}: {_X.shape[0]} pairs — all values finite ✓")
+
+    # ------------------------------------------------------------------ #
+    # Label flipping (training data only — any held-out test labels stay clean)
+    # ------------------------------------------------------------------ #
+    # y_train is one-hot (N, 2); flipping a label is 1.0 - y (swaps the columns).
+    if config.label_flip > 0.0:
+        n_train = X_train.shape[0]
+        if config.label_flip >= 1.0:
+            y_train = 1.0 - y_train
+            n_flipped = n_train
+        else:
+            n_flipped = int(n_train * config.label_flip)
+            flip_idx = np.random.choice(n_train, n_flipped, replace=False)
+            y_train[flip_idx] = 1.0 - y_train[flip_idx]
+        print(
+            f"[data] label_flip={config.label_flip}: flipped {n_flipped}/{n_train} "
+            "training labels"
+        )
+
+    # ------------------------------------------------------------------ #
+    # Data reduction (training data only — test data unaffected)
+    # ------------------------------------------------------------------ #
+    if config.data_reduction > 0.0:
+        if config.data_reduction >= 1.0:
+            print("[data] data_reduction=1.0: no training data remains.  Exiting.")
+            wandb.finish()
+            return
+        n_train = X_train.shape[0]
+        n_keep = int(n_train * (1.0 - config.data_reduction))
+        keep_idx = np.random.choice(n_train, n_keep, replace=False)
+        X_train = X_train[keep_idx]
+        y_train = y_train[keep_idx]
+        print(
+            f"[data] data_reduction={config.data_reduction}: kept {n_keep}/{n_train} "
+            "training pairs"
+        )
+
+    # In full-dataset mode the eval set IS the training set, so re-sync it after
+    # any label flipping / reduction (these may rebind or subset y_train/X_train).
+    if full_dataset:
+        X_eval, y_eval = X_train, y_train
 
     # X_train has shape (N, 2, T, d_dim); the last column of d_dim is the
     # attention mask, so obs_dim = state_dim + action_dim = d_dim - 1.
