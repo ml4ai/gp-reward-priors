@@ -2,7 +2,7 @@ project: MR-training
 program: run_mr_training.py
 method: bayes
 metric:
-  name: eval_acc
+  name: eval_acc_best
   goal: maximize
 parameters:
   config_path:
@@ -13,8 +13,8 @@ parameters:
     max: 9   # 2^9 = 512
   depth:
     distribution: int_uniform
-    min: 2
-    max: 4
+    min: 1
+    max: 6
   lr:
     distribution: log_uniform_values
     min: 1e-5
