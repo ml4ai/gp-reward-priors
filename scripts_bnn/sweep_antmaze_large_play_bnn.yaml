@@ -1,0 +1,64 @@
+project: BNN-training
+program: run_bnn_training.py
+method: bayes
+run_cap: 60
+metric:
+  name: warmup_final_acc
+  goal: maximize
+
+parameters:
+  config_path:
+    value: "scripts_bnn/antmaze_large_play_bnn.yaml"
+
+  # ---- Fixed overrides (differ from antmaze_large_play_bnn.yaml defaults) ----
+  # warmup_final_acc is logged from the warm-up phase BEFORE chain sampling, so
+  # force every run to stop right after warm-up: accuracy is always < 1.01, so
+  # this skips the expensive parallel-chain phase entirely (same metric, far
+  # cheaper sweep runs).
+  early_stop_acc_threshold:
+    value: 1.01
+  # The metric is warm-up accuracy; give every run enough burn-in to converge
+  # so configs are compared fairly.  large-play is the smallest set (~290
+  # training pairs at split=0.8), so a few thousand steps is many epochs.
+  num_burn_in_steps:
+    value: 5000
+  # Larger batch -> steadier gradient given the tiny dataset (default was 32).
+  batch_size:
+    value: 64
+  warmup_log_every:
+    value: 250
+
+  # ---- Swept parameters ----
+  # gp_cov_scale is the most consequential knob: antmaze_task_reward_prior's
+  # -goal_dist feature spans 0..-42 (larger in the large maze) while
+  # reached_goal fires only ~9% of the time, so K = ΦΣΦᵀ is dominated by the
+  # distance column.  The prior's effective strength is therefore highly
+  # sensitive to this scale.  Wide log range lets Bayes find where the prior
+  # helps vs. overpowers the likelihood.
+  gp_cov_scale:
+    distribution: log_uniform_values
+    min: 0.01
+    max: 1000.0
+  # n_meas controls functional-prior strength per step.  Includes 0 (prior off)
+  # so the optimizer can learn directly whether the GP prior helps at all.
+  n_meas:
+    distribution: int_uniform
+    min: 0
+    max: 64
+  # width is a log2 exponent: actual width = 2**width (6 -> 64 ... 10 -> 1024).
+  width:
+    distribution: int_uniform
+    min: 6
+    max: 10
+  depth:
+    distribution: int_uniform
+    min: 2
+    max: 6
+  sghmc_lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 1e-2
+  mdecay:
+    distribution: log_uniform_values
+    min: 1e-3
+    max: 1e-1
