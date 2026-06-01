@@ -17,9 +17,9 @@ num_burn_in_steps: 3000  # steps for preconditioner adaptation (shared warm-up
 sghmc_lr: 0.003          # cool-phase (sampling) step size; tuned empirically
 mdecay: 0.01             # low friction → long momentum → better barrier crossing
                          # in hot phase; 1/mdecay ≈ 100-step decorrelation length
-batch_size: 256
+batch_size: 32
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
-n_meas: 256
+n_meas: 8
 meas_jitter: .000001
 gp_cov_scale: 1.0
 reward_function: bb_reward_prior  # source fn in optbnn/gp/reward_functions.py
@@ -48,7 +48,7 @@ measurement_dataset: data/bb/bbway_tuning_set.hdf5
 
 # --- Warm-up monitoring / early stop ---
 warmup_log_every: 100        # eval NLL+acc every N burn-in steps (0 = disabled)
-early_stop_acc_threshold: 0.6  # skip chains if warm-up acc below this (null = off)
+early_stop_acc_threshold: 0.98  # skip chains if warm-up acc below this (null = off)
 
 # --- Misc ---
 print_every_n_samples: 10
