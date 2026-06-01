@@ -30,7 +30,7 @@ class TrainConfig:
     # model params
     embd_dim: int = 8  # log2 exponent; actual embd_dim = 2**embd_dim (e.g. 8 → 256)
     pref_attn_embd_dim: Optional[int] = None
-    num_heads: int = 4
+    head_dim: int = 6  # log2 exponent; actual head_dim = 2**head_dim (e.g. 6 → 64); num_heads = embd_dim // head_dim
     attn_dropout: float = 0.1
     resid_dropout: float = 0.1
     intermediate_dim: Optional[int] = None
@@ -60,6 +60,8 @@ class TrainConfig:
 
     def __post_init__(self):
         self.embd_dim = 2 ** self.embd_dim
+        self.head_dim = 2 ** self.head_dim
+        self.num_heads = self.embd_dim // self.head_dim
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
             self.checkpoints_path = os.path.join(

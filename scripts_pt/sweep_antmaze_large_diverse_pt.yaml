@@ -1,17 +1,28 @@
 project: PT-training
 program: run_pt_training.py
-method: grid
+method: bayes
+run_cap: 50
+metric:
+  name: eval_acc_best
+  goal: maximize
 parameters:
-  # specify all configs to run for the choosen algorithm
   config_path:
     value: "scripts_pt/antmaze_large_diverse_pt.yaml"
-  num_heads:
-    values: [1, 2, 4, 8]
-  num_layers:
-    values: [1, 2, 3, 4]
   embd_dim:
-    values: [64, 128, 256]
+    distribution: int_uniform
+    min: 6   # 2^6 = 64
+    max: 8   # 2^8 = 256
+  head_dim:
+    distribution: int_uniform
+    min: 5   # 2^5 = 32
+    max: 7   # 2^7 = 128
+  num_layers:
+    distribution: int_uniform
+    min: 1
+    max: 4
+  lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2
   epochs:
     value: 5000
-  lr:
-    values: [0.03, 0.003, 0.0003, 0.00003, 0.000003]
