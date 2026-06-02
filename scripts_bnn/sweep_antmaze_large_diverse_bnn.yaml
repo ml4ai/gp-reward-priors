@@ -22,9 +22,6 @@ parameters:
   # training pairs at split=0.8), so a few thousand steps is many epochs.
   num_burn_in_steps:
     value: 5000
-  # Larger batch -> steadier gradient given the tiny dataset (default was 32).
-  batch_size:
-    value: 64
   warmup_log_every:
     value: 250
 

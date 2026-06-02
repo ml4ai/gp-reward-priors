@@ -17,7 +17,7 @@ num_burn_in_steps: 3000  # steps for preconditioner adaptation (shared warm-up
 sghmc_lr: 0.003          # cool-phase (sampling) step size; tuned empirically
 mdecay: 0.01             # low friction → long momentum → better barrier crossing
                          # in hot phase; 1/mdecay ≈ 100-step decorrelation length
-batch_size: 32
+batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
 n_meas: 8
 meas_jitter: .000001
