@@ -61,6 +61,7 @@ class TrainConfig:
     def __post_init__(self):
         self.embd_dim = 2 ** self.embd_dim
         self.head_dim = 2 ** self.head_dim
+        self.head_dim = min(self.head_dim, self.embd_dim)  # clamp so num_heads >= 1
         self.num_heads = self.embd_dim // self.head_dim
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
