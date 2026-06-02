@@ -13,6 +13,10 @@ parameters:
   config_path:
     value: "scripts_pt/antmaze_medium_diverse_pt.yaml"
 
+  # Train on the FULL dataset (no held-out split) for the final multi-seed eval
+  training_split:
+    value: 1.0
+
   # Best hyperparameters from the bayes sweep
   embd_dim:
     value: PLACEHOLDER

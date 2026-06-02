@@ -13,6 +13,10 @@ parameters:
   config_path:
     value: "scripts_bnn/antmaze_large_diverse_bnn.yaml"
 
+  # Train on the FULL dataset (no held-out split) for the final multi-seed eval
+  training_split:
+    value: 1.0
+
   # Fixed sweep settings (copy from the bayes sweep, or adjust for the re-eval)
   early_stop_acc_threshold:
     value: PLACEHOLDER
