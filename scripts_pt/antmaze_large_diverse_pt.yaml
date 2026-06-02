@@ -3,7 +3,7 @@ group: PT
 name: pt
 embd_dim: 8
 pref_attn_embd_dim: null
-num_heads: 5
+head_dim: 6
 attn_dropout: 0.1
 resid_dropout: 0.1
 intermediate_dim: null
