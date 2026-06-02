@@ -1,0 +1,28 @@
+project: MR-training
+program: run_mr_training.py
+method: grid
+metric:
+  name: eval_acc_best
+  goal: maximize
+
+# Multi-seed re-evaluation of the best config from
+# sweep_antmaze_large_play_mr.yaml.  Replace every PLACEHOLDER with the
+# winning value from the Bayesian optimization sweep, then run: grid expands
+# to one run per seed (10 total) so you get mean +/- std for the chosen config.
+parameters:
+  config_path:
+    value: "scripts_mr/antmaze_large_play_mr.yaml"
+
+  # Best hyperparameters from the bayes sweep
+  width:
+    value: PLACEHOLDER
+  depth:
+    value: PLACEHOLDER
+  lr:
+    value: PLACEHOLDER
+  epochs:
+    value: PLACEHOLDER
+
+  # Multi-seed grid
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
