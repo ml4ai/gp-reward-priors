@@ -19,13 +19,13 @@ parameters:
 
   # Best hyperparameters from the bayes sweep
   width:
-    value: PLACEHOLDER
+    value: 9
   depth:
-    value: PLACEHOLDER
+    value: 1
   lr:
-    value: PLACEHOLDER
+    value: 0.00381828352544939
   epochs:
-    value: PLACEHOLDER
+    value: 5000
 
   # Multi-seed grid
   seed:

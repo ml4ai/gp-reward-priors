@@ -1,7 +1,7 @@
 project: BNN-training
 program: run_bnn_training.py
 method: bayes
-run_cap: 60
+run_cap: 70
 metric:
   name: warmup_final_acc
   goal: maximize
