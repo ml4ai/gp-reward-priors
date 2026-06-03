@@ -19,15 +19,15 @@ parameters:
 
   # Best hyperparameters from the bayes sweep
   embd_dim:
-    value: PLACEHOLDER
+    value: 8
   head_dim:
-    value: PLACEHOLDER
+    value: 7
   num_layers:
-    value: PLACEHOLDER
+    value: 4
   lr:
-    value: PLACEHOLDER
+    value: 0.0002363862972320704
   epochs:
-    value: PLACEHOLDER
+    value: 5000
 
   # Multi-seed grid
   seed:
