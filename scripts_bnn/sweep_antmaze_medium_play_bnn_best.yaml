@@ -19,25 +19,25 @@ parameters:
 
   # Fixed sweep settings (copy from the bayes sweep, or adjust for the re-eval)
   early_stop_acc_threshold:
-    value: PLACEHOLDER
+    value: 0.0
   num_burn_in_steps:
-    value: PLACEHOLDER
+    value: 5000
   warmup_log_every:
-    value: PLACEHOLDER
+    value: 250
 
   # Best hyperparameters from the bayes sweep
   gp_cov_scale:
-    value: PLACEHOLDER
+    value: 24.134764576305223
   n_meas:
-    value: PLACEHOLDER
+    value: 15
   width:
-    value: PLACEHOLDER
+    value: 9
   depth:
-    value: PLACEHOLDER
+    value: 3
   sghmc_lr:
-    value: PLACEHOLDER
+    value: 0.0005823471121717912
   mdecay:
-    value: PLACEHOLDER
+    value: 0.007862499246631656
 
   # Multi-seed grid
   seed:
