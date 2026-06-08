@@ -1,0 +1,81 @@
+project: BNN-training
+program: run_bnn_training.py
+method: bayes
+run_cap: 70
+metric:
+  name: train_mean_accuracy
+  goal: maximize
+
+# Sampling-phase tuning sweep for antmaze-large-diverse.  Unlike the *_warmup
+# sweeps (which early-stop right after burn-in and optimize warmup_final_acc),
+# this sweep runs the FULL parallel-chain cyclical-SGHMC phase and optimizes the
+# posterior-predictive train_mean_accuracy.  Motivation: a config can reach
+# warmup_final_acc ~0.97 yet collapse to ~0.52 posterior accuracy when the
+# cyclical schedule is too hot — the chains diverge from the data-fitting basin
+# (param within-chain var explodes).  Architecture / prior knobs are FIXED to
+# the sweep_antmaze_large_diverse_bnn_warmup_best.yaml winners; only the sampler
+# schedule (sghmc_lr, sghmc_lr_max, cycle_length, mdecay) is tuned here.
+parameters:
+  config_path:
+    value: "scripts_bnn/antmaze_large_diverse_bnn.yaml"
+
+  # train_mean_accuracy is only logged when training on the FULL dataset
+  # (training_split == 1.0 -> eval_label "train").  Required for the metric above.
+  training_split:
+    value: 1.0
+
+  # Must be low enough to let chain sampling run — a high threshold early-stops
+  # before any samples are collected, and train_mean_accuracy is never logged.
+  # PLACEHOLDER: set from the initial *_warmup sweep results.
+  early_stop_acc_threshold:
+    value: PLACEHOLDER
+
+  # Cyclical schedule must be on for sghmc_lr_max / cycle_length to take effect.
+  use_cyclical_lr:
+    value: true
+
+  # ---- Fixed from sweep_antmaze_large_diverse_bnn_warmup_best.yaml ----
+  # PLACEHOLDER: that warmup_best sweep is not yet filled in; paste its winning
+  # architecture / prior values here once the *_warmup sweep has run.
+  num_burn_in_steps:
+    value: PLACEHOLDER
+  warmup_log_every:
+    value: PLACEHOLDER
+  gp_cov_scale:
+    value: PLACEHOLDER
+  n_meas:
+    value: PLACEHOLDER
+  width:
+    value: PLACEHOLDER
+  depth:
+    value: PLACEHOLDER
+
+  # ---- Swept: cyclical-SGHMC sampler schedule ----
+  # Cool-phase / minimum step size (lr_min).  Sets how tightly each cool phase
+  # settles before its sample is taken.  Capped at 3e-3 so lr_max >= sghmc_lr.
+  sghmc_lr:
+    distribution: log_uniform_values
+    min: 1e-4
+    max: 3e-3
+  # Hot-phase peak step size (lr_max).  The reference warmup run diverged with a
+  # 0.03 peak (param within-chain var ~8.9e3, train acc 0.52 vs warmup 0.97);
+  # sweep lower to find a peak that explores without ejecting weights from the
+  # basin.  Range floor 3e-3 keeps lr_max >= sghmc_lr.
+  sghmc_lr_max:
+    distribution: log_uniform_values
+    min: 3e-3
+    max: 3e-2
+  # Steps per hot+cool cycle.  Longer cycles give the cool phase more time to
+  # re-settle before sampling.  Cost scales linearly: steps/chain =
+  # (num_samples + n_discarded) * cycle_length.
+  cycle_length:
+    distribution: q_uniform
+    min: 500
+    max: 3000
+    q: 250
+  # Friction: higher mdecay damps hot-phase excursions and shortens the momentum
+  # decorrelation length (~1/mdecay steps).
+  mdecay:
+    distribution: log_uniform_values
+    min: 1e-3
+    max: 1e-1

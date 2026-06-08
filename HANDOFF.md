@@ -326,7 +326,17 @@ MAP options.
 data/antmaze/<env>_tuning_set.hdf5`, `reward_function: antmaze_task_reward_prior`.
 (The user later set `project/group/name` to `BNN-training`/`BNN`/`bnn`.)
 
-**Bayesian sweeps** `sweep_antmaze_*_bnn.yaml` (4): `method: bayes`,
+**Two-stage BNN sweep design (warmup → sampling).** The bnn antmaze sweeps come
+in two families, one per training phase. Naming convention:
+`sweep_antmaze_<size>_<type>_bnn_<stage>[_best].yaml`, `<stage> ∈ {warmup,
+sampling}` (16 files: 4 envs × 2 stages × {base, best}). Rationale: a config can
+hit `warmup_final_acc` ~0.97 yet collapse to ~0.52 posterior `train_mean_accuracy`
+when the cyclical-SGHMC schedule is too hot — the chains diverge from the
+data-fitting basin (`param_within_chain_var` blows up while `pred_rhat` stays ~1.0
+on a *consistently uninformative* predictive). So warmup tunes architecture/prior
+cheaply, then sampling tunes the sampler schedule on the real posterior metric.
+
+**Warmup sweeps** `sweep_antmaze_*_bnn_warmup.yaml` (4): `method: bayes`,
 `run_cap: 70` (user raised from 60), maximize `warmup_final_acc`. Data-driven
 design from inspecting the HDF5s:
 - pref sets are **small** (363–734 pairs) → fixed `batch_size: 64`,
@@ -341,14 +351,39 @@ design from inspecting the HDF5s:
   these sweeps fix `early_stop_acc_threshold: 1.01` to skip the expensive chain
   phase entirely — every sweep run is warm-up-only, same metric, far cheaper.
 
-**Multi-seed "best" re-eval sweeps** `sweep_antmaze_*_{bnn,mr,pt}_best.yaml` (12,
-across all three pipelines): `method: grid`, all hyperparameters as literal
-`PLACEHOLDER` (user fills in the bayes winners), plus `seed: [0..9]` (→ 10 runs
-for mean ± std), and **`training_split: 1.0`** (full-dataset final eval).
-`config_path` is kept real (a placeholder there would break the run). The user has
-filled in several mr/pt `_best` files with bayes results. **For the bnn `_best`
-files, the user will want `early_stop_acc_threshold` set to a real value (or the
-config default), NOT `1.01`, so the full chain phase actually runs.**
+**Sampling sweeps** `sweep_antmaze_*_bnn_sampling.yaml` (4): `method: bayes`,
+`run_cap: 70`, maximize **`train_mean_accuracy`** (the posterior-predictive
+in-sample metric). These run the **full** parallel-chain cyclical-SGHMC phase.
+- **Architecture/prior knobs are FIXED** to the `*_warmup_best` winners
+  (`gp_cov_scale`, `n_meas`, `width`, `depth`, `num_burn_in_steps`,
+  `warmup_log_every`) — real values pasted for the two `medium` envs, `PLACEHOLDER`
+  for the two `large` envs (whose `warmup_best` isn't filled in yet).
+- **Swept (sampler schedule only):** `sghmc_lr` (log 1e-4..3e-3, the cool/lr_min),
+  `sghmc_lr_max` (log 3e-3..3e-2, the hot peak — floor meets `sghmc_lr`'s ceiling
+  so `lr_max ≥ lr_min` by construction), `cycle_length` (`q_uniform 500..3000`,
+  q=250), `mdecay` (log 1e-3..1e-1).
+- **Two pins required for the metric to exist:** `training_split: 1.0` (else
+  `eval_label` is "test" and `train_mean_accuracy` is never logged) and
+  `use_cyclical_lr: true` (else `sghmc_lr_max`/`cycle_length` are inert).
+- `early_stop_acc_threshold` is left as `PLACEHOLDER` (user sets it from initial
+  warmup results) — but it **must end up low** (e.g. `0.0`); a high threshold
+  early-stops before any samples are collected and the metric never appears.
+- **Cost**: full sampling, so far more expensive than warmup sweeps. Steps/chain =
+  `(num_samples + n_discarded) × cycle_length`; `num_samples`/`num_chains` inherit
+  from the base config (155/4).
+
+**Multi-seed "best" re-eval sweeps** (`method: grid`, `seed: [0..9]` → 10 runs for
+mean ± std, **`training_split: 1.0`**; `config_path` kept real — a placeholder
+there would break the run):
+- `sweep_antmaze_*_{mr,pt}_best.yaml` (8): user fills in the bayes winners; several
+  already filled.
+- `sweep_antmaze_*_bnn_warmup_best.yaml` (4): the former `_bnn_best.yaml`, renamed.
+  medium envs filled in; large envs still `PLACEHOLDER`. For these the user will
+  want `early_stop_acc_threshold` set to a real value (or the config default), NOT
+  `1.01`, so the full chain phase actually runs.
+- `sweep_antmaze_*_bnn_sampling_best.yaml` (4, new): re-evals the sampling-sweep
+  winners. Architecture pinned from `*_warmup_best`; the four schedule knobs +
+  `early_stop_acc_threshold` are `PLACEHOLDER`.
 
 ### 7.10 Repo hygiene done this session
 

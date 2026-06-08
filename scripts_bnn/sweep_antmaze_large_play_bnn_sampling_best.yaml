@@ -1,0 +1,55 @@
+project: BNN-training
+program: run_bnn_training.py
+method: grid
+metric:
+  name: train_mean_accuracy
+  goal: maximize
+
+# Multi-seed re-evaluation of the best config from
+# sweep_antmaze_large_play_bnn_sampling.yaml.  Replace every PLACEHOLDER with the
+# winning value from the sampling Bayesian-optimization sweep, then run: grid
+# expands to one run per seed (10 total) so you get mean +/- std for the chosen
+# config.
+parameters:
+  config_path:
+    value: "scripts_bnn/antmaze_large_play_bnn.yaml"
+
+  # Train on the FULL dataset (in-sample train_* metrics) and run chain sampling.
+  training_split:
+    value: 1.0
+  use_cyclical_lr:
+    value: true
+
+  # PLACEHOLDER: set from the initial *_warmup sweep results.
+  early_stop_acc_threshold:
+    value: PLACEHOLDER
+
+  # Fixed from sweep_antmaze_large_play_bnn_warmup_best.yaml
+  # PLACEHOLDER: that warmup_best sweep is not yet filled in; paste its winning
+  # architecture / prior values here once the *_warmup sweep has run.
+  num_burn_in_steps:
+    value: PLACEHOLDER
+  warmup_log_every:
+    value: PLACEHOLDER
+  gp_cov_scale:
+    value: PLACEHOLDER
+  n_meas:
+    value: PLACEHOLDER
+  width:
+    value: PLACEHOLDER
+  depth:
+    value: PLACEHOLDER
+
+  # Best sampler schedule from sweep_antmaze_large_play_bnn_sampling.yaml
+  sghmc_lr:
+    value: PLACEHOLDER
+  sghmc_lr_max:
+    value: PLACEHOLDER
+  cycle_length:
+    value: PLACEHOLDER
+  mdecay:
+    value: PLACEHOLDER
+
+  # Multi-seed grid
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
