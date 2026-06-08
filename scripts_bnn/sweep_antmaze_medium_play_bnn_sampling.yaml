@@ -1,7 +1,7 @@
 project: BNN-training
 program: run_bnn_training.py
 method: bayes
-run_cap: 70
+run_cap: 50
 metric:
   name: train_mean_accuracy
   goal: maximize
@@ -28,7 +28,7 @@ parameters:
   # before any samples are collected, and train_mean_accuracy is never logged.
   # PLACEHOLDER: set from the initial *_warmup sweep results.
   early_stop_acc_threshold:
-    value: PLACEHOLDER
+    value: 0.95
 
   # Cyclical schedule must be on for sghmc_lr_max / cycle_length to take effect.
   use_cyclical_lr:
