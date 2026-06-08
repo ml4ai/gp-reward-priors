@@ -19,7 +19,7 @@ parameters:
 
   # Fixed sweep settings (copy from the bayes sweep, or adjust for the re-eval)
   early_stop_acc_threshold:
-    value: 0.0
+    value: 1.01
   num_burn_in_steps:
     value: 5000
   warmup_log_every:
