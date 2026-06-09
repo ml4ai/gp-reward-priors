@@ -5,42 +5,41 @@ metric:
   name: train_mean_accuracy
   goal: maximize
 
-# Multi-seed re-evaluation of the best config from
-# sweep_antmaze_large_play_bnn_sampling.yaml.  Replace every PLACEHOLDER with the
-# winning value from the sampling Bayesian-optimization sweep, then run: grid
-# expands to one run per seed (10 total) so you get mean +/- std for the chosen
-# config.
+# Stage 3 of 3:  warmup -> sampling -> sampling_best.
+# Multi-seed re-evaluation of the fully-tuned config (architecture + prior from
+# sweep_antmaze_large_play_bnn_warmup.yaml, sampler schedule from
+# sweep_antmaze_large_play_bnn_sampling.yaml) on the FULL training data
+# (training_split=1.0 -> in-sample train_* metrics).  The grid expands to one run
+# per seed (10 total) so you get mean +/- std for the chosen config.  Replace
+# every PLACEHOLDER with the corresponding winning value.
 parameters:
   config_path:
     value: "scripts_bnn/antmaze_large_play_bnn.yaml"
 
-  # Train on the FULL dataset (in-sample train_* metrics) and run chain sampling.
+  # Full dataset (no held-out split) + chain sampling -> train_mean_accuracy.
   training_split:
     value: 1.0
   use_cyclical_lr:
     value: true
 
-  # PLACEHOLDER: set from the initial *_warmup sweep results.
+  # Set low enough that chains run (e.g. 0.0); a high threshold early-stops
+  # before any samples are collected and the metric is never logged.
   early_stop_acc_threshold:
     value: PLACEHOLDER
 
-  # Fixed from sweep_antmaze_large_play_bnn_warmup_best.yaml
-  # PLACEHOLDER: that warmup_best sweep is not yet filled in; paste its winning
-  # architecture / prior values here once the *_warmup sweep has run.
+  # ---- Fixed: architecture + prior from *_warmup winners ----
   num_burn_in_steps:
-    value: PLACEHOLDER
+    value: 5000
   warmup_log_every:
-    value: PLACEHOLDER
-  gp_cov_scale:
-    value: PLACEHOLDER
-  n_meas:
-    value: PLACEHOLDER
+    value: 250
   width:
     value: PLACEHOLDER
   depth:
     value: PLACEHOLDER
+  n_meas:
+    value: PLACEHOLDER
 
-  # Best sampler schedule from sweep_antmaze_large_play_bnn_sampling.yaml
+  # ---- Fixed: sampler schedule from *_sampling winners ----
   sghmc_lr:
     value: PLACEHOLDER
   sghmc_lr_max:
