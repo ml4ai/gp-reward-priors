@@ -132,6 +132,38 @@ class TrainConfig:
     # GP prior covariance = gp_cov_scale * I_{n_concepts}.
     # Controls prior variance on reward-function coefficients.
     gp_cov_scale: float = 1.0
+    # ----------------------------------------------------------------------- #
+    # Functional GP prior selection
+    # ----------------------------------------------------------------------- #
+    # Which functional GP prior to use for the fSGHMC prior gradient:
+    #   "lcf"          — the linear-combination-of-features prior (LCFModel)
+    #                    built from `reward_function` (the existing behaviour).
+    #   "map_informed" — the map-informed, wall-respecting heat-kernel prior
+    #                    (MapInformedGPPrior) for D4RL Antmaze.  When selected,
+    #                    `reward_function` / `n_concepts` / `gp_cov_scale` are
+    #                    ignored and the map_* fields below take effect.
+    gp_prior_type: str = "lcf"
+    # --- map_informed prior settings (only used when gp_prior_type="map_informed") ---
+    # Maze size selecting the hardcoded fallback layout: "medium" or "large".
+    # medium-{play,diverse} share one layout; large-{play,diverse} share another.
+    map_size: str = "medium"
+    # Optional D4RL gym id (e.g. "antmaze-medium-play-v2").  When set, the maze
+    # layout / scaling / offset are extracted from the live env (authoritative)
+    # and `map_size` is ignored.  When None, the hardcoded `map_size` layout is
+    # used.  Set this on the run machine (which has D4RL) for an exact layout.
+    map_env_name: Optional[str] = None
+    # Heat-kernel diffusion time: sets the spatial correlation length (~2-4
+    # cells).  Fixed per map size; verify via prior-sample heatmaps, NOT reward.
+    map_eta: float = 1.0
+    # Constant-offset variance (Bradley-Terry additive constant freedom).
+    map_sig_c2: float = 1.0
+    # Map-informed signal variance (prior reward scale).
+    map_sig_g2: float = 1.0
+    # Nugget / diagonal jitter (mandatory for K invertibility).
+    map_sig_n2: float = 1e-3
+    # Where to read the torso (x, y) from: "obs" (X_M[:, :2], the antmaze
+    # convention) or "aux" (aux_X).  Never read the goal columns.
+    map_xy_source: str = "obs"
     # Warm-up monitoring: log NLL and accuracy every this many steps.
     # 0 = disabled.  Set to e.g. 100 to get a live convergence curve during
     # burn-in.  Evaluation uses a random 512-pair subsample of the test set.
@@ -181,16 +213,29 @@ def train(config: TrainConfig):
     transfer_fn = "relu"
 
     # ------------------------------------------------------------------ #
-    # Resolve reward source function
+    # Resolve reward source function (only needed for the LCF prior)
     # ------------------------------------------------------------------ #
-    if not hasattr(_reward_fns, config.reward_function):
+    map_informed = config.gp_prior_type == "map_informed"
+    if config.gp_prior_type not in ("lcf", "map_informed"):
         raise ValueError(
-            f"reward_function={config.reward_function!r} not found in "
-            "optbnn/gp/reward_functions.py.  "
-            f"Available: {[n for n in dir(_reward_fns) if not n.startswith('_')]}"
+            f"gp_prior_type={config.gp_prior_type!r} unknown; "
+            "expected 'lcf' or 'map_informed'."
         )
-    function_vect = getattr(_reward_fns, config.reward_function)
-    print(f"[GP prior] reward_function = {config.reward_function!r}")
+    if map_informed:
+        function_vect = None
+        print(
+            f"[GP prior] map_informed prior (map_size={config.map_size!r}, "
+            f"env={config.map_env_name!r})"
+        )
+    else:
+        if not hasattr(_reward_fns, config.reward_function):
+            raise ValueError(
+                f"reward_function={config.reward_function!r} not found in "
+                "optbnn/gp/reward_functions.py.  "
+                f"Available: {[n for n in dir(_reward_fns) if not n.startswith('_')]}"
+            )
+        function_vect = getattr(_reward_fns, config.reward_function)
+        print(f"[GP prior] reward_function = {config.reward_function!r}")
 
     # ------------------------------------------------------------------ #
     # Load preference data (optionally split into train / test)
@@ -300,42 +345,11 @@ def train(config: TrainConfig):
         )
 
     # ------------------------------------------------------------------ #
-    # Infer n_concepts from a dummy forward pass through the source function
+    # Build the functional GP prior (LCFModel or MapInformedGPPrior)
     # ------------------------------------------------------------------ #
-    if config.n_concepts is not None:
-        n_concepts = config.n_concepts
-        print(f"[GP prior] n_concepts = {n_concepts} (from config)")
-    else:
-        with torch.no_grad():
-            _dummy_X = torch.zeros(1, input_dim, device=device, dtype=torch.float64)
-            if aux_meas is not None:
-                _dummy_aux = torch.zeros(
-                    1, aux_meas.shape[1], device=device, dtype=torch.float64
-                )
-                _phi_dummy = function_vect(_dummy_X, _dummy_aux, device)
-            else:
-                _phi_dummy = function_vect(_dummy_X, device)
-        n_concepts = int(_phi_dummy.shape[-1])
-        print(f"[GP prior] inferred n_concepts = {n_concepts}")
-
-    # ------------------------------------------------------------------ #
-    # Build the GP functional prior (LCFModel + selected source function)
-    # ------------------------------------------------------------------ #
-    # p_covariance = gp_cov_scale * I_{n_concepts} — isotropic GP weight prior.
-    # p_mean = ones(n_concepts) — unit prior mean on reward-function coefficients.
-    # gp_prior_args must survive pickle across mp.spawn:
-    #   numpy arrays are picklable; function_vect is a module-level fn.
-    p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
-    # First feature is the intercept (when present) — no prior bias on its sign.
-    # All other coefficients default to 1 (positive weights on reward-relevant features).
-    p_mean = np.ones(n_concepts, dtype=np.float32)
-    p_mean[0] = 0.0
-    gp_prior_args = {
-        "p_covariance": p_covariance,
-        "function_vect": function_vect,
-        "p_mean": p_mean,
-    }
-
+    # gp_prior_args must survive pickle across mp.spawn (numpy arrays + a
+    # module-level function reference); workers reconstruct their own prior from
+    # it.  The parent-process prior is used only during warm-up.
     meas_kwargs = {
         "x_meas": x_meas,
         "aux_meas": aux_meas,
@@ -343,14 +357,68 @@ def train(config: TrainConfig):
         "meas_jitter": config.meas_jitter,
     }
 
-    # Parent-process LCFModel (used only during warm-up; workers reconstruct
-    # their own from gp_prior_args)
-    gp_prior = LCFModel(
-        p_covariance=p_covariance,
-        function_vect=function_vect,
-        device=device,
-        p_mean=p_mean,
-    ).to(device)
+    if map_informed:
+        from optbnn.gp.maze_layouts import get_antmaze_layout
+        from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
+
+        free_mask, scaling, offset = get_antmaze_layout(
+            config.map_size, env_name=config.map_env_name
+        )
+        print(
+            f"[GP prior] maze layout: {free_mask.shape} grid, "
+            f"{int(free_mask.sum())} free cells, scaling={scaling}, "
+            f"offset={offset}"
+        )
+        gp_prior = MapInformedGPPrior(
+            free_mask=free_mask,
+            scaling=scaling,
+            offset=offset,
+            eta=config.map_eta,
+            sig_c2=config.map_sig_c2,
+            sig_g2=config.map_sig_g2,
+            sig_n2=config.map_sig_n2,
+            xy_source=config.map_xy_source,
+            device=device,
+        )
+        gp_prior_args = gp_prior.to_args()
+    else:
+        # ---- Infer n_concepts from a dummy forward pass through the source fn ----
+        if config.n_concepts is not None:
+            n_concepts = config.n_concepts
+            print(f"[GP prior] n_concepts = {n_concepts} (from config)")
+        else:
+            with torch.no_grad():
+                _dummy_X = torch.zeros(1, input_dim, device=device, dtype=torch.float64)
+                if aux_meas is not None:
+                    _dummy_aux = torch.zeros(
+                        1, aux_meas.shape[1], device=device, dtype=torch.float64
+                    )
+                    _phi_dummy = function_vect(_dummy_X, _dummy_aux, device)
+                else:
+                    _phi_dummy = function_vect(_dummy_X, device)
+            n_concepts = int(_phi_dummy.shape[-1])
+            print(f"[GP prior] inferred n_concepts = {n_concepts}")
+
+        # p_covariance = gp_cov_scale * I_{n_concepts} — isotropic GP weight prior.
+        # p_mean = ones(n_concepts); intercept (feature 0) gets 0 (no sign bias).
+        p_covariance = np.eye(n_concepts, dtype=np.float32) * config.gp_cov_scale
+        p_mean = np.ones(n_concepts, dtype=np.float32)
+        p_mean[0] = 0.0
+        gp_prior_args = {
+            "prior_type": "lcf",
+            "p_covariance": p_covariance,
+            "function_vect": function_vect,
+            "p_mean": p_mean,
+        }
+
+        # Parent-process LCFModel (used only during warm-up; workers reconstruct
+        # their own from gp_prior_args).
+        gp_prior = LCFModel(
+            p_covariance=p_covariance,
+            function_vect=function_vect,
+            device=device,
+            p_mean=p_mean,
+        ).to(device)
 
     # ------------------------------------------------------------------ #
     # Build BNN and FPrefNet (no OptimGaussianPrior needed)

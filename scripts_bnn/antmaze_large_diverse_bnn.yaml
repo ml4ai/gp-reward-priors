@@ -25,6 +25,20 @@ gp_cov_scale: 1.0
 reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
 n_concepts: null         # GP feature dim; null = infer from reward_function
 
+# --- Functional GP prior selection ---
+# "lcf" = the LCFModel reward-function prior above (current behaviour).
+# "map_informed" = the wall-respecting heat-kernel maze prior; the map_* fields
+# below take effect and reward_function/n_concepts/gp_cov_scale are ignored.
+gp_prior_type: map_informed
+map_size: large                           # "medium" or "large" (hardcoded fallback layout)
+map_env_name: antmaze-large-diverse-v2    # extract exact layout from this live D4RL env
+                                          # (set null to use the hardcoded map_size layout)
+map_eta: 1.0             # heat-kernel diffusion time (correlation length ~2-4 cells)
+map_sig_c2: 1.0          # constant-offset variance (Bradley-Terry additive constant)
+map_sig_g2: 1.0          # map-informed signal variance (prior reward scale)
+map_sig_n2: 0.001        # nugget / diagonal jitter (mandatory for invertibility)
+map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
+
 # --- Cyclical step-size schedule (Zhang et al. 2020) ---
 # Hot phase (lr_max → sghmc_lr, cosine): momentum zeroed at onset so the
 # chain escapes the current basin.  Cool phase (near sghmc_lr): one sample

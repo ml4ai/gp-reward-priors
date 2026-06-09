@@ -73,10 +73,16 @@ def _fpref_chain_worker(
         y_train: numpy (N,) training targets.
         seed: int, base random seed; chain i uses seed + i.
         train_kwargs: dict forwarded verbatim to FPrefNet.train().
-        gp_prior_args: dict with keys:
+        gp_prior_args: dict describing the functional GP prior to reconstruct.
+            The optional key ``prior_type`` selects the prior class
+            (``"lcf"`` default, or ``"map_informed"``).
+            For ``"lcf"`` (LCFModel) the keys are:
             ``p_covariance`` — numpy (d,) or (d, d) weight prior covariance,
             ``function_vect`` — module-level callable (must be picklable),
             ``p_mean``        — numpy (d,) or None (→ zeros).
+            For ``"map_informed"`` (MapInformedGPPrior) the keys are those
+            produced by ``MapInformedGPPrior.to_args()`` (free_mask, scaling,
+            offset, eta, sig_c2, sig_g2, sig_n2, xy_cols, xy_source).
         meas_kwargs: dict with keys:
             ``x_meas``      — numpy (N_meas, obs_dim),
             ``aux_meas``    — numpy (N_meas, aux_dim) or None,
@@ -87,7 +93,6 @@ def _fpref_chain_worker(
     """
     from optbnn.bnn.likelihoods import LikCE
     from optbnn.bnn.nets.mlp import MLP
-    from optbnn.gp.models.model import LCFModel
     from optbnn.sgmcmc_bayes_net.f_pref_net import FPrefNet
     from optbnn.utils.util import set_seed
 
@@ -108,12 +113,19 @@ def _fpref_chain_worker(
 
     likelihood = LikCE()
 
-    gp_prior = LCFModel(
-        p_covariance=gp_prior_args["p_covariance"],
-        function_vect=gp_prior_args["function_vect"],
-        device=device,
-        p_mean=gp_prior_args.get("p_mean"),
-    ).to(device)
+    # Reconstruct the functional GP prior (LCFModel or MapInformedGPPrior).
+    prior_type = gp_prior_args.get("prior_type", "lcf")
+    if prior_type == "map_informed":
+        from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
+        gp_prior = MapInformedGPPrior.from_args(gp_prior_args, device=device)
+    else:
+        from optbnn.gp.models.model import LCFModel
+        gp_prior = LCFModel(
+            p_covariance=gp_prior_args["p_covariance"],
+            function_vect=gp_prior_args["function_vect"],
+            device=device,
+            p_mean=gp_prior_args.get("p_mean"),
+        ).to(device)
 
     chain_dir = os.path.join(base_ckpt_dir, f"chain_{chain_idx}")
     os.makedirs(chain_dir, exist_ok=True)
