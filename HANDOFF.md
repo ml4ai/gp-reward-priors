@@ -249,7 +249,14 @@ The GP prior gradient is evaluated on a **separate** measurement HDF5, loaded by
 
 For AntMaze these are the `data/antmaze/<env>_tuning_set.hdf5` files produced by
 the `scripts_bnn/create_tuning_set_antmaze_*.py` generators (≈999k rows,
-`aux_obs` = 4-d `[x, y, goal_x, goal_y]`).
+`aux_obs` = 4-d `[goal_x, goal_y, x, y]`).
+
+> **Correction (§8 session).** The `aux_obs` column order is `[goal_x, goal_y,
+> x, y]`, **not** `[x, y, goal_x, goal_y]` as originally written above. The
+> generator builds it as `concatenate([dataset["goals"], dataset["xys"]])` and
+> `antmaze_task_reward_prior` confirms it (`goal_distance = norm(aux[:,0:2] -
+> aux[:,2:])`): cols 0:2 = goal, cols 2:4 = torso (x, y). Observations are stored
+> **raw** (no normalization), so `obs[:, :2]` is also the torso (x, y).
 
 ### 7.5 The degenerate-GP numerics fix (important)
 
@@ -417,3 +424,123 @@ there would break the run):
 - **macOS Stop-hook notification**: at the user's request a user-level
   `~/.claude/settings.json` Stop hook was added that fires an `osascript` desktop
   notification when a turn ends (env is macOS, paths under `/Users/champlin`).
+
+---
+
+## 8. Map-informed GP functional prior for Antmaze (this session)
+
+Implements the manually-designed, goal-agnostic **map-informed GP functional
+prior** from `handoff_mapinformed_gp_functional_prior_antmaze.md`: a wall-
+respecting heat-kernel prior over the Antmaze reward, as a **drop-in alternative
+to the `LCFModel` reward-function prior** in the fSGHMC pipeline (§7). Toggled
+per-config; no change to the sampler.
+
+### 8.1 What it is
+
+Zero-mean GP whose kernel is a sum of a constant offset and a graph diffusion
+(heat) kernel on the maze free-space grid:
+
+    k((s,a),(s',a')) = sig_c2 + sig_g2 · K_geo[c(s), c(s')] + sig_n2 · 1[i=j]
+
+- `c(s)` maps a state to its discrete maze cell via the torso **(x, y)** only —
+  `obs[:, :2]` (raw, un-normalized). The **goal is never used** (no leakage).
+- `K_geo = exp(-eta · L)` with `L` the symmetric normalized Laplacian — PSD by
+  construction (unlike a geodesic-distance RBF). Computed once at construction.
+- `sig_c2` absorbs the Bradley–Terry additive constant; `sig_n2` is the
+  mandatory nugget for invertibility.
+
+It is **manually designed** — never pretrained, fit to data, or tuned on return.
+Its design hypers (`eta`, `sig_c2`, `sig_g2`, `sig_n2`) are set from maze
+geometry + diagnostics, *never* selected on accuracy (that would smuggle the
+goal back in).
+
+### 8.2 Files
+
+| File | Role |
+|------|------|
+| `optbnn/gp/models/map_informed_prior.py` | `MapInformedGPPrior` (`nn.Module`). |
+| `optbnn/gp/maze_layouts.py` | layout recovery + grid-graph + heat-kernel builders. |
+| `scripts_bnn/diagnose_map_prior.py` | validation/diagnostics (handoff §9). |
+
+`MapInformedGPPrior` exposes the **same contract `FPrefNet` already relies on** —
+`functional_prior_grad(net, X_M, aux_X, jitter)` returning a per-parameter grad
+tuple, and `.to(device)` — so it is a true drop-in for `LCFModel`. It also
+implements `gram`, `prior_grad`, `neg_log_density` (Path B), `log_prior`,
+`sample_prior`, `free_cell_inputs`, `save`/`load`, and `to_args`/`from_args`
+(plain numpy/float dict) for `mp.spawn` reconstruction and Ch.5 reuse as mu_0.
+`functional_prior_grad` verified to match autograd of `log_prior` to 0.0.
+
+### 8.3 Layout recovery (`maze_layouts.py`)
+
+Produces `(free_mask, scaling, offset)`:
+
+- **`extract_maze_from_env(env_name)`** — the **authoritative** path: introspects
+  a live D4RL env (`gym.make`), reading the maze array / `maze_size_scaling` /
+  `_init_torso_*` (tries several attribute names for version robustness).
+- Hardcoded `ANTMAZE_MEDIUM_MAP` / `ANTMAZE_LARGE_MAP` fallbacks (medium ==
+  `BIG_MAZE` verified to match the live env; **large is best-effort — the live
+  env overrides it**).
+- World→cell map is the inverse of D4RL's `_rowcol_to_xy`: `col = x/scaling +
+  col_off`, `row = y/scaling + row_off`, with offsets = the reset cell's (row,
+  col) (== `init_torso/scaling`). Cells are clamped to the nearest free node.
+- `scaling = 4.0` for antmaze; 4-connectivity only (8 leaks around wall corners).
+
+### 8.4 Integration & toggle (`run_bnn_training.py`, `f_pref_net.py`)
+
+- New config field **`gp_prior_type`**: `"lcf"` (existing) or `"map_informed"`.
+- `map_*` config fields (only used when map_informed): `map_size`
+  (`"medium"`/`"large"`), `map_env_name` (Optional — set it to extract the exact
+  layout from the live env; `None` → hardcoded `map_size`), `map_eta`,
+  `map_sig_c2`, `map_sig_g2`, `map_sig_n2`, `map_xy_source` (`"obs"`).
+- When map_informed, the script **bypasses** `reward_function` / `n_concepts` /
+  `gp_cov_scale` (all ignored) and builds the prior via `get_antmaze_layout`.
+- `gp_prior_args` carries a **`prior_type`** key; the module-level worker
+  `_fpref_chain_worker` dispatches on it to reconstruct the right prior class
+  (`MapInformedGPPrior.from_args` vs `LCFModel`). LCF path unchanged
+  (`prior_type: "lcf"`, default when key absent).
+- **All 4 `antmaze_*_bnn.yaml` default to `gp_prior_type: map_informed`** with
+  `map_env_name` set per env (exact layout on the run machine) and `map_eta:
+  1.0`, `map_sig_c2/g2/n2 = 1.0 / 1.0 / 0.001`. Flip to `lcf` to switch back.
+
+### 8.5 Validation (run on the user's machine, real D4RL envs)
+
+All four envs passed the handoff §9 checks via `diagnose_map_prior.py`
+(`--env <antmaze id> --meas <tuning_set>`): K_geo PSD; cell-occupancy overlay
+fills corridors not walls (cell map correct, no shift); prior-sample heatmaps
+smooth along corridors / sharp across walls / no goal bias; correlation tracks
+geodesic distance and violates Euclidean monotonicity at wall-separated pairs.
+`eta = 1.0` gives a correlation length ≈ 2–3 cells on both sizes — accepted.
+Diagnostic PNGs live in `scripts_bnn/exp/map_prior_diag/` (gitignored output).
+
+### 8.6 Antmaze BNN sweeps redesigned for the map prior
+
+Pipeline is now **`warmup → sampling → sampling_best`** (the `*_warmup_best`
+stage was **removed** — 4 files deleted). Per env, 3 files (12 total):
+
+- **`*_warmup`** (`bayes`, run_cap 70, maximize `warmup_final_acc`): tunes
+  `width`, `depth`, `n_meas` (incl. **0 = prior off**), `sghmc_lr`, `mdecay`;
+  early-stops after burn-in (`early_stop_acc_threshold: 1.01`) to stay cheap.
+  `gp_cov_scale` is **gone** (ignored by the map prior); the map design hypers
+  are **not** swept (fixed in the base config, goal-leakage discipline).
+- **`*_sampling`** (`bayes`, run_cap 50, maximize **`test_mean_accuracy`**): no
+  longer pins `training_split` — inherits the base **0.8** split (same as
+  warmup), so `eval_label` is "test". Runs the full parallel-chain phase and
+  tunes only the cyclical schedule (`sghmc_lr`=lr_min, `sghmc_lr_max`,
+  `cycle_length`, `mdecay`); `width`/`depth`/`n_meas` FIXED from `*_warmup`.
+- **`*_sampling_best`** (`grid`, seeds 0–9, maximize `train_mean_accuracy`):
+  multi-seed re-eval of all winners on the **FULL** data (`training_split: 1.0`).
+
+Stale LCF-prior winners reset to `PLACEHOLDER` (the prior changed). Fill order:
+warmup → paste arch/`n_meas` (+ a real `early_stop_acc_threshold`) into sampling
+→ paste schedule into sampling_best.
+
+### 8.7 Preferences reaffirmed this session
+
+- **Goal-leakage discipline is a hard rule**: map design hypers are set from
+  geometry/diagnostics, never swept on reward; only `n_meas` (a numerical knob,
+  prior-agnostic to the goal) is searched.
+- Authoritative env extraction preferred over hardcoded maps; the user verified
+  all four layouts with the diagnostics before training.
+- Same conventions as §7.11: verify before committing, run with
+  `/opt/anaconda3/envs/irl/bin/python`, commit **and push** each logical change
+  (pushed to `master`), descriptive messages.
