@@ -30,7 +30,7 @@ parameters:
   # *_warmup sweep results — low enough that the winning architecture clears it
   # (e.g. a little below the warmup winner's accuracy).
   early_stop_acc_threshold:
-    value: PLACEHOLDER
+    value: 0.92
 
   # ---- Fixed from sweep_antmaze_medium_play_bnn_warmup.yaml winners ----
   num_burn_in_steps:
@@ -38,11 +38,11 @@ parameters:
   warmup_log_every:
     value: 250
   width:
-    value: PLACEHOLDER
+    value: 8
   depth:
-    value: PLACEHOLDER
+    value: 6
   n_meas:
-    value: PLACEHOLDER
+    value: 10
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # Cool-phase / minimum step size (lr_min).  Capped at 3e-3 so lr_max >= lr_min.
