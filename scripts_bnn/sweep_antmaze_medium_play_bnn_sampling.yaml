@@ -30,7 +30,7 @@ parameters:
   # *_warmup sweep results — low enough that the winning architecture clears it
   # (e.g. a little below the warmup winner's accuracy).
   early_stop_acc_threshold:
-    value: 0.92
+    value: 0.90
 
   # ---- Fixed from sweep_antmaze_medium_play_bnn_warmup.yaml winners ----
   num_burn_in_steps:
