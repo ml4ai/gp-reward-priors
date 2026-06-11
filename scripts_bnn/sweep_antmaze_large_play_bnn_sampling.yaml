@@ -21,6 +21,11 @@ parameters:
   config_path:
     value: "scripts_bnn/antmaze_large_play_bnn.yaml"
 
+  num_samples:
+    value: 35
+  n_discarded:
+    value: 2
+
   # Cyclical schedule must be on for sghmc_lr_max / cycle_length to take effect.
   use_cyclical_lr:
     value: true
