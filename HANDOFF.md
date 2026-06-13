@@ -413,6 +413,45 @@ there would break the run):
   winners. Architecture pinned from `*_warmup_best`; the four schedule knobs +
   `early_stop_acc_threshold` are `PLACEHOLDER`.
 
+### 7.9b GPU allocation for the sampling sweeps (6× A6000)
+
+`chains_per_gpu` (§7.3) lets several of a run's `num_chains` chains share one
+GPU, so the four independent sampling sweeps can be packed onto the available
+GPUs. **Allocation principle:** `method: bayes` is only degraded by *within-sweep*
+parallelism (multiple agents on one sweep ID propose blindly against a stale GP
+surrogate). Running different sweeps concurrently, and packing one run's chains
+onto fewer GPUs, are both free for BO quality. So: **one sequential agent per
+sweep, parallelize across sweeps, use `chains_per_gpu` to fit.** Pin each agent
+with `CUDA_VISIBLE_DEVICES` (it remaps physical GPUs to `cuda:0..`, and the worker
+maps chain → `rank // chains_per_gpu` within that visible subset). Required
+pairing: `chains_per_gpu = ceil(num_chains / visible_gpus)` — otherwise some
+visible GPUs sit idle (e.g. 2 visible GPUs with `cpg=4` puts all 4 chains on
+`cuda:0`).
+
+The knob is set in the **base config** (`config_path`, read fresh each run), not
+the sweep YAML, so allocation can be rebalanced mid-flight without disturbing the
+server-side BO history (stop the agent, edit `chains_per_gpu` + `CUDA_VISIBLE_DEVICES`,
+restart — a fresh agent resumes the same sweep ID from accumulated runs).
+
+**Status (this session):** `sweep_antmaze_medium_play_bnn_sampling.yaml` is
+**done**. For the remaining three, allocate by per-run cost — `medium_diverse`
+(width `2**10`, `n_meas` 48) is ~60–90× the per-step compute of either `large`
+sweep, so it is the makespan bottleneck and gets the most GPUs:
+
+| Sweep | GPUs | `CUDA_VISIBLE_DEVICES` | `chains_per_gpu` |
+|---|---|---|---|
+| medium_diverse | 4 | `0,1,2,3` | 1 |
+| large_play | 1 | `4` | 4 |
+| large_diverse | 1 | `5` | 4 |
+
+These `chains_per_gpu` values are committed into the three base configs.
+medium_diverse runs full 4-way parallel sampling (a 4-chain run can't use >4 GPUs
+at `cpg=1`); the two cheap large sweeps run alongside it. As each large sweep
+finishes, its freed GPU can't speed up medium_diverse further — use it for the
+stage-3 `_sampling_best` re-eval of the finished env instead. Fallback if the
+large sweeps turn out heavier than their param counts suggest: even 2/2/2 split,
+`cpg=2` each. (`num_chains=4` for all, inherited from base config.)
+
 ### 7.10 Repo hygiene done this session
 
 - Renames (history-preserving): `bb_optim_f.py → run_bnn_training.py`,
