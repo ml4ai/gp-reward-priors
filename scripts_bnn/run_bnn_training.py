@@ -86,6 +86,14 @@ class TrainConfig:
     keep_every: int = 2000
     sghmc_lr: float = 0.008
     num_chains: int = 4
+    # How many chains to co-locate on each GPU during parallel sampling.  Chains
+    # pack greedily onto the lowest GPU indices: with chains_per_gpu=2, chains
+    # 0-1 share cuda:0, chains 2-3 share cuda:1, etc., so a run uses only
+    # ceil(num_chains / chains_per_gpu) GPUs.  The MLP + n_meas×n_meas kernel are
+    # tiny relative to an A6000's memory, and co-located chains stay independent
+    # (separate processes/seeds/RNG/ckpt dirs), only sharing compute.  Default 1
+    # preserves the original one-chain-per-GPU behaviour.
+    chains_per_gpu: int = 1
     mdecay: float = 0.01
     print_every_n_samples: int = 5
     # Cyclical step-size schedule (Zhang et al. 2020)
@@ -560,6 +568,7 @@ def train(config: TrainConfig):
         cycle_length=config.cycle_length,
         fraction_cool=config.fraction_cool,
         max_param_step=config.max_param_step,
+        chains_per_gpu=config.chains_per_gpu,
     )
 
     # ------------------------------------------------------------------ #

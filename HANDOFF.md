@@ -239,6 +239,24 @@ Parallel chains run via `sample_multi_chains_parallel` → `mp.spawn`. The worke
 numpy arrays + a module-level function reference; the `LCFModel` is
 reconstructed inside each worker.
 
+**`chains_per_gpu` (config field, default 1) — co-locating chains on a GPU.**
+By default each chain gets its own physical GPU: the worker maps its `mp.spawn`
+rank 1:1 to a CUDA device, and the dispatch loop waves over `num_gpus` chains at
+a time. With `chains_per_gpu = k`, the worker instead picks device
+`rank // k`, so chains pack greedily onto the lowest indices — e.g. 4 GPUs,
+4 chains, `chains_per_gpu=2` runs chains 0-1 on `cuda:0`, chains 2-3 on
+`cuda:1`, leaving `cuda:2-3` idle. A run therefore uses only
+`ceil(num_chains / chains_per_gpu)` GPUs (capped at those available), and each
+wave runs up to `num_gpus * chains_per_gpu` chains before joining and spilling to
+the next wave. Co-located chains stay **statistically independent** — separate
+processes, seeds (`seed + chain_idx`), RNG, and `chain_<i>/` checkpoint dirs — so
+R-hat/ESS validity is unaffected; they share only compute. This is cheap here
+because the per-chain footprint (a `2**width`-wide, `depth`-deep MLP plus the
+`n_meas × n_meas` kernel) is tiny relative to an A6000's 48 GB; a solo chain badly
+underutilizes the card, so packing raises per-GPU throughput. `chains_per_gpu=1`
+reproduces the original one-chain-per-GPU behavior exactly. Validated
+`chains_per_gpu >= 1`.
+
 ### 7.4 Measurement (tuning) data
 
 The GP prior gradient is evaluated on a **separate** measurement HDF5, loaded by
@@ -307,6 +325,9 @@ covariance undefined).
   data untouched (the project's hard "test data is sacred" rule). One-hot labels
   ⇒ a flip is `1.0 - y`. `data_reduction == 1.0` ⇒ `wandb.finish()` + clean return
   (no exception — sweep-safe).
+- **`chains_per_gpu`** (int, default 1): chains to co-locate per GPU during
+  parallel sampling; packs greedily so a run uses `ceil(num_chains/chains_per_gpu)`
+  GPUs. See §7.3 for the device-mapping and independence details.
 - **Warm-up early stop** — `early_stop_acc_threshold` (Optional[float], default 0.6):
   after warm-up, if `warmup_final_acc < threshold`, skip the parallel-chain phase
   and finish cleanly (`wandb.finish()` + `return`, **never an exception**, so a

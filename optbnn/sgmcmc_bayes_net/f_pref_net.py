@@ -57,6 +57,7 @@ def _fpref_chain_worker(
     gp_prior_args,
     meas_kwargs,
     initial_weights=None,
+    chains_per_gpu=1,
 ):
     """Worker for one parallel FPrefNet chain, called by mp.spawn.
 
@@ -64,7 +65,9 @@ def _fpref_chain_worker(
     callables) so they survive the pickle/unpickle round-trip intact.
 
     Args:
-        rank: int, process rank in this batch — maps to CUDA device index.
+        rank: int, process rank in this batch.  The CUDA device is
+            ``rank // chains_per_gpu`` so consecutive ranks pack onto the same
+            GPU before spilling to the next one.
         batch_start: int, chain index of rank 0 in this batch.
         base_ckpt_dir: str, root directory; chain i writes to
             ``<base_ckpt_dir>/chain_<i>/``.
@@ -90,6 +93,8 @@ def _fpref_chain_worker(
             ``meas_jitter`` — float, Cholesky diagonal regularisation.
         initial_weights: optional tuple of numpy arrays (one per parameter),
             giving the shared warm-up starting point for all chains.
+        chains_per_gpu: int, how many chains share each GPU; the device index
+            for this worker is ``rank // chains_per_gpu``.
     """
     from optbnn.bnn.likelihoods import LikCE
     from optbnn.bnn.nets.mlp import MLP
@@ -97,13 +102,14 @@ def _fpref_chain_worker(
     from optbnn.utils.util import set_seed
 
     chain_idx = batch_start + rank
-    torch.cuda.set_device(rank)
+    device_idx = rank // chains_per_gpu
+    torch.cuda.set_device(device_idx)
     set_seed(seed + chain_idx)
 
     import wandb as _wandb
     _wandb.init(mode="disabled")
 
-    device = torch.device(f"cuda:{rank}")
+    device = torch.device(f"cuda:{device_idx}")
 
     net = MLP(**net_args)
     if initial_weights is not None:
@@ -705,8 +711,9 @@ class FPrefNet:
         cycle_length=None,
         fraction_cool=0.25,
         max_param_step=None,
+        chains_per_gpu=1,
     ):
-        """Run multiple fSGHMC chains in parallel, one process per GPU.
+        """Run multiple fSGHMC chains in parallel, packing chains onto GPUs.
 
         Sampled weights for chain i are written to::
 
@@ -724,6 +731,14 @@ class FPrefNet:
             seed: int, base seed; chain i uses seed + i.
             initial_weights: optional tuple of numpy arrays — shared warm-up
                 starting point to prevent chains from diverging at init.
+            chains_per_gpu: int >= 1, how many chains to co-locate on each GPU.
+                Chains pack greedily: the first ``chains_per_gpu`` chains share
+                cuda:0, the next share cuda:1, and so on, so a run uses only
+                ``ceil(num_chains / chains_per_gpu)`` GPUs (capped at the number
+                available).  The chains' tiny MLP + n_meas×n_meas kernel leave an
+                A6000 far from memory-bound; co-located chains stay statistically
+                independent (separate processes, seeds, RNG, ckpt dirs) and only
+                share compute.  Default 1 reproduces one-chain-per-GPU behaviour.
             (remaining args forwarded verbatim to FPrefNet.train())
         """
         import torch.multiprocessing as mp
@@ -732,6 +747,10 @@ class FPrefNet:
         if num_gpus == 0:
             raise RuntimeError(
                 "sample_multi_chains_parallel requires at least one CUDA device."
+            )
+        if chains_per_gpu < 1:
+            raise ValueError(
+                f"chains_per_gpu must be >= 1, got {chains_per_gpu}."
             )
 
         train_kwargs = dict(
@@ -753,11 +772,22 @@ class FPrefNet:
             max_param_step=max_param_step,
         )
 
-        for batch_start in range(0, num_chains, num_gpus):
-            n_parallel = min(num_gpus, num_chains - batch_start)
+        # Up to this many chains run concurrently per wave: chains_per_gpu on
+        # each of the available GPUs.  Within a wave, the worker maps its rank to
+        # device rank // chains_per_gpu, so chains pack onto the lowest GPU
+        # indices first (cuda:2+ stay idle when fewer are needed).
+        max_concurrent = num_gpus * chains_per_gpu
+        for batch_start in range(0, num_chains, max_concurrent):
+            n_parallel = min(max_concurrent, num_chains - batch_start)
+            n_gpus_used = math.ceil(n_parallel / chains_per_gpu)
             self.print_info(
-                "Launching fSGHMC chains {:d}–{:d} in parallel on {:d} GPU(s)".format(
-                    batch_start, batch_start + n_parallel - 1, n_parallel
+                "Launching fSGHMC chains {:d}–{:d} ({:d} chains) on {:d} GPU(s), "
+                "{:d} chain(s)/GPU".format(
+                    batch_start,
+                    batch_start + n_parallel - 1,
+                    n_parallel,
+                    n_gpus_used,
+                    chains_per_gpu,
                 )
             )
             mp.spawn(
@@ -773,6 +803,7 @@ class FPrefNet:
                     gp_prior_args,
                     meas_kwargs,
                     initial_weights,
+                    chains_per_gpu,
                 ),
                 nprocs=n_parallel,
                 join=True,
