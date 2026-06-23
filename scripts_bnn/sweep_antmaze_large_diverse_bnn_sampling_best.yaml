@@ -25,7 +25,7 @@ parameters:
   # Set low enough that chains run (e.g. 0.0); a high threshold early-stops
   # before any samples are collected and the metric is never logged.
   early_stop_acc_threshold:
-    value: PLACEHOLDER
+    value: 0.0
 
   # ---- Fixed: architecture + prior from *_warmup winners ----
   num_burn_in_steps:
@@ -33,21 +33,21 @@ parameters:
   warmup_log_every:
     value: 250
   width:
-    value: PLACEHOLDER
+    value: 7
   depth:
-    value: PLACEHOLDER
+    value: 2
   n_meas:
-    value: PLACEHOLDER
+    value: 25
 
   # ---- Fixed: sampler schedule from *_sampling winners ----
   sghmc_lr:
-    value: PLACEHOLDER
+    value: 0.0015914385966502977
   sghmc_lr_max:
-    value: PLACEHOLDER
+    value: 0.009055956577794531
   cycle_length:
-    value: PLACEHOLDER
+    value: 2250
   mdecay:
-    value: PLACEHOLDER
+    value: 0.040951539878604074
 
   # Multi-seed grid
   seed:
