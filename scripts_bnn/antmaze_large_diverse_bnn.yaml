@@ -8,7 +8,7 @@ depth: 3
 
 # --- Sampling budget ---
 num_chains: 4
-chains_per_gpu: 4        # 4 chains on 1 GPU (CUDA_VISIBLE_DEVICES=5); = ceil(num_chains / visible_gpus)
+chains_per_gpu: 4        # 4 chains on 1 GPU (one agent per GPU); = ceil(num_chains / visible_gpus)
 num_samples: 155          # samples per chain; one per cycle with cyclical lr
 n_discarded: 5           # discard first N cycles as extra post-burn-in warm-up
 num_burn_in_steps: 3000  # steps for preconditioner adaptation (shared warm-up
