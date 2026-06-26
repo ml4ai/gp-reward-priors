@@ -578,7 +578,15 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     _B_rhat = min(64, X_eval.shape[0])
     _obs_dim = X_eval.shape[-1] - 1
-    x_rhat = X_eval[:_B_rhat, 0, :, :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+    # Drop attention-masked (padded) timesteps: the last feature column is the
+    # attn_mask (see util.load_pref_data), and the net produces garbage at padded
+    # steps.  No-op for datasets with full-length trajectories, but keeps the
+    # diagnostics over *real* states for sweeps whose trajectories are padded.
+    _block = X_eval[:_B_rhat, 0, :, :]                       # [B, T, obs_dim+1]
+    _valid = (_block[..., _obs_dim].reshape(-1) > 0.5)       # attn_mask column
+    x_rhat = _block[..., :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+    x_rhat = x_rhat[_valid]
+    print(f"[diag] x_rhat: {int(_valid.sum())}/{_valid.size} valid (non-padded) points")
     x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
 
     mean_ce = []
@@ -655,6 +663,67 @@ def train(config: TrainConfig):
     ess_pred = azs.ess(pred_chains)
     ess_param = azs.ess(params_chains)
 
+    # ------------------------------------------------------------------ #
+    # Lower-tail (5% quantile) convergence.  The defaults above are *bulk*
+    # diagnostics (centred on the median) and do NOT certify a quantile.
+    # Downstream we take a 95% lower confidence bound on the reward, i.e.
+    # the 5th percentile of the per-point posterior predictive, so we need
+    # tail-ESS / tail-R-hat and the Monte-Carlo error of that quantile.
+    # Wrapped defensively: a signature mismatch here must not discard the
+    # (expensive) sampling run — fall back to NaN + a warning.
+    # ------------------------------------------------------------------ #
+    _nan_pred = np.full(pred_chains.shape[-1], np.nan)
+    try:
+        # ESS *at* the 0.05 quantile — directly the draws backing the lower
+        # bound (arviz_stats "tail" needs a prob and mixes both ends; we only
+        # care about the lower one).
+        ess_pred_q05 = np.asarray(azs.ess(pred_chains, method="quantile", prob=0.05))
+        # Folded rank-normalised R-hat: sensitive to scale/tail mixing
+        # differences across chains, unlike the default (bulk) rank R-hat.
+        # ("tail" is not a valid rhat method in arviz_stats.)
+        rhat_pred_folded = np.asarray(azs.rhat(pred_chains, method="folded"))
+        # MCSE of the 0.05 quantile, in reward units (the error bar on the
+        # bound we actually report).
+        mcse_pred_q05 = np.asarray(azs.mcse(pred_chains, method="quantile", prob=0.05))
+    except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
+        warnings.warn(
+            f"Tail diagnostics failed ({type(e).__name__}: {e}); logging NaN. "
+            "Check the arviz_stats ess/rhat/mcse signatures for this version.",
+            RuntimeWarning,
+        )
+        ess_pred_q05 = rhat_pred_folded = mcse_pred_q05 = _nan_pred
+
+    # Absolute MCSE is scale-confounded: reward magnitude varies by orders of
+    # magnitude across states (deep-net w^(depth+1) output scaling), so a large
+    # `mcse_q05_max` flags a high-magnitude point, not a poorly-resolved one.
+    # Normalise by each point's posterior-predictive sd to get a scale-free
+    # "fraction of the spread" — THIS is the trustworthy `_max` to read.
+    _pred_sd = pred_chains.reshape(-1, pred_chains.shape[-1]).std(axis=0)
+    mcse_pred_q05_rel = mcse_pred_q05 / (_pred_sd + 1e-8)
+
+    # ------------------------------------------------------------------ #
+    # CVaR (mean of the lowest 5%) convergence — the downstream quantity.
+    # CVaR averages the extreme tail, so it is harder to estimate than the
+    # q05 quantile (VaR) above and needs its own ESS/MCSE.  Rockafellar–Uryasev
+    # identity  CVaR = VaR + (1/a)·E[min(X-VaR,0)]  is exact, so CVaR's MC error
+    # is the *mean* ESS/MCSE of the integrand u = (1/a)·min(X-VaR,0).
+    # ------------------------------------------------------------------ #
+    _alpha = 0.05
+    try:
+        _var = np.quantile(pred_chains.reshape(-1, pred_chains.shape[-1]),
+                           _alpha, axis=0)
+        _u = np.minimum(pred_chains - _var[None, None, :], 0.0) / _alpha
+        ess_pred_cvar = np.asarray(azs.ess(_u, method="mean"))
+        mcse_pred_cvar = np.asarray(azs.mcse(_u, method="mean"))
+        rhat_pred_cvar = np.asarray(azs.rhat(_u, method="folded"))
+        mcse_pred_cvar_rel = mcse_pred_cvar / (_pred_sd + 1e-8)
+    except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
+        warnings.warn(
+            f"CVaR diagnostics failed ({type(e).__name__}: {e}); logging NaN.",
+            RuntimeWarning,
+        )
+        ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
+
     def _pct_over(arr, threshold):
         arr = np.asarray(arr, dtype=float)
         valid = arr[~np.isnan(arr)]
@@ -677,6 +746,28 @@ def train(config: TrainConfig):
         "pred_ess_mean": float(np.nanmean(ess_pred)),
         "pred_ess_min_norm": float(np.nanmin(ess_pred)) / total_samples,
         "pred_ess_median_norm": float(np.nanmedian(ess_pred)) / total_samples,
+        # ---- Lower-tail (5% quantile) diagnostics: certify the 95% bound ----
+        "pred_q05_ess_min": float(np.nanmin(ess_pred_q05)),
+        "pred_q05_ess_median": float(np.nanmedian(ess_pred_q05)),
+        "pred_q05_ess_min_norm": float(np.nanmin(ess_pred_q05)) / total_samples,
+        "pred_folded_rhat_max": float(np.nanmax(rhat_pred_folded)),
+        "pred_folded_rhat_95th_pct": float(np.nanpercentile(rhat_pred_folded, 95)),
+        "pred_folded_rhat_median": float(np.nanmedian(rhat_pred_folded)),
+        "pred_folded_rhat_pct_over_1.01": _pct_over(rhat_pred_folded, 1.01),
+        "pred_q05_mcse_max": float(np.nanmax(mcse_pred_q05)),
+        "pred_q05_mcse_median": float(np.nanmedian(mcse_pred_q05)),
+        # scale-free MCSE (fraction of per-point predictive sd) — the _max here
+        # is meaningful, unlike the absolute one above.
+        "pred_q05_mcse_rel_max": float(np.nanmax(mcse_pred_q05_rel)),
+        "pred_q05_mcse_rel_median": float(np.nanmedian(mcse_pred_q05_rel)),
+        # ---- CVaR (mean of lowest 5%): the downstream quantity ----
+        "pred_cvar_ess_min": float(np.nanmin(ess_pred_cvar)),
+        "pred_cvar_ess_median": float(np.nanmedian(ess_pred_cvar)),
+        "pred_cvar_rhat_max": float(np.nanmax(rhat_pred_cvar)),
+        "pred_cvar_rhat_median": float(np.nanmedian(rhat_pred_cvar)),
+        "pred_cvar_rhat_pct_over_1.01": _pct_over(rhat_pred_cvar, 1.01),
+        "pred_cvar_mcse_rel_max": float(np.nanmax(mcse_pred_cvar_rel)),
+        "pred_cvar_mcse_rel_median": float(np.nanmedian(mcse_pred_cvar_rel)),
         "param_rhat_max": float(np.nanmax(rhats_param)),
         "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
         "param_rhat_median": float(np.nanmedian(rhats_param)),
