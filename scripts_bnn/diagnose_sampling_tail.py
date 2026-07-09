@@ -122,8 +122,13 @@ def _summ(name, arr):
           f"max {a.max():9.4f}")
 
 
-def tail_diagnostics(pred_chains, alpha=0.05):
-    """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics."""
+def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
+    """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics.
+
+    If worst_k > 0 and x_rhat is given, also list the worst_k points by CVaR
+    rel-MCSE with their torso (x, y) coordinates, so you can tell whether the
+    unresolved points are real in-support maze states or degenerate ones.
+    """
     C, D, P = pred_chains.shape
     total = C * D
     flat = pred_chains.reshape(-1, P)
@@ -165,6 +170,25 @@ def tail_diagnostics(pred_chains, alpha=0.05):
     print(f"  {'points MCSE>sd (unresolved)':26s} {n_unresolved} of {P} "
           f"({100 * n_unresolved / P:.2f}%)")
 
+    if worst_k and x_rhat is not None:
+        rel_cvar = mcse_cvar / (pred_sd + eps)
+        rel_var = mcse_var / (pred_sd + eps)
+        cvar_val = var + u.reshape(-1, P).mean(axis=0)       # actual CVaR reward
+        pred_mean = flat.mean(axis=0)
+        order = np.argsort(rel_cvar)[::-1][:worst_k]         # worst first
+        # torso (x, y) is obs[:, :2] under the antmaze convention (map_xy_source=obs)
+        xy = x_rhat[:, :2]
+        print(f"\n=== WORST {worst_k} POINTS by CVaR rel-MCSE "
+              f"(coords = torso x,y = obs[:, :2]) ===")
+        print(f"  {'idx':>6} {'x':>8} {'y':>8} | {'cvar_relMCSE':>12} "
+              f"{'cvar_Rhat':>9} {'cvar_ESS':>8} {'var_relMCSE':>11} "
+              f"{'pred_mean':>10} {'pred_sd':>10} {'CVaR':>10}")
+        for j in order:
+            print(f"  {j:>6} {xy[j, 0]:>8.3f} {xy[j, 1]:>8.3f} | "
+                  f"{rel_cvar[j]:>12.3f} {rhat_cvar[j]:>9.3f} {ess_cvar[j]:>8.1f} "
+                  f"{rel_var[j]:>11.3f} {pred_mean[j]:>10.3f} {pred_sd[j]:>10.3f} "
+                  f"{cvar_val[j]:>10.3f}")
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
@@ -177,6 +201,9 @@ def main():
                     help="Number of preference pairs to evaluate (default 64, "
                          "matching run_bnn_training.py).")
     ap.add_argument("--device", default="cpu", help="cpu or cuda (default cpu).")
+    ap.add_argument("--worst-k", type=int, default=10,
+                    help="List the K worst points by CVaR rel-MCSE with their "
+                         "torso (x, y) coords (default 10; 0 to disable).")
     # The following default to the run's config.yaml; override only if needed.
     ap.add_argument("--dataset", default=None)
     ap.add_argument("--width", type=int, default=None,
@@ -194,9 +221,10 @@ def main():
     print(f"[run] seed={cfg.get('seed')} width={width} depth={depth} "
           f"num_chains={num_chains} num_samples={cfg.get('num_samples')}")
 
-    pred_chains, _ = build_pred_chains(
+    pred_chains, x_rhat = build_pred_chains(
         args.run_dir, dataset, width, depth, num_chains, args.b_rhat, args.device)
-    tail_diagnostics(pred_chains, alpha=args.alpha)
+    tail_diagnostics(pred_chains, x_rhat=x_rhat, alpha=args.alpha,
+                     worst_k=args.worst_k)
 
 
 if __name__ == "__main__":
