@@ -13,9 +13,8 @@ parameters:
   config_path:
     value: "scripts_mr/antmaze_medium_diverse_mr.yaml"
 
-  # Train on the FULL dataset (no held-out split) for the final multi-seed eval
-  training_split:
-    value: 1.0
+  # Data comes from the base config's train_dataset / val_dataset (pre-split);
+  # the grid below varies the model seed over that fixed train/validation split.
 
   # Best hyperparameters from the bayes sweep
   width:

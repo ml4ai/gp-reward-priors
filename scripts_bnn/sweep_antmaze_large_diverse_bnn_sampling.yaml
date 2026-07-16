@@ -3,15 +3,15 @@ program: run_bnn_training.py
 method: bayes
 run_cap: 50
 metric:
-  name: test_mean_accuracy
+  name: val_mean_accuracy
   goal: maximize
 
 # Stage 2 of 3:  warmup -> sampling -> sampling_best.
 # Runs the FULL parallel-chain cyclical-SGHMC phase and tunes ONLY the sampler
 # schedule (sghmc_lr=lr_min, sghmc_lr_max, cycle_length, mdecay) on the
-# posterior-predictive test_mean_accuracy.  Uses the SAME held-out split as the
-# warmup sweep (training_split is inherited from the base config = 0.8, so
-# eval_label is "test" and the metric is test_mean_accuracy).  Architecture and
+# posterior-predictive val_mean_accuracy.  Evaluates on the pre-split validation
+# set (train_dataset / val_dataset are inherited from the base config, so
+# eval_label is "val" and the metric is val_mean_accuracy).  Architecture and
 # prior strength are FIXED to the sweep_antmaze_large_diverse_bnn_warmup.yaml winners.
 # Motivation: a config can reach warmup_final_acc ~0.97 yet collapse to ~0.52
 # posterior accuracy when the cyclical schedule is too hot (the chains diverge
@@ -31,7 +31,7 @@ parameters:
     value: true
 
   # Let chain sampling actually run: a high threshold early-stops before any
-  # samples are collected and test_mean_accuracy is never logged.  Set from the
+  # samples are collected and val_mean_accuracy is never logged.  Set from the
   # *_warmup sweep results — low enough that the winning architecture clears it
   # (e.g. a little below the warmup winner's accuracy).
   early_stop_acc_threshold:

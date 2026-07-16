@@ -54,11 +54,9 @@ fraction_cool: 0.25      # 250 cool steps / 750 hot steps per cycle
 keep_every: 1000
 
 # --- Data ---
-dataset: data/antmaze/antmaze-medium-diverse-v2/antmaze-medium-diverse-v2_pref_nt.hdf5
+train_dataset: data/antmaze/antmaze-medium-diverse-v2/eval/seed_1/antmaze-medium-diverse-v2_pref_train_1.hdf5
+val_dataset: data/antmaze/antmaze-medium-diverse-v2/eval/seed_1/antmaze-medium-diverse-v2_pref_val_1.hdf5
 dataset_id: D4RL_antmaze-medium-diverse-v2
-training_split: 0.8      # 1.0 = full dataset, in-sample metrics (train_*)
-label_flip: 0.0          # fraction of TRAINING labels to flip (test stays clean)
-data_reduction: 0.0      # fraction of TRAINING pairs to discard (test unaffected)
 measurement_dataset: data/antmaze/antmaze-medium-diverse-v2/antmaze-medium-diverse-v2_tuning_set.hdf5
 
 # --- Warm-up monitoring / early stop ---

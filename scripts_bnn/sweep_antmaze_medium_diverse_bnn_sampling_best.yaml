@@ -2,23 +2,21 @@ project: BNN-training
 program: run_bnn_training.py
 method: grid
 metric:
-  name: train_mean_accuracy
+  name: val_mean_accuracy
   goal: maximize
 
 # Stage 3 of 3:  warmup -> sampling -> sampling_best.
 # Multi-seed re-evaluation of the fully-tuned config (architecture + prior from
 # sweep_antmaze_medium_diverse_bnn_warmup.yaml, sampler schedule from
-# sweep_antmaze_medium_diverse_bnn_sampling.yaml) on the FULL training data
-# (training_split=1.0 -> in-sample train_* metrics).  The grid expands to one run
+# sweep_antmaze_medium_diverse_bnn_sampling.yaml) on the pre-split
+# train/validation sets (val_* metrics).  The grid expands to one run
 # per seed (10 total) so you get mean +/- std for the chosen config.  Replace
 # every PLACEHOLDER with the corresponding winning value.
 parameters:
   config_path:
     value: "scripts_bnn/antmaze_medium_diverse_bnn.yaml"
 
-  # Full dataset (no held-out split) + chain sampling -> train_mean_accuracy.
-  training_split:
-    value: 1.0
+  # Chain sampling on the pre-split train/validation sets -> val_mean_accuracy.
   use_cyclical_lr:
     value: true
 

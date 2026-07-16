@@ -18,18 +18,19 @@ Key differences from bb_optim_star.py
 7. ``n_concepts`` (GP feature dimension) is inferred by probing the source
    function on a dummy input, or can be set explicitly in the config.
 
-Train/test split vs. full-dataset training
-------------------------------------------
-``training_split`` controls how the dataset is used:
+Pre-split train / validation data
+----------------------------------
+The training and validation sets are loaded from separate pre-split HDF5 files
+(``train_dataset`` and ``val_dataset``); no splitting is done in this script.
+Build the partitions upstream (e.g. split_pref_nt_seeds.py) so that any data
+reduction or label-noise variants are just different files to point at.  The
+model is trained on ``train_dataset`` and all post-sampling metrics (CE,
+accuracy) are computed on ``val_dataset`` and logged as ``val_*``.  R-hat and
+ESS measure MCMC convergence and are independent of the train/validation split.
 
-* ``0 < training_split < 1`` — the data is split; the model is trained on the
-  training partition and all post-sampling metrics (CE, accuracy) are computed
-  on the held-out test partition and logged as ``test_*``.
-* ``training_split == 1.0`` — the *entire* dataset is used for posterior
-  sampling (no held-out split).  Warm-up monitoring, the early-stop check, and
-  post-sampling CE / accuracy are then computed in-sample on the training data
-  and logged as ``train_*``.  R-hat and ESS measure MCMC convergence and are
-  unaffected by the absence of a split.
+Note this is distinct from the measurement dataset (``measurement_dataset``),
+which supplies the raw observations for the functional GP prior gradient and is
+loaded separately from both the train and validation sets.
 
 All SGHMC hyper-parameters, warm-up logic, R-hat / ESS diagnostics, and
 wandb logging are otherwise identical to bb_optim_star.py.
@@ -103,22 +104,14 @@ class TrainConfig:
     fraction_cool: float = 0.25
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
-    # Preference training dataset
-    dataset: str = "data/pref.hdf5"
+    # Pre-split preference datasets (separate train / validation HDF5 files).
+    # Both are read whole — no splitting is done in this script.  Build the
+    # partitions upstream (split_pref_nt_seeds.py) so that data-reduction or
+    # label-noise variants are just different files to point at.  The model is
+    # trained on train_dataset; metrics are computed on val_dataset (val_*).
+    train_dataset: str = "data/pref_train.hdf5"
+    val_dataset: str = "data/pref_val.hdf5"
     dataset_id: str = "run"
-    # Fraction of the dataset used for training.  0 < training_split < 1 holds
-    # out the remainder as a test set (metrics logged as test_*).  Set to 1.0 to
-    # train on the FULL dataset with no held-out split — metrics are then
-    # computed in-sample on the training data and logged as train_*.
-    training_split: float = 0.8
-    # Fraction of TRAINING labels to flip (0 = none, 1 = all).  Applied only to
-    # the training partition so any held-out test labels stay clean.  Flipping a
-    # preference label swaps the two trajectories' win/loss assignment.
-    label_flip: float = 0.0
-    # Fraction of TRAINING pairs to randomly discard after the split (0 = none,
-    # 1 = all).  Test data is unaffected.  data_reduction=1.0 leaves no training
-    # data and the run exits cleanly.
-    data_reduction: float = 0.0
     # Measurement dataset for the fSGHMC functional GP prior.
     # Must be an HDF5 file with keys:
     #   "obs"     — (N, obs_dim)  required.  BNN inputs (state + action concatenated).
@@ -174,10 +167,10 @@ class TrainConfig:
     map_xy_source: str = "obs"
     # Warm-up monitoring: log NLL and accuracy every this many steps.
     # 0 = disabled.  Set to e.g. 100 to get a live convergence curve during
-    # burn-in.  Evaluation uses a random 512-pair subsample of the test set.
+    # burn-in.  Evaluation uses a random 512-pair subsample of the validation set.
     warmup_log_every: int = 100
     # Early-stop threshold on warm-up preference accuracy.  After warm-up,
-    # accuracy is evaluated on the test set; if it is below this threshold,
+    # accuracy is evaluated on the validation set; if it is below this threshold,
     # parallel chain sampling is skipped and the run finishes cleanly (no
     # exception raised, so a wandb sweep records a completed run rather than a
     # crash).  Accuracy is used rather than NLL because the trajectory-sum
@@ -246,27 +239,17 @@ def train(config: TrainConfig):
         print(f"[GP prior] reward_function = {config.reward_function!r}")
 
     # ------------------------------------------------------------------ #
-    # Load preference data (optionally split into train / test)
+    # Load preference data (separate pre-split train / validation files)
     # ------------------------------------------------------------------ #
-    # training_split == 1.0 -> load_pref_data returns (X, y) (no split); the full
-    # dataset is used for sampling and all metrics are computed in-sample.
-    full_dataset = config.training_split >= 1.0
-    if full_dataset:
-        X_train, y_train = util.load_pref_data(config.dataset, training_ratio=1.0)
-        # Evaluate in-sample: eval set is the training set itself.
-        X_eval, y_eval = X_train, y_train
-        eval_label = "train"
-        _splits = [("train", X_train, y_train)]
-        print("[data] training_split=1.0 — using FULL dataset (no held-out test set)")
-    else:
-        X_train, y_train, X_test, y_test = util.load_pref_data(
-            config.dataset, config.training_split
-        )
-        X_eval, y_eval = X_test, y_test
-        eval_label = "test"
-        _splits = [("train", X_train, y_train), ("test", X_test, y_test)]
+    # Each file is read whole (training_ratio=1.0 = no in-script split); the
+    # model trains on train_dataset and all post-sampling metrics are computed
+    # on val_dataset and logged as val_*.
+    X_train, y_train = util.load_pref_data(config.train_dataset, training_ratio=1.0)
+    X_val, y_val = util.load_pref_data(config.val_dataset, training_ratio=1.0)
+    X_eval, y_eval = X_val, y_val
+    eval_label = "val"
 
-    for _split, _X, _y in _splits:
+    for _split, _X, _y in (("train", X_train, y_train), ("val", X_val, y_val)):
         _n_nan_X = int(np.isnan(_X).sum())
         _n_inf_X = int(np.isinf(_X).sum())
         _n_nan_y = int(np.isnan(_y).sum())
@@ -282,47 +265,6 @@ def train(config: TrainConfig):
                 "Labels must be finite class indices."
             )
         print(f"[data] {_split}: {_X.shape[0]} pairs — all values finite ✓")
-
-    # ------------------------------------------------------------------ #
-    # Label flipping (training data only — any held-out test labels stay clean)
-    # ------------------------------------------------------------------ #
-    # y_train is one-hot (N, 2); flipping a label is 1.0 - y (swaps the columns).
-    if config.label_flip > 0.0:
-        n_train = X_train.shape[0]
-        if config.label_flip >= 1.0:
-            y_train = 1.0 - y_train
-            n_flipped = n_train
-        else:
-            n_flipped = int(n_train * config.label_flip)
-            flip_idx = np.random.choice(n_train, n_flipped, replace=False)
-            y_train[flip_idx] = 1.0 - y_train[flip_idx]
-        print(
-            f"[data] label_flip={config.label_flip}: flipped {n_flipped}/{n_train} "
-            "training labels"
-        )
-
-    # ------------------------------------------------------------------ #
-    # Data reduction (training data only — test data unaffected)
-    # ------------------------------------------------------------------ #
-    if config.data_reduction > 0.0:
-        if config.data_reduction >= 1.0:
-            print("[data] data_reduction=1.0: no training data remains.  Exiting.")
-            wandb.finish()
-            return
-        n_train = X_train.shape[0]
-        n_keep = int(n_train * (1.0 - config.data_reduction))
-        keep_idx = np.random.choice(n_train, n_keep, replace=False)
-        X_train = X_train[keep_idx]
-        y_train = y_train[keep_idx]
-        print(
-            f"[data] data_reduction={config.data_reduction}: kept {n_keep}/{n_train} "
-            "training pairs"
-        )
-
-    # In full-dataset mode the eval set IS the training set, so re-sync it after
-    # any label flipping / reduction (these may rebind or subset y_train/X_train).
-    if full_dataset:
-        X_eval, y_eval = X_train, y_train
 
     # X_train has shape (N, 2, T, d_dim); the last column of d_dim is the
     # attention mask, so obs_dim = state_dim + action_dim = d_dim - 1.
@@ -462,9 +404,8 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     # Warm-up runs fSGHMC so the starting point already reflects the GP prior.
     # When warmup_log_every > 0, NLL and accuracy are evaluated every
-    # warmup_log_every steps on a 512-pair subsample of the eval set (test set,
-    # or the training set when training_split=1.0) and logged to stdout + wandb
-    # under the "warmup/" prefix.
+    # warmup_log_every steps on a 512-pair subsample of the validation set and
+    # logged to stdout + wandb under the "warmup/" prefix.
     util.set_seed(config.seed)
     bayes_net_f.train(
         X_train,
@@ -572,9 +513,8 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Evaluation — on the eval set (held-out test set, or the training set
-    # in-sample when training_split=1.0).  R-hat and ESS measure MCMC
-    # convergence and are independent of the train/test distinction.
+    # Evaluation — on the held-out validation set.  R-hat and ESS measure MCMC
+    # convergence and are independent of the train/validation distinction.
     # ------------------------------------------------------------------ #
     _B_rhat = min(64, X_eval.shape[0])
     _obs_dim = X_eval.shape[-1] - 1

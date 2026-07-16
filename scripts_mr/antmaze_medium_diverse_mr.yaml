@@ -5,8 +5,8 @@ width: 8
 depth: 2
 activations: relu
 dataset_id: D4RL_antmaze-medium-diverse-v2
-dataset: data/antmaze/antmaze-medium-diverse-v2/antmaze-medium-diverse-v2_pref_nt.hdf5
-training_split: 0.8
+train_dataset: data/antmaze/antmaze-medium-diverse-v2/eval/seed_1/antmaze-medium-diverse-v2_pref_train_1.hdf5
+val_dataset: data/antmaze/antmaze-medium-diverse-v2/eval/seed_1/antmaze-medium-diverse-v2_pref_val_1.hdf5
 epochs: 10
 batch_size: 64
 lr: 0.0003

@@ -9,7 +9,7 @@ import numpy as np
 import pyrallis
 import torch
 import wandb
-from torch.utils.data import DataLoader, Subset, random_split
+from torch.utils.data import DataLoader
 
 sys.path.insert(0, os.path.abspath(".."))
 os.chdir("..")
@@ -33,10 +33,11 @@ class TrainConfig:
     activations: str = "relu"
     # training params
     dataset_id: str = "D4RL_antmaze-medium-play-v2"
-    dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref.hdf5"
-    training_split: float = 0.7
-    label_flip: float = 0.0  # fraction of training labels to flip (0 = none, 1 = all)
-    data_reduction: float = 0.0  # fraction of training data to remove after split (0 = none, 1 = all)
+    # Separate pre-split train / validation HDF5 files, each loaded whole (no
+    # in-script splitting).  Point these at the appropriate partitions — any
+    # data-reduction or label-noise variant is just a different file.
+    train_dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref_train.hdf5"
+    val_dataset: str = "~/busy-beeway/transformers/pen_labels/AdroitHandPen-v1_pref_val.hdf5"
     epochs: int = 10
     batch_size: int = 256  # Batch size for all networks
     lr: float = 3e-4
@@ -77,50 +78,12 @@ def train(config: TrainConfig):
             pyrallis.dump(config, f)
 
     util.set_seed(config.seed)
-    dataset = osp.expanduser(config.dataset)
-    dataset = util.Pref_H5Dataset(dataset, -1)
-    state_shape, action_shape = dataset.shapes()
+    # Load the pre-split train and validation sets from separate files.
+    train_data = util.Pref_H5Dataset(osp.expanduser(config.train_dataset), -1)
+    val_data = util.Pref_H5Dataset(osp.expanduser(config.val_dataset), -1)
+    state_shape, action_shape = train_data.shapes()
     state_dim = state_shape[2]
     action_dim = action_shape[2]
-    full_training = config.training_split == 1.0
-
-    if full_training:
-        training_data = dataset
-        if config.label_flip > 0.0:
-            if config.label_flip == 1.0:
-                dataset.labels = 1.0 - dataset.labels
-            else:
-                num_to_flip = int(len(dataset) * config.label_flip)
-                indices_to_flip = np.random.choice(len(dataset), num_to_flip, replace=False)
-                dataset.labels[indices_to_flip] = 1.0 - dataset.labels[indices_to_flip]
-    else:
-        training_data, test_data = random_split(
-            dataset, [config.training_split, 1 - config.training_split]
-        )
-        # Apply label flipping to the training split only, so test labels stay clean.
-        if config.label_flip > 0.0:
-            train_indices = np.array(training_data.indices)
-            if config.label_flip == 1.0:
-                dataset.labels[train_indices] = 1.0 - dataset.labels[train_indices]
-            else:
-                num_to_flip = int(len(train_indices) * config.label_flip)
-                flip_positions = np.random.choice(len(train_indices), num_to_flip, replace=False)
-                indices_to_flip = train_indices[flip_positions]
-                dataset.labels[indices_to_flip] = 1.0 - dataset.labels[indices_to_flip]
-
-    # Randomly discard data_reduction fraction of training points (test data unaffected).
-    if config.data_reduction > 0.0:
-        if config.data_reduction == 1.0:
-            print("data_reduction=1.0: no training data remains. Exiting.")
-            sys.exit(0)
-        n_train = len(training_data)
-        n_keep = int(n_train * (1.0 - config.data_reduction))
-        keep_positions = np.random.choice(n_train, n_keep, replace=False)
-        if full_training:
-            training_data = Subset(dataset, keep_positions)
-        else:
-            keep_indices = np.array(training_data.indices)[keep_positions]
-            training_data = Subset(dataset, keep_indices)
 
     persistent = config.num_workers > 0
     loader_kwargs = dict(
@@ -131,9 +94,8 @@ def train(config: TrainConfig):
     )
     if config.num_workers > 0:
         loader_kwargs["prefetch_factor"] = config.prefetch_factor
-    training_data_loader = DataLoader(training_data, shuffle=True, **loader_kwargs)
-    if not full_training:
-        test_data_loader = DataLoader(test_data, shuffle=False, **loader_kwargs)
+    training_data_loader = DataLoader(train_data, shuffle=True, **loader_kwargs)
+    val_data_loader = DataLoader(val_data, shuffle=False, **loader_kwargs)
 
     net = MLP(
         state_dim + action_dim, 1, [config.width] * config.depth, config.activations
@@ -144,7 +106,7 @@ def train(config: TrainConfig):
     model = MRTrainer(
         net,
         opt=net_optimizer,
-        num_datapoints=len(training_data),
+        num_datapoints=len(train_data),
         device=device,
     )
     c_best_epoch = 0
@@ -157,17 +119,12 @@ def train(config: TrainConfig):
             "training_loss": [],
             "training_acc": [],
             "best_epoch": c_best_epoch,
+            "eval_loss": [],
+            "eval_acc": [],
+            f"eval_{config.criteria_key}_best": (
+                best_acc if config.criteria_key == "acc" else best_loss
+            ),
         }
-        if full_training:
-            metrics[f"training_{config.criteria_key}_best"] = (
-                best_acc if config.criteria_key == "acc" else best_loss
-            )
-        else:
-            metrics["eval_loss"] = []
-            metrics["eval_acc"] = []
-            metrics[f"eval_{config.criteria_key}_best"] = (
-                best_acc if config.criteria_key == "acc" else best_loss
-            )
 
         if epoch:
             for train_batch in training_data_loader:
@@ -177,80 +134,33 @@ def train(config: TrainConfig):
         else:
             metrics["training_loss"] = np.nan
 
-        if full_training:
-            # Best model tracked by training metrics; skip epoch 0 (no training yet).
-            if epoch:
-                loss = np.mean(metrics["training_loss"])
-                acc = np.mean(metrics["training_acc"])
-                if config.criteria_key == "acc":
-                    if acc > best_acc:
-                        c_best_epoch = epoch
-                        best_acc = acc
-                        metrics["best_epoch"] = c_best_epoch
-                        metrics["training_acc_best"] = best_acc
-                        if config.checkpoints_path is not None:
-                            torch.save(
-                                model.state_dict(),
-                                os.path.join(config.checkpoints_path, "best_model.pt"),
-                            )
-                        if loss < best_loss:
-                            best_loss = loss
-                    elif acc == best_acc:
-                        if loss < best_loss:
-                            c_best_epoch = epoch
-                            best_loss = loss
-                            metrics["best_epoch"] = c_best_epoch
-                            metrics["training_acc_best"] = best_acc
-                            if config.checkpoints_path is not None:
-                                torch.save(
-                                    model.state_dict(),
-                                    os.path.join(config.checkpoints_path, "best_model.pt"),
-                                )
-                    else:
-                        if loss < best_loss:
-                            best_loss = loss
-                else:
+        # eval phase — evaluate on the held-out validation set
+        if epoch % config.eval_every == 0:
+            for val_batch in val_data_loader:
+                val_batch = [b.to(device, non_blocking=True) for b in val_batch]
+                for key, val in model.evaluation(val_batch).items():
+                    metrics[key].append(val)
+
+            loss = np.mean(metrics["eval_loss"])
+            acc = np.mean(metrics["eval_acc"])
+
+            if config.criteria_key == "acc":
+                if acc > best_acc:
+                    c_best_epoch = epoch
+                    best_acc = acc
+                    metrics["best_epoch"] = c_best_epoch
+                    metrics["eval_acc_best"] = best_acc
+                    if config.checkpoints_path is not None:
+                        torch.save(
+                            model.state_dict(),
+                            os.path.join(config.checkpoints_path, "best_model.pt"),
+                        )
+                    if loss < best_loss:
+                        best_loss = loss
+                elif acc == best_acc:
                     if loss < best_loss:
                         c_best_epoch = epoch
                         best_loss = loss
-                        metrics["best_epoch"] = c_best_epoch
-                        metrics["training_loss_best"] = best_loss
-                        if config.checkpoints_path is not None:
-                            torch.save(
-                                model.state_dict(),
-                                os.path.join(config.checkpoints_path, "best_model.pt"),
-                            )
-                        if acc > best_acc:
-                            best_acc = acc
-                    elif loss == best_loss:
-                        if acc > best_acc:
-                            c_best_epoch = epoch
-                            best_acc = acc
-                            metrics["best_epoch"] = c_best_epoch
-                            metrics["training_loss_best"] = best_loss
-                            if config.checkpoints_path is not None:
-                                torch.save(
-                                    model.state_dict(),
-                                    os.path.join(config.checkpoints_path, "best_model.pt"),
-                                )
-                    else:
-                        if acc > best_acc:
-                            best_acc = acc
-        else:
-            # eval phase
-            if epoch % config.eval_every == 0:
-                for test_batch in test_data_loader:
-                    test_batch = [b.to(device, non_blocking=True) for b in test_batch]
-                    for key, val in model.evaluation(test_batch).items():
-                        metrics[key].append(val)
-
-                loss = np.mean(metrics["eval_loss"])
-                acc = np.mean(metrics["eval_acc"])
-
-                if config.criteria_key == "acc":
-                    if acc > best_acc:
-                        c_best_epoch = epoch
-                        best_acc = acc
                         metrics["best_epoch"] = c_best_epoch
                         metrics["eval_acc_best"] = best_acc
                         if config.checkpoints_path is not None:
@@ -258,26 +168,26 @@ def train(config: TrainConfig):
                                 model.state_dict(),
                                 os.path.join(config.checkpoints_path, "best_model.pt"),
                             )
-                        if loss < best_loss:
-                            best_loss = loss
-                    elif acc == best_acc:
-                        if loss < best_loss:
-                            c_best_epoch = epoch
-                            best_loss = loss
-                            metrics["best_epoch"] = c_best_epoch
-                            metrics["eval_acc_best"] = best_acc
-                            if config.checkpoints_path is not None:
-                                torch.save(
-                                    model.state_dict(),
-                                    os.path.join(config.checkpoints_path, "best_model.pt"),
-                                )
-                    else:
-                        if loss < best_loss:
-                            best_loss = loss
                 else:
                     if loss < best_loss:
-                        c_best_epoch = epoch
                         best_loss = loss
+            else:
+                if loss < best_loss:
+                    c_best_epoch = epoch
+                    best_loss = loss
+                    metrics["best_epoch"] = c_best_epoch
+                    metrics["eval_loss_best"] = best_loss
+                    if config.checkpoints_path is not None:
+                        torch.save(
+                            model.state_dict(),
+                            os.path.join(config.checkpoints_path, "best_model.pt"),
+                        )
+                    if acc > best_acc:
+                        best_acc = acc
+                elif loss == best_loss:
+                    if acc > best_acc:
+                        c_best_epoch = epoch
+                        best_acc = acc
                         metrics["best_epoch"] = c_best_epoch
                         metrics["eval_loss_best"] = best_loss
                         if config.checkpoints_path is not None:
@@ -285,22 +195,9 @@ def train(config: TrainConfig):
                                 model.state_dict(),
                                 os.path.join(config.checkpoints_path, "best_model.pt"),
                             )
-                        if acc > best_acc:
-                            best_acc = acc
-                    elif loss == best_loss:
-                        if acc > best_acc:
-                            c_best_epoch = epoch
-                            best_acc = acc
-                            metrics["best_epoch"] = c_best_epoch
-                            metrics["eval_loss_best"] = best_loss
-                            if config.checkpoints_path is not None:
-                                torch.save(
-                                    model.state_dict(),
-                                    os.path.join(config.checkpoints_path, "best_model.pt"),
-                                )
-                    else:
-                        if acc > best_acc:
-                            best_acc = acc
+                else:
+                    if acc > best_acc:
+                        best_acc = acc
 
         for key, val in metrics.items():
             if isinstance(val, list):

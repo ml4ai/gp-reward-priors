@@ -5,8 +5,10 @@ parameters:
   # specify all configs to run for the choosen algorithm
   config_path:
     value: "scripts_bnn/bb_bnn.yaml"
-  dataset: 
-    value: "data/bb/t0012_pref.hdf5"
+  train_dataset:
+    value: "data/bb/t0012_pref_train.hdf5"
+  val_dataset:
+    value: "data/bb/t0012_pref_val.hdf5"
   # width is a log2 exponent: actual width = 2**width (8→256 ... 11→2048)
   width:
     values: [8, 9, 10, 11]
