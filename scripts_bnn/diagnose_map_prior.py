@@ -21,7 +21,7 @@ Examples
     python scripts_bnn/diagnose_map_prior.py --env antmaze-medium-play-v2
     python scripts_bnn/diagnose_map_prior.py --size large --eta 1.0
     python scripts_bnn/diagnose_map_prior.py --env antmaze-medium-play-v2 \
-        --meas data/antmaze/antmaze-medium-play-v2_tuning_set.hdf5
+        --meas data/antmaze/antmaze-medium-play-v2/antmaze-medium-play-v2_tuning_set.hdf5
 """
 
 import argparse

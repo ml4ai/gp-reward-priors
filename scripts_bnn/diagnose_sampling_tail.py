@@ -35,7 +35,7 @@ Examples
 
     # override the auto-read config (e.g. a relocated dataset) and use a GPU
     python scripts_bnn/diagnose_sampling_tail.py --run-dir <dir> \
-        --dataset data/antmaze/antmaze-medium-play-v2_pref_nt.hdf5 \
+        --dataset data/antmaze/antmaze-medium-play-v2/antmaze-medium-play-v2_pref_nt.hdf5 \
         --alpha 0.05 --device cuda
 """
 

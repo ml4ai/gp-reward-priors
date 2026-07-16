@@ -13,7 +13,7 @@ model_eps: 0.1
 max_ep_length: null
 default_max_pos: 2048
 dataset_id: D4RL_antmaze-medium-play-v2
-dataset: data/antmaze/antmaze-medium-play-v2_pref_nt.hdf5
+dataset: data/antmaze/antmaze-medium-play-v2/antmaze-medium-play-v2_pref_nt.hdf5
 training_split: 0.8
 epochs: 10
 batch_size: 64
