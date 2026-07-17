@@ -809,3 +809,10 @@ FodyWeavers.xsd
 exp/*
 *.hdf5
 .csv
+
+# macOS
+.DS_Store
+
+# Generated experiment output at any depth (root exp/ is covered by exp/* above,
+# which git anchors to the repo root because of its mid-pattern slash).
+**/exp/
