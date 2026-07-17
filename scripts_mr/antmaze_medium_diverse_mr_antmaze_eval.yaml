@@ -1,0 +1,17 @@
+project: MR-training
+group: MR
+name: mr
+width: 8
+depth: 2
+activations: relu
+dataset_id: D4RL_antmaze-medium-diverse-v2
+antmaze_variant: antmaze-medium-diverse-v2   # train/val derived from antmaze_variant + seed by the eval script
+epochs: 5000
+batch_size: 64
+lr: 0.004122398265382635
+eval_every: 1
+criteria_key: acc
+compile_model: true
+pin_memory: true
+seed: 1
+checkpoints_path: ./exp/reward_learning/antmaze_medium_diverse_mr_eval

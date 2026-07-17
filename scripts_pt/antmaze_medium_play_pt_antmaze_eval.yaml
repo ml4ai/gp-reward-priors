@@ -1,0 +1,25 @@
+project: PT-training
+group: PT
+name: pt
+embd_dim: 8
+pref_attn_embd_dim: null
+head_dim: 7
+attn_dropout: 0.1
+resid_dropout: 0.1
+intermediate_dim: null
+num_layers: 4
+embd_dropout: 0.1
+model_eps: 0.1
+max_ep_length: null
+default_max_pos: 2048
+dataset_id: D4RL_antmaze-medium-play-v2
+antmaze_variant: antmaze-medium-play-v2   # train/val derived from antmaze_variant + seed by the eval script
+epochs: 5000
+batch_size: 64
+lr: 0.0002363862972320704
+eval_every: 1
+criteria_key: acc
+compile_model: true
+pin_memory: true
+seed: 1
+checkpoints_path: ./exp/reward_learning/antmaze_medium_play_pt_eval

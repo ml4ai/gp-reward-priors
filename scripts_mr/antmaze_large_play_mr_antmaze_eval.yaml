@@ -1,0 +1,17 @@
+project: MR-training
+group: MR
+name: mr
+width: 9
+depth: 1
+activations: relu
+dataset_id: D4RL_antmaze-large-play-v2
+antmaze_variant: antmaze-large-play-v2   # train/val derived from antmaze_variant + seed by the eval script
+epochs: 5000
+batch_size: 64
+lr: 0.00381828352544939
+eval_every: 1
+criteria_key: acc
+compile_model: true
+pin_memory: true
+seed: 1
+checkpoints_path: ./exp/reward_learning/antmaze_large_play_mr_eval

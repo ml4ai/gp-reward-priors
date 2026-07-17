@@ -1,0 +1,68 @@
+project: BNN-training
+group: BNN
+name: bnn
+
+# --- Model architecture ---
+width: 8                 # log2 exponent; actual width = 2**width (6 → 64)
+depth: 6
+
+# --- Sampling budget ---
+num_chains: 8
+chains_per_gpu: 2        # co-locate 2 chains per GPU; ceil(num_chains / chains_per_gpu) GPUs used
+num_samples: 310          # samples per chain; one per cycle with cyclical lr
+n_discarded: 5           # discard first N cycles as extra post-burn-in warm-up
+num_burn_in_steps: 5000  # steps for preconditioner adaptation (shared warm-up
+                         # + per-chain burn-in each run this many steps)
+
+# --- SGHMC core hyperparameters ---
+sghmc_lr: 0.001412083692555041          # cool-phase (sampling) step size; tuned empirically
+mdecay: 0.09726028131296788             # low friction → long momentum → better barrier crossing
+                         # in hot phase; 1/mdecay ≈ 100-step decorrelation length
+batch_size: 64
+max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
+n_meas: 10
+meas_jitter: .000001
+gp_cov_scale: 1.0
+reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
+n_concepts: null         # GP feature dim; null = infer from reward_function
+
+# --- Functional GP prior selection ---
+# "lcf" = the LCFModel reward-function prior above (current behaviour).
+# "map_informed" = the wall-respecting heat-kernel maze prior; the map_* fields
+# below take effect and reward_function/n_concepts/gp_cov_scale are ignored.
+gp_prior_type: map_informed
+map_size: medium                          # "medium" or "large" (hardcoded fallback layout)
+map_env_name: antmaze-medium-play-v2      # extract exact layout from this live D4RL env
+                                          # (set null to use the hardcoded map_size layout)
+map_eta: 1.0             # heat-kernel diffusion time (correlation length ~2-4 cells)
+map_sig_c2: 1.0          # constant-offset variance (Bradley-Terry additive constant)
+map_sig_g2: 1.0          # map-informed signal variance (prior reward scale)
+map_sig_n2: 0.001        # nugget / diagonal jitter (mandatory for invertibility)
+map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
+
+# --- Cyclical step-size schedule (Zhang et al. 2020) ---
+# Hot phase (lr_max → sghmc_lr, cosine): momentum zeroed at onset so the
+# chain escapes the current basin.  Cool phase (near sghmc_lr): one sample
+# collected at the final step.  The adaptive preconditioner is frozen after
+# burn-in, so only lr cycles.
+use_cyclical_lr: true
+sghmc_lr_max: 0.006402047122411048       # hot-phase peak lr (~10× sghmc_lr)
+cycle_length: 1250       # total steps per cycle (hot + cool)
+fraction_cool: 0.25      # 250 cool steps / 750 hot steps per cycle
+
+# keep_every is used only when use_cyclical_lr: false
+keep_every: 1000
+
+# --- Data ---
+antmaze_variant: antmaze-medium-play-v2   # train/val derived from antmaze_variant + seed by the eval script
+dataset_id: D4RL_antmaze-medium-play-v2
+measurement_dataset: data/antmaze/antmaze-medium-play-v2/antmaze-medium-play-v2_tuning_set.hdf5
+
+# --- Warm-up monitoring / early stop ---
+warmup_log_every: 250        # eval NLL+acc every N burn-in steps (0 = disabled)
+early_stop_acc_threshold: 0.0  # skip chains if warm-up acc below this (null = off)
+
+# --- Misc ---
+print_every_n_samples: 10
+seed: 1
+OUT_DIR: ./exp/reward_learning/antmaze_medium_play_bnn_eval
