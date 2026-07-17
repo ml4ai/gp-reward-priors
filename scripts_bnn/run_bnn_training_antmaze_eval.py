@@ -24,27 +24,30 @@ Key differences from bb_optim_star.py
 7. ``n_concepts`` (GP feature dimension) is inferred by probing the source
    function on a dummy input, or can be set explicitly in the config.
 
-Antmaze eval train / validation data
--------------------------------------
-The training and validation sets are loaded from the per-seed antmaze eval
+Antmaze eval train / validation / test data
+--------------------------------------------
+The training, validation and test sets are loaded from the per-seed antmaze eval
 directory, with paths derived from ``antmaze_variant`` and ``seed``::
 
     {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_train_{seed}.hdf5
     {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_val_{seed}.hdf5
+    {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_test_{seed}.hdf5
 
 Because the same ``seed`` drives both posterior sampling and the file selection,
-the model seed and the loaded data split are always consistent.  No splitting is
+the model seed and the loaded data splits are always consistent.  No splitting is
 done in this script.  Build the partitions upstream (split_pref_nt_seeds.py) so
 that any data-reduction or label-noise variants are just different files —
-``train_dataset`` / ``val_dataset`` may be set explicitly to override the derived
-paths (e.g. to point at a reduction/ or noise/ subdirectory file).  The model is
-trained on ``train_dataset`` and all post-sampling metrics (CE, accuracy) are
-computed on ``val_dataset`` and logged as ``val_*``.  R-hat and ESS measure MCMC
-convergence and are independent of the train/validation split.
+``train_dataset`` / ``val_dataset`` / ``test_dataset`` may be set explicitly to
+override the derived paths (e.g. to point at a reduction/ or noise/ subdirectory
+file).  The model is trained on ``train_dataset``.  Warm-up monitoring and the
+early-stop check use the validation set only; the end-of-training metrics (CE,
+accuracy, R-hat / ESS / tail / CVaR diagnostics) are computed on BOTH the
+validation and test sets and logged as ``val_*`` and ``test_*``.  R-hat and ESS
+measure MCMC convergence and are independent of the eval split.
 
 Note this is distinct from the measurement dataset (``measurement_dataset``),
 which supplies the raw observations for the functional GP prior gradient and is
-loaded separately from both the train and validation sets.
+loaded separately from the train / validation / test sets.
 
 All SGHMC hyper-parameters, warm-up logic, R-hat / ESS diagnostics, and
 wandb logging are otherwise identical to bb_optim_star.py.
@@ -118,19 +121,22 @@ class TrainConfig:
     fraction_cool: float = 0.25
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
-    # Antmaze evaluation data.  Train / validation sets are loaded from the
-    # per-seed eval directory:
-    #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val}_{seed}.hdf5
+    # Antmaze evaluation data.  Train / validation / test sets are loaded from
+    # the per-seed eval directory:
+    #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val,test}_{seed}.hdf5
     # The seed that drives sampling (config.seed) also selects the data files,
-    # so the model seed and the loaded data split always match.  Both files are
-    # read whole — no splitting is done in this script.
+    # so the model seed and the loaded data splits always match.  All files are
+    # read whole — no splitting is done in this script.  Warm-up monitoring runs
+    # on the validation set only; the end-of-training metrics are computed on
+    # both the validation and the test sets (val_* / test_*).
     antmaze_variant: str = "antmaze-medium-play-v2"
     data_root: str = "data/antmaze"
-    # train_dataset / val_dataset are derived from antmaze_variant + seed in
-    # __post_init__ when left unset.  Set them explicitly only to override the
-    # convention — e.g. to point at a reduction/ or noise/ subdirectory file.
+    # train_dataset / val_dataset / test_dataset are derived from antmaze_variant
+    # + seed in __post_init__ when left unset.  Set them explicitly only to
+    # override the convention — e.g. a reduction/ or noise/ subdirectory file.
     train_dataset: Optional[str] = None
     val_dataset: Optional[str] = None
+    test_dataset: Optional[str] = None
     dataset_id: str = "run"
     # Measurement dataset for the fSGHMC functional GP prior.
     # Must be an HDF5 file with keys:
@@ -221,6 +227,10 @@ class TrainConfig:
             self.val_dataset = os.path.join(
                 eval_seed_dir, f"{prefix}_val_{self.seed}.hdf5"
             )
+        if self.test_dataset is None:
+            self.test_dataset = os.path.join(
+                eval_seed_dir, f"{prefix}_test_{self.seed}.hdf5"
+            )
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
             self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
@@ -274,17 +284,25 @@ def train(config: TrainConfig):
         print(f"[GP prior] reward_function = {config.reward_function!r}")
 
     # ------------------------------------------------------------------ #
-    # Load preference data (separate pre-split train / validation files)
+    # Load preference data (separate pre-split train / validation / test files)
     # ------------------------------------------------------------------ #
-    # Each file is read whole (training_ratio=1.0 = no in-script split); the
-    # model trains on train_dataset and all post-sampling metrics are computed
-    # on val_dataset and logged as val_*.
+    # Each file is read whole (training_ratio=1.0 = no in-script split).  The
+    # model trains on train_dataset; warm-up monitoring uses the validation set
+    # (X_eval), and end-of-training metrics are computed on both the validation
+    # and test sets (logged as val_* / test_*).
     X_train, y_train = util.load_pref_data(config.train_dataset, training_ratio=1.0)
     X_val, y_val = util.load_pref_data(config.val_dataset, training_ratio=1.0)
+    X_test, y_test = util.load_pref_data(config.test_dataset, training_ratio=1.0)
+    # Warm-up / early-stop evaluate on the validation set only.
     X_eval, y_eval = X_val, y_val
-    eval_label = "val"
+    # End-of-training metrics run over each of these (label, X, y) eval sets.
+    eval_sets = [("val", X_val, y_val), ("test", X_test, y_test)]
 
-    for _split, _X, _y in (("train", X_train, y_train), ("val", X_val, y_val)):
+    for _split, _X, _y in (
+        ("train", X_train, y_train),
+        ("val", X_val, y_val),
+        ("test", X_test, y_test),
+    ):
         _n_nan_X = int(np.isnan(_X).sum())
         _n_inf_X = int(np.isinf(_X).sum())
         _n_nan_y = int(np.isnan(_y).sum())
@@ -548,33 +566,33 @@ def train(config: TrainConfig):
     )
 
     # ------------------------------------------------------------------ #
-    # Evaluation — on the held-out validation set.  R-hat and ESS measure MCMC
-    # convergence and are independent of the train/validation distinction.
+    # End-of-training evaluation.
+    #
+    # Predictive metrics — CE, accuracy, and the pred_* R-hat / ESS / tail /
+    # CVaR diagnostics (evaluated at input points drawn from the eval set) —
+    # are computed on BOTH the validation and test sets and logged with val_* /
+    # test_* prefixes.  Parameter-space diagnostics (param_*) measure MCMC
+    # convergence in weight space, do not depend on any eval set, and are logged
+    # once (unprefixed).  R-hat and ESS are independent of the eval split.
     # ------------------------------------------------------------------ #
-    _B_rhat = min(64, X_eval.shape[0])
-    _obs_dim = X_eval.shape[-1] - 1
-    # Drop attention-masked (padded) timesteps: the last feature column is the
-    # attn_mask (see util.load_pref_data), and the net produces garbage at padded
-    # steps.  No-op for datasets with full-length trajectories, but keeps the
-    # diagnostics over *real* states for sweeps whose trajectories are padded.
-    _block = X_eval[:_B_rhat, 0, :, :]                       # [B, T, obs_dim+1]
-    _valid = (_block[..., _obs_dim].reshape(-1) > 0.5)       # attn_mask column
-    x_rhat = _block[..., :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
-    x_rhat = x_rhat[_valid]
-    print(f"[diag] x_rhat: {int(_valid.sum())}/{_valid.size} valid (non-padded) points")
-    x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
+    def _pct_over(arr, threshold):
+        arr = np.asarray(arr, dtype=float)
+        valid = arr[~np.isnan(arr)]
+        if valid.size == 0:
+            return float("nan")
+        return float(np.mean(valid > threshold) * 100)
 
-    mean_ce = []
-    mean_acc = []
-    pred_chains = []
+    total_samples = config.num_chains * config.num_samples
+
+    # ---- Load every chain's sampled weights once (eval-set independent) ----
+    chains_weights = []
     params_chains = []
-
     for i in range(config.num_chains):
         chain_dir = os.path.join(saved_dir, f"chain_{i}")
-        bayes_net_f.sampled_weights = bayes_net_f._load_sampled_weights(
+        sampled_weights = bayes_net_f._load_sampled_weights(
             os.path.join(chain_dir, "sampled_weights", "sampled_weights_0000000")
         )
-        n_loaded = len(bayes_net_f.sampled_weights)
+        n_loaded = len(sampled_weights)
         print(f"[chain {i}] loaded {n_loaded} samples (expected {config.num_samples})")
         if n_loaded < 2:
             warnings.warn(
@@ -582,14 +600,10 @@ def train(config: TrainConfig):
                 "Check that the worker completed and num_samples > n_discarded.",
                 RuntimeWarning,
             )
-
         if n_loaded >= 2:
             _diff = max(
                 float(np.abs(a - b).max())
-                for a, b in zip(
-                    bayes_net_f.sampled_weights[0],
-                    bayes_net_f.sampled_weights[1],
-                )
+                for a, b in zip(sampled_weights[0], sampled_weights[1])
             )
             print(f"[chain {i}] max |w[0] - w[1]| = {_diff:.3e}")
             if _diff < 1e-8:
@@ -600,149 +614,24 @@ def train(config: TrainConfig):
                     RuntimeWarning,
                 )
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
-
-        ce, acc = bayes_net_f.eval_test_data(X_eval, y_eval, eval_batch_size=4096)
-        mean_ce.append(ce)
-        mean_acc.append(acc)
-
-        bayes_net_f.net.eval()
-        with torch.no_grad():
-            chain_preds = []
-            for weights in bayes_net_f.sampled_weights:
-                bayes_net_f.network_weights = weights
-                pred = bayes_net_f.net(x_rhat_t).detach().cpu().numpy().ravel()
-                chain_preds.append(pred)
-        pred_chains.append(np.stack(chain_preds))
-
+        chains_weights.append(sampled_weights)
         params_chains.append(
             np.stack(
                 [
                     np.hstack([arr.ravel() for arr in arrays])
-                    for arrays in bayes_net_f.sampled_weights
+                    for arrays in sampled_weights
                 ]
             )
         )
-
-    pred_chains = np.stack(pred_chains)
     params_chains = np.stack(params_chains)
 
-    pred_within_chain_var = float(np.mean(pred_chains.var(axis=1)))
+    # ---- Parameter-space diagnostics (eval-set independent; logged once) ----
     param_within_chain_var = float(np.mean(params_chains.var(axis=1)))
-    print(f"[diag] pred within-chain var  = {pred_within_chain_var:.4e}")
     print(f"[diag] param within-chain var = {param_within_chain_var:.4e}")
-
-    rhats_pred = azs.rhat(pred_chains)
     rhats_param = azs.rhat(params_chains)
-
-    total_samples = config.num_chains * config.num_samples
-    ess_pred = azs.ess(pred_chains)
     ess_param = azs.ess(params_chains)
-
-    # ------------------------------------------------------------------ #
-    # Lower-tail (5% quantile) convergence.  The defaults above are *bulk*
-    # diagnostics (centred on the median) and do NOT certify a quantile.
-    # Downstream we take a 95% lower confidence bound on the reward, i.e.
-    # the 5th percentile of the per-point posterior predictive, so we need
-    # tail-ESS / tail-R-hat and the Monte-Carlo error of that quantile.
-    # Wrapped defensively: a signature mismatch here must not discard the
-    # (expensive) sampling run — fall back to NaN + a warning.
-    # ------------------------------------------------------------------ #
-    _nan_pred = np.full(pred_chains.shape[-1], np.nan)
-    try:
-        # ESS *at* the 0.05 quantile — directly the draws backing the lower
-        # bound (arviz_stats "tail" needs a prob and mixes both ends; we only
-        # care about the lower one).
-        ess_pred_q05 = np.asarray(azs.ess(pred_chains, method="quantile", prob=0.05))
-        # Folded rank-normalised R-hat: sensitive to scale/tail mixing
-        # differences across chains, unlike the default (bulk) rank R-hat.
-        # ("tail" is not a valid rhat method in arviz_stats.)
-        rhat_pred_folded = np.asarray(azs.rhat(pred_chains, method="folded"))
-        # MCSE of the 0.05 quantile, in reward units (the error bar on the
-        # bound we actually report).
-        mcse_pred_q05 = np.asarray(azs.mcse(pred_chains, method="quantile", prob=0.05))
-    except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
-        warnings.warn(
-            f"Tail diagnostics failed ({type(e).__name__}: {e}); logging NaN. "
-            "Check the arviz_stats ess/rhat/mcse signatures for this version.",
-            RuntimeWarning,
-        )
-        ess_pred_q05 = rhat_pred_folded = mcse_pred_q05 = _nan_pred
-
-    # Absolute MCSE is scale-confounded: reward magnitude varies by orders of
-    # magnitude across states (deep-net w^(depth+1) output scaling), so a large
-    # `mcse_q05_max` flags a high-magnitude point, not a poorly-resolved one.
-    # Normalise by each point's posterior-predictive sd to get a scale-free
-    # "fraction of the spread" — THIS is the trustworthy `_max` to read.
-    _pred_sd = pred_chains.reshape(-1, pred_chains.shape[-1]).std(axis=0)
-    mcse_pred_q05_rel = mcse_pred_q05 / (_pred_sd + 1e-8)
-
-    # ------------------------------------------------------------------ #
-    # CVaR (mean of the lowest 5%) convergence — the downstream quantity.
-    # CVaR averages the extreme tail, so it is harder to estimate than the
-    # q05 quantile (VaR) above and needs its own ESS/MCSE.  Rockafellar–Uryasev
-    # identity  CVaR = VaR + (1/a)·E[min(X-VaR,0)]  is exact, so CVaR's MC error
-    # is the *mean* ESS/MCSE of the integrand u = (1/a)·min(X-VaR,0).
-    # ------------------------------------------------------------------ #
-    _alpha = 0.05
-    try:
-        _var = np.quantile(pred_chains.reshape(-1, pred_chains.shape[-1]),
-                           _alpha, axis=0)
-        _u = np.minimum(pred_chains - _var[None, None, :], 0.0) / _alpha
-        ess_pred_cvar = np.asarray(azs.ess(_u, method="mean"))
-        mcse_pred_cvar = np.asarray(azs.mcse(_u, method="mean"))
-        rhat_pred_cvar = np.asarray(azs.rhat(_u, method="folded"))
-        mcse_pred_cvar_rel = mcse_pred_cvar / (_pred_sd + 1e-8)
-    except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
-        warnings.warn(
-            f"CVaR diagnostics failed ({type(e).__name__}: {e}); logging NaN.",
-            RuntimeWarning,
-        )
-        ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
-
-    def _pct_over(arr, threshold):
-        arr = np.asarray(arr, dtype=float)
-        valid = arr[~np.isnan(arr)]
-        if valid.size == 0:
-            return float("nan")
-        return float(np.mean(valid > threshold) * 100)
-
     summary = {
-        f"{eval_label}_mean_cross_entropy": np.mean(mean_ce),
-        f"{eval_label}_mean_accuracy": np.mean(mean_acc),
-        "pred_within_chain_var": pred_within_chain_var,
         "param_within_chain_var": param_within_chain_var,
-        "pred_rhat_max": float(np.nanmax(rhats_pred)),
-        "pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
-        "pred_rhat_median": float(np.nanmedian(rhats_pred)),
-        "pred_rhat_mean": float(np.nanmean(rhats_pred)),
-        "pred_rhat_pct_over_1.01": _pct_over(rhats_pred, 1.01),
-        "pred_ess_min": float(np.nanmin(ess_pred)),
-        "pred_ess_median": float(np.nanmedian(ess_pred)),
-        "pred_ess_mean": float(np.nanmean(ess_pred)),
-        "pred_ess_min_norm": float(np.nanmin(ess_pred)) / total_samples,
-        "pred_ess_median_norm": float(np.nanmedian(ess_pred)) / total_samples,
-        # ---- Lower-tail (5% quantile) diagnostics: certify the 95% bound ----
-        "pred_q05_ess_min": float(np.nanmin(ess_pred_q05)),
-        "pred_q05_ess_median": float(np.nanmedian(ess_pred_q05)),
-        "pred_q05_ess_min_norm": float(np.nanmin(ess_pred_q05)) / total_samples,
-        "pred_folded_rhat_max": float(np.nanmax(rhat_pred_folded)),
-        "pred_folded_rhat_95th_pct": float(np.nanpercentile(rhat_pred_folded, 95)),
-        "pred_folded_rhat_median": float(np.nanmedian(rhat_pred_folded)),
-        "pred_folded_rhat_pct_over_1.01": _pct_over(rhat_pred_folded, 1.01),
-        "pred_q05_mcse_max": float(np.nanmax(mcse_pred_q05)),
-        "pred_q05_mcse_median": float(np.nanmedian(mcse_pred_q05)),
-        # scale-free MCSE (fraction of per-point predictive sd) — the _max here
-        # is meaningful, unlike the absolute one above.
-        "pred_q05_mcse_rel_max": float(np.nanmax(mcse_pred_q05_rel)),
-        "pred_q05_mcse_rel_median": float(np.nanmedian(mcse_pred_q05_rel)),
-        # ---- CVaR (mean of lowest 5%): the downstream quantity ----
-        "pred_cvar_ess_min": float(np.nanmin(ess_pred_cvar)),
-        "pred_cvar_ess_median": float(np.nanmedian(ess_pred_cvar)),
-        "pred_cvar_rhat_max": float(np.nanmax(rhat_pred_cvar)),
-        "pred_cvar_rhat_median": float(np.nanmedian(rhat_pred_cvar)),
-        "pred_cvar_rhat_pct_over_1.01": _pct_over(rhat_pred_cvar, 1.01),
-        "pred_cvar_mcse_rel_max": float(np.nanmax(mcse_pred_cvar_rel)),
-        "pred_cvar_mcse_rel_median": float(np.nanmedian(mcse_pred_cvar_rel)),
         "param_rhat_max": float(np.nanmax(rhats_param)),
         "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
         "param_rhat_median": float(np.nanmedian(rhats_param)),
@@ -752,6 +641,131 @@ def train(config: TrainConfig):
         "param_ess_median": float(np.nanmedian(ess_param)),
         "param_ess_min_norm": float(np.nanmin(ess_param)) / total_samples,
     }
+
+    # ---- Predictive diagnostics, computed per eval set (val_* and test_*) ----
+    def evaluate_eval_set(label, X_e, y_e):
+        _B_rhat = min(64, X_e.shape[0])
+        _obs_dim = X_e.shape[-1] - 1
+        # Drop attention-masked (padded) timesteps: the last feature column is
+        # the attn_mask (see util.load_pref_data), and the net produces garbage
+        # at padded steps.  No-op for full-length trajectories.
+        _block = X_e[:_B_rhat, 0, :, :]                       # [B, T, obs_dim+1]
+        _valid = (_block[..., _obs_dim].reshape(-1) > 0.5)     # attn_mask column
+        x_rhat = _block[..., :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+        x_rhat = x_rhat[_valid]
+        print(
+            f"[diag/{label}] x_rhat: {int(_valid.sum())}/{_valid.size} "
+            "valid (non-padded) points"
+        )
+        x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
+
+        mean_ce = []
+        mean_acc = []
+        pred_chains = []
+        for i in range(config.num_chains):
+            bayes_net_f.sampled_weights = chains_weights[i]
+            ce, acc = bayes_net_f.eval_test_data(X_e, y_e, eval_batch_size=4096)
+            mean_ce.append(ce)
+            mean_acc.append(acc)
+            bayes_net_f.net.eval()
+            with torch.no_grad():
+                chain_preds = []
+                for weights in chains_weights[i]:
+                    bayes_net_f.network_weights = weights
+                    pred = bayes_net_f.net(x_rhat_t).detach().cpu().numpy().ravel()
+                    chain_preds.append(pred)
+            pred_chains.append(np.stack(chain_preds))
+        pred_chains = np.stack(pred_chains)
+
+        pred_within_chain_var = float(np.mean(pred_chains.var(axis=1)))
+        print(f"[diag/{label}] pred within-chain var = {pred_within_chain_var:.4e}")
+
+        rhats_pred = azs.rhat(pred_chains)
+        ess_pred = azs.ess(pred_chains)
+
+        # ---- Lower-tail (5% quantile) convergence.  The defaults above are
+        # *bulk* diagnostics (centred on the median) and do NOT certify a
+        # quantile.  Downstream we take a 95% lower confidence bound on the
+        # reward (the 5th percentile of the per-point posterior predictive), so
+        # we need tail-ESS / tail-R-hat and the MC error of that quantile.
+        # Wrapped defensively so a signature mismatch cannot discard the run. ----
+        _nan_pred = np.full(pred_chains.shape[-1], np.nan)
+        try:
+            ess_pred_q05 = np.asarray(azs.ess(pred_chains, method="quantile", prob=0.05))
+            rhat_pred_folded = np.asarray(azs.rhat(pred_chains, method="folded"))
+            mcse_pred_q05 = np.asarray(azs.mcse(pred_chains, method="quantile", prob=0.05))
+        except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
+            warnings.warn(
+                f"[{label}] Tail diagnostics failed ({type(e).__name__}: {e}); "
+                "logging NaN.  Check the arviz_stats ess/rhat/mcse signatures.",
+                RuntimeWarning,
+            )
+            ess_pred_q05 = rhat_pred_folded = mcse_pred_q05 = _nan_pred
+
+        # Absolute MCSE is scale-confounded: reward magnitude varies by orders of
+        # magnitude across states, so normalise by each point's posterior sd to
+        # get a scale-free "fraction of the spread" — the trustworthy _max.
+        _pred_sd = pred_chains.reshape(-1, pred_chains.shape[-1]).std(axis=0)
+        mcse_pred_q05_rel = mcse_pred_q05 / (_pred_sd + 1e-8)
+
+        # ---- CVaR (mean of the lowest 5%) convergence — the downstream
+        # quantity.  Rockafellar–Uryasev: CVaR = VaR + (1/a)·E[min(X-VaR,0)] is
+        # exact, so CVaR's MC error is the mean ESS/MCSE of u=(1/a)·min(X-VaR,0). ----
+        _alpha = 0.05
+        try:
+            _var = np.quantile(pred_chains.reshape(-1, pred_chains.shape[-1]),
+                               _alpha, axis=0)
+            _u = np.minimum(pred_chains - _var[None, None, :], 0.0) / _alpha
+            ess_pred_cvar = np.asarray(azs.ess(_u, method="mean"))
+            mcse_pred_cvar = np.asarray(azs.mcse(_u, method="mean"))
+            rhat_pred_cvar = np.asarray(azs.rhat(_u, method="folded"))
+            mcse_pred_cvar_rel = mcse_pred_cvar / (_pred_sd + 1e-8)
+        except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
+            warnings.warn(
+                f"[{label}] CVaR diagnostics failed ({type(e).__name__}: {e}); logging NaN.",
+                RuntimeWarning,
+            )
+            ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
+
+        return {
+            f"{label}_mean_cross_entropy": np.mean(mean_ce),
+            f"{label}_mean_accuracy": np.mean(mean_acc),
+            f"{label}_pred_within_chain_var": pred_within_chain_var,
+            f"{label}_pred_rhat_max": float(np.nanmax(rhats_pred)),
+            f"{label}_pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
+            f"{label}_pred_rhat_median": float(np.nanmedian(rhats_pred)),
+            f"{label}_pred_rhat_mean": float(np.nanmean(rhats_pred)),
+            f"{label}_pred_rhat_pct_over_1.01": _pct_over(rhats_pred, 1.01),
+            f"{label}_pred_ess_min": float(np.nanmin(ess_pred)),
+            f"{label}_pred_ess_median": float(np.nanmedian(ess_pred)),
+            f"{label}_pred_ess_mean": float(np.nanmean(ess_pred)),
+            f"{label}_pred_ess_min_norm": float(np.nanmin(ess_pred)) / total_samples,
+            f"{label}_pred_ess_median_norm": float(np.nanmedian(ess_pred)) / total_samples,
+            # ---- Lower-tail (5% quantile) diagnostics: certify the 95% bound ----
+            f"{label}_pred_q05_ess_min": float(np.nanmin(ess_pred_q05)),
+            f"{label}_pred_q05_ess_median": float(np.nanmedian(ess_pred_q05)),
+            f"{label}_pred_q05_ess_min_norm": float(np.nanmin(ess_pred_q05)) / total_samples,
+            f"{label}_pred_folded_rhat_max": float(np.nanmax(rhat_pred_folded)),
+            f"{label}_pred_folded_rhat_95th_pct": float(np.nanpercentile(rhat_pred_folded, 95)),
+            f"{label}_pred_folded_rhat_median": float(np.nanmedian(rhat_pred_folded)),
+            f"{label}_pred_folded_rhat_pct_over_1.01": _pct_over(rhat_pred_folded, 1.01),
+            f"{label}_pred_q05_mcse_max": float(np.nanmax(mcse_pred_q05)),
+            f"{label}_pred_q05_mcse_median": float(np.nanmedian(mcse_pred_q05)),
+            f"{label}_pred_q05_mcse_rel_max": float(np.nanmax(mcse_pred_q05_rel)),
+            f"{label}_pred_q05_mcse_rel_median": float(np.nanmedian(mcse_pred_q05_rel)),
+            # ---- CVaR (mean of lowest 5%): the downstream quantity ----
+            f"{label}_pred_cvar_ess_min": float(np.nanmin(ess_pred_cvar)),
+            f"{label}_pred_cvar_ess_median": float(np.nanmedian(ess_pred_cvar)),
+            f"{label}_pred_cvar_rhat_max": float(np.nanmax(rhat_pred_cvar)),
+            f"{label}_pred_cvar_rhat_median": float(np.nanmedian(rhat_pred_cvar)),
+            f"{label}_pred_cvar_rhat_pct_over_1.01": _pct_over(rhat_pred_cvar, 1.01),
+            f"{label}_pred_cvar_mcse_rel_max": float(np.nanmax(mcse_pred_cvar_rel)),
+            f"{label}_pred_cvar_mcse_rel_median": float(np.nanmedian(mcse_pred_cvar_rel)),
+        }
+
+    for _label, _Xe, _ye in eval_sets:
+        summary.update(evaluate_eval_set(_label, _Xe, _ye))
+
     wandb.log(summary)
 
 

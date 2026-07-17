@@ -41,17 +41,20 @@ class TrainConfig:
     default_max_pos: int = 2048
     # training params
     dataset_id: str = "D4RL/pen-v2"
-    # Antmaze evaluation data.  Train / validation sets are loaded from the
-    # per-seed eval directory:
-    #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val}_{seed}.hdf5
+    # Antmaze evaluation data.  Train / validation / test sets are loaded from
+    # the per-seed eval directory:
+    #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val,test}_{seed}.hdf5
     # The same seed drives training and file selection, so the model seed and the
-    # loaded data split always match.  Both files are loaded whole (no splitting).
+    # loaded data splits always match.  Training uses the train set with the
+    # validation set for best-model selection; after training the best model is
+    # reloaded and evaluated once on the held-out test set (test_acc / test_loss).
     antmaze_variant: str = "antmaze-medium-play-v2"
     data_root: str = "data/antmaze"
     # Derived from antmaze_variant + seed in __post_init__ when left unset.  Set
     # explicitly only to override — e.g. a reduction/ or noise/ subdirectory file.
     train_dataset: Optional[str] = None
     val_dataset: Optional[str] = None
+    test_dataset: Optional[str] = None
     epochs: int = 10
     batch_size: int = 256  # Batch size for all networks
     lr: float = 3e-4
@@ -84,6 +87,10 @@ class TrainConfig:
         if self.val_dataset is None:
             self.val_dataset = os.path.join(
                 eval_seed_dir, f"{prefix}_val_{self.seed}.hdf5"
+            )
+        if self.test_dataset is None:
+            self.test_dataset = os.path.join(
+                eval_seed_dir, f"{prefix}_test_{self.seed}.hdf5"
             )
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
@@ -258,6 +265,36 @@ def train(config: TrainConfig):
                 else:
                     metrics[key] = np.nan
         wandb.log(metrics, step=epoch)
+
+    # ------------------------------------------------------------------ #
+    # Final test-set evaluation — reload the best (validation-selected) model
+    # and evaluate it once on the held-out test set, logging preference
+    # accuracy and loss as test_acc / test_loss.
+    # ------------------------------------------------------------------ #
+    if config.checkpoints_path is not None:
+        best_path = os.path.join(config.checkpoints_path, "best_model.pt")
+        model.load_state_dict(torch.load(best_path, map_location=device))
+        print(f"[test] reloaded best model from {best_path} (best epoch {c_best_epoch})")
+    else:
+        print("[test] no checkpoints_path — evaluating the final-epoch model on test")
+
+    test_data = util.Pref_H5Dataset(osp.expanduser(config.test_dataset))
+    test_data_loader = DataLoader(test_data, shuffle=False, **loader_kwargs)
+    test_loss, test_acc = [], []
+    for test_batch in test_data_loader:
+        test_batch = [b.to(device, non_blocking=True) for b in test_batch]
+        eval_out = model.evaluation(test_batch)
+        test_loss.append(eval_out["eval_loss"])
+        test_acc.append(eval_out["eval_acc"])
+    test_metrics = {
+        "test_loss": float(np.mean(test_loss)),
+        "test_acc": float(np.mean(test_acc)),
+    }
+    print(
+        f"[test] test_acc = {test_metrics['test_acc']:.4f}, "
+        f"test_loss = {test_metrics['test_loss']:.4f}"
+    )
+    wandb.log(test_metrics)
     sys.exit(0)
 
 
