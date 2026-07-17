@@ -144,6 +144,12 @@ def train(config: TrainConfig):
             loss = np.mean(metrics["eval_loss"])
             acc = np.mean(metrics["eval_acc"])
 
+            if config.checkpoints_path is not None:
+                torch.save(
+                    model.state_dict(),
+                    os.path.join(config.checkpoints_path, f"checkpoint_{epoch}.pt"),
+                )
+
             if config.criteria_key == "acc":
                 if acc > best_acc:
                     c_best_epoch = epoch
