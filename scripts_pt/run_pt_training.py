@@ -230,12 +230,14 @@ def train(config: TrainConfig):
                     if acc > best_acc:
                         best_acc = acc
 
-        for key, val in metrics.items():
-            if isinstance(val, list):
-                if len(val):
-                    metrics[key] = np.mean(val)
-                else:
-                    metrics[key] = np.nan
+        # Drop metrics that weren't computed this epoch (empty lists) instead of
+        # logging them as NaN — otherwise every non-eval step writes NaN into the
+        # eval_* series (and training_acc at epoch 0).
+        metrics = {
+            key: (np.mean(val) if isinstance(val, list) else val)
+            for key, val in metrics.items()
+            if not (isinstance(val, list) and not len(val))
+        }
         wandb.log(metrics, step=epoch)
     sys.exit(0)
 
