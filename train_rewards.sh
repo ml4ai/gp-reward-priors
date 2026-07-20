@@ -48,7 +48,9 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) ))
   exit 1
 fi
 
-PY=/opt/anaconda3/envs/irl/bin/python
+# Uses whatever `python` is on PATH: activate your conda env before running.
+# Override with e.g. PY=/path/to/python ./train_rewards.sh ...
+PY="${PY:-python}"
 
 if [[ ! -d scripts_bnn || ! -d data/antmaze ]]; then
   echo "ERROR: run this from the gp_reward-priors submodule root." >&2
