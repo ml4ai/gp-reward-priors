@@ -231,11 +231,14 @@ class TrainConfig:
             self.test_dataset = os.path.join(
                 eval_seed_dir, f"{prefix}_test_{self.seed}.hdf5"
             )
+        # The wandb run name keeps a uuid for uniqueness across launches, but the
+        # on-disk output directory is deterministic: {OUT_DIR}_{seed}, with no
+        # uuid leaf.  This lets the IQL eval stage (iql_eval.py) derive the exact
+        # reward-model directory from the seed alone.  Exactly one training run
+        # per (variant, seed) writes here; a re-run overwrites in place.
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(
-                f"{osp.expanduser(self.OUT_DIR)}_{self.seed}", self.name
-            )
+            self.OUT_DIR = f"{osp.expanduser(self.OUT_DIR)}_{self.seed}"
             util.ensure_dir(self.OUT_DIR)
 
 
