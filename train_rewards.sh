@@ -52,6 +52,13 @@ fi
 # Override with e.g. PY=/path/to/python ./train_rewards.sh ...
 PY="${PY:-python}"
 
+# Submodule root (dir holding optbnn/). The training scripts import optbnn, but
+# run from a working dir where their own `sys.path.insert(0, abspath(".."))` does
+# not resolve to it — so put the root on PYTHONPATH explicitly. Uses the launcher's
+# own location, independent of the caller's CWD.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
 if [[ ! -d scripts_bnn || ! -d data/antmaze ]]; then
   echo "ERROR: run this from the gp_reward-priors submodule root." >&2
   exit 1
