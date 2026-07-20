@@ -9,7 +9,7 @@ antmaze_variant: antmaze-large-diverse-v2   # train/val derived from antmaze_var
 epochs: 5000
 batch_size: 64
 lr: 0.00319282651334437
-eval_every: 1
+eval_every: 5
 criteria_key: acc
 compile_model: true
 pin_memory: true
