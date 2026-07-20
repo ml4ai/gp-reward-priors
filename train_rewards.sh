@@ -120,6 +120,7 @@ for v in $VARIANTS; do
   if [[ ! -f "$cfg" ]]; then echo "ERROR: config not found: $cfg" >&2; exit 1; fi
   for s in $SEEDS; do JOBS+=("$v $s"); done
 done
+echo "Root (cwd): $ROOT   data_root: ${ROOT}/data/antmaze"
 echo "Method: $METHOD   variants: $VARIANTS   seeds: $SEEDS"
 echo "Total jobs: ${#JOBS[@]}   slots: $NSLOTS   log dir: $LOGDIR"
 echo
@@ -136,8 +137,12 @@ launch() {  # $1=slot_index  $2=variant  $3=seed
   local cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
   local logf="$LOGDIR/${v}_seed${s}.log"
   echo "[gpu ${gpus}] ${METHOD} ${v} seed=${s}  -> ${logf}"
+  # Absolute --data_root as well: the configs build train/val/test paths from it
+  # (default "data/antmaze"), and pyrallis/h5py open those relative to the CWD.
+  # Passing the absolute root makes the data paths resolve independent of CWD.
   CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
-      --config_path "$cfg" --seed "$s" "${EXTRA_ARGS[@]}" \
+      --config_path "$cfg" --data_root "${ROOT}/data/antmaze" \
+      --seed "$s" "${EXTRA_ARGS[@]}" \
       > "$logf" 2>&1 &
   local pid=$!
   SLOT_PID[$slot]=$pid
