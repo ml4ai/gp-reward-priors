@@ -116,7 +116,7 @@ NSLOTS=${#SLOTS[@]}
 # --- enumerate jobs ---
 JOBS=()   # each element: "variant seed"
 for v in $VARIANTS; do
-  cfg="${CFG_DIR}/antmaze_${v}${CFG_SUF}"
+  cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
   if [[ ! -f "$cfg" ]]; then echo "ERROR: config not found: $cfg" >&2; exit 1; fi
   for s in $SEEDS; do JOBS+=("$v $s"); done
 done
@@ -131,7 +131,9 @@ declare -A PID_SLOT=()      # pid -> slot index
 launch() {  # $1=slot_index  $2=variant  $3=seed
   local slot="$1" v="$2" s="$3"
   local gpus="${SLOTS[$slot]}"
-  local cfg="${CFG_DIR}/antmaze_${v}${CFG_SUF}"
+  # Absolute path: pyrallis opens config_path relative to the process CWD, so an
+  # absolute path makes config loading independent of where the run happens.
+  local cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
   local logf="$LOGDIR/${v}_seed${s}.log"
   echo "[gpu ${gpus}] ${METHOD} ${v} seed=${s}  -> ${logf}"
   CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
