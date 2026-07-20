@@ -233,7 +233,9 @@ class TrainConfig:
             )
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.OUT_DIR is not None:
-            self.OUT_DIR = os.path.join(osp.expanduser(self.OUT_DIR), self.name)
+            self.OUT_DIR = os.path.join(
+                f"{osp.expanduser(self.OUT_DIR)}_{self.seed}", self.name
+            )
             util.ensure_dir(self.OUT_DIR)
 
 

@@ -95,7 +95,7 @@ class TrainConfig:
         self.name = f"{self.name}-{self.dataset_id}-{str(uuid.uuid4())[:8]}"
         if self.checkpoints_path is not None:
             self.checkpoints_path = os.path.join(
-                osp.expanduser(self.checkpoints_path), self.name
+                f"{osp.expanduser(self.checkpoints_path)}_{self.seed}", self.name
             )
         if self.pref_attn_embd_dim is None:
             self.pref_attn_embd_dim = self.embd_dim
