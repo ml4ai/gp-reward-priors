@@ -59,8 +59,14 @@ PY="${PY:-python}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
+# Always run from the submodule root so the configs' relative paths resolve no
+# matter where the launcher was invoked from: the --config_path yaml, and inside
+# each config data_root ("data/antmaze") and measurement_dataset, are all relative
+# to this directory.
+cd "$ROOT"
+
 if [[ ! -d scripts_bnn || ! -d data/antmaze ]]; then
-  echo "ERROR: run this from the gp_reward-priors submodule root." >&2
+  echo "ERROR: train_rewards.sh must live in the gp_reward-priors submodule root." >&2
   exit 1
 fi
 
