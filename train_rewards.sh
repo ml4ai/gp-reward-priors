@@ -152,8 +152,12 @@ launch() {  # $1=slot_index  $2=variant  $3=seed
 free_slot() {  # echo index of a free slot, or nothing
   local i
   for (( i=0; i<NSLOTS; i++ )); do
-    [[ -z "${SLOT_PID[$i]:-}" ]] && { echo "$i"; return; }
+    [[ -z "${SLOT_PID[$i]:-}" ]] && { echo "$i"; return 0; }
   done
+  # No free slot: still exit 0. Otherwise the C-style for loop's final failing
+  # test would make this function return 1, and `slot=$(free_slot)` under
+  # `set -e` would abort the whole launcher the moment all slots are busy.
+  return 0
 }
 
 FAILED=0
