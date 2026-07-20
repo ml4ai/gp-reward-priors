@@ -157,6 +157,7 @@ free_slot() {  # echo index of a free slot, or nothing
 }
 
 FAILED=0
+DONE=0
 ji=0
 NJOBS=${#JOBS[@]}
 while (( ji < NJOBS )) || (( ${#PID_SLOT[@]} > 0 )); do
@@ -168,14 +169,17 @@ while (( ji < NJOBS )) || (( ${#PID_SLOT[@]} > 0 )); do
     launch "$slot" "$v" "$s"
     ji=$(( ji + 1 ))
   done
-  # wait for any running job to finish, free its slot
+  # all slots busy (or no jobs left to fill) -> block until one finishes
   if (( ${#PID_SLOT[@]} > 0 )); then
+    (( ji < NJOBS )) && echo "  ...${#PID_SLOT[@]}/${NSLOTS} slots busy, ${DONE} done, $(( NJOBS - ji )) queued; waiting for a job to finish"
     wait -n || FAILED=$(( FAILED + 1 ))
     for pid in "${!PID_SLOT[@]}"; do
       if ! kill -0 "$pid" 2>/dev/null; then
         slot="${PID_SLOT[$pid]}"
         unset "SLOT_PID[$slot]"
         unset "PID_SLOT[$pid]"
+        DONE=$(( DONE + 1 ))
+        echo "  [${DONE}/${NJOBS} done] freed slot ${slot}  (running: ${#PID_SLOT[@]})"
       fi
     done
   fi
