@@ -6,14 +6,13 @@
 # decisive number is the sampling-phase "%>clip": ~0 means the clip is inert
 # during sampling (CVaR tail unbiased); >0 means it fires (proceed to BT /T).
 #
-# Run from anywhere; must be on the GPU box with the `irl` env active (or set
-# PY=/path/to/irl/python).  6 A6000s assumed: large variants get 2 GPUs each
-# (1 chain/GPU), medium variants 1 GPU each (2 chains/GPU).
+# Needs the `irl` env.  Either activate it first (conda activate irl) OR point
+# PY at its interpreter:  PY=/path/to/anaconda3/envs/irl/bin/python bash launch.sh
+# 6 A6000s assumed: large variants 2 GPUs each (1 chain/GPU), medium 1 GPU each.
 set -u
 
 cd "$(dirname "$0")/../.." || exit 1          # repo root
 REPO="$(pwd)"
-PY="${PY:-python}"                            # override with PY=... if needed
 SCRIPT="scripts_bnn/run_bnn_training_antmaze_eval.py"
 CFGDIR="scripts_bnn/gradnorm_readout"
 LOGDIR="$CFGDIR/logs"
@@ -21,6 +20,23 @@ mkdir -p "$LOGDIR"
 
 export WANDB_MODE=disabled
 export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
+
+# --- resolve interpreter: PY override, else python, else python3 --------------
+if [ -n "${PY:-}" ]; then :; elif command -v python >/dev/null 2>&1; then PY=python;
+elif command -v python3 >/dev/null 2>&1; then PY=python3; else
+  echo "ERROR: no python found. Activate irl (conda activate irl) or set PY=." >&2; exit 1
+fi
+
+# --- preflight: the interpreter must import torch + optbnn, else fail LOUDLY --
+echo "[preflight] interpreter: $($PY -c 'import sys;print(sys.executable)' 2>/dev/null || echo "$PY (not runnable)")"
+if ! "$PY" -c "import torch, optbnn" >/tmp/gradnorm_preflight.log 2>&1; then
+  echo "ERROR: '$PY' cannot import torch + optbnn. This is why nothing ran." >&2
+  echo "  Fix: 'conda activate irl' first, or run with PY=/path/to/envs/irl/bin/python" >&2
+  echo "  ---- preflight error ----" >&2; sed 's/^/  /' /tmp/gradnorm_preflight.log >&2
+  exit 1
+fi
+_ngpu="$("$PY" -c 'import torch;print(torch.cuda.device_count())' 2>/dev/null || echo '?')"
+echo "[preflight] torch + optbnn OK; visible GPUs: $_ngpu (need 6 for the layout below)"
 
 gpus_for() {   # GPU assignment: 4 variants over 6 GPUs (2 idle)
   case "$1" in
@@ -31,17 +47,35 @@ gpus_for() {   # GPU assignment: 4 variants over 6 GPUs (2 idle)
   esac
 }
 
+tasks="large_play large_diverse medium_play medium_diverse"
 pids=""
-for task in large_play large_diverse medium_play medium_diverse; do
+for task in $tasks; do
   gpus="$(gpus_for "$task")"
   echo "[launch] $task on GPU(s) $gpus  -> $LOGDIR/$task.log"
   CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
       --config_path "$CFGDIR/${task}_readout.yaml" \
       > "$LOGDIR/$task.log" 2>&1 &
+  eval "pid_$task=$!"
   pids="$pids $!"
 done
 
-echo "[launch] PIDs:$pids — waiting..."
+# --- grace check: catch processes that die on startup ------------------------
+sleep 8
+_dead=0
+for task in $tasks; do
+  eval "p=\$pid_$task"
+  if ! kill -0 "$p" 2>/dev/null; then
+    wait "$p" 2>/dev/null; rc=$?
+    if [ "$rc" -ne 0 ]; then
+      _dead=1
+      echo "[error] $task (pid $p) exited early rc=$rc — last lines of its log:" >&2
+      tail -n 15 "$LOGDIR/$task.log" | sed 's/^/    /' >&2
+    fi
+  fi
+done
+[ "$_dead" -eq 1 ] && echo "[error] at least one run died on startup; fix the above and re-run." >&2
+
+echo "[launch] waiting for runs to finish (burn-in 5000 + 12 cycles)..."
 wait $pids
-echo "[launch] all runs finished; aggregating grad-norm stats"
+echo "[launch] done; aggregating grad-norm stats"
 "$PY" "$CFGDIR/read_results.py"
