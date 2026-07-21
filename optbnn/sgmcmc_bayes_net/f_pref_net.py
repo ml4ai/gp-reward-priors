@@ -150,6 +150,11 @@ def _fpref_chain_worker(
     )
     bayes_net.train(x_train, y_train, **train_kwargs)
     bayes_net._save_sampled_weights()
+    # Persist grad-norm instrumentation (Issue 3, Step 1) for the main process
+    # to aggregate — workers have no wandb run of their own.
+    _stats = getattr(bayes_net, "_grad_norm_stats", None)
+    if _stats is not None:
+        torch.save(_stats, os.path.join(chain_dir, "grad_norm_stats.pt"))
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +571,16 @@ class FPrefNet:
         self.net.train()
         n_samples = 0
 
+        # Grad-norm instrumentation (Issue 3, Step 1): accumulate the PRE-clip
+        # total gradient norm, split by phase, so we can tell whether the clip
+        # actually fires during sampling (where it would bias the CVaR tail) or
+        # only during burn-in (harmless).  Zero overhead — clip_grad_norm_
+        # already returns this norm.  Behaviour of the clip itself is unchanged.
+        self._grad_norm_stats = {
+            phase: {"count": 0, "sum": 0.0, "max": 0.0, "n_over_clip": 0}
+            for phase in ("burnin", "sampling")
+        }
+
         for step, (x_batch, y_batch) in batch_generator:
             x_batch = x_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
@@ -644,7 +659,19 @@ class FPrefNet:
                         param.grad.add_(-fg.to(param.grad.dtype) / num_datapoints)
 
             # ---- Clip and step ------------------------------------------
-            torch.nn.utils.clip_grad_norm_(self.net.parameters(), 100.0)
+            _clip_value = 100.0
+            _gnorm = float(
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), _clip_value)
+            )
+            # Record the pre-clip norm for this step's phase (instrumentation).
+            _phase = "burnin" if step < num_burn_in_steps else "sampling"
+            _st = self._grad_norm_stats[_phase]
+            _st["count"] += 1
+            _st["sum"] += _gnorm
+            if _gnorm > _st["max"]:
+                _st["max"] = _gnorm
+            if _gnorm > _clip_value:
+                _st["n_over_clip"] += 1
             self.sampler.step()
             self.step += 1
 

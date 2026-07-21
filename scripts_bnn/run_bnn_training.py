@@ -664,6 +664,31 @@ def train(config: TrainConfig):
         )
         ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
 
+    # ------------------------------------------------------------------ #
+    # Gradient-clip instrumentation (Issue 3, Step 1) — aggregate the per-chain
+    # pre-clip grad-norm stats the workers wrote to disk.  The decisive number
+    # is gradnorm_sampling_pct_over_clip: if the clip effectively never fires
+    # during sampling, the sampled dynamics are unmodified and the CVaR tail is
+    # clip-unbiased; if it fires, there is a real tail bias to fix (BT logit /T).
+    # ------------------------------------------------------------------ #
+    _gn_agg = {}
+    for _phase in ("burnin", "sampling"):
+        _cnt = _sm = _nover = 0
+        _mx = 0.0
+        for i in range(config.num_chains):
+            _p = os.path.join(saved_dir, f"chain_{i}", "grad_norm_stats.pt")
+            if not os.path.exists(_p):
+                continue
+            _s = torch.load(_p, weights_only=False).get(_phase, {})
+            _cnt += _s.get("count", 0)
+            _sm += _s.get("sum", 0.0)
+            _nover += _s.get("n_over_clip", 0)
+            _mx = max(_mx, _s.get("max", 0.0))
+        if _cnt > 0:
+            _gn_agg[f"gradnorm_{_phase}_max"] = _mx
+            _gn_agg[f"gradnorm_{_phase}_mean"] = _sm / _cnt
+            _gn_agg[f"gradnorm_{_phase}_pct_over_clip"] = 100.0 * _nover / _cnt
+
     def _pct_over(arr, threshold):
         arr = np.asarray(arr, dtype=float)
         valid = arr[~np.isnan(arr)]
@@ -717,6 +742,7 @@ def train(config: TrainConfig):
         "param_ess_median": float(np.nanmedian(ess_param)),
         "param_ess_min_norm": float(np.nanmin(ess_param)) / total_samples,
     }
+    summary.update(_gn_agg)
     wandb.log(summary)
 
 
