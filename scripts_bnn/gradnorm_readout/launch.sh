@@ -6,15 +6,15 @@
 # decisive number is the sampling-phase "%>clip": ~0 means the clip is inert
 # during sampling (CVaR tail unbiased); >0 means it fires (proceed to BT /T).
 #
-# Needs the `irl` env.  Either activate it first (conda activate irl) OR point
-# PY at its interpreter:  PY=/path/to/anaconda3/envs/irl/bin/python bash launch.sh
+# ACTIVATE the conda env that has torch + optbnn first (e.g. `conda activate pt`),
+# then just run this — it uses `python` on PATH.  Override with PY=/path if needed.
 # 6 A6000s assumed: large variants 2 GPUs each (1 chain/GPU), medium 1 GPU each.
 set -u
 
 cd "$(dirname "$0")/../.." || exit 1          # repo root
 REPO="$(pwd)"
-SCRIPT="scripts_bnn/run_bnn_training_antmaze_eval.py"
-CFGDIR="scripts_bnn/gradnorm_readout"
+SCRIPT="$REPO/scripts_bnn/run_bnn_training_antmaze_eval.py"
+CFGDIR="$REPO/scripts_bnn/gradnorm_readout"
 LOGDIR="$CFGDIR/logs"
 mkdir -p "$LOGDIR"
 
@@ -24,14 +24,16 @@ export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
 # --- resolve interpreter: PY override, else python, else python3 --------------
 if [ -n "${PY:-}" ]; then :; elif command -v python >/dev/null 2>&1; then PY=python;
 elif command -v python3 >/dev/null 2>&1; then PY=python3; else
-  echo "ERROR: no python found. Activate irl (conda activate irl) or set PY=." >&2; exit 1
+  echo "ERROR: no python on PATH. Activate the env with torch+optbnn, or set PY=." >&2; exit 1
 fi
 
-# --- preflight: the interpreter must import torch + optbnn, else fail LOUDLY --
+# --- preflight: interpreter must import torch + optbnn ------------------------
+echo "[preflight] repo root : $REPO"
 echo "[preflight] interpreter: $($PY -c 'import sys;print(sys.executable)' 2>/dev/null || echo "$PY (not runnable)")"
 if ! "$PY" -c "import torch, optbnn" >/tmp/gradnorm_preflight.log 2>&1; then
   echo "ERROR: '$PY' cannot import torch + optbnn. This is why nothing ran." >&2
-  echo "  Fix: 'conda activate irl' first, or run with PY=/path/to/envs/irl/bin/python" >&2
+  echo "  Fix: activate the conda env that has them (e.g. 'conda activate pt')," >&2
+  echo "       or run with PY=/path/to/that/env/bin/python" >&2
   echo "  ---- preflight error ----" >&2; sed 's/^/  /' /tmp/gradnorm_preflight.log >&2
   exit 1
 fi
@@ -47,13 +49,22 @@ gpus_for() {   # GPU assignment: 4 variants over 6 GPUs (2 idle)
   esac
 }
 
+# --- verify all configs are present (catches a missing git pull) -------------
 tasks="large_play large_diverse medium_play medium_diverse"
+for task in $tasks; do
+  cfg="$CFGDIR/${task}_readout.yaml"
+  if [ ! -f "$cfg" ]; then
+    echo "ERROR: missing config $cfg — did you 'git pull' on this machine?" >&2; exit 1
+  fi
+done
+
 pids=""
 for task in $tasks; do
   gpus="$(gpus_for "$task")"
+  cfg="$CFGDIR/${task}_readout.yaml"          # absolute path (CWD-independent)
   echo "[launch] $task on GPU(s) $gpus  -> $LOGDIR/$task.log"
   CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
-      --config_path "$CFGDIR/${task}_readout.yaml" \
+      --config_path "$cfg" \
       > "$LOGDIR/$task.log" 2>&1 &
   eval "pid_$task=$!"
   pids="$pids $!"
