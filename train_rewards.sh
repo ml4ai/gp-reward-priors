@@ -113,13 +113,35 @@ else
 fi
 NSLOTS=${#SLOTS[@]}
 
-# --- enumerate jobs ---
+# Absolute measurement_dataset (the fSGHMC GP-prior "tuning set") for a config.
+# BNN configs set it as a path relative to the submodule root; MR/PT configs have
+# no such key, so this echoes nothing for them. Always exits 0 (see free_slot).
+abs_meas() {  # $1 = config file
+  local m
+  m=$(sed -n 's/^[[:space:]]*measurement_dataset:[[:space:]]*//p' "$1" | awk '{print $1}' | head -1)
+  [[ -z "$m" ]] && return 0
+  [[ "$m" == /* ]] || m="${ROOT}/${m}"
+  echo "$m"
+  return 0
+}
+
+# --- enumerate jobs (and preflight the measurement set for BNN) ---
 JOBS=()   # each element: "variant seed"
+MISSING_MEAS=()
 for v in $VARIANTS; do
   cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
   if [[ ! -f "$cfg" ]]; then echo "ERROR: config not found: $cfg" >&2; exit 1; fi
+  meas=$(abs_meas "$cfg")
+  [[ -n "$meas" && ! -f "$meas" ]] && MISSING_MEAS+=("$v -> $meas")
   for s in $SEEDS; do JOBS+=("$v $s"); done
 done
+if (( ${#MISSING_MEAS[@]} > 0 )); then
+  echo "ERROR: measurement (tuning) set file missing for:" >&2
+  printf '  %s\n' "${MISSING_MEAS[@]}" >&2
+  echo "These *_tuning_set.hdf5 files are separate from the eval/ splits and, like all" >&2
+  echo "of data/, are gitignored -- copy them to the box (or set measurement_dataset)." >&2
+  exit 1
+fi
 echo "Root (cwd): $ROOT   data_root: ${ROOT}/data/antmaze"
 echo "Method: $METHOD   variants: $VARIANTS   seeds: $SEEDS"
 echo "Total jobs: ${#JOBS[@]}   slots: $NSLOTS   log dir: $LOGDIR"
@@ -140,8 +162,11 @@ launch() {  # $1=slot_index  $2=variant  $3=seed
   # Absolute --data_root as well: the configs build train/val/test paths from it
   # (default "data/antmaze"), and pyrallis/h5py open those relative to the CWD.
   # Passing the absolute root makes the data paths resolve independent of CWD.
+  # Same for the BNN measurement_dataset (empty flag for MR/PT, which lack it).
+  local meas; meas=$(abs_meas "$cfg")
+  local -a mflag=(); [[ -n "$meas" ]] && mflag=(--measurement_dataset "$meas")
   CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
-      --config_path "$cfg" --data_root "${ROOT}/data/antmaze" \
+      --config_path "$cfg" --data_root "${ROOT}/data/antmaze" "${mflag[@]}" \
       --seed "$s" "${EXTRA_ARGS[@]}" \
       > "$logf" 2>&1 &
   local pid=$!
