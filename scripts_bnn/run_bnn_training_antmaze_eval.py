@@ -771,6 +771,30 @@ def train(config: TrainConfig):
     for _label, _Xe, _ye in eval_sets:
         summary.update(evaluate_eval_set(_label, _Xe, _ye))
 
+    # ------------------------------------------------------------------ #
+    # Gradient-clip instrumentation (Issue 3, Step 1) — aggregate the per-chain
+    # pre-clip grad-norm stats the workers wrote to disk.  Split-independent (a
+    # property of sampling), so logged once, unprefixed.  The decisive number is
+    # gradnorm_sampling_pct_over_clip: ~0 => the clip is inert during sampling
+    # and the CVaR tail is clip-unbiased; >0 => it fires => real tail bias.
+    # ------------------------------------------------------------------ #
+    for _phase in ("burnin", "sampling"):
+        _cnt = _nover = 0
+        _sm = _mx = 0.0
+        for _i in range(config.num_chains):
+            _p = os.path.join(saved_dir, f"chain_{_i}", "grad_norm_stats.pt")
+            if not os.path.exists(_p):
+                continue
+            _s = torch.load(_p, weights_only=False).get(_phase, {})
+            _cnt += _s.get("count", 0)
+            _sm += _s.get("sum", 0.0)
+            _nover += _s.get("n_over_clip", 0)
+            _mx = max(_mx, _s.get("max", 0.0))
+        if _cnt > 0:
+            summary[f"gradnorm_{_phase}_max"] = _mx
+            summary[f"gradnorm_{_phase}_mean"] = _sm / _cnt
+            summary[f"gradnorm_{_phase}_pct_over_clip"] = 100.0 * _nover / _cnt
+
     wandb.log(summary)
 
 
