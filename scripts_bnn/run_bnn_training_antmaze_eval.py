@@ -127,6 +127,11 @@ class TrainConfig:
     # Resample momentum from its stationary Gaussian at each cycle start (Issue 1)
     # instead of zeroing it (Wu et al. 2025).  False = legacy zeroing.
     resample_momentum: bool = True
+    # Chain-start diversification: overdisperse each chain's initial weights around
+    # the shared warm-up point by chain_init_jitter * per-tensor std.  0.0 = legacy
+    # identical starts (which under-estimate R-hat).  A convergence-diagnostic /
+    # mode-coverage lever, best tuned in the HP sweep alongside lr_max/fraction_cool.
+    chain_init_jitter: float = 0.0
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
@@ -589,6 +594,10 @@ def train(config: TrainConfig):
         resample_momentum=config.resample_momentum,
         max_param_step=config.max_param_step,
         chains_per_gpu=config.chains_per_gpu,
+        bt_pool=config.bt_pool,
+        clip_grad_norm_value=config.clip_grad_norm_value,
+        clip_during_sampling=config.clip_during_sampling,
+        chain_init_jitter=config.chain_init_jitter,
     )
 
     # ------------------------------------------------------------------ #

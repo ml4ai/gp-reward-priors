@@ -64,6 +64,8 @@ def _fpref_chain_worker(
     meas_kwargs,
     initial_weights=None,
     chains_per_gpu=1,
+    fpref_kwargs=None,
+    chain_init_jitter=0.0,
 ):
     """Worker for one parallel FPrefNet chain, called by mp.spawn.
 
@@ -122,6 +124,20 @@ def _fpref_chain_worker(
         with torch.no_grad():
             for param, w in zip(net.parameters(), initial_weights):
                 param.copy_(torch.from_numpy(w))
+        # Chain-start diversification: overdisperse each chain around the shared
+        # warm-up point.  Shared starts under-estimate R-hat (chains are
+        # artificially similar); overdispersed starts make R-hat a valid
+        # convergence check and let the pooled chains cover more posterior modes.
+        # Per-tensor relative scale (chain_init_jitter * std(w)), seeded per chain
+        # by set_seed(seed + chain_idx) above.  0.0 -> identical shared start.
+        if chain_init_jitter and chain_init_jitter > 0.0:
+            with torch.no_grad():
+                for param in net.parameters():
+                    _sd = float(param.detach().std())
+                    if _sd > 0.0:
+                        param.add_(
+                            torch.randn_like(param) * (chain_init_jitter * _sd)
+                        )
 
     likelihood = LikCE()
 
@@ -153,6 +169,7 @@ def _fpref_chain_worker(
         meas_jitter=meas_kwargs.get("meas_jitter", 1e-6),
         n_gpu=1,
         name=f"chain_{chain_idx}",
+        **(fpref_kwargs or {}),
     )
     bayes_net.train(x_train, y_train, **train_kwargs)
     bayes_net._save_sampled_weights()
@@ -801,6 +818,10 @@ class FPrefNet:
         resample_momentum=True,
         max_param_step=None,
         chains_per_gpu=1,
+        bt_pool="mean",
+        clip_grad_norm_value=100.0,
+        clip_during_sampling=False,
+        chain_init_jitter=0.0,
     ):
         """Run multiple fSGHMC chains in parallel, packing chains onto GPUs.
 
@@ -867,6 +888,13 @@ class FPrefNet:
         # each of the available GPUs.  Within a wave, the worker maps its rank to
         # device rank // chains_per_gpu, so chains pack onto the lowest GPU
         # indices first (cuda:2+ stay idle when fewer are needed).
+        # FPrefNet construction params must reach each worker (workers build
+        # their own FPrefNet), else worker sampling would silently use defaults.
+        _fpref_kwargs = dict(
+            bt_pool=bt_pool,
+            clip_grad_norm_value=clip_grad_norm_value,
+            clip_during_sampling=clip_during_sampling,
+        )
         max_concurrent = num_gpus * chains_per_gpu
         for batch_start in range(0, num_chains, max_concurrent):
             n_parallel = min(max_concurrent, num_chains - batch_start)
@@ -895,6 +923,8 @@ class FPrefNet:
                     meas_kwargs,
                     initial_weights,
                     chains_per_gpu,
+                    _fpref_kwargs,
+                    chain_init_jitter,
                 ),
                 nprocs=n_parallel,
                 join=True,
