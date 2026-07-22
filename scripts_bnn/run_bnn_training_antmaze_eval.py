@@ -124,6 +124,9 @@ class TrainConfig:
     # ceil(num_samples / samples_per_cycle) cycles -> the wall-clock lever.
     # 1 = legacy one-sample-per-cycle (num_samples cycles).
     samples_per_cycle: int = 1
+    # Resample momentum from its stationary Gaussian at each cycle start (Issue 1)
+    # instead of zeroing it (Wu et al. 2025).  False = legacy zeroing.
+    resample_momentum: bool = True
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
@@ -583,6 +586,7 @@ def train(config: TrainConfig):
         cycle_length=config.cycle_length,
         fraction_cool=config.fraction_cool,
         samples_per_cycle=config.samples_per_cycle,
+        resample_momentum=config.resample_momentum,
         max_param_step=config.max_param_step,
         chains_per_gpu=config.chains_per_gpu,
     )

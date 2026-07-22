@@ -498,6 +498,7 @@ class FPrefNet:
         cycle_length=None,
         fraction_cool=0.25,
         samples_per_cycle=1,
+        resample_momentum=True,
         max_param_step=None,
         log_every=0,
         eval_data=None,
@@ -617,12 +618,32 @@ class FPrefNet:
                 for _pg in self.sampler.param_groups:
                     _pg["lr"] = np.float32(_cycle_lr)
                 if _cycle_step == 0:
-                    # Zero momentum at the start of each new hot phase
+                    # Cycle start (Issue 1): resample momentum from its stationary
+                    # Gaussian (Wu et al. 2025, Alg. 2) rather than zeroing it —
+                    # zeroing drops the chain into an atypical set that costs
+                    # ~1/mdecay steps to re-equilibrate.  The AdaptiveSGHMC
+                    # "momentum" buffer is the position increment v ≈ εM⁻¹z, whose
+                    # OU stationary law is v ~ N(0, lr²·minv_t), minv_t=1/(√v_hat+ε),
+                    # with lr = lr_max at the cycle start (= _cycle_lr).  Plain
+                    # SGHMC has no v_hat: std = √lr.  resample_momentum=False keeps
+                    # the legacy zeroing for reproducibility.
                     for _pg in self.sampler.param_groups:
+                        _eps = _pg.get("epsilon", 1e-16)
                         for _p in _pg["params"]:
                             _s = self.sampler.state.get(_p)
-                            if _s is not None and "momentum" in _s:
+                            if _s is None or "momentum" not in _s:
+                                continue
+                            if not resample_momentum:
                                 _s["momentum"].zero_()
+                                continue
+                            if "v_hat" in _s:  # adaptive_sghmc
+                                _std = (
+                                    _s["v_hat"].sqrt().add(_eps).reciprocal()
+                                    .sqrt_().mul_(_cycle_lr)
+                                )
+                            else:              # plain sghmc
+                                _std = math.sqrt(float(_cycle_lr))
+                            _s["momentum"].normal_().mul_(_std)
 
             # ---- Preference task forward pass ---------------------------
             B, _, T, d_dim = x_batch.size()
@@ -777,6 +798,7 @@ class FPrefNet:
         cycle_length=None,
         fraction_cool=0.25,
         samples_per_cycle=1,
+        resample_momentum=True,
         max_param_step=None,
         chains_per_gpu=1,
     ):
@@ -837,6 +859,7 @@ class FPrefNet:
             cycle_length=cycle_length,
             fraction_cool=fraction_cool,
             samples_per_cycle=samples_per_cycle,
+            resample_momentum=resample_momentum,
             max_param_step=max_param_step,
         )
 
