@@ -209,6 +209,14 @@ class TrainConfig:
     map_sig_g2: float = 1.0
     # Nugget / diagonal jitter (mandatory for K invertibility).
     map_sig_n2: float = 1e-3
+    # Overall variance-scale multiplier on the map kernel, K -> map_amp2 * K
+    # (prior sd scales as sqrt(map_amp2)).  Leaves the correlation structure —
+    # the map-informed part — exactly unchanged; only recalibrates the prior's
+    # reward amplitude to the mean-pooled (bt_pool="mean") BT logit scale,
+    # where per-point amplitude must match logit magnitude.  Unlike
+    # map_eta/map_sig_* (design-fixed from geometry), this is a prior-STRENGTH
+    # knob and is swept on validation loss alongside n_meas.  1.0 = legacy.
+    map_amp2: float = 1.0
     # Where to read the torso (x, y) from: "obs" (X_M[:, :2], the antmaze
     # convention) or "aux" (aux_X).  Never read the goal columns.
     map_xy_source: str = "obs"
@@ -406,6 +414,7 @@ def train(config: TrainConfig):
             sig_c2=config.map_sig_c2,
             sig_g2=config.map_sig_g2,
             sig_n2=config.map_sig_n2,
+            amp2=config.map_amp2,
             xy_source=config.map_xy_source,
             device=device,
         )

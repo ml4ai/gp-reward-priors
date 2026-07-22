@@ -2,9 +2,10 @@
 
 A manually-designed, goal-agnostic GP prior over the scalar reward
 ``r(s, a) -> R`` whose informativeness lives entirely in its kernel (zero mean).
-The kernel is a sum of a constant offset and a wall-respecting heat-kernel term::
+The kernel is a sum of a constant offset and a wall-respecting heat-kernel term,
+scaled by a single overall amplitude multiplier::
 
-    k((s,a),(s',a')) = sig_c2  +  sig_g2 * K_geo[c(s), c(s')]  +  sig_n2 * 1[i=j]
+    k((s,a),(s',a')) = amp2 * (sig_c2 + sig_g2 * K_geo[c(s), c(s')] + sig_n2 * 1[i=j])
 
 where ``c(s)`` maps a state to its discrete maze cell via the torso (x, y) and
 ``K_geo`` is a graph diffusion (heat) kernel on the maze free-space grid, so
@@ -46,6 +47,15 @@ class MapInformedGPPrior(torch.nn.Module):
             constant the reward is only identifiable up to).
         sig_g2: map-informed signal variance (prior reward scale).
         sig_n2: nugget / diagonal jitter — mandatory for invertibility of K.
+        amp2: overall variance-scale multiplier, K -> amp2 * K.  Scales the
+            prior's marginal reward amplitude (sd scales as sqrt(amp2)) while
+            leaving the correlation structure — everything map-informed about
+            the prior (heat-kernel geometry, ``eta``'s correlation length) —
+            exactly unchanged.  Recalibrates the prior to the mean-pooled
+            (``bt_pool="mean"``) Bradley-Terry logit scale, where per-point
+            reward amplitude must match logit magnitude; under the legacy sum
+            pooling the two were decoupled and amp2=1 was adequate.  Default
+            1.0 reproduces the pre-amp2 kernel bit-for-bit.
         xy_cols: which two columns of the input hold the torso (x, y).
         xy_source: ``"obs"`` to read (x, y) from the BNN input X_M, or
             ``"aux"`` to read them from aux_X.  Antmaze ``obs[:, :2]`` are the
@@ -56,7 +66,8 @@ class MapInformedGPPrior(torch.nn.Module):
     """
 
     def __init__(self, free_mask, scaling, offset, eta, sig_c2, sig_g2, sig_n2,
-                 xy_cols=(0, 1), xy_source="obs", device=None, name=None):
+                 amp2=1.0, xy_cols=(0, 1), xy_source="obs", device=None,
+                 name=None):
         super().__init__()
         self.name = name
         self.free_mask = np.asarray(free_mask, dtype=bool)
@@ -66,6 +77,9 @@ class MapInformedGPPrior(torch.nn.Module):
         self.sig_c2 = float(sig_c2)
         self.sig_g2 = float(sig_g2)
         self.sig_n2 = float(sig_n2)
+        self.amp2 = float(amp2)
+        if self.amp2 <= 0.0:
+            raise ValueError(f"amp2 must be > 0, got {amp2!r}")
         self.xy_cols = (int(xy_cols[0]), int(xy_cols[1]))
         self.xy_source = str(xy_source)
         if self.xy_source not in ("obs", "aux"):
@@ -146,7 +160,11 @@ class MapInformedGPPrior(torch.nn.Module):
     def _gram_from_idx(self, idx, extra_jitter=0.0):
         """Assemble K (with nugget) for the given node indices.
 
-        K[i,j] = sig_c2 + sig_g2 * Kgeo[idx_i, idx_j]; diag += sig_n2 (+ extra).
+        K[i,j] = amp2 * (sig_c2 + sig_g2 * Kgeo[idx_i, idx_j]);
+        diag += amp2 * (sig_n2 + extra).  The amplitude multiplies the WHOLE
+        matrix (jitter included) so K -> amp2 * K exactly: the conditioning of
+        the Cholesky solve is identical for every amp2, and the prior gradient
+        scales as 1/amp2.
         Returns an (n, n) float64 tensor on ``self.device``.
         """
         idx_t = torch.as_tensor(idx, dtype=torch.long, device=self.device)
@@ -155,7 +173,7 @@ class MapInformedGPPrior(torch.nn.Module):
         if n > 0:
             diag = self.sig_n2 + float(extra_jitter)
             K = K + diag * torch.eye(n, dtype=K.dtype, device=K.device)
-        return K
+        return self.amp2 * K
 
     def gram(self, X_M, aux_X=None, extra_jitter=0.0):
         """Full Gram matrix K(X_M, X_M) for arbitrary (s, a) inputs (§5).
@@ -311,13 +329,18 @@ class MapInformedGPPrior(torch.nn.Module):
             "sig_c2": self.sig_c2,
             "sig_g2": self.sig_g2,
             "sig_n2": self.sig_n2,
+            "amp2": self.amp2,
             "xy_cols": np.asarray(self.xy_cols, dtype=np.int64),
             "xy_source": self.xy_source,
         }
 
     @classmethod
     def from_args(cls, args, device=None):
-        """Reconstruct from a :meth:`to_args` dict (rebuilds graph + kernel)."""
+        """Reconstruct from a :meth:`to_args` dict (rebuilds graph + kernel).
+
+        ``amp2`` defaults to 1.0 when absent, so dicts from pre-amp2 code
+        reconstruct the legacy kernel unchanged.
+        """
         return cls(
             free_mask=args["free_mask"],
             scaling=float(args["scaling"]),
@@ -326,6 +349,7 @@ class MapInformedGPPrior(torch.nn.Module):
             sig_c2=float(args["sig_c2"]),
             sig_g2=float(args["sig_g2"]),
             sig_n2=float(args["sig_n2"]),
+            amp2=float(args.get("amp2", 1.0)),
             xy_cols=tuple(np.asarray(args["xy_cols"]).tolist()),
             xy_source=str(args["xy_source"]),
             device=device,
@@ -342,13 +366,17 @@ class MapInformedGPPrior(torch.nn.Module):
             sig_c2=self.sig_c2,
             sig_g2=self.sig_g2,
             sig_n2=self.sig_n2,
+            amp2=self.amp2,
             xy_cols=np.asarray(self.xy_cols, dtype=np.int64),
             xy_source=self.xy_source,
         )
 
     @classmethod
     def load(cls, path, device=None):
-        """Load a prior saved with :meth:`save`."""
+        """Load a prior saved with :meth:`save`.
+
+        ``amp2`` defaults to 1.0 for .npz files written by pre-amp2 code.
+        """
         d = np.load(path, allow_pickle=False)
         return cls(
             free_mask=d["free_mask"],
@@ -358,6 +386,7 @@ class MapInformedGPPrior(torch.nn.Module):
             sig_c2=float(d["sig_c2"]),
             sig_g2=float(d["sig_g2"]),
             sig_n2=float(d["sig_n2"]),
+            amp2=float(d["amp2"]) if "amp2" in d.files else 1.0,
             xy_cols=tuple(d["xy_cols"].tolist()),
             xy_source=str(d["xy_source"]),
             device=device,

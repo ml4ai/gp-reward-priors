@@ -69,16 +69,19 @@ parameters:
   # ---- FILL from the tier-1 (warm-up) winner for this variant ----
   # width is a log2 exponent (2**width).
   width:
-    value: 8
+    value: FILL_ME
   depth:
-    value: 2
+    value: FILL_ME
   n_meas:
-    value: 2
+    value: FILL_ME
+  # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
+  map_amp2:
+    value: FILL_ME
   # Let chain sampling actually run: set a little BELOW the tier-1 winner's
   # warmup_final_acc so the winning architecture clears the gate while
   # diverged warm-ups still stop cheaply.
   early_stop_acc_threshold:
-    value: 0.75
+    value: FILL_ME
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)

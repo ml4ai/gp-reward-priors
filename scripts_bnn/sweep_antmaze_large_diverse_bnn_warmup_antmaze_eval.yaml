@@ -1,7 +1,7 @@
 project: BNN-training
 program: run_bnn_training_antmaze_eval.py
 method: bayes
-run_cap: 60   # 10 * 5 swept params + 10
+run_cap: 70   # 10 * 6 swept params + 10
 metric:
   name: warmup_final_nll
   goal: minimize
@@ -17,9 +17,14 @@ metric:
 # map_sig_g2, map_sig_n2) are deliberately NOT swept: they are prior-design
 # choices fixed from the maze geometry and the prior-sample diagnostics, never
 # selected on downstream return (tuning them on reward would smuggle the
-# hidden goal back in).  They are inherited from the base config.  Only n_meas
-# (incl. 0 = prior off) is searched, to learn whether and how much the
-# map-informed prior helps.
+# hidden goal back in).  They are inherited from the base config.  The two
+# prior-STRENGTH knobs ARE searched: n_meas (incl. 0 = prior off) and
+# map_amp2, the overall variance-scale multiplier K -> amp2*K.  map_amp2
+# rescales only the prior's reward amplitude (sd ~ sqrt(amp2)), leaving the
+# map-informed correlation structure untouched: the bt_pool="mean" fix tied
+# per-point reward amplitude to BT logit magnitude, so the legacy O(1)
+# amplitude strangles confidence (NLL) and, without this knob, the sweep can
+# only escape by driving n_meas -> 0.
 #
 # Launch agents from the scripts_bnn/ dir (see launch_hp_sweeps.sh): the
 # script os.chdir("..")s to the repo root at import, so config_path and data
@@ -69,3 +74,10 @@ parameters:
     distribution: log_uniform_values
     min: 1e-3
     max: 1e-1
+  # Prior amplitude multiplier (variance scale; sd multiplier is sqrt).  Floor
+  # 1.0 = legacy scale; ceiling 1e3 allows prior sd up to ~31x, comfortably
+  # covering the |logit| ~ 3-5 a confident mean-pooled BT fit needs.
+  map_amp2:
+    distribution: log_uniform_values
+    min: 1.0
+    max: 1000.0
