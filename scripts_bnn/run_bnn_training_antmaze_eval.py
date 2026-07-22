@@ -119,6 +119,11 @@ class TrainConfig:
     sghmc_lr_max: float = 0.03
     cycle_length: int = 1000
     fraction_cool: float = 0.25
+    # Cool-phase harvesting (Issue 2): samples collected per cycle from the cool
+    # tail.  num_samples is the TOTAL sample count, reached in
+    # ceil(num_samples / samples_per_cycle) cycles -> the wall-clock lever.
+    # 1 = legacy one-sample-per-cycle (num_samples cycles).
+    samples_per_cycle: int = 1
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
@@ -577,6 +582,7 @@ def train(config: TrainConfig):
         lr_max=config.sghmc_lr_max,
         cycle_length=config.cycle_length,
         fraction_cool=config.fraction_cool,
+        samples_per_cycle=config.samples_per_cycle,
         max_param_step=config.max_param_step,
         chains_per_gpu=config.chains_per_gpu,
     )

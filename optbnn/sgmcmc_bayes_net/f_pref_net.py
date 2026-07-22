@@ -497,6 +497,7 @@ class FPrefNet:
         lr_max=None,
         cycle_length=None,
         fraction_cool=0.25,
+        samples_per_cycle=1,
         max_param_step=None,
         log_every=0,
         eval_data=None,
@@ -557,8 +558,14 @@ class FPrefNet:
         _lr_max = float(lr_max) if lr_max is not None else float(lr) * 10.0
         _lr_min = float(lr)
 
+        # samples_per_cycle > 1 harvests multiple thinned samples from each cool
+        # phase (Issue 2), so num_samples (a TOTAL count) is reached in fewer
+        # cycles -> fewer steps.  samples_per_cycle == 1 is the legacy one-sample-
+        # per-cycle behaviour (num_steps unchanged).
+        _spc = max(1, int(samples_per_cycle))
         if use_cyclical_lr and num_samples is not None:
-            num_steps = (num_samples + n_discarded) * _cycle_len
+            _n_cycles = math.ceil((num_samples + n_discarded) / _spc)
+            num_steps = _n_cycles * _cycle_len
         else:
             num_steps = 0 if num_samples is None else (num_samples + 1) * keep_every
 
@@ -722,9 +729,16 @@ class FPrefNet:
             if use_cyclical_lr and step >= num_burn_in_steps:
                 _post_burn = step - num_burn_in_steps
                 _cycle_step = _post_burn % _cycle_len
-                if _cycle_step == _cycle_len - 1:
+                # Cool-phase harvesting (Issue 2): collect _spc thinned samples
+                # from the low-LR tail of the cycle, spaced to end at the coldest
+                # step (_from_end == 0).  _spc == 1 -> only the coldest sample,
+                # i.e. exactly the legacy one-sample-per-cycle behaviour.
+                _cool_len = max(1, int(fraction_cool * _cycle_len))
+                _thin = max(1, _cool_len // _spc)
+                _from_end = (_cycle_len - 1) - _cycle_step
+                if 0 <= _from_end < _spc * _thin and _from_end % _thin == 0:
                     n_samples += 1
-                    if n_samples > n_discarded:
+                    if n_samples > n_discarded and self.num_samples < num_samples:
                         self.sampled_weights.append(self.network_weights)
                         self.num_samples += 1
             elif (not use_cyclical_lr) and (step > num_burn_in_steps) and (
@@ -762,6 +776,7 @@ class FPrefNet:
         lr_max=None,
         cycle_length=None,
         fraction_cool=0.25,
+        samples_per_cycle=1,
         max_param_step=None,
         chains_per_gpu=1,
     ):
@@ -821,6 +836,7 @@ class FPrefNet:
             lr_max=lr_max,
             cycle_length=cycle_length,
             fraction_cool=fraction_cool,
+            samples_per_cycle=samples_per_cycle,
             max_param_step=max_param_step,
         )
 
