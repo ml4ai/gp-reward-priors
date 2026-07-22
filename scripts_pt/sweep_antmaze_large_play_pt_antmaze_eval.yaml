@@ -1,0 +1,43 @@
+project: PT-training
+program: run_pt_training_antmaze_eval.py
+method: bayes
+run_cap: 50   # 10 * 4 swept params + 10
+metric:
+  name: eval_loss_best
+  goal: minimize
+
+# Post-sampler-fix HP re-selection (shared bt_pool="mean" likelihood), 
+# antmaze_eval lineage, seed 0.  Selection MINIMIZES the best-over-epochs
+# validation loss: criteria_key=loss makes the script track and log
+# eval_loss_best.  seed selects both the model seed and the
+# data/antmaze/<variant>/eval/seed_0/ split.  Launch agents from the repo root
+# (see launch_hp_sweeps.sh) — config_path is repo-root-relative.
+parameters:
+  config_path:
+    value: "scripts_pt/antmaze_large_play_pt_antmaze_eval.yaml"
+  seed:
+    value: 0
+  criteria_key:
+    value: "loss"
+  epochs:
+    value: 5000
+
+  # ---- Swept (identical ranges across all antmaze variants) ----
+  # embd_dim / head_dim are log2 exponents: 2**6=64 ... 2**8=256 and
+  # 2**5=32 ... 2**7=128 (head_dim is clamped to embd_dim in __post_init__).
+  embd_dim:
+    distribution: int_uniform
+    min: 6
+    max: 8
+  head_dim:
+    distribution: int_uniform
+    min: 5
+    max: 7
+  num_layers:
+    distribution: int_uniform
+    min: 1
+    max: 4
+  lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2

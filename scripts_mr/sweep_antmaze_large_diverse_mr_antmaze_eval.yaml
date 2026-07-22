@@ -1,0 +1,39 @@
+project: MR-training
+program: run_mr_training_antmaze_eval.py
+method: bayes
+run_cap: 40   # 10 * 3 swept params + 10
+metric:
+  name: eval_loss_best
+  goal: minimize
+
+# Post-sampler-fix HP re-selection (bt_pool="mean" rescaled the reward, so the
+# old optima no longer apply), antmaze_eval lineage, seed 0.  Selection
+# MINIMIZES the best-over-epochs validation loss: criteria_key=loss makes the
+# script track and log eval_loss_best.  seed selects both the model seed and
+# the data/antmaze/<variant>/eval/seed_0/ split.  Launch agents from this
+# scripts dir (see launch_hp_sweeps.sh): the script os.chdir("..")s to the repo
+# root at import, so config_path/data paths are repo-root-relative.
+parameters:
+  config_path:
+    value: "scripts_mr/antmaze_large_diverse_mr_antmaze_eval.yaml"
+  seed:
+    value: 0
+  criteria_key:
+    value: "loss"
+  epochs:
+    value: 5000
+
+  # ---- Swept (identical ranges across all antmaze variants) ----
+  # width is a log2 exponent: actual width = 2**width (6 -> 64 ... 9 -> 512).
+  width:
+    distribution: int_uniform
+    min: 6
+    max: 9
+  depth:
+    distribution: int_uniform
+    min: 1
+    max: 6
+  lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2
