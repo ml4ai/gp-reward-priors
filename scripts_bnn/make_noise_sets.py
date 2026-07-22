@@ -1,6 +1,7 @@
 """make_noise_sets.py — build nested label-noise training/validation sets.
 
-For every antmaze variant and every seed (1..10), take that seed's training and
+For every antmaze variant and every seed (default 1..10; pass seed numbers as
+command-line args to override, e.g. `make_noise_sets.py 0`), take that seed's training and
 validation partitions and create noisy copies where a percentage of the
 preference labels are flipped (one-hot columns swapped).  Flip percentages are
 0.1, 0.2, 0.3, 0.4, 0.45 and are NESTED: a single seed-matched permutation of
@@ -16,12 +17,14 @@ removed (0.1 -> 01, 0.45 -> 045):
   data/antmaze/<variant>/eval/seed_<s>/noise/<variant>_pref_val_<s>_<pp>.hdf5
 """
 import os
+import sys
 import glob
 import h5py
 import numpy as np
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "antmaze")
-SEEDS = range(1, 11)
+# Seeds may be given on the command line; default is the original 1..10.
+SEEDS = [int(a) for a in sys.argv[1:]] or list(range(1, 11))
 PERCENTS = [0.1, 0.2, 0.3, 0.4, 0.45]  # ascending; nested flip prefixes
 
 

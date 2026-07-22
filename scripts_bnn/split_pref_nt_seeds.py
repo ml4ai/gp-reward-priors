@@ -1,5 +1,6 @@
 """split_pref_nt_seeds.py — split each antmaze *_pref_nt.hdf5 preference dataset
-into train/val/test partitions over 10 random seeds (1..10).
+into train/val/test partitions over random seeds (default 1..10; pass seed
+numbers as command-line args to override, e.g. `split_pref_nt_seeds.py 0`).
 
 For every variant under data/antmaze, the *_pref_nt.hdf5 file holds N preference
 pairs along axis 0 across 9 datasets (states/states_2, actions/actions_2,
@@ -12,12 +13,15 @@ Outputs:
   data/antmaze/<variant>/eval/seed_<s>/<variant>_pref_{train,val,test}_<s>.hdf5
 """
 import os
+import sys
 import glob
 import h5py
 import numpy as np
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "antmaze")
-SEEDS = range(1, 11)
+# Seeds may be given on the command line (e.g. `split_pref_nt_seeds.py 0`);
+# default is the original 1..10.
+SEEDS = [int(a) for a in sys.argv[1:]] or list(range(1, 11))
 TRAIN_FRAC = 0.70
 VAL_FRAC = 0.15  # test gets the remainder
 
