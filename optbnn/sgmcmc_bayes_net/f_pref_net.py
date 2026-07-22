@@ -38,7 +38,13 @@ import torch.utils.data as data_utils
 from ..metrics.metrics_tensor import accuracy
 from ..samplers.adaptive_sghmc import AdaptiveSGHMC
 from ..samplers.sghmc import SGHMC
-from ..utils.util import ensure_dir, inf_loop, prepare_device
+from ..utils.util import (
+    bt_pool_logit,
+    bt_pool_logit_np,
+    ensure_dir,
+    inf_loop,
+    prepare_device,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +224,9 @@ class FPrefNet:
         logger=None,
         n_gpu=0,
         name="fpref",
+        bt_pool="mean",
+        clip_grad_norm_value=100.0,
+        clip_during_sampling=False,
     ):
         self.net = net
         self.lik_module = likelihood
@@ -226,6 +235,12 @@ class FPrefNet:
         self.temperature = temperature
         self.name = name
         self.n_gpu = n_gpu
+        # Bradley-Terry pooling: "mean" (masked mean over valid timesteps, shared
+        # with MR/PT) or "sum" (legacy).  Grad-clip scope (Issue 3): apply the
+        # clip in burn-in always, in sampling only if clip_during_sampling.
+        self._bt_pool = bt_pool
+        self._clip_grad_norm_value = clip_grad_norm_value
+        self._clip_during_sampling = clip_during_sampling
 
         self.print_info = print if logger is None else logger.info
 
@@ -370,8 +385,8 @@ class FPrefNet:
 
             pred_1 = pred[: b * T].reshape(b, T) * am_1[start:end]
             pred_2 = pred[b * T :].reshape(b, T) * am_2[start:end]
-            parts_1.append(np.nansum(pred_1, axis=1))
-            parts_2.append(np.nansum(pred_2, axis=1))
+            parts_1.append(bt_pool_logit_np(pred_1, am_1[start:end], self._bt_pool))
+            parts_2.append(bt_pool_logit_np(pred_2, am_2[start:end], self._bt_pool))
 
         return np.concatenate(parts_1), np.concatenate(parts_2)
 
@@ -421,8 +436,8 @@ class FPrefNet:
             pred_both = self.net(torch.cat([x1_t, x2_t], dim=0)).view(2, B, T)
             pred_1 = pred_both[0] * am1_t
             pred_2 = pred_both[1] * am2_t
-            sum_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
-            sum_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+            sum_1 = bt_pool_logit(pred_1, am1_t, self._bt_pool).view(-1, 1)
+            sum_2 = bt_pool_logit(pred_2, am2_t, self._bt_pool).view(-1, 1)
             fx = torch.cat([sum_1, sum_2], dim=1)
 
             nll = torch.nn.CrossEntropyLoss()(fx, y_t).item()
@@ -615,8 +630,8 @@ class FPrefNet:
             ).view(2, B, T)
             pred_1 = pred_both[0] * am_1
             pred_2 = pred_both[1] * am_2
-            sum_pred_1 = torch.nansum(pred_1, dim=1).view(-1, 1)
-            sum_pred_2 = torch.nansum(pred_2, dim=1).view(-1, 1)
+            sum_pred_1 = bt_pool_logit(pred_1, am_1, self._bt_pool).view(-1, 1)
+            sum_pred_2 = bt_pool_logit(pred_2, am_2, self._bt_pool).view(-1, 1)
             fx_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
             # ---- Likelihood gradient ------------------------------------
@@ -659,18 +674,28 @@ class FPrefNet:
                         param.grad.add_(-fg.to(param.grad.dtype) / num_datapoints)
 
             # ---- Clip and step ------------------------------------------
-            _clip_value = 100.0
-            _gnorm = float(
-                torch.nn.utils.clip_grad_norm_(self.net.parameters(), _clip_value)
+            # Grad-clip scope (Issue 3, Step 2): applied in burn-in always, in
+            # sampling only if clip_during_sampling.  The pre-clip norm is always
+            # measured for the instrumentation (Step 1), even when not applied
+            # (max_norm=inf leaves gradients untouched but still returns the norm).
+            _clip_value = self._clip_grad_norm_value
+            _apply_clip = _clip_value is not None and (
+                step < num_burn_in_steps or self._clip_during_sampling
             )
-            # Record the pre-clip norm for this step's phase (instrumentation).
+            _gnorm = float(
+                torch.nn.utils.clip_grad_norm_(
+                    self.net.parameters(),
+                    _clip_value if _apply_clip else float("inf"),
+                )
+            )
+            _thr = _clip_value if _clip_value is not None else 100.0
             _phase = "burnin" if step < num_burn_in_steps else "sampling"
             _st = self._grad_norm_stats[_phase]
             _st["count"] += 1
             _st["sum"] += _gnorm
             if _gnorm > _st["max"]:
                 _st["max"] = _gnorm
-            if _gnorm > _clip_value:
+            if _gnorm > _thr:
                 _st["n_over_clip"] += 1
             self.sampler.step()
             self.step += 1

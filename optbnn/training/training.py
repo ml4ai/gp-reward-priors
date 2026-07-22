@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Tuple, Union
 import torch
 import torch.nn as nn
 from optbnn.gp.models.model import LCFModel
+from optbnn.utils.util import bt_pool_logit
 
 TensorBatch = List[torch.Tensor]
 
@@ -14,11 +15,13 @@ class MRTrainer:
         opt: torch.optim.Optimizer,
         num_datapoints: int,
         device: str = "cpu",
+        bt_pool: str = "mean",
     ):
         self.net = net
         self.opt = opt
         self.device = device
         self.like = torch.nn.CrossEntropyLoss(reduction="mean")
+        self.bt_pool = bt_pool
         self.num_datapoints = num_datapoints
 
     def train(self, batch: TensorBatch) -> Dict[str, float]:
@@ -53,8 +56,8 @@ class MRTrainer:
         pred_1 = pred[: B * T].reshape(B, T) * attn_mask
         pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
-        sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
-        sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
+        sum_pred_1 = bt_pool_logit(pred_1, attn_mask, self.bt_pool).reshape(-1, 1)
+        sum_pred_2 = bt_pool_logit(pred_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
         fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
         loss = self.like(fX_batch, labels)
         self.opt.zero_grad(set_to_none=True)
@@ -101,8 +104,8 @@ class MRTrainer:
             pred_1 = pred[: B * T].reshape(B, T) * attn_mask
             pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
-            sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
-            sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
+            sum_pred_1 = bt_pool_logit(pred_1, attn_mask, self.bt_pool).reshape(-1, 1)
+            sum_pred_2 = bt_pool_logit(pred_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
             fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
             loss = self.like(fX_batch, labels)
 
@@ -149,12 +152,14 @@ class MRTrainerF:
         num_datapoints: int,
         prior: LCFModel,
         device: str = "cpu",
+        bt_pool: str = "mean",
     ):
         self.net = net
         self.opt = opt
         self.prior = prior
         self.device = device
         self.like = torch.nn.CrossEntropyLoss(reduction="mean")
+        self.bt_pool = bt_pool
         self.num_datapoints = num_datapoints
 
     def train(
@@ -193,8 +198,8 @@ class MRTrainerF:
         pred_1 = pred[: B * T].reshape(B, T) * attn_mask
         pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
-        sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
-        sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
+        sum_pred_1 = bt_pool_logit(pred_1, attn_mask, self.bt_pool).reshape(-1, 1)
+        sum_pred_2 = bt_pool_logit(pred_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
         fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
         loss = self.like(fX_batch, labels)
@@ -274,8 +279,8 @@ class MRTrainerF:
             pred_1 = pred[: B * T].reshape(B, T) * attn_mask
             pred_2 = pred[B * T :].reshape(B, T) * attn_mask_2
 
-            sum_pred_1 = torch.nansum(pred_1, dim=1).reshape(-1, 1)
-            sum_pred_2 = torch.nansum(pred_2, dim=1).reshape(-1, 1)
+            sum_pred_1 = bt_pool_logit(pred_1, attn_mask, self.bt_pool).reshape(-1, 1)
+            sum_pred_2 = bt_pool_logit(pred_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
             fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
             loss = self.like(fX_batch, labels)
@@ -306,11 +311,13 @@ class PTTrainer:
         net: nn.Module,
         opt: torch.optim.Optimizer,
         device: str = "cpu",
+        bt_pool: str = "mean",
     ):
         self.net = net
         self.opt = opt
         self.device = device
         self.like = torch.nn.CrossEntropyLoss(reduction="mean")
+        self.bt_pool = bt_pool
 
     def train(self, batch: TensorBatch) -> Dict[str, float]:
         (
@@ -339,8 +346,8 @@ class PTTrainer:
             torch.cat([attn_mask, attn_mask_2], dim=0),
         )
         pred = out["weighted_sum"]  # (2B, T, 1)
-        sum_pred_1 = pred[:B].reshape(B, T).mean(dim=1, keepdim=True)
-        sum_pred_2 = pred[B:].reshape(B, T).mean(dim=1, keepdim=True)
+        sum_pred_1 = bt_pool_logit(pred[:B].reshape(B, T) * attn_mask, attn_mask, self.bt_pool).reshape(-1, 1)
+        sum_pred_2 = bt_pool_logit(pred[B:].reshape(B, T) * attn_mask_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
         fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
         loss = self.like(fX_batch, labels)
@@ -383,8 +390,8 @@ class PTTrainer:
                 torch.cat([attn_mask, attn_mask_2], dim=0),
             )
             pred = out["weighted_sum"]  # (2B, T, 1)
-            sum_pred_1 = pred[:B].reshape(B, T).mean(dim=1, keepdim=True)
-            sum_pred_2 = pred[B:].reshape(B, T).mean(dim=1, keepdim=True)
+            sum_pred_1 = bt_pool_logit(pred[:B].reshape(B, T) * attn_mask, attn_mask, self.bt_pool).reshape(-1, 1)
+            sum_pred_2 = bt_pool_logit(pred[B:].reshape(B, T) * attn_mask_2, attn_mask_2, self.bt_pool).reshape(-1, 1)
             fX_batch = torch.cat([sum_pred_1, sum_pred_2], dim=1)
 
             loss = self.like(fX_batch, labels)

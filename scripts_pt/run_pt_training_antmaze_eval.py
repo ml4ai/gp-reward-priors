@@ -32,6 +32,9 @@ class TrainConfig:
     pref_attn_embd_dim: Optional[int] = None
     head_dim: int = 6  # log2 exponent; actual head_dim = 2**head_dim (e.g. 6 → 64); num_heads = embd_dim // head_dim
     attn_dropout: float = 0.1
+    # BT trajectory pooling, shared with BNN/MR: "mean" (masked mean over valid
+    # timesteps) or "sum" (legacy).  Must match across all three for comparability.
+    bt_pool: str = "mean"
     resid_dropout: float = 0.1
     intermediate_dim: Optional[int] = None
     num_layers: int = 1
@@ -170,6 +173,7 @@ def train(config: TrainConfig):
         net,
         opt=net_optimizer,
         device=device,
+        bt_pool=config.bt_pool,
     )
     c_best_epoch = 0
 

@@ -342,3 +342,33 @@ def split_train_val(x_train, y_train, splitting_ratio=0.2):
     x_train, y_train = x_train.copy()[train_idx, :], y_train.copy()[train_idx]
 
     return x_train, y_train, x_val, y_val
+
+# ---------------------------------------------------------------------------
+# Bradley-Terry trajectory pooling (shared by BNN / MR / PT so all three use an
+# identical likelihood).  Given per-timestep rewards already multiplied by the
+# 0/1 attention mask, pool them into one scalar per trajectory:
+#   mode="sum"  -> Sum_t r_t              (legacy, trajectory-length-dependent)
+#   mode="mean" -> Sum_t r_t / Sum_t m_t  (masked mean over valid timesteps)
+# The masked mean is trajectory-length-independent and keeps the logit scale
+# bounded, which avoids the w^(depth+1) gradient blow-up in deep reward nets.
+# ---------------------------------------------------------------------------
+def bt_pool_logit(pred_masked, mask, mode="mean"):
+    """Torch pooling. pred_masked,(B,T) rewards*mask; mask,(B,T) 0/1. -> (B,)."""
+    s = torch.nansum(pred_masked, dim=1)
+    if mode == "sum":
+        return s
+    if mode != "mean":
+        raise ValueError(f"bt_pool_logit: mode must be 'sum' or 'mean', got {mode!r}")
+    n = torch.nansum(mask, dim=1).clamp(min=1.0)
+    return s / n
+
+
+def bt_pool_logit_np(pred_masked, mask, mode="mean"):
+    """NumPy counterpart of bt_pool_logit (used in the eval helpers)."""
+    s = np.nansum(pred_masked, axis=1)
+    if mode == "sum":
+        return s
+    if mode != "mean":
+        raise ValueError(f"bt_pool_logit_np: mode must be 'sum' or 'mean', got {mode!r}")
+    n = np.clip(np.nansum(mask, axis=1), 1.0, None)
+    return s / n

@@ -121,6 +121,14 @@ class TrainConfig:
     fraction_cool: float = 0.25
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
+    # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
+    # mean over valid timesteps, trajectory-length-independent) or "sum" (legacy).
+    bt_pool: str = "mean"
+    # Gradient-clip scope (Issue 3): clip in burn-in always, in sampling only if
+    # clip_during_sampling.  With bt_pool="mean" the logits are bounded, so the
+    # sampling-phase clip should be unnecessary (default off).
+    clip_grad_norm_value: Optional[float] = 100.0
+    clip_during_sampling: bool = False
     # Antmaze evaluation data.  Train / validation / test sets are loaded from
     # the per-seed eval directory:
     #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val,test}_{seed}.hdf5
@@ -455,6 +463,9 @@ def train(config: TrainConfig):
         meas_jitter=config.meas_jitter,
         n_gpu=1,
         name="bnn_f",
+        bt_pool=config.bt_pool,
+        clip_grad_norm_value=config.clip_grad_norm_value,
+        clip_during_sampling=config.clip_during_sampling,
     )
 
     # ------------------------------------------------------------------ #

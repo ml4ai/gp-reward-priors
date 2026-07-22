@@ -31,6 +31,9 @@ class TrainConfig:
     width: int = 6  # log2 exponent; actual width = 2**width (e.g. 6 → 64)
     depth: int = 3
     activations: str = "relu"
+    # BT trajectory pooling, shared with BNN/PT: "mean" (masked mean over valid
+    # timesteps) or "sum" (legacy).  Must match across all three for comparability.
+    bt_pool: str = "mean"
     # training params
     dataset_id: str = "D4RL_antmaze-medium-play-v2"
     # Antmaze evaluation data.  Train / validation / test sets are loaded from
@@ -139,6 +142,7 @@ def train(config: TrainConfig):
         opt=net_optimizer,
         num_datapoints=len(train_data),
         device=device,
+        bt_pool=config.bt_pool,
     )
     c_best_epoch = 0
 
