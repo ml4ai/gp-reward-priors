@@ -1,0 +1,566 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+% ---------------------------------------------------------------------------
+% Notation macros
+% ---------------------------------------------------------------------------
+\newcommand{\w}{\mathbf{w}}
+\newcommand{\vv}{\mathbf{v}}
+\newcommand{\XM}{X_{\mathrm{M}}}
+\newcommand{\fM}{\mathbf{f}_{\mathrm{M}}}
+\newcommand{\mM}{\mathbf{m}_{\mathrm{M}}}
+\newcommand{\KMM}{\mathbf{K}_{\mathrm{MM}}}
+\newcommand{\gp}{\mathcal{GP}}
+\newcommand{\D}{\mathcal{D}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\gbar}{\bar{\mathbf{g}}}
+\newcommand{\vhat}{\hat{\mathbf{v}}}
+\newcommand{\ghat}{\hat{\mathbf{g}}}
+\newcommand{\btau}{\bm{\tau}}
+\newcommand{\gradU}{\nabla \widetilde{U}}
+
+\title{A Scale-Adapted, Cyclical Functional SGHMC Sampler:\\
+Implementation Notes and Provenance of Modifications}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note documents the functional stochastic gradient Hamiltonian Monte Carlo
+(fSGHMC) sampler implemented in this codebase.  The algorithm follows the
+functional SG-MCMC framework of Wu et al.~\cite{wu2025},
+in which a Gaussian-process (GP) prior over \emph{functions} replaces the usual
+weight-space Gaussian prior of a Bayesian neural network (BNN), and its
+gradient is injected into the parameter-space dynamics through a
+vector--Jacobian product at a random set of measurement points.  The
+implementation departs from the reference algorithm of \cite{wu2025} in several
+ways: the base sampler is the \emph{scale-adapted} (preconditioned) SGHMC of
+Springenberg et al.~\cite{springenberg2016} rather than a vanilla
+leapfrog SGHMC; the step size follows the cyclical cosine schedule of Zhang et
+al.~\cite{zhang2020} with cool-phase sample harvesting and stationary-law
+momentum refreshment; the posterior is tempered by a temperature parameter
+$T$; the GP prior gradient is obtained from a double-precision Cholesky solve
+of the nugget-regularised prior Gram matrix; and a small set of numerical
+safeguards
+(gradient-norm clipping, preconditioner floors, an optional per-step
+displacement clamp) protect the chain during phase transitions.  We describe
+each modification, give its origin, and present pseudocode in the style of the
+original paper.
+\end{abstract}
+
+% ===========================================================================
+\section{Setting and notation}
+% ===========================================================================
+
+Let $f(\cdot;\w):\mathcal{X}\to\mathbb{R}$ be the function computed by a
+neural network with parameters $\w\in\mathbb{R}^k$, and let
+$\D=\{(x_i,y_i)\}_{i=1}^{N}$ be a dataset with likelihood
+$p(y\,|\,f(x;\w))$.\footnote{The implementation is agnostic to the form of the
+likelihood; any differentiable $\log p(y\,|\,f)$ that depends on the input
+only through the network output fits the scheme unchanged.}
+Instead of a weight-space prior $p(\w)$, a functional prior
+$P_0 \sim \gp(m,K)$ is placed directly on $f$, and the target is the
+posterior measure over functions
+\begin{equation}
+  P_{f|\D}(\mathrm{d}f) \;\propto\;
+  \exp\!\bigl(-\Phi(f)\bigr)\,P_0(\mathrm{d}f),
+  \qquad
+  \Phi(f) = -\log p(Y_\D \,|\, f(X_\D;\w)),
+\end{equation}
+following the function-space formulation of \cite{wu2025}.  Since $f$ is
+determined by $\w$, sampling proceeds in parameter space with the potential
+\begin{equation}
+  U(\w) \;=\; -\log p(Y_\D\,|\,f(X_\D;\w)) \;+\; I_0\bigl(f(\cdot;\w)\bigr),
+  \label{eq:potential}
+\end{equation}
+where $I_0$ is the Onsager--Machlup functional of $P_0$ (heuristically,
+$-\log P_0$).  The prior term is made tractable by evaluating it on a finite
+set of \emph{measurement points}
+$\XM = [x_1^{\mathrm{m}},\dots,x_M^{\mathrm{m}}]^\top$, freshly drawn at every
+step, where the GP marginal is a multivariate Gaussian.  Writing
+$\fM = f(\XM;\w)$, $\mM = m(\XM)$, $\KMM = K(\XM,\XM)$, the stochastic
+estimate of $\nabla_\w U$ used at each step is
+\begin{equation}
+  \gradU(\w)
+  \;=\;
+  \underbrace{\frac{N}{n}\sum_{i\in\mathcal{B}}
+      \nabla_\w \bigl[-\log p(y_i\,|\,f(x_i;\w))\bigr]}_{\text{minibatch likelihood
+      gradient},\ |\mathcal{B}| = n}
+  \;+\;
+  \underbrace{J_\w(\XM)^\top\,
+      \bigl(\KMM + \tilde\delta I\bigr)^{-1}\bigl(\fM - \mM\bigr)}_{
+      \;-\,\nabla_\w \log P_0(\fM)\;=\;J^\top\bm{\alpha}},
+  \label{eq:gradU}
+\end{equation}
+where $J_\w(\XM)\in\mathbb{R}^{M\times k}$ is the Jacobian of the network
+outputs at the measurement points with respect to $\w$ and $\tilde\delta$ is a
+diagonal regulariser (Section~\ref{sec:priorsolve}).  This is exactly the drift
+of fSGHMC in Eq.~(9) of \cite{wu2025}; only the likelihood term is
+minibatched, and the prior-gradient term enters unscaled, at $O(1)$ relative
+to the full-data likelihood gradient.  The Jacobian is never formed
+explicitly: $J^\top\bm{\alpha}$ is one reverse-mode vector--Jacobian product
+(a single backward pass with $\bm{\alpha}$ as the output cotangent), with
+$\bm{\alpha}$ computed numerically and detached from the autodiff graph.
+
+% ===========================================================================
+\section{The implemented algorithm}
+% ===========================================================================
+
+\subsection{Base sampler: scale-adapted SGHMC}
+\label{sec:adaptive}
+
+The reference algorithm of \cite{wu2025} (their Algorithm~2) is a vanilla
+SGHMC in the sense of Chen et al.~\cite{chen2014}: identity mass matrix,
+hand-tuned step size and friction, and an inner leapfrog loop of $m$ steps
+with the momentum resampled from $\N(0,M)$ at every outer iteration.  The
+implementation replaces this with the \emph{scale-adapted} SGHMC of
+Springenberg et al.~\cite{springenberg2016} (the sampler underlying
+BOHAMIANN), which removes the sensitivity to the raw gradient scale by
+adapting a diagonal preconditioner during burn-in.
+
+The sampler maintains, per parameter element and with all operations
+element-wise, an exponential moving average $\ghat \approx \mathbb{E}[\gradU]$
+of the gradient, an uncentred second-moment estimate
+$\vhat \approx \mathbb{E}[(\gradU)^2]$, and an automatic averaging window
+$\btau$ whose update rule originates in the adaptive learning-rate method of
+Schaul et al.~\cite{schaul2013}.  During the $N_b$ burn-in steps, for
+stochastic gradient $\gbar$:
+\begin{align}
+  \btau &\leftarrow
+    \Bigl(1 - \frac{\ghat^{2}}{\vhat + \lambda}\Bigr)\,\btau + 1,
+    \qquad \btau \leftarrow \max(\btau,\,1),
+    \label{eq:tau}\\
+  \ghat &\leftarrow \ghat + \btau^{-1}(\gbar - \ghat),\\
+  \vhat &\leftarrow \vhat + \btau^{-1}(\gbar^{2} - \vhat),
+    \qquad \vhat \leftarrow \max(\vhat,\,v_{\min}),
+    \label{eq:vhat}
+\end{align}
+with a small numerical stabiliser $\lambda$.  After burn-in the estimates are
+frozen, so the recorded samples are drawn from unchanged (valid) dynamics, as
+argued in \cite{springenberg2016}.  The clamps in \eqref{eq:tau} and
+\eqref{eq:vhat} are safeguards added in this codebase; see
+Section~\ref{sec:safeguards}.
+
+Every step then applies the preconditioned update of
+\cite{springenberg2016} (their Eq.~10), written in the incremental variable
+$\vv = \varepsilon M^{-1}\mathbf{r}$ (momentum after the variable
+substitution), with preconditioner
+$\mathbf{a} = \bigl(\sqrt{\vhat} + \lambda\bigr)^{-1} \approx
+\hat V^{-1/2}$, step size $\varepsilon$, and momentum decay
+$c$ (the implementation's \texttt{mdecay}, playing the role of
+$\varepsilon \hat V^{-1/2} C$):
+\begin{align}
+  \bm{\sigma}^{2} &= \max\bigl(2\,\varepsilon^{2} c\,\mathbf{a}
+      \;-\; \varepsilon^{4},\ 10^{-16}\bigr),
+      \label{eq:noisevar}\\
+  \vv &\leftarrow \vv \;-\; \varepsilon^{2}\,\mathbf{a}\odot\gbar
+      \;-\; c\,\vv \;+\; \bm{\sigma}\odot\bm{\xi},
+      \qquad \bm{\xi}\sim\N(0,I),
+      \label{eq:momentum}\\
+  \w &\leftarrow \w + \vv.
+  \label{eq:position}
+\end{align}
+The $-\varepsilon^4$ term in \eqref{eq:noisevar} is the correction for the
+minibatch-noise estimate $\hat B = \tfrac{1}{2}\varepsilon\hat V$, which
+cancels against the squared preconditioner exactly as in
+\cite{springenberg2016}.
+
+Two structural differences from Algorithm~2 of \cite{wu2025} follow from this
+choice of base sampler:
+\begin{enumerate}
+  \item \textbf{No inner leapfrog loop.}  The chain is a single persistent
+  trajectory in the style of \cite{chen2014}: one
+  momentum/parameter update per gradient evaluation, with friction $c$
+  providing the mixing that periodic momentum resampling provides in
+  \cite{wu2025}.  Momentum is refreshed only at cycle boundaries
+  (Section~\ref{sec:cyclical}).
+  \item \textbf{Diagonal preconditioning.}  The mass matrix is the adapted
+  $M^{-1} = \mathrm{diag}(\hat V^{-1/2})$ rather than the identity, making
+  the effective step size per parameter scale-invariant.
+\end{enumerate}
+
+\subsection{Tempering}
+\label{sec:tempering}
+
+The gradient actually passed to updates
+\eqref{eq:tau}--\eqref{eq:momentum} is
+\begin{equation}
+  \gbar \;=\; \frac{1}{T}\,\gradU(\w),
+\end{equation}
+where $T$ is a posterior temperature (implemented as the sampler's gradient
+scale $N/T$ applied to a per-example-normalised loss).  Since the injected
+noise in \eqref{eq:noisevar} is unchanged, the chain targets the tempered
+posterior $\propto \bigl[p(Y_\D|f)\,P_0\bigr]^{1/T}$; $T=1$ recovers the
+untempered target.  Tempering the posterior of a deep BNN is common practice
+in SG-MCMC --- Zhang et al.~\cite{zhang2020} introduce a system temperature
+for the same sampler family, and Wenzel et al.~\cite{wenzel2020} study the
+effect systematically ("cold posteriors", $T<1$).  Note that both the
+likelihood and prior terms are tempered jointly.
+
+\subsection{Cyclical step-size schedule with cool-phase harvesting}
+\label{sec:cyclical}
+
+After burn-in the step size follows the cyclical cosine schedule of Zhang et
+al.~\cite{zhang2020} (itself adapted from warm-restart schedules in
+optimisation \cite{loshchilov2017}).  With cycle length $L$, post-burn-in
+step index $j = (t - N_b) \bmod L$, and bounds
+$\varepsilon_{\min},\varepsilon_{\max}$:
+\begin{equation}
+  \varepsilon_t \;=\; \varepsilon_{\min}
+  + \tfrac{1}{2}\bigl(\varepsilon_{\max} - \varepsilon_{\min}\bigr)
+    \Bigl(1 + \cos\tfrac{\pi j}{L}\Bigr).
+  \label{eq:cyclical}
+\end{equation}
+Each cycle begins with large, exploratory steps and anneals toward
+$\varepsilon_{\min}$; samples are recorded only near the cold end.  The
+implementation differs from \cite{zhang2020} in three deliberate ways:
+\begin{enumerate}
+  \item \textbf{Nonzero floor.}  The schedule anneals to
+  $\varepsilon_{\min} > 0$ rather than to $0$, so the chain keeps sampling
+  (with small steps) instead of degenerating to optimisation; relatedly,
+  there is no explicit $T=0$ "optimisation" stage inside the exploration
+  phase of a cycle --- exploration is realised purely through the large step
+  size.  A single conventional burn-in phase precedes the first cycle (during
+  which the preconditioner of Section~\ref{sec:adaptive} adapts), rather than
+  treating each cycle's exploration stage as its own burn-in.
+  \item \textbf{Cool-phase harvesting.}  Let $\rho\in(0,1]$ be the cool
+  fraction and $S_c \ge 1$ the samples harvested per cycle.  With cool-window
+  length $\ell = \max(1, \lfloor \rho L\rfloor)$ and thinning interval
+  $\Delta = \max(1, \lfloor \ell / S_c\rfloor)$, a sample is recorded at step
+  $j$ iff the distance from the cycle end, $d = (L-1) - j$, satisfies
+  $d \in \{0, \Delta, 2\Delta, \dots, (S_c - 1)\Delta\}$ --- i.e., $S_c$
+  thinned samples spaced to terminate exactly at the coldest step of the
+  cycle.  $S_c = 1$ keeps only the coldest iterate per cycle.
+  \item \textbf{Stationary-law momentum refreshment.}  At each cycle start
+  ($j=0$) the momentum variable is resampled from its stationary distribution
+  under the preconditioned dynamics,
+  \begin{equation}
+    \vv \;\sim\; \N\!\bigl(0,\ \varepsilon_t^{2}\,
+      \mathrm{diag}(\mathbf{a})\bigr),
+    \qquad
+    \mathbf{a} = \bigl(\sqrt{\vhat}+\lambda\bigr)^{-1},
+    \label{eq:refresh}
+  \end{equation}
+  with $\varepsilon_t = \varepsilon_{\max}$ at the cycle start (for
+  unpreconditioned SGHMC this reduces to
+  $\vv \sim \N(0, \varepsilon_t I)$).  This is the incremental-variable
+  analogue of the $z_t \sim \N(0,M)$ refreshment in Algorithm~2 of
+  \cite{wu2025}: since $\vv = \varepsilon M^{-1} \mathbf{z}$ with
+  $M^{-1} = \mathrm{diag}(\mathbf a)$ and $\mathbf z\sim\N(0,M)$, one gets
+  $\operatorname{Var}(\vv) = \varepsilon^2 M^{-1}$.  Resampling (rather than
+  zeroing) the momentum avoids dropping the chain into an atypical set that
+  would cost $O(1/c)$ steps to re-equilibrate.
+\end{enumerate}
+When the cyclical schedule is disabled, the sampler falls back to a constant
+step size with fixed-interval thinning (record every $\kappa$-th post-burn-in
+iterate), matching the "draw separated samples every $\kappa$ epochs"
+protocol of \cite{wu2025}.
+
+\subsection{The GP prior solve}
+\label{sec:priorsolve}
+
+The prior-gradient cotangent
+$\bm{\alpha} = (\KMM + \tilde\delta I)^{-1}(\fM - \mM)$ in
+Eq.~\eqref{eq:gradU} is computed by a direct Cholesky factorisation of the
+$M \times M$ Gram matrix, carried out in double precision and detached from
+the autodiff graph (only the subsequent VJP touches the network's
+computation graph).  The prior kernels used in practice are full rank by
+construction: the kernel includes an explicit nugget (observation-noise)
+term $\sigma_n^2\,\delta_{x,x'}$ on the diagonal, corresponding to the valid
+GP kernel $k_{\mathrm{eff}}(x,x') = K(x,x') + \sigma_n^2\,\delta_{x,x'}$
+\cite{rasmussen2006}, so the factorisation is well conditioned without
+further regularisation ($\tilde\delta$ in Eq.~\eqref{eq:gradU} absorbs the
+nugget plus any optional extra jitter).  One convention is worth noting: a
+global prior-amplitude hyperparameter multiplies the \emph{entire} Gram
+matrix, nugget included ($\KMM \to a^2 \KMM$), so the conditioning of the
+Cholesky solve is invariant to the amplitude and the prior-gradient
+magnitude scales exactly as $1/a^{2}$.  If the measurement set is empty the
+prior term is skipped entirely and the update reduces to likelihood-only
+SGHMC.
+
+\subsection{Numerical safeguards}
+\label{sec:safeguards}
+
+Four safeguards, none of which appear in
+\cite{wu2025,springenberg2016,zhang2020}, protect the chain --- chiefly at
+the transition from burn-in to the first hot phase of the cyclical schedule,
+where the preconditioner calibrated on burn-in gradients suddenly meets
+$\varepsilon_{\max}$-sized steps:
+
+\begin{itemize}
+  \item \textbf{Second-moment floor} ($v_{\min}$, Eq.~\ref{eq:vhat}).  A
+  parameter that receives near-zero gradient during burn-in (e.g.\ a dead
+  ReLU unit) drives $\vhat\to 0$, and with only the tiny stabiliser
+  $\lambda$ in the denominator the preconditioner gain
+  $1/(\sqrt{\vhat}+\lambda)$ can reach $\sim\!10^{8}$, producing a
+  catastrophic jump on the first nonzero gradient.  Flooring
+  $\vhat \ge v_{\min}$ bounds the gain by $v_{\min}^{-1/2}$.
+  \item \textbf{Averaging-window clamp} ($\btau \ge 1$,
+  Eq.~\ref{eq:tau}).  Floating-point rounding can push $\btau$ below $1$
+  when gradients are small; a negative $\btau^{-1}$ would reverse the
+  moving-average updates and can drive $\vhat$ negative
+  ($\sqrt{\vhat} = \mathrm{NaN}$).
+  \item \textbf{Gradient-norm clipping.}  The total gradient norm (of the
+  un-tempered, per-example-scale gradient) is clipped to a threshold
+  $\kappa_{\mathrm{clip}}$ --- always during burn-in, and during the sampling
+  phase only if explicitly enabled, since clipping while samples are being
+  recorded biases the sampled posterior (in particular its tails).  The
+  pre-clip norm is instrumented in both phases so that runs can verify the
+  clip never fires while sampling.
+  \item \textbf{Displacement clamp} (optional).  Each element of $\vv$ may be
+  clamped to $[-v_{\mathrm{max}}, v_{\mathrm{max}}]$ before the position
+  update \eqref{eq:position}, bounding the per-step parameter change.  The
+  steady-state momentum scale is $O(\varepsilon^{2}/c)$; the clamp is set
+  well above that level so it fires only in pathological transients.
+\end{itemize}
+
+\subsection{Initialisation and parallel chains}
+
+Rather than initialising $\w_0 \sim \N(0,I)$ as in \cite{wu2025}, chains
+start from a shared warm-up point (e.g.\ the end state of a preliminary
+burn-in-only run).  When $R$ chains are run in parallel, chain $r$ perturbs
+every parameter tensor of the shared start by
+$\N\bigl(0, (\iota\cdot\mathrm{std}(\w))^{2}\bigr)$ with a relative jitter
+scale $\iota$, giving overdispersed initial states so that pooled-chain
+convergence diagnostics such as $\widehat R$ remain valid and the chains can
+cover distinct posterior modes~\cite{gelman1992}.  Chains are otherwise fully
+independent (separate seeds, RNG streams, and sample stores).
+
+% ===========================================================================
+\section{Summary of modifications and their origins}
+% ===========================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{0.46\textwidth} p{0.46\textwidth}}
+\toprule
+\textbf{Component / modification} & \textbf{Origin} \\
+\midrule
+Functional prior gradient at random measurement points; parameter-space
+functional dynamics & Wu et al.~\cite{wu2025} (fSGHMC) \\
+\addlinespace
+Persistent-momentum SGHMC with friction (no leapfrog inner loop, no MH
+correction) & Chen et al.~\cite{chen2014} \\
+\addlinespace
+Diagonal preconditioner $M^{-1} = \mathrm{diag}(\hat V^{-1/2})$ adapted
+during burn-in; noise-estimate cancellation; frozen after burn-in &
+Springenberg et al.~\cite{springenberg2016} (BOHAMIANN) \\
+\addlinespace
+Automatic averaging window $\btau$ for the moment estimates &
+Schaul et al.~\cite{schaul2013}, via \cite{springenberg2016} \\
+\addlinespace
+Cyclical cosine step size; exploration/sampling stages; samples from the cold
+phase & Zhang et al.~\cite{zhang2020} (cSG-MCMC); cosine restarts from
+\cite{loshchilov2017} \\
+\addlinespace
+Posterior temperature $T$ & Zhang et al.~\cite{zhang2020}; see also Wenzel et
+al.~\cite{wenzel2020} \\
+\addlinespace
+Momentum refreshment at cycle starts from the preconditioned stationary law
+\eqref{eq:refresh} & Refreshment per Algorithm~2 of \cite{wu2025}; the
+preconditioned form and cycle-start placement are this codebase's \\
+\addlinespace
+Multi-sample cool-phase harvesting ($S_c$ thinned samples ending at the
+coldest step) & This codebase \\
+\addlinespace
+Double-precision Cholesky solve of the nugget-regularised Gram;
+amplitude-invariant conditioning convention & Standard GP practice
+\cite{rasmussen2006}; conventions are this codebase's \\
+\addlinespace
+Safeguards: $v_{\min}$ floor, $\btau\ge1$ clamp, phase-scoped gradient
+clipping, displacement clamp & This codebase (heuristics; not from the
+literature) \\
+\addlinespace
+Warm-started, overdispersed parallel chains & Standard MCMC practice
+\cite{gelman1992} \\
+\bottomrule
+\end{tabular}
+\caption{Provenance of each component of the implemented sampler.}
+\label{tab:origins}
+\end{table}
+
+% ===========================================================================
+\section{Pseudocode}
+% ===========================================================================
+
+Algorithm~\ref{alg:step} gives the per-iteration update (the scale-adapted
+SGHMC step applied to the functional-posterior gradient), and
+Algorithm~\ref{alg:fsghmc} the full sampler, in the style of Algorithm~2 of
+\cite{wu2025}.  All vector operations are element-wise.
+
+\begin{algorithm}[t]
+\caption{\textsc{AdaptiveStep}: scale-adapted SGHMC update
+\cite{springenberg2016}}
+\label{alg:step}
+\begin{algorithmic}[1]
+\Require gradient $\gbar$; step size $\varepsilon$; momentum decay $c$;
+  state $(\btau, \ghat, \vhat, \vv)$; step counter $t$; burn-in length $N_b$;
+  stabiliser $\lambda$; floor $v_{\min}$; optional clamp $v_{\mathrm{max}}$
+\If{$t \le N_b$}  \Comment{burn-in: adapt preconditioner}
+  \State $\btau \gets \bigl(1 - \ghat^{2}/(\vhat+\lambda)\bigr)\btau + 1$;
+    \quad $\btau \gets \max(\btau, 1)$
+  \State $\ghat \gets \ghat + \btau^{-1}(\gbar - \ghat)$
+  \State $\vhat \gets \vhat + \btau^{-1}(\gbar^{2} - \vhat)$;
+    \quad $\vhat \gets \max(\vhat, v_{\min})$
+\EndIf
+\State $\mathbf{a} \gets \bigl(\sqrt{\vhat} + \lambda\bigr)^{-1}$
+  \Comment{$\approx \hat V^{-1/2}$}
+\State $\bm{\sigma}^{2} \gets \max\bigl(2\varepsilon^{2} c\,\mathbf{a}
+  - \varepsilon^{4},\, 10^{-16}\bigr)$
+\State $\vv \gets \vv - \varepsilon^{2}\mathbf{a}\odot\gbar - c\,\vv
+  + \bm{\sigma}\odot\bm{\xi}$, \quad $\bm{\xi} \sim \N(0, I)$
+\If{$v_{\mathrm{max}}$ set}
+  $\vv \gets \mathrm{clamp}(\vv, -v_{\mathrm{max}}, v_{\mathrm{max}})$
+\EndIf
+\State $\w \gets \w + \vv$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{Cyclical scale-adapted functional SGHMC (this codebase)}
+\label{alg:fsghmc}
+\begin{algorithmic}[1]
+\Require dataset $\D$ ($|\D| = N$), minibatch size $n$; GP prior
+  $\gp(m, K)$ with jitter $\delta$; measurement pool
+  $\mathcal{X}_{\mathrm{pool}}$ and draw size $M$; temperature $T$;
+  burn-in steps $N_b$; cycle length $L$; step sizes
+  $\varepsilon_{\min}, \varepsilon_{\max}$; cool fraction $\rho$;
+  samples per cycle $S_c$; discard count $D_0$; target sample count
+  $S_{\mathrm{tot}}$; momentum decay $c$; clip threshold
+  $\kappa_{\mathrm{clip}}$ (burn-in only, unless enabled for sampling);
+  warm start $\w^{\star}$, jitter scale $\iota$
+\State $\w_0 \gets \w^{\star} + \iota\,\mathrm{std}(\w^{\star})\odot
+  \bm{\zeta}$, \quad $\bm{\zeta}\sim\N(0,I)$
+  \Comment{overdispersed init (per chain)}
+\State $(\btau, \ghat, \vhat) \gets \mathbf{1}$;\quad
+  $\vv \gets \mathbf{0}$;\quad
+  $\mathcal{S} \gets \emptyset$;\quad
+  $s \gets 0$
+\For{$t = 0, 1, 2, \dots$ until $|\mathcal{S}| = S_{\mathrm{tot}}$}
+  \State \textbf{\# Step size and momentum refreshment}
+  \If{$t < N_b$} \quad $\varepsilon_t \gets \varepsilon_{\min}$
+  \Else
+    \State $j \gets (t - N_b) \bmod L$;\qquad
+      $\varepsilon_t \gets \varepsilon_{\min} + \tfrac12
+      (\varepsilon_{\max} - \varepsilon_{\min})
+      \bigl(1 + \cos\tfrac{\pi j}{L}\bigr)$
+    \If{$j = 0$} \quad
+      $\vv \sim \N\bigl(0,\ \varepsilon_t^{2}\,
+        \mathrm{diag}\bigl((\sqrt{\vhat}+\lambda)^{-1}\bigr)\bigr)$
+      \Comment{Eq.~\eqref{eq:refresh}}
+    \EndIf
+  \EndIf
+  \State \textbf{\# Stochastic functional-posterior gradient}
+  \State draw minibatch $\mathcal{B} \subset \D$, $|\mathcal{B}| = n$;\qquad
+    $\mathbf{g}_{\mathrm{lik}} \gets \tfrac{1}{n} \sum_{i\in\mathcal{B}}
+    \nabla_\w\bigl[-\log p(y_i\,|\,f(x_i;\w_t))\bigr]$
+  \State draw measurement set $\XM \subset \mathcal{X}_{\mathrm{pool}}$
+    without replacement, $|\XM| = M$
+  \State $\fM \gets f(\XM;\w_t)$;\qquad
+    $\bm{\alpha} \gets (\KMM + \tilde\delta I)^{-1}(\fM - \mM)$
+    \Comment{Cholesky, \S\ref{sec:priorsolve}}
+  \State $\mathbf{g}_{\mathrm{prior}} \gets J_{\w}(\XM)^{\top}\bm{\alpha}$
+    \Comment{one VJP backward pass}
+  \State $\gbar \gets \mathbf{g}_{\mathrm{lik}}
+    + \mathbf{g}_{\mathrm{prior}} / N$
+  \If{$t < N_b$ \textbf{or} clip-in-sampling enabled}
+    \State $\gbar \gets \gbar \cdot
+      \min\bigl(1,\ \kappa_{\mathrm{clip}} / \lVert\gbar\rVert_2\bigr)$
+  \EndIf
+  \State $\gbar \gets (N / T)\,\gbar$
+    \Comment{$= \tfrac{1}{T}\gradU(\w_t)$, Eq.~\eqref{eq:gradU}}
+  \State \textbf{\# Update}
+  \State $\w_{t+1} \gets$ \textsc{AdaptiveStep}$(\gbar, \varepsilon_t, c,
+    \text{state}, t, N_b)$ \Comment{Algorithm~\ref{alg:step}}
+  \State \textbf{\# Cool-phase sample harvesting}
+  \If{$t \ge N_b$}
+    \State $\ell \gets \max(1, \lfloor\rho L\rfloor)$;\quad
+      $\Delta \gets \max(1, \lfloor\ell / S_c\rfloor)$;\quad
+      $d \gets (L - 1) - j$
+    \If{$d \in \{0, \Delta, \dots, (S_c{-}1)\Delta\}$}
+      \State $s \gets s + 1$;\qquad
+        \textbf{if} $s > D_0$ \textbf{then}
+        $\mathcal{S} \gets \mathcal{S} \cup \{\w_{t+1}\}$
+    \EndIf
+  \EndIf
+\EndFor
+\State \Return $\mathcal{S}$
+\end{algorithmic}
+\end{algorithm}
+
+As in \cite{wu2025}, posterior predictions integrate over the collected
+(pooled, over chains) samples:
+$p(y^{*}|x^{*},\D) \approx \tfrac{1}{|\mathcal{S}|}
+\sum_{\w\in\mathcal{S}} p\bigl(y^{*}\,|\,f(x^{*};\w)\bigr)$.
+
+% ===========================================================================
+\begin{thebibliography}{10}
+
+\bibitem{wu2025}
+M.~Wu, J.~Xuan, and J.~Lu.
+\newblock Functional stochastic gradient {MCMC} for {B}ayesian neural
+  networks.
+\newblock In \emph{Proceedings of the 28th International Conference on
+  Artificial Intelligence and Statistics (AISTATS)}, PMLR 258, 2025.
+
+\bibitem{chen2014}
+T.~Chen, E.~Fox, and C.~Guestrin.
+\newblock Stochastic gradient {H}amiltonian {M}onte {C}arlo.
+\newblock In \emph{Proceedings of the 31st International Conference on
+  Machine Learning (ICML)}, 2014.
+
+\bibitem{springenberg2016}
+J.~T. Springenberg, A.~Klein, S.~Falkner, and F.~Hutter.
+\newblock Bayesian optimization with robust {B}ayesian neural networks.
+\newblock In \emph{Advances in Neural Information Processing Systems 29
+  (NeurIPS)}, 2016.
+
+\bibitem{schaul2013}
+T.~Schaul, S.~Zhang, and Y.~LeCun.
+\newblock No more pesky learning rates.
+\newblock In \emph{Proceedings of the 30th International Conference on
+  Machine Learning (ICML)}, 2013.
+
+\bibitem{zhang2020}
+R.~Zhang, C.~Li, J.~Zhang, C.~Chen, and A.~G. Wilson.
+\newblock Cyclical stochastic gradient {MCMC} for {B}ayesian deep learning.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2020.
+
+\bibitem{loshchilov2017}
+I.~Loshchilov and F.~Hutter.
+\newblock {SGDR}: Stochastic gradient descent with warm restarts.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2017.
+
+\bibitem{wenzel2020}
+F.~Wenzel, K.~Roth, B.~S. Veeling, J.~{\'S}wi{\k{a}}tkowski, L.~Tran,
+  S.~Mandt, J.~Snoek, T.~Salimans, R.~Jenatton, and S.~Nowozin.
+\newblock How good is the {B}ayes posterior in deep neural networks really?
+\newblock In \emph{Proceedings of the 37th International Conference on
+  Machine Learning (ICML)}, 2020.
+
+\bibitem{rasmussen2006}
+C.~E. Rasmussen and C.~K.~I. Williams.
+\newblock \emph{Gaussian Processes for Machine Learning}.
+\newblock MIT Press, 2006.
+
+\bibitem{gelman1992}
+A.~Gelman and D.~B. Rubin.
+\newblock Inference from iterative simulation using multiple sequences.
+\newblock \emph{Statistical Science}, 7(4):457--472, 1992.
+
+\end{thebibliography}
+
+\end{document}

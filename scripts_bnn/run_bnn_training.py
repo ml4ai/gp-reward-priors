@@ -137,13 +137,15 @@ class TrainConfig:
     # Functional GP prior selection
     # ----------------------------------------------------------------------- #
     # Which functional GP prior to use for the fSGHMC prior gradient:
-    #   "lcf"          — the linear-combination-of-features prior (LCFModel)
-    #                    built from `reward_function` (the existing behaviour).
     #   "map_informed" — the map-informed, wall-respecting heat-kernel prior
-    #                    (MapInformedGPPrior) for D4RL Antmaze.  When selected,
-    #                    `reward_function` / `n_concepts` / `gp_cov_scale` are
-    #                    ignored and the map_* fields below take effect.
-    gp_prior_type: str = "lcf"
+    #                    (MapInformedGPPrior) for D4RL Antmaze (default).  When
+    #                    selected, `reward_function` / `n_concepts` /
+    #                    `gp_cov_scale` are ignored and the map_* fields below
+    #                    take effect.
+    #   "lcf"          — legacy linear-combination-of-features prior (LCFModel)
+    #                    built from `reward_function`.  Obsolete: no current
+    #                    test environment uses it.
+    gp_prior_type: str = "map_informed"
     # --- map_informed prior settings (only used when gp_prior_type="map_informed") ---
     # Maze size selecting the hardcoded fallback layout: "medium" or "large".
     # medium-{play,diverse} share one layout; large-{play,diverse} share another.

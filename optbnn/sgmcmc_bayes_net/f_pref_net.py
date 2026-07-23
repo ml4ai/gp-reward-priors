@@ -2,8 +2,10 @@
 
 FPrefNet is a *standalone* class — it does not inherit from BayesNet or
 PrefNet and requires no weight-space prior (OptimGaussianPrior).  The only
-regularisation comes from the functional GP prior (LCFModel), whose gradient
-is injected at every sampler step via a single VJP backward pass.
+regularisation comes from the functional GP prior (any module exposing the
+``functional_prior_grad`` contract, e.g. MapInformedGPPrior or the legacy
+LCFModel), whose gradient is injected at every sampler step via a single VJP
+backward pass.
 
 Gradient accounting
 -------------------
@@ -85,15 +87,16 @@ def _fpref_chain_worker(
         seed: int, base random seed; chain i uses seed + i.
         train_kwargs: dict forwarded verbatim to FPrefNet.train().
         gp_prior_args: dict describing the functional GP prior to reconstruct.
-            The optional key ``prior_type`` selects the prior class
-            (``"lcf"`` default, or ``"map_informed"``).
-            For ``"lcf"`` (LCFModel) the keys are:
-            ``p_covariance`` — numpy (d,) or (d, d) weight prior covariance,
-            ``function_vect`` — module-level callable (must be picklable),
-            ``p_mean``        — numpy (d,) or None (→ zeros).
+            The key ``prior_type`` selects the prior class
+            (``"map_informed"``, or the legacy ``"lcf"``; dicts lacking the
+            key are treated as ``"lcf"`` for backward compatibility).
             For ``"map_informed"`` (MapInformedGPPrior) the keys are those
             produced by ``MapInformedGPPrior.to_args()`` (free_mask, scaling,
             offset, eta, sig_c2, sig_g2, sig_n2, xy_cols, xy_source).
+            For the legacy ``"lcf"`` (LCFModel) the keys are:
+            ``p_covariance`` — numpy (d,) or (d, d) weight prior covariance,
+            ``function_vect`` — module-level callable (must be picklable),
+            ``p_mean``        — numpy (d,) or None (→ zeros).
         meas_kwargs: dict with keys:
             ``x_meas``      — numpy (N_meas, obs_dim),
             ``aux_meas``    — numpy (N_meas, aux_dim) or None,
@@ -141,7 +144,9 @@ def _fpref_chain_worker(
 
     likelihood = LikCE()
 
-    # Reconstruct the functional GP prior (LCFModel or MapInformedGPPrior).
+    # Reconstruct the functional GP prior (MapInformedGPPrior, or the legacy
+    # LCFModel).  The "lcf" fallback keeps old-style gp_prior_args dicts
+    # (which predate the prior_type key and are LCF-shaped) working.
     prior_type = gp_prior_args.get("prior_type", "lcf")
     if prior_type == "map_informed":
         from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
@@ -189,7 +194,9 @@ class FPrefNet:
 
     Does **not** inherit from BayesNet or PrefNet and requires **no**
     weight-space prior (OptimGaussianPrior).  Regularisation comes entirely
-    from the functional GP prior defined by ``gp_prior`` (an LCFModel).
+    from the functional GP prior defined by ``gp_prior`` (any module exposing
+    ``functional_prior_grad``, e.g. MapInformedGPPrior or the legacy
+    LCFModel).
 
     At every sampler step:
 
@@ -209,13 +216,15 @@ class FPrefNet:
         net: torch.nn.Module, the BNN (e.g. MLP).
         likelihood: LikelihoodModule (e.g. LikCE).
         ckpt_dir: str, directory for sampled-weight checkpoints.
-        gp_prior: LCFModel, the functional GP prior.
+        gp_prior: functional GP prior module exposing
+            ``functional_prior_grad(net, X_M, aux_X, jitter)`` and
+            ``.to(device)`` (e.g. MapInformedGPPrior, or the legacy LCFModel).
         x_meas: numpy float32 (N_meas, obs_dim) — measurement-point pool.
             At each step ``n_meas`` rows are sampled uniformly without
             replacement and used for the VJP backward pass.
         aux_meas: numpy (N_meas, aux_dim) or None — auxiliary feature inputs
-            passed as ``aux_X`` to the LCFModel feature map (e.g. raw states
-            for ``bb_reward_prior`` which ignores action columns).
+            passed as ``aux_X`` to the prior (e.g. raw states when the prior
+            reads coordinates from a source other than the network inputs).
         n_meas: int, measurement points per step (default 100).
         meas_jitter: float, Cholesky diagonal jitter in ``solve_prior``
             (default 1e-6).
@@ -833,8 +842,9 @@ class FPrefNet:
             x_train: numpy (N, 2, T, d_dim) training inputs.
             y_train: numpy (N,) training targets.
             net_args: dict of kwargs for MLP(**net_args).
-            gp_prior_args: dict with keys ``p_covariance``, ``function_vect``,
-                ``p_mean`` (see _fpref_chain_worker docstring).
+            gp_prior_args: dict describing the prior to reconstruct in each
+                worker, keyed by ``prior_type`` (see _fpref_chain_worker
+                docstring for the per-type keys).
             meas_kwargs: dict with keys ``x_meas``, ``aux_meas``, ``n_meas``,
                 ``meas_jitter`` (see _fpref_chain_worker docstring).
             num_chains: int, total number of chains.
