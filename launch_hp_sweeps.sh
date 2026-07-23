@@ -105,8 +105,10 @@ done
 for entry in "${ENTRIES[@]}"; do
     yaml="${entry#*|}"; yaml="${yaml%%|*}"
     [[ -f "$yaml" ]] || { echo "PREFLIGHT: missing sweep yaml $yaml" >&2; fail=1; }
-    if [[ "$PHASE" == "phase2" ]] && grep -q "FILL_ME" "$yaml" 2>/dev/null; then
-        echo "PREFLIGHT: $yaml still contains FILL_ME — transcribe the tier-1 winners first" >&2
+    # Match FILL_ME only as a parameter VALUE — the yamls' header comments
+    # legitimately mention FILL_ME when describing this very guard.
+    if [[ "$PHASE" == "phase2" ]] && grep -qE "value: *FILL_ME" "$yaml" 2>/dev/null; then
+        echo "PREFLIGHT: $yaml still contains FILL_ME values — transcribe the tier-1 winners first" >&2
         fail=1
     fi
 done
