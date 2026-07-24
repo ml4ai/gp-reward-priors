@@ -103,6 +103,14 @@ class TrainConfig:
     num_burn_in_steps: int = 3000
     keep_every: int = 2000
     sghmc_lr: float = 0.008
+    # Fixed step size for the burn-in phase only.  None = inherit sghmc_lr
+    # (= cool-phase lr_min under the cyclical schedule) — the legacy behaviour.
+    # When lr_min is swept small (sampling-tier schedules), a fixed-length
+    # burn-in at lr_min under-fits: warm-up accuracy collapses and the warm-up
+    # gate (early_stop_acc_threshold) rejects otherwise-good configs.  Set this
+    # to a value that fits (e.g. ~2e-3, near the warm-up tier's winning sghmc_lr)
+    # so burn-in quality is decoupled from the swept cool-phase lr_min.
+    burn_in_lr: Optional[float] = None
     num_chains: int = 4
     # How many chains to co-locate on each GPU during parallel sampling.  Chains
     # pack greedily onto the lowest GPU indices: with chains_per_gpu=2, chains
@@ -506,6 +514,7 @@ def train(config: TrainConfig):
         num_samples=None,  # burn-in only; no weights collected
         num_burn_in_steps=config.num_burn_in_steps,
         lr=config.sghmc_lr,
+        burn_in_lr=config.burn_in_lr,
         mdecay=config.mdecay,
         batch_size=config.batch_size,
         max_param_step=config.max_param_step,
@@ -594,6 +603,7 @@ def train(config: TrainConfig):
         num_burn_in_steps=config.num_burn_in_steps,
         keep_every=config.keep_every,
         lr=config.sghmc_lr,
+        burn_in_lr=config.burn_in_lr,
         mdecay=config.mdecay,
         print_every_n_samples=config.print_every_n_samples,
         initial_weights=initial_weights,

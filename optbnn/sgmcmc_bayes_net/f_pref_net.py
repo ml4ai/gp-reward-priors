@@ -513,6 +513,7 @@ class FPrefNet:
         n_discarded=0,
         num_burn_in_steps=3000,
         lr=1e-2,
+        burn_in_lr=None,
         batch_size=32,
         epsilon=1e-10,
         mdecay=0.05,
@@ -543,6 +544,14 @@ class FPrefNet:
             n_discarded: discard the first n_discarded samples after burn-in.
             num_burn_in_steps: number of AdaptiveSGHMC burn-in steps.
             lr: base learning rate (also lr_min when use_cyclical_lr=True).
+            burn_in_lr: optional fixed step size for the burn-in phase only.
+                When None (default) burn-in inherits ``lr`` (= lr_min under the
+                cyclical schedule) — the legacy behaviour.  When the cool-phase
+                lr_min is swept small (sampling-tier schedules), a fixed-step
+                burn-in at lr_min under-fits, so warm-up accuracy collapses and
+                the warm-up gate rejects otherwise-good configs; set burn_in_lr
+                to a value that fits (independent of lr_min) to decouple the two.
+                Only applied when use_cyclical_lr=True.
             batch_size: mini-batch size.
             epsilon: AdaptiveSGHMC numerical stabiliser.
             mdecay: momentum decay coefficient.
@@ -634,7 +643,28 @@ class FPrefNet:
             x_batch = x_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
 
-            # ---- Cyclical LR --------------------------------------------
+            # ---- Learning-rate schedule ---------------------------------
+            # Burn-in at a fixed step size, decoupled from the cool-phase lr_min
+            # (= lr).  Applies in EITHER mode: the standalone warm-up uses
+            # use_cyclical_lr=False, and its warm-up accuracy is what the gate
+            # (early_stop_acc_threshold) reads, so the override must fire there
+            # too.  The sampler was initialised at lr_min; without this, the
+            # fixed-length burn-in inherits lr_min, and a small (sampling-tier)
+            # lr_min under-fits so the gate rejects good configs.
+            if step < num_burn_in_steps and burn_in_lr is not None:
+                for _pg in self.sampler.param_groups:
+                    _pg["lr"] = np.float32(burn_in_lr)
+            elif (
+                (not use_cyclical_lr)
+                and step == num_burn_in_steps
+                and burn_in_lr is not None
+            ):
+                # Non-cyclical sampling: burn-in ran at burn_in_lr; restore lr_min
+                # once for the fixed-interval sampling phase (the cyclical branch
+                # below sets the LR itself every post-burn-in step, so this restore
+                # is only needed when the schedule is off).
+                for _pg in self.sampler.param_groups:
+                    _pg["lr"] = np.float32(_lr_min)
             if use_cyclical_lr and step >= num_burn_in_steps:
                 _post_burn = step - num_burn_in_steps
                 _cycle_step = _post_burn % _cycle_len
@@ -813,6 +843,7 @@ class FPrefNet:
         n_discarded=0,
         num_burn_in_steps=3000,
         lr=1e-2,
+        burn_in_lr=None,
         batch_size=32,
         epsilon=1e-10,
         mdecay=0.05,
@@ -879,6 +910,7 @@ class FPrefNet:
             n_discarded=n_discarded,
             num_burn_in_steps=num_burn_in_steps,
             lr=lr,
+            burn_in_lr=burn_in_lr,
             batch_size=batch_size,
             epsilon=epsilon,
             mdecay=mdecay,
