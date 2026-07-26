@@ -69,12 +69,16 @@ parameters:
   # (sghmc_lr).  Burn-in runs at lr_min by default; the sampling-tier lr_min
   # (5e-5-5e-4) is far below the warm-up tier's productive range (1e-4-1e-2),
   # so a fixed-length burn-in under-fits and the 0.8 gate rejects the very
-  # architecture tier-1 selected.  2e-3 ~ the tier-1 winners' sghmc_lr (e.g.
-  # large_diverse's was 2.57e-3, at warm-up acc 0.86), so warm-up now clears
-  # the gate as intended.  Independent of lr_min, so the schedule sweep is no
-  # longer confounded by burn-in quality.
+  # architecture tier-1 selected.  The other variants use 2e-3 (~ the tier-1
+  # winners' sghmc_lr); large_play is lowered to 1e-3 because its deep, wide
+  # net (width 1024, depth 6) OVERSHOOTS at 2e-3 on low-friction (mdecay)
+  # draws — burn-in diverges (weight-mag up to 8.9, warm-up acc 0.43-0.78),
+  # missing the 0.8 gate, so ~60% of runs early-stopped with no objective.
+  # 1e-3 still fits a 1024-wide net easily (no under-fit risk) while curbing
+  # the overshoot.  Independent of lr_min, so the schedule sweep is not
+  # confounded by burn-in quality.
   burn_in_lr:
-    value: 0.002
+    value: 0.001
 
   # ---- FILL from the tier-1 (warm-up) winner for this variant ----
   # width is a log2 exponent (2**width).
