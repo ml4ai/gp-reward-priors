@@ -91,11 +91,21 @@ parameters:
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
     value: 998.7237563083588
-  # Let chain sampling actually run: set a little BELOW the tier-1 winner's
+  # Let chain sampling actually run: set BELOW the tier-1 winner's
   # warmup_final_acc so the winning architecture clears the gate while
-  # diverged warm-ups still stop cheaply.
+  # diverged warm-ups still stop cheaply.  Lowered to 0.65 for large_play
+  # only (others use 0.8): this deep, wide net (width 1024, depth 6) has a
+  # narrow viable burn-in window, and 0.8 sat mid-spread of its natural
+  # warm-up distribution — ~60% of runs early-stopped at BOTH burn_in_lr
+  # 2e-3 and 1e-3.  The per-run detail showed most rejects were NOT diverged
+  # but merely under-fit with healthy weights (acc 0.69-0.80, weight-mag
+  # ~3-4.6; one missed by 0.004), and their sampling results would have been
+  # legitimate.  0.65 still catches the genuinely divergent draws (acc
+  # 0.50-0.54, weight-mag 8-10).  Selection is on val_mean_cross_entropy (a
+  # posterior metric), not warm-up accuracy, so a per-variant gate costs
+  # some wall-clock on mediocre runs rather than biasing the choice.
   early_stop_acc_threshold:
-    value: 0.8
+    value: 0.65
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)
