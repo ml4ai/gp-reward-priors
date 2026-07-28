@@ -1,7 +1,7 @@
 project: MR-training
 program: run_mr_training_antmaze_eval.py
 method: bayes
-run_cap: 40   # 10 * 3 swept params + 10
+run_cap: 130  # matched across model families (see comment below)
 metric:
   name: eval_loss_best
   goal: minimize
@@ -13,6 +13,22 @@ metric:
 # the data/antmaze/<variant>/eval/seed_0/ split.  Launch agents from this
 # scripts dir (see launch_hp_sweeps.sh): the script os.chdir("..")s to the repo
 # root at import, so config_path/data paths are repo-root-relative.
+# Trial budget: 130, MATCHED across all model families (MR, PT, and BNN's two
+# tiers at 70 + 60).  Rationale: the per-family 10*d+10 rule would give MR 40
+# and PT 50 vs the BNN's 130, inviting the objection that the proposed method
+# was simply tuned harder than the baselines.  A single shared budget makes the
+# comparison auditable ("every family received 130 trials under the same
+# stopping rule") and errs toward over-tuning the baselines, which is the safe
+# direction.  130 is generous for this family's small search space; the
+# adaptive stop below is what actually bounds the spend.
+#
+# Stopping rule (applied uniformly to every family): stop when the best-so-far
+# has not improved for K=15 consecutive trials.  wandb has no built-in
+# convergence stop for bayes sweeps, so this is checked out-of-band with
+# check_sweep_convergence.py (repo root) and applied by discarding trials after
+# the trigger point.  Report BOTH the stopping-rule winner (primary) and
+# best-of-all-trials (robustness check); disclose any disagreement.
+
 parameters:
   config_path:
     value: "scripts_mr/antmaze_medium_diverse_mr_antmaze_eval.yaml"
