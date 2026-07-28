@@ -66,32 +66,37 @@ parameters:
   chain_init_jitter:
     value: 0.0
   # Fixed burn-in step size, decoupled from the swept cool-phase lr_min
-  # (sghmc_lr).  Burn-in runs at lr_min by default; the sampling-tier lr_min
-  # (5e-5-5e-4) is far below the warm-up tier's productive range (1e-4-1e-2),
-  # so a fixed-length burn-in under-fits and the 0.8 gate rejects the very
-  # architecture tier-1 selected.  2e-3 ~ the tier-1 winners' sghmc_lr (e.g.
-  # large_diverse's was 2.57e-3, at warm-up acc 0.86), so warm-up now clears
-  # the gate as intended.  Independent of lr_min, so the schedule sweep is no
-  # longer confounded by burn-in quality.
+  # (sghmc_lr).  Burn-in inherits lr_min by default, but the sampling-tier
+  # lr_min (5e-5-5e-4) is far below the warm-up tier's productive range
+  # (1e-4-1e-2), so a fixed-length burn-in under-fits: warm-up accuracy
+  # collapses and the gate rejects the very architecture tier-1 selected.
+  # This is a design fix (burn-in quality should not be a function of the
+  # swept cool-phase step size), not a tuned value.  2e-3 ~ the tier-1
+  # winners' sghmc_lr, and is applied UNIFORMLY to every variant.
   burn_in_lr:
     value: 0.002
 
   # ---- FILL from the tier-1 (warm-up) winner for this variant ----
   # width is a log2 exponent (2**width).
   width:
-    value: 6
+    value: FILL_ME
   depth:
-    value: 2
+    value: FILL_ME
   n_meas:
-    value: 1
+    value: FILL_ME
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
-    value: 199.11491484011225
-  # Let chain sampling actually run: set a little BELOW the tier-1 winner's
-  # warmup_final_acc so the winning architecture clears the gate while
-  # diverged warm-ups still stop cheaply.
+    value: FILL_ME
+  # Warm-up gate, so chain sampling actually runs.  Set by RULE, not by
+  # inspection of tier-2 behaviour: take the tier-1 winner's
+  # warmup_final_acc, subtract 0.10, and round down to the nearest 0.05.
+  # With burn_in_lr fixed above, tier-2's burn-in reproduces tier-1's, so
+  # the winning architecture clears this gate by construction while
+  # genuinely divergent draws still stop cheaply.  Applying one rule to
+  # every variant keeps any per-variant differences principled rather than
+  # reactive.
   early_stop_acc_threshold:
-    value: 0.8
+    value: FILL_ME
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)

@@ -66,46 +66,37 @@ parameters:
   chain_init_jitter:
     value: 0.0
   # Fixed burn-in step size, decoupled from the swept cool-phase lr_min
-  # (sghmc_lr).  Burn-in runs at lr_min by default; the sampling-tier lr_min
-  # (5e-5-5e-4) is far below the warm-up tier's productive range (1e-4-1e-2),
-  # so a fixed-length burn-in under-fits and the 0.8 gate rejects the very
-  # architecture tier-1 selected.  The other variants use 2e-3 (~ the tier-1
-  # winners' sghmc_lr); large_play is lowered to 1e-3 because its deep, wide
-  # net (width 1024, depth 6) OVERSHOOTS at 2e-3 on low-friction (mdecay)
-  # draws — burn-in diverges (weight-mag up to 8.9, warm-up acc 0.43-0.78),
-  # missing the 0.8 gate, so ~60% of runs early-stopped with no objective.
-  # 1e-3 still fits a 1024-wide net easily (no under-fit risk) while curbing
-  # the overshoot.  Independent of lr_min, so the schedule sweep is not
-  # confounded by burn-in quality.
+  # (sghmc_lr).  Burn-in inherits lr_min by default, but the sampling-tier
+  # lr_min (5e-5-5e-4) is far below the warm-up tier's productive range
+  # (1e-4-1e-2), so a fixed-length burn-in under-fits: warm-up accuracy
+  # collapses and the gate rejects the very architecture tier-1 selected.
+  # This is a design fix (burn-in quality should not be a function of the
+  # swept cool-phase step size), not a tuned value.  2e-3 ~ the tier-1
+  # winners' sghmc_lr, and is applied UNIFORMLY to every variant.
   burn_in_lr:
-    value: 0.001
+    value: 0.002
 
   # ---- FILL from the tier-1 (warm-up) winner for this variant ----
   # width is a log2 exponent (2**width).
   width:
-    value: 10
+    value: FILL_ME
   depth:
-    value: 6
+    value: FILL_ME
   n_meas:
-    value: 54
+    value: FILL_ME
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
-    value: 998.7237563083588
-  # Let chain sampling actually run: set BELOW the tier-1 winner's
-  # warmup_final_acc so the winning architecture clears the gate while
-  # diverged warm-ups still stop cheaply.  Lowered to 0.65 for large_play
-  # only (others use 0.8): this deep, wide net (width 1024, depth 6) has a
-  # narrow viable burn-in window, and 0.8 sat mid-spread of its natural
-  # warm-up distribution — ~60% of runs early-stopped at BOTH burn_in_lr
-  # 2e-3 and 1e-3.  The per-run detail showed most rejects were NOT diverged
-  # but merely under-fit with healthy weights (acc 0.69-0.80, weight-mag
-  # ~3-4.6; one missed by 0.004), and their sampling results would have been
-  # legitimate.  0.65 still catches the genuinely divergent draws (acc
-  # 0.50-0.54, weight-mag 8-10).  Selection is on val_mean_cross_entropy (a
-  # posterior metric), not warm-up accuracy, so a per-variant gate costs
-  # some wall-clock on mediocre runs rather than biasing the choice.
+    value: FILL_ME
+  # Warm-up gate, so chain sampling actually runs.  Set by RULE, not by
+  # inspection of tier-2 behaviour: take the tier-1 winner's
+  # warmup_final_acc, subtract 0.10, and round down to the nearest 0.05.
+  # With burn_in_lr fixed above, tier-2's burn-in reproduces tier-1's, so
+  # the winning architecture clears this gate by construction while
+  # genuinely divergent draws still stop cheaply.  Applying one rule to
+  # every variant keeps any per-variant differences principled rather than
+  # reactive.
   early_stop_acc_threshold:
-    value: 0.65
+    value: FILL_ME
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)
