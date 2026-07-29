@@ -76,17 +76,19 @@ parameters:
   burn_in_lr:
     value: 0.002
 
-  # ---- FILL from the tier-1 (warm-up) winner for this variant ----
+  # ---- FILLED from the tier-1 (warm-up) winner for this variant ----
+  # tier-1 sweep run st3a5fgh, trial 17, warmup_final_nll=0.235876,
+  # warmup_final_acc=0.9000; stopping rule fired at trial 32.
   # width is a log2 exponent (2**width).
   width:
-    value: FILL_ME
+    value: 6
   depth:
-    value: FILL_ME
+    value: 3
   n_meas:
-    value: FILL_ME
+    value: 11
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
-    value: FILL_ME
+    value: 459.29535442639326
   # Warm-up gate, so chain sampling actually runs.  Set by RULE, not by
   # inspection of tier-2 behaviour: take the tier-1 winner's
   # warmup_final_acc, subtract 0.10, and round down to the nearest 0.05.
@@ -96,7 +98,7 @@ parameters:
   # every variant keeps any per-variant differences principled rather than
   # reactive.
   early_stop_acc_threshold:
-    value: FILL_ME
+    value: 0.8
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)
