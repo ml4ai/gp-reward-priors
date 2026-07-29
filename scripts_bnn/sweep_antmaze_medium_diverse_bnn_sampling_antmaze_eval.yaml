@@ -89,14 +89,11 @@ parameters:
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
     value: 772.7792283520979
-  # Warm-up gate, so chain sampling actually runs.  Set by RULE, not by
-  # inspection of tier-2 behaviour: take the tier-1 winner's
-  # warmup_final_acc, subtract 0.10, and round down to the nearest 0.05.
-  # With burn_in_lr fixed above, tier-2's burn-in reproduces tier-1's, so
-  # the winning architecture clears this gate by construction while
-  # genuinely divergent draws still stop cheaply.  Applying one rule to
-  # every variant keeps any per-variant differences principled rather than
-  # reactive.
+  # Warm-up gate, so chain sampling actually runs.  A single STATIC constant
+  # applied to every variant -- not derived from any observed quantity.  A
+  # run whose warm-up accuracy falls below it is treated as a failed draw and
+  # stopped before the expensive sampling phase; 0.75 sits well above chance
+  # (0.5) while leaving room for the natural spread of warm-up outcomes.
   early_stop_acc_threshold:
     value: 0.75
 
