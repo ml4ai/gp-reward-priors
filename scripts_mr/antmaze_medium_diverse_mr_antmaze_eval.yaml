@@ -13,7 +13,7 @@ epochs: 5000
 batch_size: 64
 lr: 0.004818335911849079
 eval_every: 5
-criteria_key: acc
+criteria_key: loss   # matches the sweep selection metric (eval_loss_best)
 compile_model: true
 pin_memory: true
 seed: 1
