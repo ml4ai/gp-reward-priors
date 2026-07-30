@@ -1,14 +1,21 @@
+# Hyperparameters selected by sweep MR-training/59czpdwf
+# (seed-0 data split, metric eval_loss_best minimised).  Stopping-rule winner:
+# run 88wg34ln, trial 5, eval_loss_best=0.210400; rule fired at trial 20.
+# NOTE: rule winner != best-of-all. Trial 27 (run d9rk7o76) reached
+# eval_loss_best 0.203892 (3.2% better, width 8 / depth 5 / lr 2.579e-4)
+# but arrived after the trigger at trial 20, so it is discarded per the
+# pre-registered stopping rule.  Disclose in the robustness table.
 project: MR-training
 group: MR
 name: mr
-width: 9
-depth: 6
+width: 7
+depth: 3
 activations: relu
 dataset_id: D4RL_antmaze-large-diverse-v2
 antmaze_variant: antmaze-large-diverse-v2   # train/val derived from antmaze_variant + seed by the eval script
 epochs: 5000
 batch_size: 64
-lr: 0.00319282651334437
+lr: 0.005840272764501282
 eval_every: 5
 criteria_key: acc
 compile_model: true
