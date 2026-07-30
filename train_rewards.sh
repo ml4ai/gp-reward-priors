@@ -74,7 +74,7 @@ METHOD="${1:-}"
 GPU_LIST="${2:-0 1 2 3 4 5}"
 PACK_ARG="${3:-}"
 VARIANTS="${VARIANTS:-medium_play medium_diverse large_play large_diverse}"
-SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10}"
+SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10}"
 NUM_CHAINS="${NUM_CHAINS:-8}"
 
 case "$METHOD" in
