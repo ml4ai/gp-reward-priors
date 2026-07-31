@@ -29,6 +29,9 @@ reactive tuning.
 
 **Selection uses seed 0. Evaluation uses seeds 1–10. They never mix.**
 
+This holds for *every* stage, including the stage-4 IQL grid search: there is a
+single **seed-0 selection lineage** and ten separate **evaluation lineages**.
+
 This matters more than it looks, because in this codebase `seed` does *not* only
 control run-time pseudo-randomness (weight init, minibatch order, sampler
 noise). It **also selects the data files**. The antmaze_eval scripts derive
@@ -48,7 +51,7 @@ train/val/test partition. Consequently:
   incidental to the eval script's data loader.
 - Reported evaluation results at seeds 1–10 are therefore out-of-sample with
   respect to the entire selection procedure, including the stage-4 normalization
-  search (§5), which uses its own held-out seed.
+  search (§5), which also runs at seed 0.
 
 **If you add a stage, give it a selection seed outside 1–10.** The whole
 argument collapses if any tuning touches an evaluation seed.
@@ -62,7 +65,7 @@ argument collapses if any tuning touches an evaluation seed.
 | 1 | model architecture + optimiser/warm-up HPs | validation loss | 0 |
 | 2 | (BNN only) posterior sampler schedule | validation loss | 0 |
 | 3 | (BNN only) chain count / draws per chain | MCMC tail diagnostics | 0 |
-| 4 | output normalization function | mean IQL policy score | held-out (≠1–10) |
+| 4 | output normalization function | max mean IQL score over eval points | 0 |
 
 Stages 1–2 are automated wandb sweeps. Stage 3 is a deliberate manual step.
 Stage 4 is a small grid search over the downstream RL objective.
@@ -277,30 +280,75 @@ The final hyperparameter is the **normalization function applied to the reward
 model's output** before it is consumed by offline RL.
 
 **Procedure:** for each (model family × antmaze variant) winner from the earlier
-stages, grid-search over **8 normalization functions**, where **function 0 is
-the identity (no normalization)**. For each candidate, train an IQL policy on
-the corresponding antmaze variant using that normalized reward model, and select
-the function that **maximises mean policy score**.
+stages, grid-search over **8 normalization functions, indexed 0–7**. For each
+candidate, train an IQL policy on the corresponding antmaze variant using that
+normalized reward model, and select the index that **maximises the mean policy
+score**.
 
-**Seed:** this stage uses its own selection seed, **held out from the evaluation
-seeds 1–10**, exactly as in stages 1–3. The score used for selection therefore
-never comes from an evaluation seed.
+**Seed: 0** — the same selection lineage as every other stage. All selection,
+end to end, happens at seed 0; all evaluation happens at seeds 1–10.
 
-**Why it is selected on return rather than on validation loss:** unlike stages
-1–3, this is not a property of the preference model in isolation. A monotone
-rescaling of the reward leaves preference likelihood unchanged (Bradley–Terry is
-invariant to it) but materially changes offline-RL behaviour, because IQL's
-value targets, advantage weighting, and expectile regression all depend on the
-reward's *scale and spread*. So validation CE cannot distinguish the candidates
-and the downstream objective is the only informative signal.
+**Selection statistic, precisely.** One IQL run is **1,000,000 training steps**
+with an evaluation every **5,000** steps, i.e. **200 evaluation points per run**.
+One evaluation point is the **mean score over 100 episodes**. The selected
+normalization index is the one maximising the **maximum, over those 200
+evaluation points, of the mean-over-100-episodes score**.
 
-> **To be filled in by the author.** This stage is implemented outside this
-> repository (the reward-model code here ends at the trained model; IQL training
-> lives in the surrounding `iqlpref` pipeline and logs to the `IQL-pref` wandb
-> project). Record here, before running it: the exact seed used, the definitions
-> of the 8 normalization functions and their index order, the number of IQL
-> seeds/episodes averaged into "mean score", and the path to the grid-search
-> driver. Without those, this stage is not reproducible from this document.
+The 100-episode evaluation is the same protocol used for the final method
+evaluation, so selection and reporting share an evaluation definition.
+
+> Note for the write-up: because selection takes a **max over 200 checkpoints**,
+> it is an optimistic statistic. That is a defensible and common offline-RL
+> convention, but state it explicitly, and state whether the *reported* numbers
+> use the same max-over-checkpoints statistic or a different one (e.g. final
+> checkpoint). If the two differ, say so.
+
+**Implementation.** Defined in `iqlpref/algorithms/offline/iql.py` (one level
+above this repo) in `modify_reward(dataset, env_name, normalize_reward, ...)`,
+selected by the `normalize_reward: int` config field. Index 0 is the identity —
+the call site is guarded by `if config.normalize_reward:`, so 0 is falsy and no
+transformation is applied.
+
+`min_ret` / `max_ret` are the **minimum and maximum episode returns in the
+dataset** as labelled by the reward model under test, and `trj_lens` is the
+per-transition trajectory length (all from `return_reward_range`).
+`max_episode_steps = 1000`. With `r` the per-step reward:
+
+| idx | transformation | note |
+|---|---|---|
+| 0 | `r` (identity) | no normalization |
+| 1 | `r − 1` | the −1 shift used on the task (oracle) reward |
+| 2 | `r / (max_ret − min_ret) · 1000` | scale only |
+| 3 | idx 2, then `− 1` | |
+| 4 | `(r − min_ret) / (max_ret − min_ret) · 1000` | **as described in the PT paper** |
+| 5 | idx 4, then `− 1` | |
+| 6 | `(r − min_ret/trj_lens) / (max_ret − min_ret) · 1000` | per-step share of `min_ret` |
+| 7 | idx 6, then `− 1` | **as actually implemented in the PT codebase** |
+
+Two properties worth being aware of:
+
+- **The grid is data- and model-dependent.** Indices 2–7 derive their constants
+  from `min_ret`/`max_ret` of the reward model's own labels over the dataset, so
+  the same index means a different transformation for each model. This is
+  exactly why the index must be re-selected per (family × variant) rather than
+  fixed once.
+- **Indices 4 and 7 encode a discrepancy in the literature.** The PT paper
+  describes index 4, but its released code implements index 7. Including both in
+  the grid means the comparison does not depend on which of the two you consider
+  canonical — worth one sentence in the paper.
+
+**Why this stage is selected on return rather than on validation loss:** unlike
+stages 1–3, this is not a property of the preference model in isolation. A
+monotone rescaling of the reward leaves the preference likelihood unchanged
+(Bradley–Terry is invariant to it) but materially changes offline-RL behaviour,
+because IQL's value targets, advantage weighting, and expectile regression all
+depend on the reward's *scale and spread*. Validation CE therefore cannot
+distinguish the candidates, and the downstream objective is the only informative
+signal.
+
+> One config detail to check before running: `n_episodes` defaults to **10** in
+> `iql.py`'s config, not 100. It must be set explicitly, or both selection and
+> evaluation will run at a tenth of the intended episode count.
 
 ---
 
