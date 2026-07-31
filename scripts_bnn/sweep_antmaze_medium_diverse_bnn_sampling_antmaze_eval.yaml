@@ -89,20 +89,28 @@ parameters:
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
     value: 772.7792283520979
-  # Warm-up gate: DISABLED.  `null` makes the check
-  # (`early_stop_acc_threshold is not None and warmup_final_acc < threshold`)
-  # unreachable, so every trial runs to completion and is ranked on the
-  # pre-registered objective, val_mean_cross_entropy -- no proxy criterion is
-  # applied anywhere in the sweep.  A divergent schedule scores poorly rather
-  # than crashing; max_param_step (0.5, from the base config) is the real
-  # blow-up guard.  Rationale: a gate on warm-up ACCURACY rejects on something
-  # other than the selection metric, and because burn-in quality is a function
-  # of the swept `mdecay` (friction acts during burn-in as well as sampling),
-  # any threshold becomes a hard wall in mdecay -- rejecting schedules for a
-  # burn-in reason even when they might sample well.  Letting every trial score
-  # lets the objective, not the wall, decide.
+  # Warm-up gate: DISABLED.  Accuracy is always >= 0, so `warmup_final_acc <
+  # 0.0` is never true and the gate never fires -- every trial runs to
+  # completion and is ranked on the pre-registered objective,
+  # val_mean_cross_entropy.  No proxy criterion is applied anywhere in the
+  # sweep.  A divergent schedule scores poorly rather than crashing;
+  # max_param_step (0.5, from the base config) is the real blow-up guard.
+  #
+  # 0.0 rather than `null`: a wandb agent serialises a null sweep parameter
+  # onto the command line as the string "None", which pyrallis cannot decode
+  # into Optional[float] ("No valid parsing for value None").  0.0 survives
+  # the CLI round-trip and is behaviourally identical for every reachable
+  # accuracy.  (In a config yaml, which pyrallis reads directly rather than
+  # through argv, `null` does work -- see the base eval configs.)
+  #
+  # Rationale for removing the gate: it rejected on warm-up ACCURACY, which is
+  # not the selection metric, and because burn-in quality is a function of the
+  # swept `mdecay` (friction acts during burn-in as well as sampling), any
+  # threshold became a hard wall in mdecay -- rejecting schedules for a
+  # burn-in reason even when they might sample well.  See HANDOFF_HP_SELECTION.md
+  # section 3.5.
   early_stop_acc_threshold:
-    value: null
+    value: 0.0
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)

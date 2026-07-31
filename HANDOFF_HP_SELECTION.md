@@ -208,11 +208,13 @@ not:
   very architecture stage 1 selected. Decoupling burn-in step size from the
   swept cool-phase `lr_min` is a **design fix** — warm-up quality should not be
   a function of the schedule under test — not a tuned value.
-- **`early_stop_acc_threshold: null` — the warm-up gate is DISABLED.** Every
+- **`early_stop_acc_threshold: 0.0` — the warm-up gate is DISABLED.** Every
   stage-2 trial runs to completion and is ranked on `val_mean_cross_entropy`;
   no proxy criterion is applied anywhere in the sweep. A divergent schedule
   scores poorly rather than crashing (`max_param_step: 0.5` is the real
-  blow-up guard). See §3.5 for why an earlier static 0.75 gate was removed.
+  blow-up guard). Accuracy is always ≥ 0, so the check `warmup_final_acc < 0.0`
+  never fires; `0.0` rather than `null` because of a wandb/pyrallis interaction
+  documented in §8. See §3.5 for why an earlier static 0.75 gate was removed.
 
 ### 3.3 What is deliberately NOT swept
 
@@ -556,6 +558,19 @@ sorts trials chronologically — this is essential and easy to get wrong, since
 the wandb API returns runs in name order and the patience rule depends on
 ordering. `--emit-prior-runs` prints `-R <run_id>` flags for carrying finished
 trials into a new sweep.
+
+**Null sweep parameters do not survive the CLI.** A wandb agent passes each
+sweep parameter to the program as a command-line argument, so a `value: null`
+arrives as the *string* `None` and pyrallis rejects it:
+
+```
+pyrallis.utils.ParsingError: Failed when parsing value='None' into field
+"TrainConfig.early_stop_acc_threshold" of type typing.Optional[float]
+```
+
+Use a value that both parses and is semantically inert (here `0.0`, since
+accuracy is never negative). `null` is fine in a *config* yaml, which pyrallis
+reads directly rather than through argv — the base eval configs use it.
 
 **Unsynced trials.** The GPU box's wandb connection drops intermittently. A
 trial can finish locally but fail to upload its final metrics; wandb marks it
