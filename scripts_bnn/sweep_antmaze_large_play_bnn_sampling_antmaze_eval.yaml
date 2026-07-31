@@ -89,13 +89,20 @@ parameters:
   # Prior amplitude multiplier (K -> amp2*K): tier-1 winner.
   map_amp2:
     value: 623.4845757821569
-  # Warm-up gate, so chain sampling actually runs.  A single STATIC constant
-  # applied to every variant -- not derived from any observed quantity.  A
-  # run whose warm-up accuracy falls below it is treated as a failed draw and
-  # stopped before the expensive sampling phase; 0.75 sits well above chance
-  # (0.5) while leaving room for the natural spread of warm-up outcomes.
+  # Warm-up gate: DISABLED.  `null` makes the check
+  # (`early_stop_acc_threshold is not None and warmup_final_acc < threshold`)
+  # unreachable, so every trial runs to completion and is ranked on the
+  # pre-registered objective, val_mean_cross_entropy -- no proxy criterion is
+  # applied anywhere in the sweep.  A divergent schedule scores poorly rather
+  # than crashing; max_param_step (0.5, from the base config) is the real
+  # blow-up guard.  Rationale: a gate on warm-up ACCURACY rejects on something
+  # other than the selection metric, and because burn-in quality is a function
+  # of the swept `mdecay` (friction acts during burn-in as well as sampling),
+  # any threshold becomes a hard wall in mdecay -- rejecting schedules for a
+  # burn-in reason even when they might sample well.  Letting every trial score
+  # lets the objective, not the wall, decide.
   early_stop_acc_threshold:
-    value: 0.75
+    value: null
 
   # ---- Swept: cyclical-SGHMC sampler schedule ----
   # (identical ranges across all antmaze variants)

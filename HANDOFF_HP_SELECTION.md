@@ -208,11 +208,11 @@ not:
   very architecture stage 1 selected. Decoupling burn-in step size from the
   swept cool-phase `lr_min` is a **design fix** — warm-up quality should not be
   a function of the schedule under test — not a tuned value.
-- **`early_stop_acc_threshold: 0.75`, uniform across variants.** A single static
-  constant, not derived from any observed quantity. A trial whose warm-up
-  accuracy falls below it is treated as a failed draw and stopped before the
-  expensive sampling phase; 0.75 sits well above chance (0.5) while leaving room
-  for the natural spread of warm-up outcomes.
+- **`early_stop_acc_threshold: null` — the warm-up gate is DISABLED.** Every
+  stage-2 trial runs to completion and is ranked on `val_mean_cross_entropy`;
+  no proxy criterion is applied anywhere in the sweep. A divergent schedule
+  scores poorly rather than crashing (`max_param_step: 0.5` is the real
+  blow-up guard). See §3.5 for why an earlier static 0.75 gate was removed.
 
 ### 3.3 What is deliberately NOT swept
 
@@ -248,6 +248,49 @@ This matters when reconstructing what a run actually did: a default that looks
 authoritative in the script may have been overridden by pyrallis from the yaml
 or by the sweep agent's CLI arguments, and the resolved values are what wandb
 records in each run's `config`.
+
+### 3.5 Why stage 2 has no warm-up gate
+
+Stage 2 originally early-stopped any trial whose warm-up accuracy fell below a
+static 0.75, to avoid spending ~6 h sampling from a broken starting point. That
+gate was **removed and all four stage-2 sweeps restarted**, for two reasons.
+
+**It rejected on the wrong quantity.** The gate reads warm-up *accuracy*, which
+is not the selection metric. Anything it rejects is excluded from the search
+without ever being scored on `val_mean_cross_entropy`.
+
+**It became a hard wall in `mdecay`.** Because `burn_in_lr`, `seed` and the
+architecture are fixed, and `cycle_length`/`fraction_cool`/`lr_min`/`lr_max`
+only act after burn-in, warm-up outcome is a deterministic function of `mdecay`
+alone — friction acts during burn-in as well as sampling. Measured on the
+discarded run, pass/fail separated perfectly by `mdecay` in every variant:
+
+| variant | failed at mdecay ≤ | passed at mdecay ≥ | incumbent's mdecay |
+|---|---|---|---|
+| medium_play | (none) | 8.58e-3 | 1.79e-2 |
+| large_diverse | 1.653e-3 | 1.957e-3 | 3.78e-2 |
+| large_play | 3.567e-3 | 9.520e-3 | 5.32e-2 |
+| **medium_diverse** | **2.249e-2** | **2.362e-2** | **2.362e-2** |
+
+For medium_diverse the wall removed roughly the bottom 60% of the swept
+`mdecay` range, and its best configuration sat *on* the wall — at the lowest
+passing value observed — while its val CE improved monotonically as `mdecay`
+fell toward it. The gate was blocking the exact direction the objective wanted.
+Schedules were being rejected for a **burn-in** reason even where they might
+sample well.
+
+The gate was also not paying for itself: across 47 completed trials it stopped
+10 (21%) and saved ~60 of ~294 GPU-hours, and 6 of those 10 were
+medium_diverse's — i.e. most of the "saving" was the harmful kind.
+
+**What removing it does and does not fix.** It converts a hard rejection into a
+soft penalty: a low-friction schedule still burns in badly and will still likely
+score a poor val CE. The optimizer will still learn to avoid low `mdecay`. The
+gain is that the *data* now decides whether the cyclical hot phases can recover
+from a poor warm-up, rather than a threshold assuming they cannot. The complete
+fix would be a `burn_in_mdecay` decoupling friction the way `burn_in_lr`
+decouples step size; that was **not** done, since it is a mid-procedure code
+change, and the residual confound is disclosed instead (§7).
 
 ## 4. Stage 3 (BNN only): hand-tuning the draw budget
 
@@ -425,20 +468,29 @@ functional prior is retained everywhere, at roughly 18–28× the legacy amplitu
 This replicates an earlier, less clean run and is now established under a fully
 pre-registered procedure.
 
-### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — in progress
+### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — restarting
 
-Status at 2026-07-30; none has fired yet, so no winner is final.
+The first attempt (sweeps `zkkg4kdu`, `jpu2vqce`, `7kfieu41`, `c05yyh72`) was
+**discarded** and all four sweeps restarted with the warm-up gate disabled
+(§3.5). ~234 GPU-hours and 47 trials were written off; the alternative was
+selecting medium_diverse's schedule from a search whose best configuration sat
+on a wall it could not cross.
 
-| variant | sweep | trials | best so far | non-improving |
+For the record, the discarded attempt's state at the point of restart:
+
+| variant | sweep | trials | early-stopped | best val CE |
 |---|---|---|---|---|
-| medium_play | `zkkg4kdu` | 8 / 60 | 0.246921 @t7 | 1 / 15 |
-| medium_diverse | `jpu2vqce` | 7 / 60 | 0.312702 @t1 | 6 / 15 |
-| large_play | `7kfieu41` | 11 / 60 | 0.213319 @t9 | 2 / 15 |
-| large_diverse | `c05yyh72` | 8 / 60 | 0.246544 @t6 | 2 / 15 |
+| medium_play | `zkkg4kdu` | 11 | 0 (0%) | 0.2469 |
+| medium_diverse | `jpu2vqce` | 11 | 6 (55%) | 0.3127 |
+| large_play | `7kfieu41` | 13 | 3 (23%) | 0.2133 |
+| large_diverse | `c05yyh72` | 12 | 1 (8%) | 0.2340 |
 
-Do not read a winner from a sweep that has not fired. When they do, transcribe
-`sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay` and `fraction_cool` into
-`scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`, then proceed to stage 3.
+None had fired, so no winner was ever read from them; they inform §3.5 only.
+
+Do not read a winner from a sweep that has not fired. When the restarted sweeps
+do, transcribe `sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay` and
+`fraction_cool` into `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`, then
+proceed to stage 3.
 
 ---
 
@@ -468,6 +520,15 @@ stopping rule, and that sweeps ran until the rule fired rather than to the cap.
 
 **Boundary winners.** PT/medium_diverse (if its lr-floor leader holds) and any
 stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
+
+**Residual burn-in/sampling confound in stage 2.** `mdecay` sets friction during
+both burn-in and sampling, so a schedule's warm-up quality is not independent of
+the schedule being tested. Removing the warm-up gate (§3.5) stops this from
+hard-rejecting configurations, but low-friction schedules are still penalised
+through a poor warm-up rather than judged purely on their sampling behaviour.
+This is a known limitation of the stage-2 search, most likely to matter for
+medium_diverse, whose network is the largest and therefore the most
+friction-hungry during burn-in.
 
 ---
 
