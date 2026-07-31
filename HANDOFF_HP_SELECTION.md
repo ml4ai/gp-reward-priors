@@ -1,7 +1,8 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Written 2026-07-30, mid-run: stages 1–2 are complete except for one PT sweep,
-> stage 2 (BNN sampling tier) is executing, stages 3–4 are not yet started.
+> Written 2026-07-30, mid-run: **stage 1 is complete for all three families**
+> and its winners are written into the production configs; stage 2 (the BNN
+> sampling tier) is executing; stages 3–4 have not started.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
 > `fsghmc_sampler_fixes_handoff.md` (the external review those fixes came from).
@@ -229,6 +230,25 @@ not:
 
 ---
 
+### 3.4 Where the operative configuration actually lives
+
+**Read values from the sweep yaml or the config yaml, never from a dataclass
+default.** The `TrainConfig` defaults in the `run_*.py` scripts are fallbacks;
+they are the operative value only for settings that are genuinely uniform across
+the whole project. Anything variant-specific, family-specific, or
+selection-specific is set explicitly in:
+
+- `scripts_<family>/sweep_antmaze_<variant>_*.yaml` — what the sweep searched
+  and what it pinned;
+- `scripts_<family>/antmaze_<variant>_*_antmaze_eval.yaml` — the production
+  configuration, including the transcribed winners;
+- the IQL run config for stage 4.
+
+This matters when reconstructing what a run actually did: a default that looks
+authoritative in the script may have been overridden by pyrallis from the yaml
+or by the sweep agent's CLI arguments, and the resolved values are what wandb
+records in each run's `config`.
+
 ## 4. Stage 3 (BNN only): hand-tuning the draw budget
 
 Stage 2 selects a *schedule*; it does not select how many samples to draw. The
@@ -294,14 +314,17 @@ One evaluation point is the **mean score over 100 episodes**. The selected
 normalization index is the one maximising the **maximum, over those 200
 evaluation points, of the mean-over-100-episodes score**.
 
-The 100-episode evaluation is the same protocol used for the final method
-evaluation, so selection and reporting share an evaluation definition.
+**Selection and reporting use the identical statistic.** The reported
+evaluation numbers are also the max-over-evaluation-points of the
+mean-over-100-episodes score; the only difference between selection and
+evaluation is the seed lineage (0 vs 1–10). There is no selection/reporting
+mismatch to disclose.
 
-> Note for the write-up: because selection takes a **max over 200 checkpoints**,
-> it is an optimistic statistic. That is a defensible and common offline-RL
-> convention, but state it explicitly, and state whether the *reported* numbers
-> use the same max-over-checkpoints statistic or a different one (e.g. final
-> checkpoint). If the two differ, say so.
+> One thing to state plainly in the paper regardless: this statistic is a
+> **max over 200 checkpoints**, which is optimistic relative to reporting the
+> final checkpoint. It is a common offline-RL convention and it is applied
+> identically to every method and every baseline here, so it does not favour
+> any one of them — but it should be named rather than left implicit.
 
 **Implementation.** Defined in `iqlpref/algorithms/offline/iql.py` (one level
 above this repo) in `modify_reward(dataset, env_name, normalize_reward, ...)`,
@@ -346,9 +369,10 @@ depend on the reward's *scale and spread*. Validation CE therefore cannot
 distinguish the candidates, and the downstream objective is the only informative
 signal.
 
-> One config detail to check before running: `n_episodes` defaults to **10** in
-> `iql.py`'s config, not 100. It must be set explicitly, or both selection and
-> evaluation will run at a tenth of the intended episode count.
+The operative values (`n_episodes: 100`, `eval_freq: 5000`,
+`max_timesteps: 1000000`, `normalize_reward: <idx>`) come from the IQL run
+config, not from the dataclass defaults in `iql.py` — see the note on reading
+configuration in §3.4.
 
 ---
 
@@ -368,21 +392,23 @@ Entity `champlin-university-of-arizona`. Status as of 2026-07-30.
 Transcribed into `scripts_mr/antmaze_<variant>_mr_antmaze_eval.yaml` with
 provenance headers and `criteria_key: loss`.
 
-### Stage 1 — PT (`PT-training`, metric `eval_loss_best`) — 3 of 4 complete
+### Stage 1 — PT (`PT-training`, metric `eval_loss_best`) — complete
 
 | variant | sweep | winner | trial / trigger | metric | embd | head | layers | lr |
 |---|---|---|---|---|---|---|---|---|
 | medium_play | `z6nrw1vy` | `hpxovx0h` | 24 / 39 | 0.115663 | 7 | 7 | 1 | 8.561e-3 |
+| medium_diverse | `sridqxoj` | `d74wbyb5` | 41 / 56 | 0.268226 | 6 | 7 | 2 | 1.365e-5 ⚠️ |
 | large_play | `1z6xo2u0` | `74db66mr` | 2 / 17 | 0.056689 | 6 | 6 | 2 | 2.304e-3 |
 | large_diverse | `gjphiwvs` | `b1ep2pcc` | 21 / 36 | 0.184459 | 8 | 6 | 1 | 7.608e-3 |
-| medium_diverse | `sridqxoj` | **open** | best @41 | 0.268226 | 6 | 7 | 2 | 1.365e-5 |
 
-Not yet written into the PT eval configs; those still carry `criteria_key: acc`
-and must be switched to `loss` when the winners are transcribed.
+Transcribed into `scripts_pt/antmaze_<variant>_pt_antmaze_eval.yaml` with
+provenance headers and `criteria_key: loss`. Rule winner equals best-of-all for
+all four.
 
-**Watch item:** medium_diverse's current leader sits at `lr ≈ 1.37e-5`, against
-a swept floor of 1e-5 — a boundary winner, suggesting the optimum may lie below
-the range. Do **not** widen the range mid-run; record it as a limitation.
+⚠️ **medium_diverse is a boundary winner:** `lr = 1.365e-5` against a swept floor
+of 1e-5, so the optimum may lie below the searched range. The range is
+pre-registered and was **not** widened; record it as a limitation. The note also
+lives in the config file itself.
 
 ### Stage 1 — BNN warm-up tier (`BNN-training`, metric `warmup_final_nll`) — complete
 
@@ -401,8 +427,18 @@ pre-registered procedure.
 
 ### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — in progress
 
-Sweeps `zkkg4kdu` (medium_play), `jpu2vqce` (medium_diverse), `7kfieu41`
-(large_play), `c05yyh72` (large_diverse); run_cap 60 each.
+Status at 2026-07-30; none has fired yet, so no winner is final.
+
+| variant | sweep | trials | best so far | non-improving |
+|---|---|---|---|---|
+| medium_play | `zkkg4kdu` | 8 / 60 | 0.246921 @t7 | 1 / 15 |
+| medium_diverse | `jpu2vqce` | 7 / 60 | 0.312702 @t1 | 6 / 15 |
+| large_play | `7kfieu41` | 11 / 60 | 0.213319 @t9 | 2 / 15 |
+| large_diverse | `c05yyh72` | 8 / 60 | 0.246544 @t6 | 2 / 15 |
+
+Do not read a winner from a sweep that has not fired. When they do, transcribe
+`sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay` and `fraction_cool` into
+`scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`, then proceed to stage 3.
 
 ---
 
