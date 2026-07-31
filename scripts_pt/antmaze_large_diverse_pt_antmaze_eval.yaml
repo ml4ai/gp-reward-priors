@@ -1,13 +1,16 @@
+# Hyperparameters selected by sweep PT-training/gjphiwvs
+# (seed-0 data split, metric eval_loss_best minimised).  Stopping-rule winner:
+# run b1ep2pcc, trial 21, eval_loss_best=0.184459; rule fired at trial 36.
 project: PT-training
 group: PT
 name: pt
-embd_dim: 7
+embd_dim: 8
 pref_attn_embd_dim: null
-head_dim: 5
+head_dim: 6
 attn_dropout: 0.1
 resid_dropout: 0.1
 intermediate_dim: null
-num_layers: 3
+num_layers: 1
 embd_dropout: 0.1
 model_eps: 0.1
 max_ep_length: null
@@ -16,9 +19,9 @@ dataset_id: D4RL_antmaze-large-diverse-v2
 antmaze_variant: antmaze-large-diverse-v2   # train/val derived from antmaze_variant + seed by the eval script
 epochs: 5000
 batch_size: 64
-lr: 0.0019786111453052356
+lr: 0.007607885892272493
 eval_every: 1
-criteria_key: acc
+criteria_key: loss   # matches the sweep selection metric (eval_loss_best)
 compile_model: true
 pin_memory: true
 seed: 1

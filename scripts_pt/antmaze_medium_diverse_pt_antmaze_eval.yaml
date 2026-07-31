@@ -1,3 +1,9 @@
+# Hyperparameters selected by sweep PT-training/sridqxoj
+# (seed-0 data split, metric eval_loss_best minimised).  Stopping-rule winner:
+# run d74wbyb5, trial 41, eval_loss_best=0.268226; rule fired at trial 56.
+# NOTE: boundary winner -- lr 1.365e-5 sits essentially on the swept
+# floor of 1e-5, so the optimum may lie below the searched range.
+# The range is pre-registered and was NOT widened; disclose as a limitation.
 project: PT-training
 group: PT
 name: pt
@@ -16,9 +22,9 @@ dataset_id: D4RL_antmaze-medium-diverse-v2
 antmaze_variant: antmaze-medium-diverse-v2   # train/val derived from antmaze_variant + seed by the eval script
 epochs: 5000
 batch_size: 64
-lr: 0.00596070924257149
+lr: 1.365137349484202e-05
 eval_every: 1
-criteria_key: acc
+criteria_key: loss   # matches the sweep selection metric (eval_loss_best)
 compile_model: true
 pin_memory: true
 seed: 1
