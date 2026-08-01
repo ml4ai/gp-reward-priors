@@ -210,11 +210,13 @@ not:
   a function of the schedule under test — not a tuned value.
 - **`early_stop_acc_threshold: 0.0` — the warm-up gate is DISABLED.** Every
   stage-2 trial runs to completion and is ranked on `val_mean_cross_entropy`;
-  no proxy criterion is applied anywhere in the sweep. A divergent schedule
-  scores poorly rather than crashing (`max_param_step: 0.5` is the real
-  blow-up guard). Accuracy is always ≥ 0, so the check `warmup_final_acc < 0.0`
-  never fires; `0.0` rather than `null` because of a wandb/pyrallis interaction
-  documented in §8. See §3.5 for why an earlier static 0.75 gate was removed.
+  no proxy criterion is applied anywhere in the sweep. Accuracy is always ≥ 0,
+  so the check `warmup_final_acc < 0.0` never fires; `0.0` rather than `null`
+  because of a wandb/pyrallis interaction documented in §8. See §3.5 for why an
+  earlier static 0.75 gate was removed, and §3.6 for what a divergent trial
+  actually looks like — **`max_param_step: 0.5` is a crash guard, not a
+  divergence guard**: it keeps a blown-up run from dying, but the chains can
+  still reach Inf gradients and return a degenerate posterior.
 
 ### 3.3 What is deliberately NOT swept
 
@@ -293,6 +295,51 @@ from a poor warm-up, rather than a threshold assuming they cannot. The complete
 fix would be a `burn_in_mdecay` decoupling friction the way `burn_in_lr`
 decouples step size; that was **not** done, since it is a mid-procedure code
 change, and the residual confound is disclosed instead (§7).
+
+### 3.6 What a divergent stage-2 trial looks like
+
+With the gate removed, low-friction schedules run to completion and are scored.
+Some of them **diverge numerically**. Observed on the restarted sweeps:
+
+| warm-up NLL | val CE | gradnorm max | %>clip | outcome |
+|---|---|---|---|---|
+| 0.24 – 0.51 (8 trials) | 0.236 – 0.299 | 3.6 – 1.8e3 | 0 – 0.04% | healthy |
+| 0.95 | 0.692 | 6.7e14 | 1.95% | near-degenerate |
+| 2.78 | 0.306 | 1.5e5 | 0.52% | poor |
+| 23.8 | 0.858 | 3.0e11 | 62% | worse than chance |
+| **350** | 0.693 | **Inf** | 12.7% | **diverged: all diagnostics NaN** |
+
+Three things to know about these.
+
+**`max_param_step: 0.5` is a crash guard, not a divergence guard.** The
+diverged trial completed and logged; it did not crash. But its gradients reached
+`Inf`, its per-chain and predictive variances, R-hat, ESS and every CVaR
+diagnostic came back `NaN`, and its reward function collapsed to a constant.
+
+**`val_mean_cross_entropy` is not monotone in brokenness.** A run that collapses
+to constant output scores exactly `ln 2 = 0.6931` — every pair gets p = 0.5 —
+which is *better* than a confidently-wrong run (0.858 above). Among failures,
+total collapse looks less bad than partial failure. Harmless for ranking here,
+since both are far from the ~0.25 healthy range, but do not read the metric as a
+severity scale.
+
+**Warm-up *accuracy* is blind to this; warm-up *NLL* is not.** The diverged trial
+had `warmup_final_acc = 0.710`, which reads as mediocre-but-usable, while its
+`warmup_final_nll` was **350** — confidently wrong, the signature of a weight
+blow-up. This is a second, independent reason the old accuracy gate was the
+wrong instrument (§3.5): it could not see the failure mode it was nominally
+there to catch. `warmup_final_nll` — stage 1's own selection metric — separates
+these cases cleanly, and `gradnorm_sampling_pct_over_clip` separates them after
+the fact (0–0.04% healthy vs 0.5–62% troubled).
+
+**Detection.** `check_sweep_convergence.py` flags these automatically: a trial
+with NaN/Inf in the convergence diagnostics, or `gradnorm_sampling_pct_over_clip`
+above 1%, is reported under `!! DIVERGED`. Such trials still count toward the
+search — the optimiser scored them — but are **unusable for stage 3**, which
+needs ESS and R-hat. If a stage-2 *winner* is ever flagged this way, do not
+carry it forward.
+
+---
 
 ## 4. Stage 3 (BNN only): hand-tuning the draw budget
 
@@ -523,6 +570,13 @@ stopping rule, and that sweeps ran until the rule fired rather than to the cap.
 **Boundary winners.** PT/medium_diverse (if its lr-floor leader holds) and any
 stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
 
+**Numerically divergent stage-2 trials.** Removing the warm-up gate (§3.5) let
+low-friction schedules run to completion, and some diverge outright — Inf
+gradients, NaN convergence diagnostics, a reward function collapsed to a
+constant scoring exactly `ln 2` (§3.6). They are correctly ranked as bad and so
+do not threaten selection, but the count should be reported, and no divergent
+configuration may be carried into stage 3.
+
 **Residual burn-in/sampling confound in stage 2.** `mdecay` sets friction during
 both burn-in and sampling, so a schedule's warm-up quality is not independent of
 the schedule being tested. Removing the warm-up gate (§3.5) stops this from
@@ -558,6 +612,10 @@ sorts trials chronologically — this is essential and easy to get wrong, since
 the wandb API returns runs in name order and the patience rule depends on
 ordering. `--emit-prior-runs` prints `-R <run_id>` flags for carrying finished
 trials into a new sweep.
+
+It also reports `!! DIVERGED` for trials whose chains blew up numerically (§3.6)
+— these are scored, so they are *not* unsynced, but they carry no usable ESS or
+R-hat.
 
 **Null sweep parameters do not survive the CLI.** A wandb agent passes each
 sweep parameter to the program as a command-line argument, so a `value: null`

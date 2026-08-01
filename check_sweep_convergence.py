@@ -15,7 +15,11 @@ For each sweep it reports:
   * unsynced trials: finished/crashed but missing the sweep's metric, which
     means the run completed locally but its result never reached the server
     (recover with `wandb sync <run-dir>` on the box, else the Bayes optimizer
-    never sees it and the trial slot is wasted).
+    never sees it and the trial slot is wasted);
+  * diverged trials: scored normally, so NOT unsynced, but the chains blew up —
+    NaN/Inf convergence diagnostics or a high fraction of sampling steps over
+    the gradient-clip threshold.  These still count toward the search, but are
+    unusable for the stage-3 draw-budget decision, which needs ESS and R-hat.
 
 Usage (entity defaults to the sweep path or --entity):
 
@@ -34,6 +38,7 @@ On the analysis Mac use /opt/anaconda3/envs/irl/bin/python; on the GPU box the
 """
 
 import argparse
+import math
 import sys
 
 import wandb
@@ -64,6 +69,33 @@ def better(a, b, goal):
     return a < b if goal == "minimize" else a > b
 
 
+# Diagnostics that go NaN/Inf when the sampler diverges.  Checked only when
+# present, so this is harmless for MR/PT sweeps (which log none of them).
+_DIVERGENCE_KEYS = (
+    "gradnorm_sampling_mean", "gradnorm_sampling_max",
+    "val_pred_rhat_max", "val_pred_ess_min",
+    "val_pred_cvar_ess_min", "val_pred_cvar_mcse_rel_max",
+    "val_pred_within_chain_var", "param_within_chain_var",
+)
+# Fraction of sampling steps whose pre-clip gradient norm exceeded the clip
+# threshold.  Healthy stage-2 trials sit at 0-0.05%; troubled ones run 0.5-60%.
+_CLIP_PCT_WARN = 1.0
+
+
+def diverged_reasons(summ):
+    """Non-empty list of reasons if this trial's chains blew up numerically."""
+    reasons = []
+    bad = [k for k in _DIVERGENCE_KEYS
+           if isinstance(summ.get(k), float)
+           and (math.isnan(summ[k]) or math.isinf(summ[k]))]
+    if bad:
+        reasons.append("NaN/Inf in " + ", ".join(bad))
+    pct = summ.get("gradnorm_sampling_pct_over_clip")
+    if isinstance(pct, (int, float)) and not math.isnan(pct) and pct > _CLIP_PCT_WARN:
+        reasons.append(f"gradnorm_sampling_pct_over_clip={pct:.1f}%")
+    return reasons
+
+
 def swept_keys(cfg):
     """Names of the parameters this sweep actually searches (not fixed values)."""
     return sorted(
@@ -82,7 +114,7 @@ def summarize(entity, project, sweep_id, patience):
     keys = swept_keys(cfg)
 
     runs = sorted(sweep.runs, key=lambda r: r.created_at)
-    trials, unsynced = [], []
+    trials, unsynced, diverged = [], [], []
     for r in runs:
         summ = dict(r.summary) if r.summary else {}
         val = summ.get(metric)
@@ -93,6 +125,14 @@ def summarize(entity, project, sweep_id, patience):
         if val is None and summ.get("early_stopped") != 1:
             unsynced.append((r.id, r.state))
         trials.append((r.id, val, {k: r.config.get(k) for k in keys}))
+
+        # numerical-divergence fingerprint: the trial completed and reported the
+        # metric, so it is NOT unsynced, but its chains blew up — the convergence
+        # diagnostics are NaN/Inf and the run is useless for the stage-3 draw-budget
+        # decision even though the optimiser scored it.
+        why = diverged_reasons(summ)
+        if why:
+            diverged.append((r.id, val, why))
 
     # best-so-far + patience trigger
     best, best_i, since, trigger = None, None, 0, None
@@ -145,6 +185,15 @@ def summarize(entity, project, sweep_id, patience):
             print(f"       {rid} (state={state})  -> find its dir on the box and `wandb sync` it")
     else:
         print("  unsynced    : none")
+
+    if diverged:
+        print(f"  !! DIVERGED : {len(diverged)} trial(s) scored but numerically blown up:")
+        for rid, val, why in diverged:
+            print(f"       {rid}  {metric}={val if val is None else f'{val:.6g}'}  ({'; '.join(why)})")
+        print("       These count toward the search (the optimiser scored them) but are")
+        print("       unusable for the stage-3 draw-budget decision, which needs ESS/R-hat.")
+    else:
+        print("  diverged    : none")
 
 
 def emit_prior_runs(entity, project, sweep_id):
