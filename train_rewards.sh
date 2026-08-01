@@ -30,7 +30,9 @@
 # Env overrides:
 #   VARIANTS  space-separated variant tokens.
 #             Default: "medium_play medium_diverse large_play large_diverse"
-#   SEEDS     space-separated seeds.      Default: "1 2 3 4 5 6 7 8 9 10"
+#   SEEDS     space-separated seeds.      Default: "0 1 2 3 4 5 6 7 8 9 10"
+#             Seed 0 is the hyperparameter-selection lineage; 1-10 are the
+#             evaluation lineages (see HANDOFF_HP_SELECTION.md).
 #   NUM_CHAINS  bnn chains per run (must match the config). Default: 8
 #
 # Examples:
