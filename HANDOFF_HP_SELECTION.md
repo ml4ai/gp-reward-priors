@@ -1,8 +1,10 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Written 2026-07-30, mid-run: **stage 1 is complete for all three families**
-> and its winners are written into the production configs; stage 2 (the BNN
-> sampling tier) is executing; stages 3–4 have not started.
+> Status 2026-08-07. **Stage 1 complete** for all three families, winners written
+> into the production configs. **Stage 2 (BNN sampling tier): 3 of 4 sweeps have
+> fired**; medium_diverse is still searching, and no stage-2 winner has been
+> written into a production config yet. **Stages 3–4 not started.**
+> Start at §10 if you are picking this up cold.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
 > `fsghmc_sampler_fixes_handoff.md` (the external review those fixes came from).
@@ -517,31 +519,45 @@ functional prior is retained everywhere, at roughly 18–28× the legacy amplitu
 This replicates an earlier, less clean run and is now established under a fully
 pre-registered procedure.
 
-### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — restarting
+### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — 3 of 4 fired
 
-The first attempt (sweeps `zkkg4kdu`, `jpu2vqce`, `7kfieu41`, `c05yyh72`) was
-**discarded** and all four sweeps restarted with the warm-up gate disabled
-(§3.5). ~234 GPU-hours and 47 trials were written off; the alternative was
-selecting medium_diverse's schedule from a search whose best configuration sat
-on a wall it could not cross.
+Live sweeps: `ld9oi90s` (medium_play), `o9g70yby` (medium_diverse), `u5snid84`
+(large_play), `gnlrcb7y` (large_diverse). These are the **second** stage-2
+attempt; the first was discarded when the warm-up gate was removed (§3.5).
 
-For the record, the discarded attempt's state at the point of restart:
+| variant | sweep | winner | trial / trigger | val CE | diverged |
+|---|---|---|---|---|---|
+| large_play | `u5snid84` | `d1ddc4yg` | 10 / 25 | **0.210992** | 7 / 26 |
+| large_diverse | `gnlrcb7y` | `k83frxm7` | 17 / 32 | 0.231372 | 0 / 34 |
+| medium_play | `ld9oi90s` | `ge5h8lfd` | 5 / 20 | 0.244184 | 0 / 21 |
+| medium_diverse | `o9g70yby` | **still running** | best @10 | 0.284295 | 6 / 14 |
 
-| variant | sweep | trials | early-stopped | best val CE |
-|---|---|---|---|---|
-| medium_play | `zkkg4kdu` | 11 | 0 (0%) | 0.2469 |
-| medium_diverse | `jpu2vqce` | 11 | 6 (55%) | 0.3127 |
-| large_play | `7kfieu41` | 13 | 3 (23%) | 0.2133 |
-| large_diverse | `c05yyh72` | 12 | 1 (8%) | 0.2340 |
+All three fired winners have **rule winner = best-of-all** and are themselves
+clean (not divergence-flagged). The winning schedules:
 
-None had fired, so no winner was ever read from them; they inform §3.5 only.
+| variant | `sghmc_lr` | `sghmc_lr_max` | `cycle_length` | `mdecay` | `fraction_cool` |
+|---|---|---|---|---|---|
+| medium_play | 1.759684326975111e-4 | 2.7127155004169033e-3 | 2750 | 3.886566686095279e-2 | 0.26490734354273915 |
+| large_play | 4.4675299100389534e-4 | 4.123441940823021e-3 | 1500 | 2.2440542355891248e-2 | 0.4464505988695707 |
+| large_diverse | 2.2274405063627215e-4 | 4.820665555950937e-3 | 2500 | 8.916002139869199e-2 | 0.41191474620821766 |
+| medium_diverse | *(pending)* | | | | |
 
-Do not read a winner from a sweep that has not fired. When the restarted sweeps
-do, transcribe `sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay` and
-`fraction_cool` into `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`, then
-proceed to stage 3.
+medium_diverse's current leader is `nfqz8f11` (val CE 0.284295, clean, `sghmc_lr`
+4.958689700913806e-4, `sghmc_lr_max` 2.1452292827590347e-3, `cycle_length` 2250,
+`mdecay` 4.286099171785899e-2, `fraction_cool` 0.14154720839003554) — **do not
+use it until the rule fires.**
 
----
+**Divergence is confined to the depth-6 networks.** medium_play (depth 2) and
+large_diverse (depth 3) produced zero divergent trials in 55 combined; large_play
+(depth 6) hit 27% and medium_diverse (depth 6, width 1024) 43%. Note large_play
+had the most hostile search yet produced the best and cleanest winner — the
+blow-ups were confined to bad regions of schedule space and never touched the
+selected configuration.
+
+**Discarded first attempt**, for the record (sweeps `zkkg4kdu`, `jpu2vqce`,
+`7kfieu41`, `c05yyh72`): ~234 GPU-hours and 47 trials written off when the gate
+was removed. None had fired, so no winner was ever read from them; they inform
+§3.5 only.
 
 ## 7. Disclosures required in the write-up
 
@@ -569,6 +585,10 @@ stopping rule, and that sweeps ran until the rule fired rather than to the cap.
 
 **Boundary winners.** PT/medium_diverse (if its lr-floor leader holds) and any
 stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
+
+**Numerically divergent stage-2 trial counts** (report these): medium_play 0/21,
+large_diverse 0/34, large_play 7/26, medium_diverse 6/14-and-counting. No fired
+winner is divergence-flagged.
 
 **Numerically divergent stage-2 trials.** Removing the warm-up gate (§3.5) let
 low-friction schedules run to completion, and some diverge outright — Inf
@@ -653,3 +673,109 @@ slot is wasted. Ground truth from the box is `wandb sync --sync-all --dry-run`.
 - Do not judge stage 3 by `param_*` or bulk predictive diagnostics.
 - Do not compare post-`bt_pool="mean"` reward magnitudes or CVaR values to
   pre-fix runs; only the scale-free convergence diagnostics carry over.
+
+---
+
+## 10. Current state and how to resume
+
+Written for someone joining cold. Read §1 (seed discipline) and §3.1 (budget,
+stopping rule, metric) first; everything else can be looked up as needed.
+
+### 10.1 What is finished
+
+| stage | family | state |
+|---|---|---|
+| 1 | MR | 4/4 sweeps fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml`, `criteria_key: loss` |
+| 1 | PT | 4/4 sweeps fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml`, `criteria_key: loss` |
+| 1 | BNN warm-up | 4/4 sweeps fired; winners transcribed into the stage-2 sweep yamls |
+| 2 | BNN sampling | **3/4 fired** (medium_play, large_play, large_diverse); medium_diverse still running |
+| 3 | BNN | not started |
+| 4 | all | not started |
+
+Every fired sweep has provenance (run id, trial, metric, trigger) recorded as a
+comment in the config it was written into.
+
+### 10.2 Immediate next action
+
+**Wait for `o9g70yby` (medium_diverse stage 2) to fire.** Check it with
+`check_sweep_convergence.py` (§8) against sweep `BNN-training/o9g70yby` at
+patience 15. It has fired when the output reads `STOP FIRED : yes`.
+
+Do not read a winner before then — this sweep has repeatedly improved late. It is
+the slowest variant (6–13 h per trial) and had 6 divergent trials in its first
+14, so expect days rather than hours.
+
+### 10.3 Then: write the BNN production configs
+
+This is the step with a **trap**. `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`
+still carries pre-selection values from an earlier era, **and is missing
+`map_amp2` and `burn_in_lr` entirely**. Fields absent from the yaml fall back to
+`TrainConfig` defaults, which would silently give:
+
+- `map_amp2 = 1.0` — discarding the stage-1 prior-amplitude result (the winners
+  are 313–773), i.e. throwing away the project's main prior finding;
+- `burn_in_lr = None` — reinstating the burn-in/sampling confound that §3.5
+  exists to describe.
+
+Both lines must be **added**, not merely edited. Each config must end up with:
+
+| field | source |
+|---|---|
+| `width`, `depth`, `n_meas`, `map_amp2` | stage-1 winner (§6; also present in the stage-2 sweep yamls) |
+| `sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`, `fraction_cool` | stage-2 winner (§6) |
+| `burn_in_lr: 0.002` | fixed, uniform (§3.2) |
+| `num_chains`, `num_samples`, `chains_per_gpu` | **stage 3 decides these** — leave until then |
+| `seed` | leave at 1; `train_rewards.sh` overrides it per evaluation seed |
+
+Afterwards verify that each parsed config contains `map_amp2`, `burn_in_lr` and
+all five schedule fields, and that they match the winning wandb runs
+field-by-field. (The same verification caught nothing wrong for MR and PT, but it
+is cheap and these are the numbers every reported result depends on.)
+
+### 10.4 Then: stage 3, then stage 4
+
+Stage 3 (§4) raises `num_chains` / `num_samples` until the CVaR tail diagnostics
+are acceptable — judged on `val_pred_cvar_ess_min`, `val_pred_cvar_mcse_rel_max`,
+`val_pred_folded_rhat_*` and `gradnorm_sampling_pct_over_clip ≈ 0`, **not** on
+`val_mean_cross_entropy` and **not** on `param_*`. The pre-selection reference
+point was `num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2`.
+
+Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
+seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
+
+### 10.5 Sweep IDs
+
+Entity `champlin-university-of-arizona`.
+
+| family / stage | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR stage 1 | `70742ym5` | `vilrah4f` | `qkjet6r3` | `59czpdwf` |
+| PT stage 1 | `z6nrw1vy` | `sridqxoj` | `1z6xo2u0` | `gjphiwvs` |
+| BNN stage 1 | `kk79h8xf` | `pyrz4qou` | `jhpdsl60` | `in2p7l17` |
+| BNN stage 2 | `ld9oi90s` | `o9g70yby` | `u5snid84` | `gnlrcb7y` |
+
+Superseded, not to be used: the first clean-restart stage-2 attempt (`zkkg4kdu`,
+`jpu2vqce`, `7kfieu41`, `c05yyh72`), and everything from the pre-restart round
+described in §0.
+
+### 10.6 Monitoring habits worth keeping
+
+Use `check_sweep_convergence.py` (§8) for every status check rather than reading
+the wandb UI. It applies the stopping rule **in chronological order** — the wandb
+API returns runs in name order, and getting this wrong silently reports the wrong
+trigger point and the wrong winner. It also runs the unsynced scan and the
+divergence scan (§3.6) in the same pass.
+
+Two failure modes it catches that the dashboard hides:
+
+- **Unsynced trials.** The GPU box's wandb connection drops intermittently; a
+  trial can finish locally but never upload its metric, and the dashboard often
+  auto-flips it from crashed to finished, so the loss is invisible. Recover with
+  `wandb sync <run-dir>` on the box.
+- **Divergent trials.** Scored normally, so not unsynced, but the chains blew up
+  and every convergence diagnostic is NaN — unusable for stage 3.
+
+Operational trap: killing a sweep agent does **not** kill its training process.
+The child is orphaned and keeps running on the GPU. Kill by process group and
+match the full config name (`antmaze_large_play_bnn_antmaze_eval`, not `large`),
+or you will take down a neighbouring variant. This has happened.
