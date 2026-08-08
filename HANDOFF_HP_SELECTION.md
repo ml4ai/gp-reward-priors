@@ -877,16 +877,40 @@ throughput changes entirely.
 The step-downs align with the other sweeps' last heartbeats (`ld9oi90s`
 Aug 6 12:52, `u5snid84` Aug 7 05:47, `gnlrcb7y` Aug 7 20:35 UTC).
 
-**It is not GPU or core starvation.** `leviathan` has 6 A6000s and 255 logical
-CPUs; each trial occupies one GPU (`num_chains: 4`, `chains_per_gpu: 4`), so at
-four concurrent sweeps neither resource was oversubscribed.
+**It is not GPU contention.** `launch_hp_sweeps.sh:171` launches each agent under
+`CUDA_VISIBLE_DEVICES="$gpu"` with a distinct GPU per sweep, and a stage-2 trial
+needs exactly one (`num_chains: 4`, `chains_per_gpu: 4` → `rank // chains_per_gpu`
+= 0 for all four chains). Four sweeps used four of `leviathan`'s six A6000s, none
+shared. Nor is it raw core starvation: the box has 255 logical CPUs.
 
-The leading candidate is **thread oversubscription**: torch defaults intra-op
-threads to core count, so four processes each spawning ~255-thread BLAS/OpenMP
-pools on 255 cores thrash on context switching. Shared-filesystem HDF5 reads and
-host memory bandwidth are the other candidates. **Not diagnosed — test
-`OMP_NUM_THREADS` before the next phase that runs jobs concurrently** (stage 4
-runs 4+ IQL jobs). A 2.8× throughput loss is worth an hour of investigation.
+The leading candidate is **thread oversubscription**, and the repo confirms the
+precondition: nothing in it sets `OMP_NUM_THREADS` / `MKL_NUM_THREADS` or calls
+`torch.set_num_threads`, so every process defaults its intra-op pool to the core
+count, 255. Each trial spawns four chain *processes* via `mp.spawn`
+(`optbnn/sgmcmc_bayes_net/f_pref_net.py:954`), and the BNN dataloaders run
+`num_workers: 0` (ibid. :588), so CPU-side work stays in-process where that pool
+applies:
+
+| concurrent sweeps | chain processes | default threads | vs 255 cores |
+|---|---|---|---|
+| 4 | 16 | ~4,080 | ~16× |
+| 1 | 4 | ~1,020 | ~4× |
+
+A 16× → 4× change in oversubscription is the right shape for the measured 2.8×.
+
+**Still not diagnosed.** The arithmetic says nothing about whether those threads
+are *active*; if the sampler is almost all GPU kernels the pools idle and thread
+count is irrelevant. The discriminating measurement is one read-only command on
+the box — `ps -o pid,nlwp,pcpu,comm -C python --sort=-pcpu` — summed over the four
+chain processes: ~400% total means idle pools (look at HDF5/filesystem instead),
+several thousand percent means they are spinning. Shared-filesystem reads and host
+memory bandwidth are the alternative candidates.
+
+**Do not set `OMP_NUM_THREADS` mid-sweep.** Thread count changes floating-point
+reduction order, so trials before and after the change would not be strictly
+comparable. Apply it at a phase boundary — before stage 3 or stage 4 — never
+while a sweep is accumulating trials. Stage 4 runs 4+ concurrent IQL jobs, so
+that is the natural point to test it; a 2.8× throughput loss is worth the hour.
 
 This does not affect any selection result — throughput is not an input to any
 stopping rule or metric — but it does affect every schedule estimate in this
