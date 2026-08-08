@@ -1,6 +1,6 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Status 2026-08-07. **Stage 1 complete** for all three families, winners written
+> Status 2026-08-08. **Stage 1 complete** for all three families, winners written
 > into the production configs. **Stage 2 (BNN sampling tier): 3 of 4 sweeps have
 > fired**; medium_diverse is still searching, and no stage-2 winner has been
 > written into a production config yet. **Stages 3–4 not started.**
@@ -341,6 +341,34 @@ search — the optimiser scored them — but are **unusable for stage 3**, which
 needs ESS and R-hat. If a stage-2 *winner* is ever flagged this way, do not
 carry it forward.
 
+### 3.6.1 The `!! DIVERGED` flag is two different things
+
+Reviewed 2026-08-08. The flag fires on either of two conditions, and in practice
+they identify **different populations**. Read the underlying numbers before
+acting on the label; do not treat "6 diverged" as six blow-ups.
+
+*Genuine failure* — NaN/Inf diagnostics, or a nonsense metric. In medium_diverse
+(`o9g70yby`) three of six flagged trials are this kind: `5yj857hf` (12.7% over
+clip, every diagnostic NaN), `00spgb6j` (9.4%, val CE 46.1), `cie2dj2r` (2.0%,
+collapsed to `ln 2`). These are the §3.6 failure mode and are correctly excluded.
+
+*Threshold call on a continuum* — the other three (`9dyx7pi2`, `oi3s2q3x`,
+`ff384ml8`) sit at 1.1–1.8% over clip with healthy warm-up NLL (0.46–0.59),
+finite diagnostics (CVaR ESS 13–19, CVaR R-hat 1.17–1.26) and val CE 0.300–0.305.
+The clean leader `nfqz8f11` is at 0.21% and clean `lzyn872v` at 0.90% — the 1%
+cutoff is splitting a smooth range, not separating two populations.
+
+This matters because those three score better than **every** clean trial in that
+sweep except the leader. If one of them ever takes the lead, the rule in §3.6
+("do not carry a flagged winner forward") would discard a plausibly usable
+configuration on a 1% cutoff.
+
+**Decide this before it happens, not after.** Both defensible options are:
+(a) keep the pre-registered rule as written and accept the cost, or (b) report
+`gradnorm_sampling_pct_over_clip` as a graded diagnostic and gate on the
+NaN/Inf condition alone. Either is fine; choosing in response to a specific
+trial's result is exactly the reactive tuning §0 exists to prevent.
+
 ---
 
 ## 4. Stage 3 (BNN only): hand-tuning the draw budget
@@ -373,6 +401,38 @@ rather than searched.
 Do **not** judge this by `param_*` diagnostics (meaningless for a BNN under
 weight-space non-identifiability) or by bulk `pred_rhat`/`pred_ess` (they
 certify the median, not the tail).
+
+**Warning: at the stage-2 budget, the `_max` / `_min` extremes above are
+censored and carry no ranking information.** Measured 2026-08-08 across all
+four stage-2 sweeps: `val_pred_cvar_rhat_max` is **1.2555612045333548 on nearly
+every healthy trial** — identical across variants, architectures and schedules,
+and identical to 16 digits between the val and test splits of the same run
+(winner `k83frxm7`). `val_pred_q05_ess_min` is likewise pinned at 12.5367 in a
+large majority of trials, with the remainder in a narrow 11.3–14.5 band.
+
+This is the attainable ceiling (resp. floor) of the rank-normalized estimators
+at 4 chains × 33 retained draws, reached as soon as *any one* of the ~640
+evaluation points has fully separated chains. It is real information — some
+point is badly mixed — but it is saturated, so it cannot rank one schedule
+against another, and it cannot get worse.
+
+Two consequences for stage 3:
+
+- **Judge on the distributional statistics, which do vary:**
+  `val_pred_cvar_rhat_median`, `val_pred_cvar_rhat_pct_over_1.01`,
+  `val_pred_folded_rhat_95th_pct`, `val_pred_cvar_ess_median`,
+  `val_pred_q05_ess_median`, `val_pred_cvar_mcse_rel_median`. The `_max`/`_min`
+  extremes are worth recording but not steering on.
+- **Verify the censoring lifts before trusting the extremes at production
+  budget.** 2480 draws is ~19× the stage-2 budget and the saturation may
+  disappear, but check it explicitly — otherwise the failure mode is
+  "diagnostics didn't improve when I added draws", which is indistinguishable
+  from a mixing problem (see the last paragraph of this section) and would send
+  you chasing `lr_max` / `chain_init_jitter` for no reason.
+
+Note the *diverged* trials are the ones with unpinned values here (CVaR ESS 25–89,
+R-hat 0.997–1.085) — a broken run whose predictive has collapsed to a constant
+mixes "perfectly". Do not read a good-looking extreme as evidence of health.
 
 **Reference point:** the production configs before this selection round used
 `num_chains: 8`, `num_samples: 310` (2480 draws) with `chains_per_gpu: 2`. The
@@ -525,12 +585,14 @@ Live sweeps: `ld9oi90s` (medium_play), `o9g70yby` (medium_diverse), `u5snid84`
 (large_play), `gnlrcb7y` (large_diverse). These are the **second** stage-2
 attempt; the first was discarded when the warm-up gate was removed (§3.5).
 
+Counts below re-verified 2026-08-08.
+
 | variant | sweep | winner | trial / trigger | val CE | diverged |
 |---|---|---|---|---|---|
 | large_play | `u5snid84` | `d1ddc4yg` | 10 / 25 | **0.210992** | 7 / 26 |
-| large_diverse | `gnlrcb7y` | `k83frxm7` | 17 / 32 | 0.231372 | 0 / 34 |
+| large_diverse | `gnlrcb7y` | `k83frxm7` | 17 / 32 | 0.231372 | 0 / 35 |
 | medium_play | `ld9oi90s` | `ge5h8lfd` | 5 / 20 | 0.244184 | 0 / 21 |
-| medium_diverse | `o9g70yby` | **still running** | best @10 | 0.284295 | 6 / 14 |
+| medium_diverse | `o9g70yby` | **still running** | best @10 | 0.284295 | 6 / 17 |
 
 All three fired winners have **rule winner = best-of-all** and are themselves
 clean (not divergence-flagged). The winning schedules:
@@ -545,7 +607,10 @@ clean (not divergence-flagged). The winning schedules:
 medium_diverse's current leader is `nfqz8f11` (val CE 0.284295, clean, `sghmc_lr`
 4.958689700913806e-4, `sghmc_lr_max` 2.1452292827590347e-3, `cycle_length` 2250,
 `mdecay` 4.286099171785899e-2, `fraction_cool` 0.14154720839003554) — **do not
-use it until the rule fires.**
+use it until the rule fires.** Its margin over the clean field is comfortable
+(0.2843 vs 0.3182 for the next clean trial, `lzyn872v`, ~12%), but three
+divergence-flagged trials sit at 0.300–0.305, i.e. between the two — see §3.6.1,
+which is the reason that matters.
 
 **Divergence is confined to the depth-6 networks.** medium_play (depth 2) and
 large_diverse (depth 3) produced zero divergent trials in 55 combined; large_play
@@ -587,8 +652,11 @@ stopping rule, and that sweeps ran until the rule fired rather than to the cap.
 stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
 
 **Numerically divergent stage-2 trial counts** (report these): medium_play 0/21,
-large_diverse 0/34, large_play 7/26, medium_diverse 6/14-and-counting. No fired
-winner is divergence-flagged.
+large_diverse 0/35, large_play 7/26, medium_diverse 6/17-and-counting. No fired
+winner is divergence-flagged. Report alongside these that the flag combines a
+NaN/Inf condition with a 1%-over-clip threshold, and that in medium_diverse only
+3 of the 6 are outright blow-ups (§3.6.1) — quoting the raw count without that
+split overstates the instability.
 
 **Numerically divergent stage-2 trials.** Removing the warm-up gate (§3.5) let
 low-friction schedules run to completion, and some diverge outright — Inf
@@ -701,9 +769,16 @@ comment in the config it was written into.
 `check_sweep_convergence.py` (§8) against sweep `BNN-training/o9g70yby` at
 patience 15. It has fired when the output reads `STOP FIRED : yes`.
 
-Do not read a winner before then — this sweep has repeatedly improved late. It is
-the slowest variant (6–13 h per trial) and had 6 divergent trials in its first
-14, so expect days rather than hours.
+Do not read a winner before then — this sweep has repeatedly improved late.
+
+As of 2026-08-08 08:00 UTC it has 17 trials done and trial 18 running, with the
+best still at trial 10. If nothing improves, **the rule fires at trial 25** — 8
+more trials, roughly **2 days** at the current ~6 h/trial. Any improvement
+resets the 15-trial count.
+
+It is now the only sweep on the box and running ~2.8× faster per sampling step
+than it did while sharing it (§10.7), so the older "6–13 h per trial, expect
+days rather than hours" estimate no longer applies.
 
 ### 10.3 Then: write the BNN production configs
 
@@ -739,6 +814,11 @@ are acceptable — judged on `val_pred_cvar_ess_min`, `val_pred_cvar_mcse_rel_ma
 `val_pred_folded_rhat_*` and `gradnorm_sampling_pct_over_clip ≈ 0`, **not** on
 `val_mean_cross_entropy` and **not** on `param_*`. The pre-selection reference
 point was `num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2`.
+
+**Read the censoring warning in §4 before using any of those numbers.** At the
+stage-2 budget the `_max`/`_min` extremes are pinned at estimator ceilings and
+rank nothing; steer on the median / 95th-pct / `pct_over_1.01` variants and
+confirm the extremes de-saturate at the production draw count.
 
 Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
 seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
@@ -779,3 +859,35 @@ Operational trap: killing a sweep agent does **not** kill its training process.
 The child is orphaned and keeps running on the GPU. Kill by process group and
 match the full config name (`antmaze_large_play_bnn_antmaze_eval`, not `large`),
 or you will take down a neighbouring variant. This has happened.
+
+### 10.7 Concurrent sweeps contend for something host-side (~2.8×)
+
+Measured on medium_diverse (`o9g70yby`), 2026-08-08. **Compare trials by
+h per 1000 sampling steps, not by wall-clock duration** — a stage-2 trial runs
+`num_samples × cycle_length` sampling steps, and `cycle_length` is swept over
+500–3000, so raw duration is dominated by the schedule under test and hides
+throughput changes entirely.
+
+| period | concurrent sweeps | h / 1k sampling steps |
+|---|---|---|
+| t1–t11 (Jul 31 – Aug 6) | 4 | 0.15–0.27 (median 0.16) |
+| t13–t15 (Aug 6–7) | 3 → 2 | 0.090–0.103 |
+| t16–t17 (Aug 7–8) | 1 | 0.056–0.060 |
+
+The step-downs align with the other sweeps' last heartbeats (`ld9oi90s`
+Aug 6 12:52, `u5snid84` Aug 7 05:47, `gnlrcb7y` Aug 7 20:35 UTC).
+
+**It is not GPU or core starvation.** `leviathan` has 6 A6000s and 255 logical
+CPUs; each trial occupies one GPU (`num_chains: 4`, `chains_per_gpu: 4`), so at
+four concurrent sweeps neither resource was oversubscribed.
+
+The leading candidate is **thread oversubscription**: torch defaults intra-op
+threads to core count, so four processes each spawning ~255-thread BLAS/OpenMP
+pools on 255 cores thrash on context switching. Shared-filesystem HDF5 reads and
+host memory bandwidth are the other candidates. **Not diagnosed — test
+`OMP_NUM_THREADS` before the next phase that runs jobs concurrently** (stage 4
+runs 4+ IQL jobs). A 2.8× throughput loss is worth an hour of investigation.
+
+This does not affect any selection result — throughput is not an input to any
+stopping rule or metric — but it does affect every schedule estimate in this
+document.
