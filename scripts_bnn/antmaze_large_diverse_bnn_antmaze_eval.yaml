@@ -1,12 +1,34 @@
+# Hyperparameters selected by the pre-registered two-stage BNN sweep
+# procedure (seed-0 data split throughout).  See HANDOFF_HP_SELECTION.md.
+#
+#   Stage 1 - warm-up tier, sweep BNN-training/in2p7l17,
+#   metric warmup_final_nll (minimise).  Rule winner: run st3a5fgh,
+#   trial 17, warmup_final_nll=0.235876; rule fired at trial 32.
+#   -> width, depth, n_meas, map_amp2
+#   NOTE (disclosure, HANDOFF section 7): this stage-1 rule winner is NOT
+#   best-of-all.  Trial 38 reached warmup_final_nll=0.226704, 4.0% better,
+#   but arrived after the trigger and is discarded per the pre-registered
+#   stopping rule.  Report the gap; do not substitute trial 38.
+#
+#   Stage 2 - sampling tier, sweep BNN-training/gnlrcb7y,
+#   metric val_mean_cross_entropy (minimise).  Rule winner: run k83frxm7,
+#   trial 17, val_mean_cross_entropy=0.231372; rule fired at trial 32.
+#   -> sghmc_lr, sghmc_lr_max, cycle_length, mdecay, fraction_cool
+#   Rule winner = best-of-all, and the run is not divergence-flagged
+#   (divergent trials in this sweep: 0 / 35).
+#
+#   NOT selected here: num_chains / num_samples / chains_per_gpu.  Stage 3
+#   sets the draw budget from the CVaR tail diagnostics (HANDOFF section 4);
+#   the values below are the pre-selection reference point.
 project: BNN-training
 group: BNN
 name: bnn
 
 # --- Model architecture ---
-width: 7                 # log2 exponent; actual width = 2**width (6 → 64)
-depth: 2
+width: 6                 # log2 exponent; actual width = 2**width (6 → 64)
+depth: 3
 
-# --- Sampling budget ---
+# --- Sampling budget (stage 3 decides these; not selected by the sweeps) ---
 num_chains: 8
 chains_per_gpu: 2        # co-locate 2 chains per GPU; ceil(num_chains / chains_per_gpu) GPUs used
 num_samples: 310          # samples per chain; one per cycle with cyclical lr
@@ -15,12 +37,21 @@ num_burn_in_steps: 5000  # steps for preconditioner adaptation (shared warm-up
                          # + per-chain burn-in each run this many steps)
 
 # --- SGHMC core hyperparameters ---
-sghmc_lr: 0.0015914385966502977          # cool-phase (sampling) step size; tuned empirically
-mdecay: 0.040951539878604074             # low friction → long momentum → better barrier crossing
-                         # in hot phase; 1/mdecay ≈ 100-step decorrelation length
+sghmc_lr: 0.00022274405063627215          # lr_min: cool-phase (sampling) step size
+mdecay: 0.08916002139869199             # friction; acts during burn-in as well as
+                         # sampling (the stage-2 confound, HANDOFF section 7)
+# Burn-in step size, deliberately DECOUPLED from the swept cool-phase lr_min.
+# Fixed and uniform across variants: burn-in quality must not be a function of
+# the schedule under test (HANDOFF section 3.2).  Absent this line the field
+# falls back to TrainConfig's None, which silently reinstates the confound.
+burn_in_lr: 0.002
 batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
-n_meas: 25
+n_meas: 11
+# Prior amplitude multiplier (K -> map_amp2*K): scales the map kernel's reward
+# amplitude while leaving its correlation structure untouched.  Absent this line
+# the field falls back to TrainConfig's 1.0, discarding the stage-1 result.
+map_amp2: 459.29535442639326
 meas_jitter: .000001
 gp_cov_scale: 1.0
 reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
@@ -46,9 +77,9 @@ map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
 # collected at the final step.  The adaptive preconditioner is frozen after
 # burn-in, so only lr cycles.
 use_cyclical_lr: true
-sghmc_lr_max: 0.009055956577794531       # hot-phase peak lr (~10× sghmc_lr)
-cycle_length: 2250       # total steps per cycle (hot + cool)
-fraction_cool: 0.25      # 250 cool steps / 750 hot steps per cycle
+sghmc_lr_max: 0.004820665555950937       # lr_max: hot-phase peak step size
+cycle_length: 2500       # total steps per cycle (hot + cool)
+fraction_cool: 0.41191474620821766   # ~1029 cool / ~1471 hot steps per cycle
 
 # keep_every is used only when use_cyclical_lr: false
 keep_every: 1000

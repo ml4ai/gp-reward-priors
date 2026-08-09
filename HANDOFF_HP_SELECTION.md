@@ -1,9 +1,10 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Status 2026-08-08. **Stage 1 complete** for all three families, winners written
-> into the production configs. **Stage 2 (BNN sampling tier): 3 of 4 sweeps have
-> fired**; medium_diverse is still searching, and no stage-2 winner has been
-> written into a production config yet. **Stages 3–4 not started.**
+> Status 2026-08-08. **Stages 1 and 2 are complete for all three families.**
+> All 20 sweeps have fired, and every winner is transcribed into its production
+> config — including the BNN configs, which now carry `map_amp2` and
+> `burn_in_lr` (see §10.3 for why their absence was a trap). **Stage 3 is the
+> next action; stage 4 not started.**
 > Start at §10 if you are picking this up cold.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
@@ -579,45 +580,60 @@ functional prior is retained everywhere, at roughly 18–28× the legacy amplitu
 This replicates an earlier, less clean run and is now established under a fully
 pre-registered procedure.
 
-### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — 3 of 4 fired
+### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — complete, 4 of 4 fired
 
-Live sweeps: `ld9oi90s` (medium_play), `o9g70yby` (medium_diverse), `u5snid84`
+Sweeps: `ld9oi90s` (medium_play), `o9g70yby` (medium_diverse), `u5snid84`
 (large_play), `gnlrcb7y` (large_diverse). These are the **second** stage-2
 attempt; the first was discarded when the warm-up gate was removed (§3.5).
 
-Counts below re-verified 2026-08-08.
+Verified 2026-08-08, all four fired.
 
 | variant | sweep | winner | trial / trigger | val CE | diverged |
 |---|---|---|---|---|---|
 | large_play | `u5snid84` | `d1ddc4yg` | 10 / 25 | **0.210992** | 7 / 26 |
 | large_diverse | `gnlrcb7y` | `k83frxm7` | 17 / 32 | 0.231372 | 0 / 35 |
 | medium_play | `ld9oi90s` | `ge5h8lfd` | 5 / 20 | 0.244184 | 0 / 21 |
-| medium_diverse | `o9g70yby` | **still running** | best @10 | 0.284295 | 6 / 17 |
+| medium_diverse | `o9g70yby` | `nfqz8f11` | 10 / 25 | 0.284295 | 8 / 25 |
 
-All three fired winners have **rule winner = best-of-all** and are themselves
-clean (not divergence-flagged). The winning schedules:
+All four winners have **rule winner = best-of-all** and are themselves clean
+(not divergence-flagged). The winning schedules:
 
 | variant | `sghmc_lr` | `sghmc_lr_max` | `cycle_length` | `mdecay` | `fraction_cool` |
 |---|---|---|---|---|---|
 | medium_play | 1.759684326975111e-4 | 2.7127155004169033e-3 | 2750 | 3.886566686095279e-2 | 0.26490734354273915 |
 | large_play | 4.4675299100389534e-4 | 4.123441940823021e-3 | 1500 | 2.2440542355891248e-2 | 0.4464505988695707 |
 | large_diverse | 2.2274405063627215e-4 | 4.820665555950937e-3 | 2500 | 8.916002139869199e-2 | 0.41191474620821766 |
-| medium_diverse | *(pending)* | | | | |
+| medium_diverse | 4.958689700913806e-4 | 2.1452292827590347e-3 | 2250 | 4.286099171785899e-2 | 0.14154720839003554 |
 
-medium_diverse's current leader is `nfqz8f11` (val CE 0.284295, clean, `sghmc_lr`
-4.958689700913806e-4, `sghmc_lr_max` 2.1452292827590347e-3, `cycle_length` 2250,
-`mdecay` 4.286099171785899e-2, `fraction_cool` 0.14154720839003554) — **do not
-use it until the rule fires.** Its margin over the clean field is comfortable
-(0.2843 vs 0.3182 for the next clean trial, `lzyn872v`, ~12%), but three
-divergence-flagged trials sit at 0.300–0.305, i.e. between the two — see §3.6.1,
-which is the reason that matters.
+**medium_diverse resolved the §3.6.1 question without needing a decision.** Its
+winner's margin over the clean field is comfortable (0.2843 vs 0.3182 for the
+next clean trial, `lzyn872v`, ~12%), and although five divergence-flagged trials
+sit at 0.300–0.327 — between the winner and the rest of the clean field — none
+ever led. No flagged trial was ever a candidate winner in any of the four sweeps,
+so the "carry forward a flagged winner?" question never had to be answered. It
+would still have to be answered if stage 2 were ever re-run.
 
 **Divergence is confined to the depth-6 networks.** medium_play (depth 2) and
-large_diverse (depth 3) produced zero divergent trials in 55 combined; large_play
-(depth 6) hit 27% and medium_diverse (depth 6, width 1024) 43%. Note large_play
+large_diverse (depth 3) produced zero divergent trials in 56 combined; large_play
+(depth 6) hit 27% and medium_diverse (depth 6, width 1024) 32%. Note large_play
 had the most hostile search yet produced the best and cleanest winner — the
 blow-ups were confined to bad regions of schedule space and never touched the
-selected configuration.
+selected configuration. Per §3.6.1 the medium_diverse count overstates the
+instability: 3 of its 8 are outright blow-ups, the other 5 are 1.1–2.1%
+over-clip with otherwise healthy diagnostics.
+
+**Predictive-tail health of the four winners at the stage-2 budget** (132 draws;
+the non-censored statistics only, see §4). medium_diverse is the weakest and
+should be expected to need the largest stage-3 draw budget, consistent with its
+being the largest network:
+
+| variant | `cvar_ess_median` | `cvar_rhat_median` | `cvar_rhat_pct_over_1.01` | `folded_rhat_95th_pct` |
+|---|---|---|---|---|
+| large_diverse | 81.8 | 1.024 | 76.6% | 1.359 |
+| medium_diverse | 49.7 | 1.071 | 97.8% | 1.149 |
+
+These rank *schedules at a fixed small budget* and are not acceptance criteria;
+stage 3 re-reads them at the production draw count.
 
 **Discarded first attempt**, for the record (sweeps `zkkg4kdu`, `jpu2vqce`,
 `7kfieu41`, `c05yyh72`): ~234 GPU-hours and 47 trials written off when the gate
@@ -651,12 +667,12 @@ stopping rule, and that sweeps ran until the rule fired rather than to the cap.
 **Boundary winners.** PT/medium_diverse (if its lr-floor leader holds) and any
 stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
 
-**Numerically divergent stage-2 trial counts** (report these): medium_play 0/21,
-large_diverse 0/35, large_play 7/26, medium_diverse 6/17-and-counting. No fired
-winner is divergence-flagged. Report alongside these that the flag combines a
-NaN/Inf condition with a 1%-over-clip threshold, and that in medium_diverse only
-3 of the 6 are outright blow-ups (§3.6.1) — quoting the raw count without that
-split overstates the instability.
+**Numerically divergent stage-2 trial counts** (report these, final): medium_play
+0/21, large_diverse 0/35, large_play 7/26, medium_diverse 8/25 — 15 of 107 trials
+overall. No winner is divergence-flagged. Report alongside these that the flag
+combines a NaN/Inf condition with a 1%-over-clip threshold, and that in
+medium_diverse only 3 of the 8 are outright blow-ups (§3.6.1) — quoting the raw
+count without that split overstates the instability.
 
 **Numerically divergent stage-2 trials.** Removing the warm-up gate (§3.5) let
 low-friction schedules run to completion, and some diverge outright — Inf
@@ -756,8 +772,9 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 sweeps fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml`, `criteria_key: loss` |
 | 1 | PT | 4/4 sweeps fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml`, `criteria_key: loss` |
 | 1 | BNN warm-up | 4/4 sweeps fired; winners transcribed into the stage-2 sweep yamls |
-| 2 | BNN sampling | **3/4 fired** (medium_play, large_play, large_diverse); medium_diverse still running |
-| 3 | BNN | not started |
+| 2 | BNN sampling | **4/4 fired**; winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
+| — | BNN configs | production configs written and verified against wandb (§10.3) |
+| 3 | BNN | **not started — this is the next action** |
 | 4 | all | not started |
 
 Every fired sweep has provenance (run id, trial, metric, trigger) recorded as a
@@ -765,27 +782,34 @@ comment in the config it was written into.
 
 ### 10.2 Immediate next action
 
-**Wait for `o9g70yby` (medium_diverse stage 2) to fire.** Check it with
-`check_sweep_convergence.py` (§8) against sweep `BNN-training/o9g70yby` at
-patience 15. It has fired when the output reads `STOP FIRED : yes`.
+**Stage 3: the BNN draw budget (§4).** Stages 1–2 are done and their winners are
+in the production configs; nothing is waiting on a sweep.
 
-Do not read a winner before then — this sweep has repeatedly improved late.
+Before starting, note two things recorded since the procedure was written:
 
-As of 2026-08-08 08:00 UTC it has 17 trials done and trial 18 running, with the
-best still at trial 10. If nothing improves, **the rule fires at trial 25** — 8
-more trials, roughly **2 days** at the current ~6 h/trial. Any improvement
-resets the 15-trial count.
+- **§4's censoring warning.** The `_max`/`_min` tail diagnostics named as stage-3
+  criteria are saturated at estimator ceilings and rank nothing at small draw
+  counts. Steer on the median / 95th-pct / `pct_over_1.01` variants, and confirm
+  the extremes de-saturate as draws increase.
+- **§10.7's CPU oversubscription.** One trial alone demands ~165 of the box's 255
+  cores, so concurrent stage-3 runs will contend. This is the phase boundary at
+  which to test `OMP_NUM_THREADS` — a change that must not be made mid-sweep.
 
-It is now the only sweep on the box and running ~2.8× faster per sampling step
-than it did while sharing it (§10.7), so the older "6–13 h per trial, expect
-days rather than hours" estimate no longer applies.
+Expect medium_diverse to need the largest budget: it is the largest network and
+has the weakest tail diagnostics of the four winners at equal draws (§6).
 
-### 10.3 Then: write the BNN production configs
+If a stage-2 agent is still alive on the box, it is now doing discardable work —
+trials after the trigger are outside the rule. §10.6's kill caution applies.
 
-This is the step with a **trap**. `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`
-still carries pre-selection values from an earlier era, **and is missing
-`map_amp2` and `burn_in_lr` entirely**. Fields absent from the yaml fall back to
-`TrainConfig` defaults, which would silently give:
+### 10.3 Done: the BNN production configs
+
+Completed 2026-08-08 for all four variants; kept here because it documents a
+**trap** that will re-appear if these configs are ever regenerated.
+`scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml` carried pre-selection
+values from an earlier era, **and was missing `map_amp2` and `burn_in_lr`
+entirely**. Fields absent from the yaml fall back to `TrainConfig` defaults
+(verified in `run_bnn_training_antmaze_eval.py`: `map_amp2: float = 1.0` at
+:229, `burn_in_lr: Optional[float] = None` at :113), which would silently give:
 
 - `map_amp2 = 1.0` — discarding the stage-1 prior-amplitude result (the winners
   are 313–773), i.e. throwing away the project's main prior finding;
@@ -806,6 +830,23 @@ Afterwards verify that each parsed config contains `map_amp2`, `burn_in_lr` and
 all five schedule fields, and that they match the winning wandb runs
 field-by-field. (The same verification caught nothing wrong for MR and PT, but it
 is cheap and these are the numbers every reported result depends on.)
+
+**What was done.** All four configs were rewritten with a provenance header
+naming both sweeps, both winning runs, their trials, triggers and metrics, and —
+for large_diverse — the §7 stage-1 rule-vs-best disclosure. Then each config was
+parsed with `yaml.safe_load` and compared field-by-field against the two winning
+wandb run configs: all nine selected fields plus `burn_in_lr` matched exactly for
+all four variants. `bt_pool: "mean"`, `clip_during_sampling: false`,
+`clip_grad_norm_value: 100.0`, `samples_per_cycle: 1` and `chain_init_jitter: 0.0`
+are deliberately left to `TrainConfig` defaults, which carry the correct values —
+this is the one place §3.4's "never read from a dataclass default" is knowingly
+relaxed, because these are genuinely uniform project-wide and the stage-2 sweep
+yamls say so explicitly.
+
+`num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2` and `n_discarded: 5` are
+still the **pre-selection reference values** — stage 3 sets the first three, and
+`n_discarded` is set by neither stage (§4 scopes stage 3 to chains and draws), so
+decide it deliberately rather than inheriting it by accident.
 
 ### 10.4 Then: stage 3, then stage 4
 

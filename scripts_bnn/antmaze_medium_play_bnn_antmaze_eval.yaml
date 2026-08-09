@@ -1,12 +1,30 @@
+# Hyperparameters selected by the pre-registered two-stage BNN sweep
+# procedure (seed-0 data split throughout).  See HANDOFF_HP_SELECTION.md.
+#
+#   Stage 1 - warm-up tier, sweep BNN-training/kk79h8xf,
+#   metric warmup_final_nll (minimise).  Rule winner: run 05byzfhm,
+#   trial 41, warmup_final_nll=0.204278; rule fired at trial 56.
+#   -> width, depth, n_meas, map_amp2
+#
+#   Stage 2 - sampling tier, sweep BNN-training/ld9oi90s,
+#   metric val_mean_cross_entropy (minimise).  Rule winner: run ge5h8lfd,
+#   trial 5, val_mean_cross_entropy=0.244184; rule fired at trial 20.
+#   -> sghmc_lr, sghmc_lr_max, cycle_length, mdecay, fraction_cool
+#   Rule winner = best-of-all, and the run is not divergence-flagged
+#   (divergent trials in this sweep: 0 / 21).
+#
+#   NOT selected here: num_chains / num_samples / chains_per_gpu.  Stage 3
+#   sets the draw budget from the CVaR tail diagnostics (HANDOFF section 4);
+#   the values below are the pre-selection reference point.
 project: BNN-training
 group: BNN
 name: bnn
 
 # --- Model architecture ---
-width: 8                 # log2 exponent; actual width = 2**width (6 → 64)
-depth: 6
+width: 6                 # log2 exponent; actual width = 2**width (6 → 64)
+depth: 2
 
-# --- Sampling budget ---
+# --- Sampling budget (stage 3 decides these; not selected by the sweeps) ---
 num_chains: 8
 chains_per_gpu: 2        # co-locate 2 chains per GPU; ceil(num_chains / chains_per_gpu) GPUs used
 num_samples: 310          # samples per chain; one per cycle with cyclical lr
@@ -15,12 +33,21 @@ num_burn_in_steps: 5000  # steps for preconditioner adaptation (shared warm-up
                          # + per-chain burn-in each run this many steps)
 
 # --- SGHMC core hyperparameters ---
-sghmc_lr: 0.001412083692555041          # cool-phase (sampling) step size; tuned empirically
-mdecay: 0.09726028131296788             # low friction → long momentum → better barrier crossing
-                         # in hot phase; 1/mdecay ≈ 100-step decorrelation length
+sghmc_lr: 0.0001759684326975111          # lr_min: cool-phase (sampling) step size
+mdecay: 0.03886566686095279             # friction; acts during burn-in as well as
+                         # sampling (the stage-2 confound, HANDOFF section 7)
+# Burn-in step size, deliberately DECOUPLED from the swept cool-phase lr_min.
+# Fixed and uniform across variants: burn-in quality must not be a function of
+# the schedule under test (HANDOFF section 3.2).  Absent this line the field
+# falls back to TrainConfig's None, which silently reinstates the confound.
+burn_in_lr: 0.002
 batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
-n_meas: 10
+n_meas: 14
+# Prior amplitude multiplier (K -> map_amp2*K): scales the map kernel's reward
+# amplitude while leaving its correlation structure untouched.  Absent this line
+# the field falls back to TrainConfig's 1.0, discarding the stage-1 result.
+map_amp2: 313.2035533342973
 meas_jitter: .000001
 gp_cov_scale: 1.0
 reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
@@ -46,9 +73,9 @@ map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
 # collected at the final step.  The adaptive preconditioner is frozen after
 # burn-in, so only lr cycles.
 use_cyclical_lr: true
-sghmc_lr_max: 0.006402047122411048       # hot-phase peak lr (~10× sghmc_lr)
-cycle_length: 1250       # total steps per cycle (hot + cool)
-fraction_cool: 0.25      # 250 cool steps / 750 hot steps per cycle
+sghmc_lr_max: 0.0027127155004169033       # lr_max: hot-phase peak step size
+cycle_length: 2750       # total steps per cycle (hot + cool)
+fraction_cool: 0.26490734354273915   # ~728 cool / ~2022 hot steps per cycle
 
 # keep_every is used only when use_cyclical_lr: false
 keep_every: 1000
