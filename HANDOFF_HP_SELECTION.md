@@ -860,7 +860,7 @@ The child is orphaned and keeps running on the GPU. Kill by process group and
 match the full config name (`antmaze_large_play_bnn_antmaze_eval`, not `large`),
 or you will take down a neighbouring variant. This has happened.
 
-### 10.7 Concurrent sweeps contend for something host-side (~2.8×)
+### 10.7 Concurrent sweeps oversubscribe the CPU (~2.8×) — confirmed
 
 Measured on medium_diverse (`o9g70yby`), 2026-08-08. **Compare trials by
 h per 1000 sampling steps, not by wall-clock duration** — a stage-2 trial runs
@@ -883,34 +883,50 @@ needs exactly one (`num_chains: 4`, `chains_per_gpu: 4` → `rank // chains_per_
 = 0 for all four chains). Four sweeps used four of `leviathan`'s six A6000s, none
 shared. Nor is it raw core starvation: the box has 255 logical CPUs.
 
-The leading candidate is **thread oversubscription**, and the repo confirms the
-precondition: nothing in it sets `OMP_NUM_THREADS` / `MKL_NUM_THREADS` or calls
-`torch.set_num_threads`, so every process defaults its intra-op pool to the core
-count, 255. Each trial spawns four chain *processes* via `mp.spawn`
-(`optbnn/sgmcmc_bayes_net/f_pref_net.py:954`), and the BNN dataloaders run
-`num_workers: 0` (ibid. :588), so CPU-side work stays in-process where that pool
-applies:
+**It is CPU oversubscription.** Nothing in the repo sets `OMP_NUM_THREADS` /
+`MKL_NUM_THREADS` or calls `torch.set_num_threads`, so every process defaults its
+intra-op pool to the core count. Each trial spawns four chain *processes* via
+`mp.spawn` (`optbnn/sgmcmc_bayes_net/f_pref_net.py:954`), and the BNN dataloaders
+run `num_workers: 0` (ibid. :588), so CPU-side work stays in-process where that
+pool applies.
 
-| concurrent sweeps | chain processes | default threads | vs 255 cores |
-|---|---|---|---|
-| 4 | 16 | ~4,080 | ~16× |
-| 1 | 4 | ~1,020 | ~4× |
+Confirmed on the box during trial 18, uncontended, with
+`ps -o pid,nlwp,pcpu,comm -C python --sort=-pcpu`:
 
-A 16× → 4× change in oversubscription is the right shape for the measured 2.8×.
+| | NLWP | %CPU |
+|---|---|---|
+| 4 chain processes | 385 each | 3814 + 3791 + 3776 + 3772 = **15,153%** |
+| parent | 389 | 1,337% |
+| **one trial** | ~1,925 threads | ~16,490% ≈ **165 of 255 cores** |
 
-**Still not diagnosed.** The arithmetic says nothing about whether those threads
-are *active*; if the sampler is almost all GPU kernels the pools idle and thread
-count is irrelevant. The discriminating measurement is one read-only command on
-the box — `ps -o pid,nlwp,pcpu,comm -C python --sort=-pcpu` — summed over the four
-chain processes: ~400% total means idle pools (look at HDF5/filesystem instead),
-several thousand percent means they are spinning. Shared-filesystem reads and host
-memory bandwidth are the alternative candidates.
+So **a single trial already consumes 65% of the box**, and four concurrent trials
+demand ~660 cores against 255 — **2.59× oversubscribed, against the 2.8× slowdown
+measured from throughput**. The two figures are derived independently (CPU demand
+vs h/1k sampling steps); the residual is context-switch and cache-thrash overhead
+on top of pure queuing.
 
-**Do not set `OMP_NUM_THREADS` mid-sweep.** Thread count changes floating-point
-reduction order, so trials before and after the change would not be strictly
-comparable. Apply it at a phase boundary — before stage 3 or stage 4 — never
-while a sweep is accumulating trials. Stage 4 runs 4+ concurrent IQL jobs, so
-that is the natural point to test it; a 2.8× throughput loss is worth the hour.
+Note `ps` reports %CPU as a *lifetime average*, which is what makes this reading
+usable: these processes lived entirely within the single-sweep period, so 165
+cores is the trial's unconstrained demand — the right input for the arithmetic.
+Read the same way during a contended period it would be suppressed, not
+informative.
+
+**Open question: most of that CPU is probably waste.** 38 cores per chain is
+anomalous for a GPU-resident sampler — the matmuls are small (width 64–1024,
+batch 64), sizes at which a 255-thread BLAS pool is parallel overhead rather than
+speed-up. The likely mechanism is OpenMP busy-wait spinning: threads with nothing
+to do spin instead of sleeping. If so, capping threads costs nothing single-trial
+while removing the contention outright.
+
+**The test**, at the next phase boundary: run one trial with `OMP_NUM_THREADS=8`
+and `OMP_WAIT_POLICY=PASSIVE`, compare h/1k sampling steps against the
+uncontended baseline of 0.056–0.060. Equal or better confirms the waste. For four
+concurrent sweeps the natural cap is 255/16 processes ≈ 16 threads each.
+
+**Do not change thread count mid-sweep.** It alters floating-point reduction
+order, so trials before and after would not be strictly comparable. Apply it at a
+phase boundary — before stage 3 or stage 4 — never while a sweep is accumulating
+trials. Stage 4 runs 4+ concurrent IQL jobs, so that is the natural point.
 
 This does not affect any selection result — throughput is not an input to any
 stopping rule or metric — but it does affect every schedule estimate in this
