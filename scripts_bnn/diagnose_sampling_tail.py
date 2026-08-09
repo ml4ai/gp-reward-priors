@@ -122,6 +122,92 @@ def _summ(name, arr):
           f"max {a.max():9.4f}")
 
 
+def compute_stats(pred_chains, alpha=0.05):
+    """Key tail statistics as a dict, without printing.  Backs the draw ladder.
+
+    Reports the median / 95th-pct / %-over-threshold variants alongside the
+    `_max`/`_min` extremes.  The extremes saturate at estimator ceilings once any
+    single point has fully separated chains, so at small draw counts they rank
+    nothing; they are kept here precisely so the ladder shows WHETHER they
+    de-saturate as draws increase (HANDOFF_HP_SELECTION.md section 4).
+    """
+    C, D, P = pred_chains.shape
+    flat = pred_chains.reshape(-1, P)
+    pred_sd = flat.std(axis=0)
+    eps = 1e-8
+
+    var = np.quantile(flat, alpha, axis=0)
+    u = np.minimum(pred_chains - var[None, None, :], 0.0) / alpha
+    ess_cvar = np.asarray(azs.ess(u, method="mean"))
+    rel_cvar = np.asarray(azs.mcse(u, method="mean")) / (pred_sd + eps)
+    rhat_cvar = np.asarray(azs.rhat(u, method="folded"))
+    ess_var = np.asarray(azs.ess(pred_chains, method="quantile", prob=alpha))
+    rhat_fold = np.asarray(azs.rhat(pred_chains, method="folded"))
+
+    def fin(a):
+        a = np.asarray(a, float)
+        return a[np.isfinite(a)]
+
+    return dict(
+        chains=C, draws=D, total=C * D,
+        cvar_ess_med=float(np.median(fin(ess_cvar))),
+        cvar_ess_min=float(fin(ess_cvar).min()),
+        cvar_rhat_med=float(np.median(fin(rhat_cvar))),
+        cvar_rhat_max=float(fin(rhat_cvar).max()),
+        cvar_rhat_pct=float(100 * np.mean(fin(rhat_cvar) > 1.01)),
+        cvar_relmcse_med=float(np.median(fin(rel_cvar))),
+        cvar_relmcse_max=float(fin(rel_cvar).max()),
+        var_ess_med=float(np.median(fin(ess_var))),
+        var_ess_min=float(fin(ess_var).min()),
+        folded_rhat_95=float(np.percentile(fin(rhat_fold), 95)),
+        folded_rhat_max=float(fin(rhat_fold).max()),
+        unresolved_pct=float(100 * np.mean(fin(rel_cvar) > 1.0)),
+    )
+
+
+def draw_ladder(pred_chains, levels, alpha=0.05):
+    """Recompute the tail statistics at several per-chain draw counts.
+
+    Answers the stage-3 question -- how many draws are enough -- from ONE
+    completed run, by truncating each chain to the first N draws.  Reading a
+    ladder off a single production-budget run replaces one training run per
+    candidate budget (HANDOFF_HP_SELECTION.md section 4).
+
+    Truncation takes the FIRST N draws, so a level is exactly what that run
+    would have produced had it stopped early: the schedule, burn-in and
+    discarded cycles are identical, and only the draw count differs.
+    """
+    C, D, _ = pred_chains.shape
+    levels = sorted({n for n in levels if 0 < n <= D})
+    if not levels:
+        print(f"\n[ladder] no valid levels (chains have {D} draws each)")
+        return
+    if levels[-1] != D:
+        levels.append(D)
+
+    print(f"\n=== DRAW LADDER ({C} chains; per-chain draws truncated to first N) ===")
+    print("  Steer on the median / 95th-pct / pct columns.  The *_max / *_min")
+    print("  extremes are censored at estimator ceilings -- watch whether they")
+    print("  move at all as draws increase (section 4).")
+    hdr = (f"  {'draws/ch':>8} {'total':>7} | {'cvarESSmed':>10} {'cvarESSmin':>10} "
+           f"{'cvarRhatMed':>11} {'cvarRhat%>1.01':>14} {'cvarRhatMax':>11} | "
+           f"{'relMCSEmed':>10} {'unres%':>7} | {'varESSmed':>9} {'fold95':>7} {'foldMax':>7}")
+    print(hdr)
+    print("  " + "-" * (len(hdr) - 2))
+    for n in levels:
+        s = compute_stats(pred_chains[:, :n, :], alpha=alpha)
+        print(f"  {n:>8} {s['total']:>7} | {s['cvar_ess_med']:>10.1f} "
+              f"{s['cvar_ess_min']:>10.1f} {s['cvar_rhat_med']:>11.4f} "
+              f"{s['cvar_rhat_pct']:>14.1f} {s['cvar_rhat_max']:>11.4f} | "
+              f"{s['cvar_relmcse_med']:>10.3f} {s['unresolved_pct']:>7.2f} | "
+              f"{s['var_ess_med']:>9.1f} {s['folded_rhat_95']:>7.3f} "
+              f"{s['folded_rhat_max']:>7.3f}")
+    print("\n  Budget is sufficient where the median columns have flattened and")
+    print("  relMCSEmed is comfortably below 1.  If R-hat stays high while ESS")
+    print("  grows, that is a MIXING problem, not a budget problem -- more draws")
+    print("  will not fix it (section 4).")
+
+
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics.
 
@@ -210,6 +296,15 @@ def main():
                     help="Actual (already-expanded) layer width; default from config.")
     ap.add_argument("--depth", type=int, default=None)
     ap.add_argument("--num-chains", type=int, default=None)
+    ap.add_argument("--max-draws", type=int, default=None,
+                    help="Use only the first N draws per chain (default: all). "
+                         "Lets one completed run stand in for a smaller budget.")
+    ap.add_argument("--draw-ladder", default=None,
+                    help="Comma-separated per-chain draw counts, e.g. "
+                         "'33,75,150,305'.  Recomputes the tail statistics at "
+                         "each level from this one run, so the stage-3 draw "
+                         "budget is read off a curve instead of costing one "
+                         "training run per candidate.")
     args = ap.parse_args()
 
     cfg = _load_run_config(args.run_dir)
@@ -223,8 +318,28 @@ def main():
 
     pred_chains, x_rhat = build_pred_chains(
         args.run_dir, dataset, width, depth, num_chains, args.b_rhat, args.device)
+
+    if args.max_draws is not None:
+        if args.max_draws < 1:
+            sys.exit("--max-draws must be >= 1")
+        avail = pred_chains.shape[1]
+        if args.max_draws > avail:
+            sys.exit(f"--max-draws {args.max_draws} exceeds the {avail} draws saved "
+                     f"per chain; truncation can only go down.")
+        pred_chains = pred_chains[:, :args.max_draws, :]
+        print(f"[draws] truncated to first {args.max_draws} per chain -> "
+              f"{pred_chains.shape[0] * args.max_draws} total")
+
     tail_diagnostics(pred_chains, x_rhat=x_rhat, alpha=args.alpha,
                      worst_k=args.worst_k)
+
+    if args.draw_ladder:
+        try:
+            levels = [int(t) for t in args.draw_ladder.split(",") if t.strip()]
+        except ValueError:
+            sys.exit(f"--draw-ladder must be comma-separated integers, got "
+                     f"{args.draw_ladder!r}")
+        draw_ladder(pred_chains, levels, alpha=args.alpha)
 
 
 if __name__ == "__main__":
