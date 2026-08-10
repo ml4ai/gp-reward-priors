@@ -145,6 +145,103 @@ def _summ(name, arr):
           f"max {a.max():9.4f}")
 
 
+def _load_chain_weights(run_dir, i, device):
+    path = os.path.join(run_dir, "sampling_f", f"chain_{i}",
+                        "sampled_weights", "sampled_weights_0000000")
+    ckpt = torch.load(path, weights_only=False, map_location=device)
+    return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
+
+
+def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
+              device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
+              chunk_pairs=64):
+    """Posterior-predictive cross-entropy and accuracy vs per-chain draw count.
+
+    The tail diagnostics measure *convergence*, not correctness, so they cannot
+    detect a sampler that mixes well in the wrong region.  CE can, which is why
+    it belongs on the ladder despite section 4 saying not to select on it: here
+    it is a divergence detector, not the selection metric.
+
+    Reproduces `f_pref_net.eval_test_data` exactly: the posterior predictive is
+    the mean over a chain's draws taken in REWARD space, then masked, then
+    mean-pooled to a Bradley-Terry logit; CE is `CrossEntropyLoss` over the
+    two pooled logits, computed per chain and averaged across chains (which is
+    what `<split>_mean_cross_entropy` logs).
+
+    Masking and mean-pooling are linear, so they commute with the average over
+    draws.  Each draw is therefore evaluated ONCE and the levels are cumulative
+    means of the per-draw pooled logits -- the whole ladder costs what a single
+    full-budget evaluation costs.
+    """
+    from optbnn.metrics.metrics_tensor import accuracy
+    from optbnn.utils.util import bt_pool_logit_np
+
+    X, y = util.load_pref_data(dataset, training_ratio=1.0)
+    if max_pairs is not None and X.shape[0] > max_pairs:
+        X, y = X[:max_pairs], y[:max_pairs]
+        print(f"[ce] subsampled to the first {max_pairs} pairs -- CE will NOT "
+              f"match the logged value (which uses all pairs)")
+    B, _, T, d_dim = X.shape
+    obs_dim = d_dim - 1
+    am1 = X[:, 0, :, obs_dim].astype(np.float32)
+    am2 = X[:, 1, :, obs_dim].astype(np.float32)
+    x1 = X[:, 0, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
+    x2 = X[:, 1, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
+
+    net = MLP(input_dim=obs_dim, output_dim=1,
+              hidden_dims=[width] * depth, activation_fn="relu").to(device)
+    net.eval()
+    x1_t = torch.from_numpy(x1).to(device)
+    x2_t = torch.from_numpy(x2).to(device)
+
+    n_draws = min(len(_load_chain_weights(run_dir, i, device))
+                  for i in range(num_chains))
+    if max_draws is not None:
+        n_draws = min(n_draws, max_draws)
+    print(f"[ce] {B} pairs x {T} steps, {num_chains} chains x {n_draws} draws "
+          f"-> {2 * B * T * n_draws * num_chains:,} forward rows "
+          f"(device={device}; use --device cuda and/or --ce-pairs if slow)")
+
+    S1 = np.zeros((num_chains, n_draws, B), dtype=np.float64)
+    S2 = np.zeros((num_chains, n_draws, B), dtype=np.float64)
+    for c in range(num_chains):
+        weights = _load_chain_weights(run_dir, c, device)[:n_draws]
+        for d, w in enumerate(weights):
+            p1 = np.empty((B, T), dtype=np.float32)
+            p2 = np.empty((B, T), dtype=np.float32)
+            with torch.no_grad():
+                for p, a in zip(net.parameters(), w):
+                    p.copy_(torch.from_numpy(a).to(device))
+                for s in range(0, B, chunk_pairs):
+                    e = min(s + chunk_pairs, B)
+                    p1[s:e] = net(x1_t[s * T:e * T]).cpu().numpy().reshape(e - s, T)
+                    p2[s:e] = net(x2_t[s * T:e * T]).cpu().numpy().reshape(e - s, T)
+            S1[c, d] = bt_pool_logit_np(p1 * am1, am1, bt_pool)
+            S2[c, d] = bt_pool_logit_np(p2 * am2, am2, bt_pool)
+        print(f"[ce] chain {c} done")
+
+    y_t = torch.from_numpy(y).float().to(device)
+    levels = sorted({n for n in levels if 0 < n <= n_draws}) or [n_draws]
+    if levels[-1] != n_draws:
+        levels.append(n_draws)
+
+    print(f"\n=== CE LADDER (posterior-predictive, {num_chains} chains) ===")
+    print(f"  {'draws/ch':>8} {'total':>7} | {'val CE':>9} {'accuracy':>9}")
+    print("  " + "-" * 40)
+    for n in levels:
+        ces, accs = [], []
+        for c in range(num_chains):
+            fx = np.stack([S1[c, :n].mean(0), S2[c, :n].mean(0)], axis=1).astype(np.float32)
+            fx_t = torch.from_numpy(fx).to(device)
+            ces.append(float(torch.nn.CrossEntropyLoss()(fx_t, y_t).cpu()))
+            accs.append(float(accuracy(fx_t, y_t).cpu()))
+        print(f"  {n:>8} {n * num_chains:>7} | {np.mean(ces):>9.4f} "
+              f"{np.mean(accs):>9.4f}")
+    print(f"\n  ln 2 = {np.log(2):.4f} is chance.  A CE that RISES with draws means")
+    print("  the added draws are worse than the ones before them -- the chains")
+    print("  are leaving the region they burned in to, not refining it.")
+
+
 def compute_stats(pred_chains, alpha=0.05):
     """Key tail statistics as a dict, without printing.  Backs the draw ladder.
 
@@ -334,6 +431,17 @@ def main():
                          "each level from this one run, so the stage-3 draw "
                          "budget is read off a curve instead of costing one "
                          "training run per candidate.")
+    ap.add_argument("--ce-ladder", action="store_true",
+                    help="Also compute posterior-predictive CE and accuracy at "
+                         "each --draw-ladder level. Catches a sampler that "
+                         "mixes well in the wrong region, which the tail "
+                         "diagnostics cannot see. Needs a forward pass per "
+                         "draw over the eval split -- use --device cuda.")
+    ap.add_argument("--ce-pairs", type=int, default=None,
+                    help="Use only the first N preference pairs for the CE "
+                         "ladder (default: all). Faster, but then the "
+                         "full-budget row no longer reproduces the logged "
+                         "<split>_mean_cross_entropy.")
     args = ap.parse_args()
 
     cfg = _load_run_config(args.run_dir)
@@ -371,6 +479,14 @@ def main():
             sys.exit(f"--draw-ladder must be comma-separated integers, got "
                      f"{args.draw_ladder!r}")
         draw_ladder(pred_chains, levels, alpha=args.alpha)
+
+    if args.ce_ladder:
+        levels = []
+        if args.draw_ladder:
+            levels = [int(t) for t in args.draw_ladder.split(",") if t.strip()]
+        ce_ladder(args.run_dir, dataset, width, depth, num_chains, levels,
+                  device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
+                  max_pairs=args.ce_pairs, max_draws=args.max_draws)
 
 
 if __name__ == "__main__":
