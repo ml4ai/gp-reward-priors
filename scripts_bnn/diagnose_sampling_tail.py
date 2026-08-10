@@ -152,6 +152,64 @@ def _load_chain_weights(run_dir, i, device):
     return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
 
 
+def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
+    """Weight magnitude per draw -- the mechanism check behind a rising CE.
+
+    Uses the same definition the training script reports as `avg |w|`:
+    total L2 norm over all parameters / sqrt(n_params), i.e. the RMS weight.
+    That script warns above 5.0 because an MLP's output scales roughly as
+    `w**(depth+1)`, so a drifting weight norm inflates the Bradley-Terry logit
+    and saturates the softmax -- raising cross-entropy while leaving the
+    ranking, and therefore accuracy, largely intact.
+
+    Costs no forward passes: the saved weights are read directly.  A magnitude
+    that climbs monotonically across draws means the chains are drifting rather
+    than sampling a stationary distribution, in which case improving R-hat/ESS
+    is an artifact of the growing within-chain variance, not convergence.
+    """
+    mags = []
+    for c in range(num_chains):
+        chain = []
+        for w in _load_chain_weights(run_dir, c, device):
+            sq = sum(float(np.sum(np.asarray(a, dtype=np.float64) ** 2)) for a in w)
+            n = sum(np.asarray(a).size for a in w)
+            chain.append(np.sqrt(sq / n))
+        mags.append(chain)
+    m = min(len(c) for c in mags)
+    mags = np.array([c[:m] for c in mags])                    # [chain, draw]
+
+    levels = sorted({n for n in levels if 0 < n <= m}) or [m]
+    if levels[-1] != m:
+        levels.append(m)
+    if levels[0] != 1:
+        levels.insert(0, 1)
+
+    print(f"\n=== WEIGHT MAGNITUDE TRACE ({num_chains} chains, {m} draws) ===")
+    print("  avg |w| = total L2 norm / sqrt(n_params), matching the training")
+    print(f"  script's warm-up readout.  It warns above 5.0; outputs scale as")
+    print(f"  ~|w|^(depth+1) = |w|^{depth + 1} here.")
+    print(f"  {'at draw':>8} | {'avg|w| mean':>11} {'min':>9} {'max':>9} "
+          f"{'x vs draw 1':>11} | {'~logit scale':>13}")
+    print("  " + "-" * 72)
+    base = float(mags[:, 0].mean())
+    for n in levels:
+        col = mags[:, n - 1]
+        mean = float(col.mean())
+        scale = mean ** (depth + 1)
+        print(f"  {n:>8} | {mean:>11.4f} {col.min():>9.4f} {col.max():>9.4f} "
+              f"{mean / base:>11.2f} | {scale:>13.3e}")
+    growth = float(mags[:, -1].mean()) / base
+    verdict = ("DRIFTING -- chains are not stationary; R-hat/ESS improvements "
+               "are an artifact" if growth > 1.5 else
+               "roughly stable -- weight drift is NOT the mechanism")
+    print(f"\n  first draw {base:.4f} -> last draw {float(mags[:, -1].mean()):.4f} "
+          f"({growth:.2f}x): {verdict}")
+    per_chain_growth = mags[:, -1] / mags[:, 0]
+    print(f"  per-chain growth: min {per_chain_growth.min():.2f}x, "
+          f"max {per_chain_growth.max():.2f}x "
+          f"({'all chains' if per_chain_growth.min() > 1.5 else 'NOT all chains'} drifting)")
+
+
 def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
               device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
               chunk_pairs=64):
@@ -431,6 +489,11 @@ def main():
                          "each level from this one run, so the stage-3 draw "
                          "budget is read off a curve instead of costing one "
                          "training run per candidate.")
+    ap.add_argument("--weight-trace", action="store_true",
+                    help="Report weight magnitude per draw at each "
+                         "--draw-ladder level. Free (no forward passes). "
+                         "Distinguishes chains that are drifting from chains "
+                         "that are sampling a stationary distribution.")
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "
@@ -480,10 +543,16 @@ def main():
                      f"{args.draw_ladder!r}")
         draw_ladder(pred_chains, levels, alpha=args.alpha)
 
-    if args.ce_ladder:
+    if args.weight_trace or args.ce_ladder:
         levels = []
         if args.draw_ladder:
             levels = [int(t) for t in args.draw_ladder.split(",") if t.strip()]
+
+    if args.weight_trace:
+        weight_trace(args.run_dir, num_chains, depth, levels,
+                     device=args.device)
+
+    if args.ce_ladder:
         ce_ladder(args.run_dir, dataset, width, depth, num_chains, levels,
                   device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
                   max_pairs=args.ce_pairs, max_draws=args.max_draws)
