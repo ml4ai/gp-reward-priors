@@ -698,11 +698,18 @@ def train(config: TrainConfig):
             return float("nan")
         return float(np.mean(valid > threshold) * 100)
 
+    # Weight-norm drift during sampling.  Comparable to warmup_avg_weight_mag;
+    # observational only, nothing gates on it.  A drifting chain makes
+    # R-hat/ESS look better as the model gets worse, so this is the statistic
+    # that tells the two apart.
+    weight_drift = util.weight_magnitude_summary(params_chains)
+
     summary = {
         f"{eval_label}_mean_cross_entropy": np.mean(mean_ce),
         f"{eval_label}_mean_accuracy": np.mean(mean_acc),
         "pred_within_chain_var": pred_within_chain_var,
         "param_within_chain_var": param_within_chain_var,
+        **weight_drift,
         "pred_rhat_max": float(np.nanmax(rhats_pred)),
         "pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
         "pred_rhat_median": float(np.nanmedian(rhats_pred)),

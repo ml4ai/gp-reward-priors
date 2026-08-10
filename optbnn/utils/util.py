@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import pickle
+import warnings
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
@@ -372,3 +373,53 @@ def bt_pool_logit_np(pred_masked, mask, mode="mean"):
         raise ValueError(f"bt_pool_logit_np: mode must be 'sum' or 'mean', got {mode!r}")
     n = np.clip(np.nansum(mask, axis=1), 1.0, None)
     return s / n
+
+
+def weight_magnitude_summary(params_chains, warn_growth=1.5):
+    """RMS weight magnitude across sampling, and how much it drifted.
+
+    `params_chains` is [chain, draw, n_params] — the flattened weights of every
+    retained draw.  The statistic is the same one the training scripts report
+    after warm-up as ``avg |w|`` (total L2 norm / sqrt(n_params)), so the
+    sampling-phase values are directly comparable to ``warmup_avg_weight_mag``.
+
+    Why this is logged: SGHMC chains that are drifting rather than sampling a
+    stationary distribution show a steadily growing weight norm.  That inflates
+    the Bradley-Terry logit and hence cross-entropy while leaving the ranking —
+    and so accuracy — largely intact, and it *deflates* R-hat and inflates ESS
+    by growing the within-chain variance.  Convergence diagnostics therefore
+    look better as such a run gets worse, and the weight norm is the signal
+    that distinguishes the two.  Purely observational: nothing gates on it.
+
+    Returns a dict of `sampling_weight_*` metrics, ready to merge into the
+    wandb summary.
+    """
+    mag = np.sqrt(np.mean(np.asarray(params_chains, dtype=np.float64) ** 2, axis=2))
+    first, last = mag[:, 0], mag[:, -1]
+    growth = last / np.clip(first, 1e-12, None)
+    out = {
+        "sampling_weight_mag_first": float(first.mean()),
+        "sampling_weight_mag_final": float(last.mean()),
+        "sampling_weight_mag_max": float(mag.max()),
+        "sampling_weight_growth": float(last.mean() / max(float(first.mean()), 1e-12)),
+        "sampling_weight_growth_min": float(growth.min()),
+        "sampling_weight_growth_max": float(growth.max()),
+    }
+    print(
+        f"[diag] sampling avg |w|: {out['sampling_weight_mag_first']:.4f} "
+        f"-> {out['sampling_weight_mag_final']:.4f} "
+        f"({out['sampling_weight_growth']:.2f}x; per-chain "
+        f"{out['sampling_weight_growth_min']:.2f}-{out['sampling_weight_growth_max']:.2f}x)"
+    )
+    if out["sampling_weight_growth"] > warn_growth:
+        warnings.warn(
+            f"Weight magnitude grew {out['sampling_weight_growth']:.2f}x during "
+            f"sampling ({out['sampling_weight_mag_first']:.2f} -> "
+            f"{out['sampling_weight_mag_final']:.2f}).  The chains are drifting "
+            "rather than sampling a stationary distribution; R-hat/ESS will look "
+            "BETTER as this worsens, so do not read them as convergence.  "
+            "Consider reducing sghmc_lr / sghmc_lr_max / burn_in_lr or "
+            "increasing mdecay.",
+            RuntimeWarning,
+        )
+    return out

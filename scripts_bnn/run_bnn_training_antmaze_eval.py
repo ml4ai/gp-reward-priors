@@ -686,8 +686,14 @@ def train(config: TrainConfig):
     print(f"[diag] param within-chain var = {param_within_chain_var:.4e}")
     rhats_param = azs.rhat(params_chains)
     ess_param = azs.ess(params_chains)
+    # Weight-norm drift during sampling.  Comparable to warmup_avg_weight_mag
+    # above; observational only, nothing gates on it.  A drifting chain makes
+    # R-hat/ESS look better as the model gets worse, so this is the statistic
+    # that tells the two apart.
+    weight_drift = util.weight_magnitude_summary(params_chains)
     summary = {
         "param_within_chain_var": param_within_chain_var,
+        **weight_drift,
         "param_rhat_max": float(np.nanmax(rhats_param)),
         "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
         "param_rhat_median": float(np.nanmedian(rhats_param)),
