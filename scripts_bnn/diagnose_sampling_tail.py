@@ -61,6 +61,29 @@ def _load_run_config(run_dir):
         return yaml.safe_load(f)
 
 
+def _resolve_dataset(cfg, split, explicit=None):
+    """Pick the eval split this run's `<split>_pred_*` metrics were computed on.
+
+    `run_bnn_training_antmaze_eval.py` derives `val_dataset` / `test_dataset`
+    from `antmaze_variant` + `seed` and never defines a plain `dataset` key, so
+    reading `cfg["dataset"]` fails on any antmaze-eval run dir.  `dataset` is
+    accepted as a legacy fallback for older run dirs.
+    """
+    if explicit:
+        return explicit, "--dataset"
+    key = f"{split}_dataset"
+    if cfg.get(key):
+        return cfg[key], key
+    if cfg.get("dataset"):
+        return cfg["dataset"], "dataset (legacy)"
+    have = sorted(k for k in cfg if "dataset" in k)
+    sys.exit(
+        f"Could not resolve a dataset: config.yaml has no '{key}'"
+        + (f" (dataset-ish keys present: {have})" if have else " and no dataset keys")
+        + ".\nPass --dataset /path/to/<variant>_pref_val_<seed>.hdf5 explicitly."
+    )
+
+
 def _to_numpy_weights(weights):
     return tuple(
         np.asarray(a.detach().cpu().numpy()) if torch.is_tensor(a) else np.asarray(a)
@@ -291,7 +314,13 @@ def main():
                     help="List the K worst points by CVaR rel-MCSE with their "
                          "torso (x, y) coords (default 10; 0 to disable).")
     # The following default to the run's config.yaml; override only if needed.
-    ap.add_argument("--dataset", default=None)
+    ap.add_argument("--split", choices=("val", "test"), default="val",
+                    help="Which eval split to reproduce (default val). Picks "
+                         "<split>_dataset from the run's config.yaml, so the "
+                         "output is comparable to the logged <split>_pred_* "
+                         "metrics.")
+    ap.add_argument("--dataset", default=None,
+                    help="Explicit dataset path, overriding --split.")
     ap.add_argument("--width", type=int, default=None,
                     help="Actual (already-expanded) layer width; default from config.")
     ap.add_argument("--depth", type=int, default=None)
@@ -308,7 +337,9 @@ def main():
     args = ap.parse_args()
 
     cfg = _load_run_config(args.run_dir)
-    dataset = args.dataset or cfg["dataset"]
+    dataset, src = _resolve_dataset(cfg, args.split, args.dataset)
+    print(f"[split] {args.split}  (from {src}) -> compare against this run's "
+          f"logged {args.split}_pred_* metrics")
     width = args.width or cfg["width"]
     depth = args.depth or cfg["depth"]
     num_chains = args.num_chains or cfg["num_chains"]
