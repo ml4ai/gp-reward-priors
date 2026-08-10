@@ -1,10 +1,12 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Status 2026-08-08. **Stages 1 and 2 are complete for all three families.**
-> All 20 sweeps have fired, and every winner is transcribed into its production
-> config — including the BNN configs, which now carry `map_amp2` and
-> `burn_in_lr` (see §10.3 for why their absence was a trap). **Stage 3 is the
-> next action; stage 4 not started.**
+> Status 2026-08-08. **Round 2 — the BNN search has been redesigned as a single
+> merged sweep and not yet run.** Round 1's two-tier BNN design (warm-up tier →
+> sampling tier) completed and fired, but its selected configuration proved
+> non-stationary at production length; the round was discarded rather than
+> patched. **Read §3.7 first** — it is the reason everything below changed.
+> MR and PT stage 1 are unaffected and remain complete. Stages 3 and 4 not
+> started. Round 1's results are retained in §6 as the record.
 > Start at §10 if you are picking this up cold.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
@@ -62,55 +64,77 @@ argument collapses if any tuning touches an evaluation seed.
 
 ---
 
-## 2. The four stages
+## 2. The stages
 
 | stage | what is chosen | selected on | seed |
 |---|---|---|---|
-| 1 | model architecture + optimiser/warm-up HPs | validation loss | 0 |
-| 2 | (BNN only) posterior sampler schedule | validation loss | 0 |
+| 1 | model architecture + prior strength + (BNN) sampler schedule | validation loss | 0 |
+| ~~2~~ | *merged into stage 1 in round 2 — see §3.7* | — | — |
 | 3 | (BNN only) chain count / draws per chain | MCMC tail diagnostics | 0 |
 | 4 | output normalization function | max mean IQL score over eval points | 0 |
 
-Stages 1–2 are automated wandb sweeps. Stage 3 is a deliberate manual step.
-Stage 4 is a small grid search over the downstream RL objective.
+Stage 1 is an automated wandb sweep — **one per (family × variant), for every
+family alike**. Stage 3 is a deliberate manual step. Stage 4 is a small grid
+search over the downstream RL objective.
+
+**Stage 2 no longer exists.** In round 1 the BNN alone was split into two tiers,
+a warm-up tier and a sampling tier; that split is what failed (§3.7). The number
+2 is left vacant rather than renumbering stages 3 and 4, so that every existing
+cross-reference and the round-1 record below stay valid.
 
 ---
 
-## 3. Stages 1–2: sweep-based selection
+## 3. Stage 1: sweep-based selection
 
 ### 3.1 Shared design (identical across all families)
 
-**Search:** wandb `method: bayes`, one sweep per (family × antmaze variant), 16
-sweeps total for stage 1 + 4 more for stage 2.
+**Search:** wandb `method: bayes`, **one sweep per (family × antmaze variant)**
+— 12 sweeps in total, and the same shape for every family. The BNN's
+architecture, prior strength and sampler schedule are searched *together* and
+scored on one metric; there is no second tier and nothing is inherited between
+sweeps.
 
-**Trial budget: 130 per model family**, matched deliberately:
+**Trial budget: `run_cap: 130` for every family.**
 
-| family | stage | swept params (d) | run_cap |
-|---|---|---|---|
-| MR | 1 | 3 | 130 |
-| PT | 1 | 4 | 130 |
-| BNN | 1 (warm-up tier) | 6 | 70 |
-| BNN | 2 (sampling tier) | 5 | 60 |
+| family | swept params (d) | run_cap |
+|---|---|---|
+| MR | 3 | 130 |
+| PT | 4 | 130 |
+| BNN | 9 | 130 |
 
-The BNN's two tiers sum to 130, so **every family receives the same trial
-budget**. This is the single most important fairness property: a reviewer
-cannot argue the proposed method simply got tuned harder than the baselines.
-130 is generous for MR's 3-dimensional space — that is intentional, since
-over-tuning a *baseline* is the safe direction. The `run_cap` is a safety
-limit, not the thing that determines the answer; the stopping rule below is.
+This is the single most important fairness property: a reviewer cannot argue the
+proposed method simply got tuned harder than the baselines. 130 is generous for
+MR's 3-dimensional space — that is intentional, since over-tuning a *baseline*
+is the safe direction.
+
+**The cap is a safety limit, not the answer.** The stopping rule below is what
+ends a sweep, and in round 1 it fired at trials 20–56, far short of the cap.
+Note also that the invariant is one-sided: the argument only requires the BNN to
+receive **no more** tuning than the baselines, so a BNN sweep that stops earlier
+than they do strengthens the claim rather than weakening it.
+
+**The BNN searches 9 dimensions against MR's 3 and PT's 4 at the same cap**, so
+its coverage per dimension is thinner. That is a real cost of merging, accepted
+deliberately: round 1 bought better coverage by factoring the search into two
+tiers, and the factorisation rested on an independence assumption that turned
+out to be false (§3.7). Thin honest coverage beats efficient coverage of the
+wrong space.
 
 **Selection metric: minimise validation loss.** Never accuracy. Accuracy is
 insensitive to confidence, and the downstream use of these models is a
 posterior-predictive quantity, so a calibrated loss is the right target.
 
-| family / stage | metric key | notes |
+| family | metric key | notes |
 |---|---|---|
 | MR, PT | `eval_loss_best` | requires `criteria_key: loss` in the config |
-| BNN stage 1 | `warmup_final_nll` | val-subsample CE logged right after burn-in |
-| BNN stage 2 | `val_mean_cross_entropy` | posterior-predictive CE after full chains |
+| BNN | `val_mean_cross_entropy` | posterior-predictive CE after the full chains |
+
+Round 1's BNN warm-up tier selected on `warmup_final_nll`, a quantity measured
+before any sampling occurred. That metric is retired: §3.7 explains why it could
+not see the failure that mattered.
 
 **Stopping rule: stop when the best-so-far has not improved for K = 15
-consecutive trials.** Applied uniformly to every sweep in both stages.
+consecutive trials.** Applied uniformly to every sweep.
 
 wandb has **no built-in convergence stop for bayes sweeps**, so this is
 evaluated out-of-band with `check_sweep_convergence.py` (repo root). Trials
@@ -148,23 +172,25 @@ Fixed: `epochs: 5000`, `criteria_key: loss`, `seed: 0`.
 
 Fixed: `epochs: 5000`, `criteria_key: loss`, `seed: 0`.
 
-**BNN stage 1 — warm-up tier**
-(`scripts_bnn/sweep_antmaze_<variant>_bnn_warmup_antmaze_eval.yaml`)
+**BNN — merged sweep**
+(`scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml`)
 
-| param | distribution | range |
-|---|---|---|
-| `width` | int_uniform | 6–10 (64–1024) |
-| `depth` | int_uniform | 2–6 |
-| `n_meas` | int_uniform | 0–64 (0 = functional prior off) |
-| `map_amp2` | log_uniform_values | 1 – 1000 |
-| `sghmc_lr` | log_uniform_values | 1e-4 – 1e-2 |
-| `mdecay` | log_uniform_values | 1e-3 – 1e-1 |
+| param | distribution | range | vs round 1 |
+|---|---|---|---|
+| `width` | int_uniform | 6–10 (64–1024) | unchanged |
+| `depth` | int_uniform | 2–6 | unchanged |
+| `n_meas` | int_uniform | 0–64 (0 = functional prior off) | unchanged |
+| `map_amp2` | log_uniform_values | 1 – **1e4** | **expanded** |
+| `sghmc_lr` (lr_min *and* burn-in) | log_uniform_values | 5e-5 – 5e-4 | unchanged |
+| `sghmc_lr_max` | log_uniform_values | 5e-4 – 5e-3 | unchanged |
+| `cycle_length` | q_uniform | 500 – 3000, q = 250 | unchanged |
+| `mdecay` | log_uniform_values | 1e-3 – **1.0** | **expanded** |
+| `fraction_cool` | uniform | 0.1 – 0.5 | unchanged |
 
-Fixed: `num_burn_in_steps: 5000`, `warmup_log_every: 250`, `seed: 0`, and
-`early_stop_acc_threshold: 1.01`. That last value is a trick: accuracy is always
-below 1.01, so **every run stops right after warm-up**, skipping the expensive
-parallel-chain phase. Stage 1 therefore costs ~7 min/trial and tunes only what
-is visible at warm-up: architecture and prior strength.
+Fixed per trial: `num_chains: 4`, `chains_per_gpu: 4`, `num_samples: 75`,
+`n_discarded: 5`, `num_burn_in_steps: 5000`, `samples_per_cycle: 1`,
+`chain_init_jitter: 0.0`, `use_cyclical_lr: true`, `warmup_log_every: 250`,
+`early_stop_acc_threshold: 0.0`, `seed: 0`.
 
 `n_meas` and `map_amp2` are the two **prior-strength** knobs, and both are
 searched, including `n_meas = 0` so the optimiser can reject the prior outright
@@ -175,44 +201,66 @@ tied per-point reward amplitude to Bradley–Terry logit magnitude; without it t
 legacy O(1) prior amplitude is incompatible with the likelihood and the sweep
 can only escape by driving `n_meas → 0`. See `HANDOFF_CVAR_SAMPLER_2026-08.md`.
 
-**BNN stage 2 — sampling tier**
-(`scripts_bnn/sweep_antmaze_<variant>_bnn_sampling_antmaze_eval.yaml`)
-
-| param | distribution | range |
-|---|---|---|
-| `sghmc_lr` (lr_min) | log_uniform_values | 5e-5 – 5e-4 |
-| `sghmc_lr_max` | log_uniform_values | 5e-4 – 5e-3 |
-| `cycle_length` | q_uniform | 500 – 3000, q = 250 |
-| `mdecay` | log_uniform_values | 1e-3 – 1e-1 |
-| `fraction_cool` | uniform | 0.1 – 0.5 |
-
 The `sghmc_lr` ceiling meets the `sghmc_lr_max` floor at 5e-4, so
 `lr_max ≥ lr_min` holds by construction. The 5e-3 cap on `lr_max` reflects a
 measured divergence cliff under mean pooling (stable at 0.0048, divergent at
 0.0064 for medium_play).
 
-Architecture and prior strength are **inherited from that variant's stage-1
-winner** (`width`, `depth`, `n_meas`, `map_amp2`), transcribed into the stage-2
-config with the source run id, trial number and metric recorded inline for
-provenance. The launcher refuses to start stage 2 while any `FILL_ME` remains.
+**Range changes and their justification.** Round 1's ranges are pre-registered
+and §9 forbids *narrowing* them in response to results. Two were **expanded**,
+on the narrow ground that a round-1 winner sat against a cap, which is evidence
+the optimum lay outside the searched region:
 
-Fixed budget per stage-2 trial: `num_chains: 4`, `chains_per_gpu: 4`,
-`num_samples: 35`, `n_discarded: 2`, `num_burn_in_steps: 5000`,
-`samples_per_cycle: 1`, `chain_init_jitter: 0.0`, `use_cyclical_lr: true`,
-`seed: 0`. This is a deliberately reduced budget (140 draws vs the production
-2480) — stage 2 ranks *schedules*, and the draw count is set in stage 3.
+- **`mdecay` 1e-1 → 1.0.** Round-1 winners reached 0.0953 (warm-up tier,
+  medium_diverse) and 0.0892 (sampling tier, large_diverse) — 89–95% of the old
+  cap.
+- **`map_amp2` 1e3 → 1e4.** All four round-1 winners landed at 313–773, the top
+  ~20% of a log-uniform 1–1e3 range. §7 had already flagged this as possibly
+  range-limited.
 
-Two stage-2 values deserve their own note because they look like tuning and are
-not:
+Three caps were left alone despite round-1 winners approaching them:
 
-- **`burn_in_lr: 0.002`, uniform across variants.** Burn-in inherits `lr_min` by
-  default, but stage 2's `lr_min` range sits far below stage 1's productive
-  range, so a fixed-length burn-in under-fits and the warm-up gate rejects the
-  very architecture stage 1 selected. Decoupling burn-in step size from the
-  swept cool-phase `lr_min` is a **design fix** — warm-up quality should not be
-  a function of the schedule under test — not a tuned value.
+- **`width` (10) and `depth` (6).** medium_diverse's warm-up-tier winner sat at
+  *both* ceilings, but it reached them under `warmup_final_nll` — the metric
+  round 2 retires precisely because it cannot see samplability (§3.7). A ceiling
+  hit under a discarded metric is not evidence about the optimum under the new
+  one. They are also not narrowed, even though the round-1 failure involved the
+  largest network in range: narrowing on that basis is exactly the reactive
+  tuning §9 prohibits.
+- **`sghmc_lr_max` (5e-3).** The cap encodes a measured divergence cliff, a
+  stability fact rather than a performance result.
+
+**`sghmc_lr` now sets the burn-in step size as well as the cool-phase minimum**,
+because there is no separate `burn_in_lr` (see below). Its range is unchanged,
+since widening it upward would break the `lr_max ≥ lr_min` construction. One
+consequence to be aware of: burn-in now runs at ≤ 5e-4 rather than round 1's
+fixed 0.002. That follows from the pre-registered construction and was not
+chosen for its effect.
+
+**Per-trial horizon: 75 draws per chain, not round 1's 35.** Round 1 ranked
+schedules at roughly 1/9 of the production draw count, and the failure it missed
+only enters the metric with length — in the round-1 pilot, val CE ran 0.2953 →
+0.3036 → 0.3411 at 33 / 75 / 150 draws. 35 draws cannot separate a drifting
+configuration from a stable one; 75 can, at ~1/4 the cost of 150. Per-trial cost
+is ~1.7 h at `cycle_length` 500 and ~10 h at 3000, ~6 h at mid-range.
+
+**Set the stage-3 production horizon to this same 75 draws per chain, and buy
+total draws with `num_chains`** (§4). Chains do not extend the horizon, so
+selection and production run at the same horizon by construction and round 1's
+mismatch cannot recur.
+
+**`burn_in_lr` is deliberately absent, and must stay absent.** Burn-in inherits
+the swept `sghmc_lr`. The base config a sweep points at must not set it — if it
+does, burn-in silently uses that value instead and the point of merging is lost.
+A `null` in the sweep cannot fix this: a wandb agent serialises null onto the
+command line as the string `"None"`, which pyrallis rejects (§8). Remove the
+line. Round 1's fixed `burn_in_lr: 0.002` is discussed in §3.7; it is the
+proximate cause of the failure that ended that round.
+
+One value deserves its own note because it looks like tuning and is not:
+
 - **`early_stop_acc_threshold: 0.0` — the warm-up gate is DISABLED.** Every
-  stage-2 trial runs to completion and is ranked on `val_mean_cross_entropy`;
+  trial runs to completion and is ranked on `val_mean_cross_entropy`;
   no proxy criterion is applied anywhere in the sweep. Accuracy is always ≥ 0,
   so the check `warmup_final_acc < 0.0` never fires; `0.0` rather than `null`
   because of a wandb/pyrallis interaction documented in §8. See §3.5 for why an
@@ -256,11 +304,15 @@ authoritative in the script may have been overridden by pyrallis from the yaml
 or by the sweep agent's CLI arguments, and the resolved values are what wandb
 records in each run's `config`.
 
-### 3.5 Why stage 2 has no warm-up gate
+### 3.5 Why there is no warm-up gate
 
-Stage 2 originally early-stopped any trial whose warm-up accuracy fell below a
-static 0.75, to avoid spending ~6 h sampling from a broken starting point. That
-gate was **removed and all four stage-2 sweeps restarted**, for two reasons.
+The reasoning below was established in round 1 and carries over unchanged: the
+merged sweep also runs every trial to completion.
+
+Round 1's sampling tier originally early-stopped any trial whose warm-up
+accuracy fell below a static 0.75, to avoid spending ~6 h sampling from a broken
+starting point. That gate was **removed and all four sweeps restarted**, for two
+reasons.
 
 **It rejected on the wrong quantity.** The gate reads warm-up *accuracy*, which
 is not the selection metric. Anything it rejects is excluded from the search
@@ -299,10 +351,11 @@ fix would be a `burn_in_mdecay` decoupling friction the way `burn_in_lr`
 decouples step size; that was **not** done, since it is a mid-procedure code
 change, and the residual confound is disclosed instead (§7).
 
-### 3.6 What a divergent stage-2 trial looks like
+### 3.6 What a divergent trial looks like
 
-With the gate removed, low-friction schedules run to completion and are scored.
-Some of them **diverge numerically**. Observed on the restarted sweeps:
+With no gate, low-friction schedules run to completion and are scored. Some of
+them **diverge numerically**. Observed on round 1's restarted sampling-tier
+sweeps; the signatures apply unchanged to the merged sweep:
 
 | warm-up NLL | val CE | gradnorm max | %>clip | outcome |
 |---|---|---|---|---|
@@ -370,18 +423,110 @@ configuration on a 1% cutoff.
 NaN/Inf condition alone. Either is fine; choosing in response to a specific
 trial's result is exactly the reactive tuning §0 exists to prevent.
 
+### 3.7 Why round 1 was discarded: the two-tier design
+
+Round 1 split the BNN search into a **warm-up tier** (architecture + prior
+strength, 70 trials, selected on `warmup_final_nll` with sampling disabled) and
+a **sampling tier** (schedule, 60 trials, selected on `val_mean_cross_entropy`,
+inheriting the warm-up tier's winner). Both tiers completed and all eight sweeps
+fired; their results are kept in §6 as the record. The design was then
+discarded, before any stage-3 or stage-4 result was produced, when the first
+production-budget run exposed a failure the procedure could not have caught.
+
+**The premise.** Factoring the search into tiers is only valid if the best
+architecture is roughly independent of the sampler schedule. That assumption
+was never stated as an assumption, and it is false.
+
+**What the pilot showed.** The medium_diverse stage-2 winner, run at the
+production budget (8 chains × 310 draws, seed 0), produced:
+
+| | sampling tier (4 × 35) | production pilot (8 × 310) |
+|---|---|---|
+| `val_mean_cross_entropy` | 0.2843 | **0.4252** |
+| `gradnorm_sampling_pct_over_clip` | 0.21% | **6.25%** |
+| `gradnorm_sampling_max` | 3.6e3 | **8.3e10** |
+| `gradnorm_burnin_max` | 142.76 | 142.76 *(identical)* |
+
+Identical burn-in maxima confirm both runs started from the same point, so the
+divergence is entirely in the sampling phase. An offline draw ladder over the
+saved chains showed CE degrading **monotonically** with draws — 0.2953, 0.3036,
+0.3411, 0.3814, 0.4252 at 33/75/150/225/310 — with accuracy nearly flat
+(0.8668 → 0.8551). That is the confidently-wrong signature: under
+`bt_pool: "mean"` a growing reward magnitude inflates the Bradley–Terry logit
+and hence CE while leaving the ranking intact. A weight trace confirmed the
+mechanism directly: `avg |w|` grew 5.74 → 23.50, a factor of 4.09, monotonically,
+in **all eight chains** (3.17×–4.30×).
+
+**Every convergence diagnostic improved as this happened.** CVaR ESS median rose
+64 → 1802, CVaR R-hat median fell 1.1454 → 1.0382, bulk R-hat median 1.560 →
+1.108. This is not coincidence and not a quirk of these estimators: a drifting
+chain has a large and growing *within*-chain variance, which pushes R-hat toward
+1 and inflates ESS. **The tail diagnostics are not merely blind to this failure;
+they are fooled by it, in the direction that makes a diverging run look
+converged.** Anything selected or certified on them alone is unsafe when drift
+is possible, which is why `sampling_weight_growth` is now logged on every run
+(§8) — reported, never gated.
+
+**Three separate seams contributed, all products of the split:**
+
+1. **The warm-up tier's metric could not see samplability.**
+   `early_stop_acc_threshold: 1.01` made every tier-1 trial stop before
+   sampling, so `warmup_final_nll` scored architectures on a quantity measured
+   before a single posterior draw existed. medium_diverse's winner was width 10,
+   depth 6 — both *range ceilings*, the largest network available — and by its
+   own metric it was healthy (`avg |w|` 2.10, NLL 0.317).
+2. **The tiers disagreed about burn-in.** Tier 2 replaced tier 1's own swept
+   `sghmc_lr` with a fixed `burn_in_lr: 0.002`, described in §3.2 as a design
+   fix. It is a good approximation for the two variants that behaved (their
+   tier-1 winners used 1.64e-3 and 1.96e-3) and a poor one for the two depth-6
+   variants (6.96e-4 and 2.56e-4 — 2.9× and 7.8× smaller). Measured cost, in
+   burn-in NLL: medium_play +42%, large_diverse +22%, **medium_diverse +54%,
+   large_play +111%**. medium_diverse began sampling from weights 1.9× larger
+   than its tier-1 winner produced. This is the proximate cause.
+3. **The horizon was 1/9 of production**, and the sampling tier's objective was
+   *biased toward* instability rather than merely blind to it: at 35 draws a
+   larger step size buys better CE and its cost has not yet appeared.
+   medium_diverse's winning `sghmc_lr` was 4.959e-4 against a range ceiling of
+   5e-4 — 99.2% of the boundary.
+
+**Why merging fixes this structurally rather than by patching.** Nothing is
+inherited, so seam 2 cannot exist and the §10.3 transcription trap disappears
+with it. One metric, applied after sampling, so seam 1 cannot exist. A per-trial
+horizon matched to production (§3.2) closes seam 3. And §3.5's "residual
+burn-in/sampling confound" stops being a confound at all: friction acting during
+burn-in as well as sampling is only a confound when a *separately chosen*
+architecture is being held fixed — when the whole package is scored end to end,
+it is simply a property of the candidate under test. The `burn_in_mdecay`
+decoupling §3.5 identified but declined as a mid-procedure change is not needed.
+
+**What round 1 still costs, and what to disclose.** Roughly 400 GPU-hours across
+both tiers plus the ~50-hour pilot. The paper should state that the BNN
+hyperparameters come from a single merged sweep matched in trial budget to the
+baselines, and — because it is the honest account of how the procedure was
+arrived at — that an earlier two-tier design was discarded when its selected
+configuration proved non-stationary at production length. §0's standing rule
+applies unchanged: the round was restarted from scratch rather than patched, so
+no post-hoc adjustment appears anywhere in the reported procedure.
+
 ---
 
 ## 4. Stage 3 (BNN only): hand-tuning the draw budget
 
-Stage 2 selects a *schedule*; it does not select how many samples to draw. The
-production runs use a larger budget than the sweep, set by hand, and this is the
-one deliberately manual step in the procedure.
+Stage 1 selects a *schedule*; it does not select how many chains to run. This is
+the one deliberately manual step in the procedure.
 
-**What is adjusted:** `num_chains` and/or `num_samples` (draws per chain), plus
-`chains_per_gpu` for placement. Nothing else. The schedule
-(`sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`, `fraction_cool`),
-architecture, and prior strength stay exactly as selected.
+**What is adjusted: `num_chains`, plus `chains_per_gpu` for placement.**
+The schedule (`sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`,
+`fraction_cool`), architecture, and prior strength stay exactly as selected.
+
+**Round 2 rule: `num_samples` is NOT a free parameter — it is pinned to the
+sweep's per-trial horizon (75).** Total draws are bought with chains alone.
+Chains do not extend a chain's horizon, so selection and production run at the
+same horizon by construction, and a configuration cannot be certified at one
+draw count and deployed at another. Round 1 selected at 35 draws and deployed at
+310, and the resulting configuration was non-stationary by draw 33 (§3.7). If
+the tail diagnostics cannot be satisfied by adding chains at a fixed horizon,
+that is a finding about the schedule, not a licence to lengthen the chains.
 
 **Why it is not a sweep:** the quantity being improved is Monte-Carlo error on
 the downstream CVaR₀.₀₅, not model quality. It is not visible in
@@ -782,8 +927,40 @@ comment in the config it was written into.
 
 ### 10.2 Immediate next action
 
-**Stage 3: the BNN draw budget (§4) — in progress.** Stages 1–2 are done and
-their winners are in the production configs; nothing is waiting on a sweep.
+**Launch the round-2 merged BNN sweeps (§3).** Round 1 is closed; its results
+stay in §6 as the record, and §3.7 is why. Read §3.7 before anything else.
+
+Preconditions, in order:
+
+1. **Remove `burn_in_lr` from all four
+   `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`.** The merged sweep
+   requires burn-in to inherit the swept `sghmc_lr`; if the base config sets
+   `burn_in_lr`, burn-in silently uses it and the merge achieves nothing. This
+   cannot be overridden from the sweep (§8, null-through-CLI).
+2. **Write the remaining three merged sweep yamls.** `medium_diverse` is
+   drafted at
+   `scripts_bnn/sweep_antmaze_medium_diverse_bnn_merged_antmaze_eval.yaml`;
+   the others differ only in `config_path`.
+3. **Decide what happens to round 1's winners in the production configs.** They
+   are superseded but still present, so a `train_rewards.sh` run today would
+   train round-1 models. Either strip them or accept the footgun knowingly.
+4. Launch one agent per sweep, four concurrently — `num_chains: 4`,
+   `chains_per_gpu: 4` puts each on a single GPU, leaving two of six free, and
+   under the §10.7 thread caps four jobs need ~128 of 255 threads.
+
+Expected cost: ~6 h per trial at mid-range `cycle_length` (1.7 h at 500, 10 h at
+3000). The `run_cap` is 130 but the K=15 rule fired at trials 20–56 in round 1;
+a 9-dimensional space should take longer, so budget for more.
+
+**Then stage 3 (§4)** — `num_chains` only, with `num_samples` pinned at the
+sweep's 75.
+
+**Sections not yet updated for round 2:** §6 (results), §7 (disclosures) and
+§10.1/§10.3–§10.5 still describe round 1 throughout. They are accurate *as the
+round-1 record*; they are not a description of the current procedure.
+
+The rest of this section describes the round-1 stage-3 pilot, retained because
+it is the evidence behind §3.7.
 
 **Pilot running.** Launched 2026-08-08: medium_diverse, **seed 0**, at the
 reference budget (`num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2`, GPUs
