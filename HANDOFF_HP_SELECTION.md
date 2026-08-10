@@ -782,21 +782,62 @@ comment in the config it was written into.
 
 ### 10.2 Immediate next action
 
-**Stage 3: the BNN draw budget (§4).** Stages 1–2 are done and their winners are
-in the production configs; nothing is waiting on a sweep.
+**Stage 3: the BNN draw budget (§4) — in progress.** Stages 1–2 are done and
+their winners are in the production configs; nothing is waiting on a sweep.
 
-Before starting, note two things recorded since the procedure was written:
+**Pilot running.** Launched 2026-08-08: medium_diverse, **seed 0**, at the
+reference budget (`num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2`, GPUs
+0–3), via
+
+```
+VARIANTS=medium_diverse SEEDS=0 NUM_CHAINS=8 ./train_rewards.sh bnn "0 1 2 3" 4
+```
+
+writing to `exp/reward_learning/antmaze_medium_diverse_bnn_eval_0`. Expect
+~2–3 days (point estimate ~56 h, range 38–68 h, extrapolated from the §10.7
+thread A/B). medium_diverse is the pilot deliberately: it is the largest network
+and has the weakest tail diagnostics of the four winners at equal draws (§6), so
+whatever budget satisfies it should satisfy the rest. **The other three variants
+are deliberately not launched** — their budget follows from this run's ladder.
+
+When it finishes, read the budget off one run rather than training more:
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/reward_learning/antmaze_medium_diverse_bnn_eval_0 \
+    --draw-ladder 33,75,150,225,305 --worst-k 10
+```
+
+`--draw-ladder` truncates each chain to its first N draws and recomputes the tail
+statistics at each level, so "would fewer draws have done?" is answered offline.
+Neither wandb nor the training script can answer it: both compute the
+diagnostics **once**, after all chains are collected, giving a single point at
+the run's full budget.
+
+Check the ladder's full-budget row against that run's logged wandb values before
+trusting the rest — `run_bnn_training_antmaze_eval.py` and
+`diagnose_sampling_tail.py` compute these identically (same `arviz_stats` calls,
+same Rockafellar–Uryasev integrand, same `/(pred_sd + 1e-8)` scaling), so they
+must agree. If they do not, the lower rows are not trustworthy either.
+
+Then, for the remaining three: with the §10.7 thread caps in place, three
+8-chain jobs need ~192 threads against 255 cores, and at `chains_per_gpu: 4`
+each takes 2 GPUs — so all three fit concurrently across the six. That was not
+viable before the caps. Do not extrapolate their runtimes from the pilot; all
+three networks are far smaller than medium_diverse's width-1024 × depth-6.
+
+Two things recorded since the procedure was written, both load-bearing here:
 
 - **§4's censoring warning.** The `_max`/`_min` tail diagnostics named as stage-3
   criteria are saturated at estimator ceilings and rank nothing at small draw
   counts. Steer on the median / 95th-pct / `pct_over_1.01` variants, and confirm
   the extremes de-saturate as draws increase.
-- **§10.7's CPU oversubscription.** One trial alone demands ~165 of the box's 255
-  cores, so concurrent stage-3 runs will contend. This is the phase boundary at
-  which to test `OMP_NUM_THREADS` — a change that must not be made mid-sweep.
+- **§10.7's thread caps.** Now set in `train_rewards.sh`. They must not vary
+  between these seed-0 selection runs and the seed 1–10 evaluation runs.
 
-Expect medium_diverse to need the largest budget: it is the largest network and
-has the weakest tail diagnostics of the four winners at equal draws (§6).
+Also note `n_discarded` is still 5 by inheritance and is owned by no stage
+(§10.3). The ladder cannot settle it — truncation drops draws from the end, not
+the start — so decide it deliberately if it matters.
 
 If a stage-2 agent is still alive on the box, it is now doing discardable work —
 trials after the trigger are outside the rule. §10.6's kill caution applies.
