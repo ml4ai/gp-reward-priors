@@ -61,6 +61,21 @@ PY="${PY:-python}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
+# --- CPU thread caps (see HANDOFF_HP_SELECTION.md section 10.7) ---------------
+# torch defaults its intra-op pool to the core count (255 on leviathan), and a
+# BNN run spawns one process per chain, so an 8-chain job alone asks for ~2000
+# threads and ~317 of 255 cores.  Most of that is spin-wait, not work: measured
+# A/B on one 8-chain medium_diverse job, 3h01m default vs 2h12m capped (-27%),
+# with the concurrency penalty (~2.8x) on top of that.
+#
+# Set here rather than per-command so every run in a campaign shares them.
+# Thread count changes floating-point reduction order, so selection and
+# evaluation runs must agree: do NOT override for part of a campaign.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-$OMP_NUM_THREADS}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
+export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"
+
 # Always run from the submodule root so the configs' relative paths resolve no
 # matter where the launcher was invoked from: the --config_path yaml, and inside
 # each config data_root ("data/antmaze") and measurement_dataset, are all relative

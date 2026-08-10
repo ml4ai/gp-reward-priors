@@ -952,22 +952,37 @@ cores is the trial's unconstrained demand — the right input for the arithmetic
 Read the same way during a contended period it would be suppressed, not
 informative.
 
-**Open question: most of that CPU is probably waste.** 38 cores per chain is
-anomalous for a GPU-resident sampler — the matmuls are small (width 64–1024,
+**Most of that CPU was waste — confirmed, and fixed.** 38 cores per chain is
+anomalous for a GPU-resident sampler: the matmuls are small (width 64–1024,
 batch 64), sizes at which a 255-thread BLAS pool is parallel overhead rather than
-speed-up. The likely mechanism is OpenMP busy-wait spinning: threads with nothing
-to do spin instead of sleeping. If so, capping threads costs nothing single-trial
-while removing the contention outright.
+speed-up, and OpenMP's default active wait policy has idle threads spin instead
+of sleeping. A/B on a single uncontended 8-chain medium_diverse job at seed 0
+(`num_samples: 10`, `n_discarded: 0`), 2026-08-08:
 
-**The test**, at the next phase boundary: run one trial with `OMP_NUM_THREADS=8`
-and `OMP_WAIT_POLICY=PASSIVE`, compare h/1k sampling steps against the
-uncontended baseline of 0.056–0.060. Equal or better confirms the waste. For four
-concurrent sweeps the natural cap is 255/16 processes ≈ 16 threads each.
+| arm | wall time |
+|---|---|
+| default threads | 3 h 01 m 34 s |
+| `OMP_NUM_THREADS=8`, `OMP_WAIT_POLICY=PASSIVE` | **2 h 12 m 10 s** (−27%) |
 
-**Do not change thread count mid-sweep.** It alters floating-point reduction
-order, so trials before and after would not be strictly comparable. Apply it at a
-phase boundary — before stage 3 or stage 4 — never while a sweep is accumulating
-trials. Stage 4 runs 4+ concurrent IQL jobs, so that is the natural point.
+Capping is **faster**, not merely equal, which settles the question: the extra
+threads were costing time. This is the single-job gain — an 8-chain job is ~8×
+oversubscribed on its own, before any concurrency — and the ~2.8× multi-job
+penalty above sits on top of it.
+
+**Now set in `train_rewards.sh`** (`OMP_NUM_THREADS=8`, `MKL_*`/`OPENBLAS_*` to
+match, `OMP_WAIT_POLICY=PASSIVE`), exported once so an entire campaign shares
+them; each is overridable from the environment for deliberate experiments.
+
+**Do not vary thread count within a campaign.** It alters floating-point
+reduction order, so runs before and after are not strictly comparable. In
+particular the stage-3 selection runs (seed 0) and the evaluation runs (seeds
+1–10) must use the same setting.
+
+*Disclosure:* stages 1 and 2 ran uncapped; stage 3 onward runs capped. The
+selected hyperparameters therefore come from a slightly different numerical
+environment than the runs that use them. This is reduction-order noise, far below
+the differences the selection metric resolved, but state it rather than leave it
+implicit.
 
 This does not affect any selection result — throughput is not an input to any
 stopping rule or metric — but it does affect every schedule estimate in this
