@@ -127,7 +127,7 @@ posterior-predictive quantity, so a calibrated loss is the right target.
 | family | metric key | notes |
 |---|---|---|
 | MR, PT | `eval_loss_best` | requires `criteria_key: loss` in the config |
-| BNN | `val_mean_cross_entropy` | posterior-predictive CE after the full chains |
+| BNN | `val_predictive_cross_entropy` | Wu et al. Eq. (10) predictive, `E[σ(f)]` — see §3.6.2 |
 
 Round 1's BNN warm-up tier selected on `warmup_final_nll`, a quantity measured
 before any sampling occurred. That metric is retired: §3.7 explains why it could
@@ -439,6 +439,57 @@ configuration on a 1% cutoff.
 NaN/Inf condition alone. Either is fine; choosing in response to a specific
 trial's result is exactly the reactive tuning §0 exists to prevent.
 
+### 3.6.2 Theory alignment: what the metrics must measure
+
+Audited 2026-08-11 against Wu et al. (2025), *Functional Stochastic Gradient
+MCMC for Bayesian Neural Networks* (AISTATS), the paper this sampler
+implements. **Read this before adding or interpreting any BNN diagnostic.**
+
+**The object of inference is f, not w.** Proposition 3.2 establishes that the
+stationary measure of the functional Hamiltonian dynamics is the function-space
+posterior `P_{f|D}`, with potential `U(f) = Φ(f) + I₀(f)` — a functional of f
+alone (`Φ` the likelihood, `I₀` the Onsager–Machlup functional of the functional
+prior). The parameter-space update (Eq. 9) is a reparameterisation whose induced
+measure on f is the target. The code matches: `f_pref_net.py` takes no
+weight-space prior, and the prior enters only as `∇_w log p_GP = −Jᵀ K⁻¹(f−m)`.
+
+Two consequences that are easy to get wrong, and were:
+
+- **Weight-space diagnostics measure nothing here.** Since `U` depends on w only
+  through f, every direction that leaves f unchanged is a flat direction, along
+  which the chain performs an *unconfined random walk*. A growing weight norm is
+  what this sampler is supposed to do. Measured on a round-1 production run,
+  ‖w‖ followed the free-diffusion law ‖w‖² = ‖w₀‖² + c·t to within 5% across
+  310 draws. `param_rhat`, `param_ess`, `param_within_chain_var` and the
+  sampling weight-norm statistics have been **removed** for this reason.
+- **Stationarity is a claim about f.** `util.function_space_drift` compares the
+  first half of each chain's draws against the second in function space:
+  *location* `|E₂[f] − E₁[f]| / sd(f)` and *scale* `sd₂(f)/sd₁(f)`. Stationary
+  chains give ~0 and ~1.
+
+**The predictive is `E[σ(f)]`, not `σ(E[f])`.** Equation (10) defines
+`p(y*|x*,D) ≈ (1/S) Σⱼ p(y*|f(x*; wⱼ))` — the *likelihood* averaged over draws.
+Round 2 originally selected on `val_mean_cross_entropy`, which averages the
+*reward* over draws and squashes once. That plug-in is blind to posterior width:
+holding the mean reward fixed and inflating the posterior 6× moves it by 0.010
+while the predictive moves by 0.174. Selecting on a width-blind statistic while
+deploying CVaR₀.₀₅ — a functional of exactly that width — was a misalignment
+between the procedure and the method it evaluates. **The selection metric is now
+`val_predictive_cross_entropy`;** the plug-in is still logged for comparison.
+
+**Verified to match Algorithm 2**: momentum resampled from `N(0, M)` at each
+cycle onset (not zeroed); a fresh measurement set `X_M` drawn every inner step;
+one sample collected per outer iteration.
+
+**Known deviations, to disclose:**
+
+| deviation | status |
+|---|---|
+| **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. |
+| **`max_param_step: 0.5`** clamps momentum every step, sampling included | Not measure-preserving when it binds, and unlike the gradient clip it was never scoped to burn-in. Now instrumented: `param_clamp_sampling_pct` must be ~0 on any selected run, else that run sampled the wrong measure. |
+| **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
+| **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | Applied identically in MR, PT and BNN, so cross-family comparability holds. If all segments have equal valid length the two differ by a constant 1/T — a temperature rescaling absorbed by the reward scale that `map_amp2` controls. **Verify the valid lengths are constant**; if they vary, mean and sum are genuinely different likelihoods (mean being the one without a length confound). |
+
 ### 3.7 Why round 1 was discarded: the two-tier design
 
 Round 1 split the BNN search into a **warm-up tier** (architecture + prior
@@ -560,9 +611,11 @@ rather than searched.
 - `val_pred_q05_ess_*` — ESS at the 5% quantile (the VaR)
 - `gradnorm_sampling_pct_over_clip` — should be ~0
 
-Do **not** judge this by `param_*` diagnostics (meaningless for a BNN under
-weight-space non-identifiability) or by bulk `pred_rhat`/`pred_ess` (they
-certify the median, not the tail).
+Do **not** judge this by `param_*` diagnostics — they no longer exist, and §3.6.2
+explains why weight-space statistics measure nothing for this sampler — or by
+bulk `pred_rhat`/`pred_ess` (they certify the median, not the tail). Check
+`fn_drift_*` and `param_clamp_sampling_pct` before trusting any of the tail
+numbers: a non-stationary or clamp-distorted run is not sampling the target.
 
 **Warning: at the stage-2 budget, the `_max` / `_min` extremes above are
 censored and carry no ranking information.** Measured 2026-08-08 across all
