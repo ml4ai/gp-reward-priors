@@ -275,7 +275,7 @@ proximate cause of the failure that ended that round.
 One value deserves its own note because it looks like tuning and is not:
 
 - **`early_stop_acc_threshold: 0.0` — the warm-up gate is DISABLED.** Every
-  trial runs to completion and is ranked on `val_mean_cross_entropy`;
+  trial runs to completion and is ranked on `val_predictive_cross_entropy`;
   no proxy criterion is applied anywhere in the sweep. Accuracy is always ≥ 0,
   so the check `warmup_final_acc < 0.0` never fires; `0.0` rather than `null`
   because of a wandb/pyrallis interaction documented in §8. See §3.5 for why an
