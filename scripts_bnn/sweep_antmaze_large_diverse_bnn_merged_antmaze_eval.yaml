@@ -17,8 +17,8 @@ metric:
 # with sampling disabled, so it could not see whether that architecture was
 # samplable; tier 2 then ran it under a *different* burn-in step size -- a
 # fixed burn_in_lr=0.002 standing in for tier 1's own swept value, which for
-# this variant was 6.955e-4 (2.9x larger).  Measured cost to burn-in quality for
-# this variant: +54% in warm-up NLL.  The medium_diverse configuration
+# this variant was 1.964e-3 (1.0x — essentially matched).  Measured cost to burn-in quality for
+# this variant: +22% in warm-up NLL.  The medium_diverse configuration
 # selected this way drifted at production length -- weight norm 4.09x over 310
 # draws -- while every convergence diagnostic IMPROVED, because a drifting
 # chain has a large and growing within-chain variance that pushes R-hat toward
@@ -46,7 +46,7 @@ metric:
 # paths are repo-root-relative.
 parameters:
   config_path:
-    value: "scripts_bnn/antmaze_medium_diverse_bnn_antmaze_eval.yaml"
+    value: "scripts_bnn/antmaze_large_diverse_bnn_antmaze_eval.yaml"
   seed:
     value: 0
 
@@ -110,8 +110,8 @@ parameters:
 
   # ---- Swept: architecture ---------------------------------------------
   # width and depth are log2 exponents (2**width).  Ranges UNCHANGED from
-  # round 1.  Round-1 tier-1 winner for this variant sat at BOTH ceilings
-  # (width 10, depth 6) — the largest network available.
+  # round 1.  Round-1 tier-1 winner for this variant was width 6, depth 3 —
+  # mid-range, no ceiling reached.
   # Ceilings reached in round 1 were reached under `warmup_final_nll`, the
   # metric round 2 retires, so they are not evidence about the optimum under
   # `val_mean_cross_entropy`.  Not narrowed either -- narrowing in response

@@ -188,7 +188,7 @@ Fixed: `epochs: 5000`, `criteria_key: loss`, `seed: 0`.
 | `fraction_cool` | uniform | 0.1 – 0.5 | unchanged |
 
 Fixed per trial: `num_chains: 4`, `chains_per_gpu: 4`, `num_samples: 75`,
-`n_discarded: 5`, `num_burn_in_steps: 5000`, `samples_per_cycle: 1`,
+`n_discarded: 5`, `num_burn_in_steps: 20000`, `samples_per_cycle: 1`,
 `chain_init_jitter: 0.0`, `use_cyclical_lr: true`, `warmup_log_every: 250`,
 `early_stop_acc_threshold: 0.0`, `seed: 0`.
 
@@ -237,6 +237,21 @@ consequence to be aware of: burn-in now runs at ≤ 5e-4 rather than round 1's
 fixed 0.002. That follows from the pre-registered construction and was not
 chosen for its effect.
 
+**Burn-in length: 20,000 steps, not round 1's 5,000.** This follows from the
+same construction. Round 1 burned in at a fixed 2e-3; round 2 burns in at the
+swept `sghmc_lr`, capped at 5e-4 — 4× smaller at the ceiling and up to 40×
+smaller at the floor. Holding the length fixed while shrinking the step would
+under-burn every trial systematically, so the length is scaled by the same 4×
+the ceiling shrank. Three of four round-1 warm-up winners used a step *above*
+the new ceiling (1.64e-3, 6.96e-4, 1.96e-3), which is how far short 5,000 steps
+would now fall.
+
+It is deliberately **not** made adaptive to the drawn `sghmc_lr`. Burn-in
+quality is part of the candidate under test in a merged design, so a
+configuration needing more burn-in than it gets simply scores worse and the
+optimiser avoids it. The fixed increase removes the systematic shortfall; it
+does not try to equalise across the swept range.
+
 **Per-trial horizon: 75 draws per chain, not round 1's 35.** Round 1 ranked
 schedules at roughly 1/9 of the production draw count, and the failure it missed
 only enters the metric with length — in the round-1 pilot, val CE ran 0.2953 →
@@ -281,7 +296,8 @@ One value deserves its own note because it looks like tuning and is not:
 - **Sampler safety: `max_param_step: 0.5`, `clip_grad_norm_value: 100.0` with
   `clip_during_sampling: false`.** The clip is scoped to burn-in because
   clipping during sampling is non-measure-preserving and biases the CVaR tail.
-- **`batch_size: 64`, `epochs: 5000`, `num_burn_in_steps: 5000`.**
+- **`batch_size: 64`, `epochs: 5000`, `num_burn_in_steps: 20000`** (round 1
+  used 5,000; see §3.2 for why the length changed with the step size).
 
 ---
 
@@ -930,27 +946,30 @@ comment in the config it was written into.
 **Launch the round-2 merged BNN sweeps (§3).** Round 1 is closed; its results
 stay in §6 as the record, and §3.7 is why. Read §3.7 before anything else.
 
-Preconditions, in order:
+**Preconditions — all done as of 2026-08-08:**
 
-1. **Remove `burn_in_lr` from all four
-   `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`.** The merged sweep
-   requires burn-in to inherit the swept `sghmc_lr`; if the base config sets
-   `burn_in_lr`, burn-in silently uses it and the merge achieves nothing. This
-   cannot be overridden from the sweep (§8, null-through-CLI).
-2. **Write the remaining three merged sweep yamls.** `medium_diverse` is
-   drafted at
-   `scripts_bnn/sweep_antmaze_medium_diverse_bnn_merged_antmaze_eval.yaml`;
-   the others differ only in `config_path`.
-3. **Decide what happens to round 1's winners in the production configs.** They
-   are superseded but still present, so a `train_rewards.sh` run today would
-   train round-1 models. Either strip them or accept the footgun knowingly.
-4. Launch one agent per sweep, four concurrently — `num_chains: 4`,
-   `chains_per_gpu: 4` puts each on a single GPU, leaving two of six free, and
-   under the §10.7 thread caps four jobs need ~128 of 255 threads.
+- All four merged sweep yamls exist:
+  `scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml`. They are
+  generated from one template and differ only in `config_path` and per-variant
+  round-1 notes.
+- `burn_in_lr` has been **removed** from all four
+  `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`, so burn-in inherits the
+  swept `sghmc_lr`. Do not add it back.
+- Those configs still hold round-1's selected values — necessarily, since the
+  sweep needs a parseable base config and overrides all nine. They now carry a
+  `STATUS: SUPERSEDED-ROUND1` header, and **`train_rewards.sh` refuses to launch
+  while that marker is present** (override: `ALLOW_SUPERSEDED=1`). Replace the
+  header when transcribing the round-2 winner; that removes the marker and
+  re-arms the launcher.
+
+**To launch:** one agent per sweep, four concurrently. `num_chains: 4`,
+`chains_per_gpu: 4` puts each on a single GPU, leaving two of six free, and
+under the §10.7 thread caps four jobs need ~128 of 255 threads.
 
 Expected cost: ~6 h per trial at mid-range `cycle_length` (1.7 h at 500, 10 h at
-3000). The `run_cap` is 130 but the K=15 rule fired at trials 20–56 in round 1;
-a 9-dimensional space should take longer, so budget for more.
+3000), plus the longer 20,000-step burn-in (~+11% at mid-range). The `run_cap`
+is 130 but the K=15 rule fired at trials 20–56 in round 1; a 9-dimensional space
+should take longer, so budget for more.
 
 **Then stage 3 (§4)** — `num_chains` only, with `num_samples` pinned at the
 sweep's 75.

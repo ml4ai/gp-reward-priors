@@ -1,21 +1,26 @@
-# Hyperparameters selected by the pre-registered two-stage BNN sweep
-# procedure (seed-0 data split throughout).  See HANDOFF_HP_SELECTION.md.
+# ============================================================================
+# STATUS: SUPERSEDED-ROUND1 -- do NOT run production training from this file.
+# ============================================================================
+# Every selected value below is ROUND 1's.  Round 1's two-tier BNN design was
+# discarded (HANDOFF_HP_SELECTION.md section 3.7) after its selected
+# configuration proved non-stationary at production length: weight norm grew
+# 4.09x over 310 draws while every convergence diagnostic improved.
 #
-#   Stage 1 - warm-up tier, sweep BNN-training/jhpdsl60,
-#   metric warmup_final_nll (minimise).  Rule winner: run 3orxv3kl,
-#   trial 10, warmup_final_nll=0.227336; rule fired at trial 25.
-#   -> width, depth, n_meas, map_amp2
+# These values are retained ONLY so this file remains a valid base config for
+# the round-2 merged sweep
+# (scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml), which
+# overrides all nine of them: width, depth, n_meas, map_amp2, sghmc_lr,
+# sghmc_lr_max, cycle_length, mdecay, fraction_cool.  Reading any of them as a
+# selected hyperparameter is a mistake.
 #
-#   Stage 2 - sampling tier, sweep BNN-training/u5snid84,
-#   metric val_mean_cross_entropy (minimise).  Rule winner: run d1ddc4yg,
-#   trial 10, val_mean_cross_entropy=0.210992; rule fired at trial 25.
-#   -> sghmc_lr, sghmc_lr_max, cycle_length, mdecay, fraction_cool
-#   Rule winner = best-of-all, and the run is not divergence-flagged
-#   (divergent trials in this sweep: 7 / 26).
+# `burn_in_lr` has been REMOVED, deliberately.  The merged sweep requires
+# burn-in to inherit the swept `sghmc_lr`; setting it here would silently
+# override that and reinstate exactly the mismatch that ended round 1.
+# Do not add it back (section 3.2).
 #
-#   NOT selected here: num_chains / num_samples / chains_per_gpu.  Stage 3
-#   sets the draw budget from the CVaR tail diagnostics (HANDOFF section 4);
-#   the values below are the pre-selection reference point.
+# train_rewards.sh refuses to launch while the SUPERSEDED-ROUND1 marker above
+# is present.  When the merged sweep fires, replace this whole header with the
+# round-2 provenance header and transcribe the winner.
 project: BNN-training
 group: BNN
 name: bnn
@@ -36,11 +41,6 @@ num_burn_in_steps: 5000  # steps for preconditioner adaptation (shared warm-up
 sghmc_lr: 0.00044675299100389534          # lr_min: cool-phase (sampling) step size
 mdecay: 0.022440542355891248             # friction; acts during burn-in as well as
                          # sampling (the stage-2 confound, HANDOFF section 7)
-# Burn-in step size, deliberately DECOUPLED from the swept cool-phase lr_min.
-# Fixed and uniform across variants: burn-in quality must not be a function of
-# the schedule under test (HANDOFF section 3.2).  Absent this line the field
-# falls back to TrainConfig's None, which silently reinstates the confound.
-burn_in_lr: 0.002
 batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
 n_meas: 10

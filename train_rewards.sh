@@ -145,13 +145,27 @@ abs_meas() {  # $1 = config file
 # --- enumerate jobs (and preflight the measurement set for BNN) ---
 JOBS=()   # each element: "variant seed"
 MISSING_MEAS=()
+SUPERSEDED=()
 for v in $VARIANTS; do
   cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
   if [[ ! -f "$cfg" ]]; then echo "ERROR: config not found: $cfg" >&2; exit 1; fi
+  # A config still carrying selected values from a discarded selection round
+  # must not silently train production models.  The marker is a comment, so it
+  # disappears the moment the header is replaced with a real provenance block.
+  grep -q 'SUPERSEDED-ROUND1' "$cfg" && SUPERSEDED+=("$v -> $cfg")
   meas=$(abs_meas "$cfg")
   [[ -n "$meas" && ! -f "$meas" ]] && MISSING_MEAS+=("$v -> $meas")
   for s in $SEEDS; do JOBS+=("$v $s"); done
 done
+if (( ${#SUPERSEDED[@]} > 0 )) && [[ "${ALLOW_SUPERSEDED:-0}" != "1" ]]; then
+  echo "ERROR: config(s) marked SUPERSEDED-ROUND1 -- refusing to train:" >&2
+  printf '  %s\n' "${SUPERSEDED[@]}" >&2
+  echo "These still hold hyperparameters from a selection round that was" >&2
+  echo "discarded (HANDOFF_HP_SELECTION.md section 3.7).  Transcribe the" >&2
+  echo "round-2 merged-sweep winner and replace the header first." >&2
+  echo "Override with ALLOW_SUPERSEDED=1 only if you know why you want this." >&2
+  exit 1
+fi
 if (( ${#MISSING_MEAS[@]} > 0 )); then
   echo "ERROR: measurement (tuning) set file missing for:" >&2
   printf '  %s\n' "${MISSING_MEAS[@]}" >&2
