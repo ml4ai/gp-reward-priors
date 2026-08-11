@@ -375,51 +375,49 @@ def bt_pool_logit_np(pred_masked, mask, mode="mean"):
     return s / n
 
 
-def weight_magnitude_summary(params_chains, warn_growth=1.5):
-    """RMS weight magnitude across sampling, and how much it drifted.
+def function_space_drift(pred_chains, eps=1e-12):
+    """Does the induced function-space measure change with draw index?
 
-    `params_chains` is [chain, draw, n_params] — the flattened weights of every
-    retained draw.  The statistic is the same one the training scripts report
-    after warm-up as ``avg |w|`` (total L2 norm / sqrt(n_params)), so the
-    sampling-phase values are directly comparable to ``warmup_avg_weight_mag``.
+    `pred_chains` is [chain, draw, point] — the predictive f at the diagnostic
+    inputs.  Under Wu et al. (2025) the stationary measure of the dynamics is
+    the function-space posterior P_{f|D}, so f is the object of inference and
+    the weights are not: weight-space statistics say nothing about convergence
+    here, because U(w) depends on w only through f and the chain diffuses freely
+    along f-preserving directions.  Stationarity is therefore a statement about
+    f, and this measures it directly.
 
-    Why this is logged: SGHMC chains that are drifting rather than sampling a
-    stationary distribution show a steadily growing weight norm.  That inflates
-    the Bradley-Terry logit and hence cross-entropy while leaving the ranking —
-    and so accuracy — largely intact, and it *deflates* R-hat and inflates ESS
-    by growing the within-chain variance.  Convergence diagnostics therefore
-    look better as such a run gets worse, and the weight norm is the signal
-    that distinguishes the two.  Purely observational: nothing gates on it.
+    Compares the first half of each chain's draws with the second half:
 
-    Returns a dict of `sampling_weight_*` metrics, ready to merge into the
-    wandb summary.
+      * location — |E2[f] - E1[f]| / sd(f), the shift in units of posterior sd;
+      * scale    — sd2(f) / sd1(f), inflation or collapse of the spread.
+
+    A stationary chain gives location ~ 0 and scale ~ 1.  A drifting one shows
+    location growing and/or scale departing from 1.  This also tests the
+    cyclical step-size schedule, which is an addition to Wu et al.: early and
+    late cycles should be samples from the same measure.
+
+    Returns a dict of `fn_drift_*` metrics (empty if too few draws to split).
     """
-    mag = np.sqrt(np.mean(np.asarray(params_chains, dtype=np.float64) ** 2, axis=2))
-    first, last = mag[:, 0], mag[:, -1]
-    growth = last / np.clip(first, 1e-12, None)
+    a = np.asarray(pred_chains, dtype=np.float64)
+    C, D, P = a.shape
+    h = D // 2
+    if h < 2:
+        return {}
+    first, second = a[:, :h, :], a[:, h:2 * h, :]
+    sd = a.reshape(-1, P).std(axis=0) + eps
+    loc = np.abs(second.mean(axis=(0, 1)) - first.mean(axis=(0, 1))) / sd
+    scale = (second.std(axis=1).mean(axis=0) + eps) / (first.std(axis=1).mean(axis=0) + eps)
+    fin = lambda x: np.asarray(x, float)[np.isfinite(x)]
     out = {
-        "sampling_weight_mag_first": float(first.mean()),
-        "sampling_weight_mag_final": float(last.mean()),
-        "sampling_weight_mag_max": float(mag.max()),
-        "sampling_weight_growth": float(last.mean() / max(float(first.mean()), 1e-12)),
-        "sampling_weight_growth_min": float(growth.min()),
-        "sampling_weight_growth_max": float(growth.max()),
+        "fn_drift_loc_median": float(np.median(fin(loc))),
+        "fn_drift_loc_95th": float(np.percentile(fin(loc), 95)),
+        "fn_drift_scale_median": float(np.median(fin(scale))),
+        "fn_drift_scale_95th": float(np.percentile(fin(scale), 95)),
     }
     print(
-        f"[diag] sampling avg |w|: {out['sampling_weight_mag_first']:.4f} "
-        f"-> {out['sampling_weight_mag_final']:.4f} "
-        f"({out['sampling_weight_growth']:.2f}x; per-chain "
-        f"{out['sampling_weight_growth_min']:.2f}-{out['sampling_weight_growth_max']:.2f}x)"
+        f"[diag] function-space drift (first vs second half of draws): "
+        f"location {out['fn_drift_loc_median']:.3f} sd (95th "
+        f"{out['fn_drift_loc_95th']:.3f}), scale {out['fn_drift_scale_median']:.3f}x "
+        f"(95th {out['fn_drift_scale_95th']:.3f}x)"
     )
-    if out["sampling_weight_growth"] > warn_growth:
-        warnings.warn(
-            f"Weight magnitude grew {out['sampling_weight_growth']:.2f}x during "
-            f"sampling ({out['sampling_weight_mag_first']:.2f} -> "
-            f"{out['sampling_weight_mag_final']:.2f}).  The chains are drifting "
-            "rather than sampling a stationary distribution; R-hat/ESS will look "
-            "BETTER as this worsens, so do not read them as convergence.  "
-            "Consider reducing sghmc_lr / sghmc_lr_max / burn_in_lr or "
-            "increasing mdecay.",
-            RuntimeWarning,
-        )
     return out

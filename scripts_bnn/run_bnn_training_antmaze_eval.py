@@ -642,7 +642,6 @@ def train(config: TrainConfig):
 
     # ---- Load every chain's sampled weights once (eval-set independent) ----
     chains_weights = []
-    params_chains = []
     for i in range(config.num_chains):
         chain_dir = os.path.join(saved_dir, f"chain_{i}")
         sampled_weights = bayes_net_f._load_sampled_weights(
@@ -671,38 +670,18 @@ def train(config: TrainConfig):
                 )
             wandb.log({f"chain_{i}_sample_max_diff_w0_w1": _diff})
         chains_weights.append(sampled_weights)
-        params_chains.append(
-            np.stack(
-                [
-                    np.hstack([arr.ravel() for arr in arrays])
-                    for arrays in sampled_weights
-                ]
-            )
-        )
-    params_chains = np.stack(params_chains)
 
-    # ---- Parameter-space diagnostics (eval-set independent; logged once) ----
-    param_within_chain_var = float(np.mean(params_chains.var(axis=1)))
-    print(f"[diag] param within-chain var = {param_within_chain_var:.4e}")
-    rhats_param = azs.rhat(params_chains)
-    ess_param = azs.ess(params_chains)
-    # Weight-norm drift during sampling.  Comparable to warmup_avg_weight_mag
-    # above; observational only, nothing gates on it.  A drifting chain makes
-    # R-hat/ESS look better as the model gets worse, so this is the statistic
-    # that tells the two apart.
-    weight_drift = util.weight_magnitude_summary(params_chains)
-    summary = {
-        "param_within_chain_var": param_within_chain_var,
-        **weight_drift,
-        "param_rhat_max": float(np.nanmax(rhats_param)),
-        "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
-        "param_rhat_median": float(np.nanmedian(rhats_param)),
-        "param_rhat_mean": float(np.nanmean(rhats_param)),
-        "param_rhat_pct_over_1.01": _pct_over(rhats_param, 1.01),
-        "param_ess_min": float(np.nanmin(ess_param)),
-        "param_ess_median": float(np.nanmedian(ess_param)),
-        "param_ess_min_norm": float(np.nanmin(ess_param)) / total_samples,
-    }
+    # ---- Weight-space diagnostics: DELIBERATELY ABSENT ----------------
+    # Under Wu et al. (2025) the stationary measure of these dynamics is the
+    # function-space posterior P_{f|D}; the weight-space measure is not the
+    # object of inference and is not even confined -- U(w) depends on w only
+    # through f, so the chain diffuses freely along f-preserving directions and
+    # ||w|| grows without that indicating anything.  param_rhat / param_ess /
+    # param_within_chain_var and the sampling weight-norm statistics were
+    # therefore measuring nothing about convergence, and have been removed
+    # rather than relabelled.  Stationarity is assessed in function space by
+    # util.function_space_drift, logged per eval split below.
+    summary = {}
 
     # ---- Predictive diagnostics, computed per eval set (val_* and test_*) ----
     def evaluate_eval_set(label, X_e, y_e):
@@ -809,7 +788,14 @@ def train(config: TrainConfig):
             )
             ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
 
+        # Stationarity of the FUNCTION-space measure — the object of inference.
+        # Also tests the cyclical step-size schedule, which is an addition to
+        # Wu et al.: early and late cycles must be samples from one measure.
+        _drift = {f"{label}_{k}": v
+                  for k, v in util.function_space_drift(pred_chains).items()}
+
         return {
+            **_drift,
             # Theory-aligned predictive (Wu et al. Eq. 10) — the SELECTION
             # metric.  Averages the likelihood over draws, so it is sensitive to
             # posterior width, which the plug-in below is not.

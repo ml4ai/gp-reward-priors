@@ -68,8 +68,9 @@ map_sig_n2: 0.001        # nugget / diagonal jitter (mandatory for invertibility
 map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
 
 # --- Cyclical step-size schedule (Zhang et al. 2020) ---
-# Hot phase (lr_max → sghmc_lr, cosine): momentum zeroed at onset so the
-# chain escapes the current basin.  Cool phase (near sghmc_lr): one sample
+# Hot phase (lr_max → sghmc_lr, cosine): momentum is RESAMPLED from its
+# stationary Gaussian at cycle onset (Wu et al. 2025 Alg. 2), not zeroed —
+# zeroing is the legacy resample_momentum=False path and is not what runs.  Cool phase (near sghmc_lr): one sample
 # collected at the final step.  The adaptive preconditioner is frozen after
 # burn-in, so only lr cycles.
 use_cyclical_lr: true

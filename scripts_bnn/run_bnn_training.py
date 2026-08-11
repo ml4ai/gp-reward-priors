@@ -698,18 +698,19 @@ def train(config: TrainConfig):
             return float("nan")
         return float(np.mean(valid > threshold) * 100)
 
-    # Weight-norm drift during sampling.  Comparable to warmup_avg_weight_mag;
-    # observational only, nothing gates on it.  A drifting chain makes
-    # R-hat/ESS look better as the model gets worse, so this is the statistic
-    # that tells the two apart.
-    weight_drift = util.weight_magnitude_summary(params_chains)
+    # Stationarity is a statement about the FUNCTION-space measure, which is
+    # what these dynamics target (Wu et al. 2025).  Weight-space statistics
+    # (param_rhat / param_ess / param_within_chain_var, and sampling weight-norm
+    # drift) have been removed: U(w) depends on w only through f, so the chain
+    # diffuses freely along f-preserving directions and those numbers measure
+    # nothing about convergence.
+    fn_drift = util.function_space_drift(pred_chains)
 
     summary = {
         f"{eval_label}_mean_cross_entropy": np.mean(mean_ce),
         f"{eval_label}_mean_accuracy": np.mean(mean_acc),
         "pred_within_chain_var": pred_within_chain_var,
-        "param_within_chain_var": param_within_chain_var,
-        **weight_drift,
+        **fn_drift,
         "pred_rhat_max": float(np.nanmax(rhats_pred)),
         "pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
         "pred_rhat_median": float(np.nanmedian(rhats_pred)),
@@ -742,14 +743,6 @@ def train(config: TrainConfig):
         "pred_cvar_rhat_pct_over_1.01": _pct_over(rhat_pred_cvar, 1.01),
         "pred_cvar_mcse_rel_max": float(np.nanmax(mcse_pred_cvar_rel)),
         "pred_cvar_mcse_rel_median": float(np.nanmedian(mcse_pred_cvar_rel)),
-        "param_rhat_max": float(np.nanmax(rhats_param)),
-        "param_rhat_95th_pct": float(np.nanpercentile(rhats_param, 95)),
-        "param_rhat_median": float(np.nanmedian(rhats_param)),
-        "param_rhat_mean": float(np.nanmean(rhats_param)),
-        "param_rhat_pct_over_1.01": _pct_over(rhats_param, 1.01),
-        "param_ess_min": float(np.nanmin(ess_param)),
-        "param_ess_median": float(np.nanmedian(ess_param)),
-        "param_ess_min_norm": float(np.nanmin(ess_param)) / total_samples,
     }
     summary.update(_gn_agg)
     wandb.log(summary)
