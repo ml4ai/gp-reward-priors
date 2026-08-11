@@ -865,6 +865,7 @@ def train(config: TrainConfig):
     for _phase in ("burnin", "sampling"):
         _cnt = _nover = 0
         _sm = _mx = 0.0
+        _chits = _celems = 0
         for _i in range(config.num_chains):
             _p = os.path.join(saved_dir, f"chain_{_i}", "grad_norm_stats.pt")
             if not os.path.exists(_p):
@@ -874,10 +875,17 @@ def train(config: TrainConfig):
             _sm += _s.get("sum", 0.0)
             _nover += _s.get("n_over_clip", 0)
             _mx = max(_mx, _s.get("max", 0.0))
+            _chits += _s.get("clamp_hits", 0)
+            _celems += _s.get("clamp_elems", 0)
         if _cnt > 0:
             summary[f"gradnorm_{_phase}_max"] = _mx
             summary[f"gradnorm_{_phase}_mean"] = _sm / _cnt
             summary[f"gradnorm_{_phase}_pct_over_clip"] = 100.0 * _nover / _cnt
+        # max_param_step is a hard momentum clamp applied every step, sampling
+        # included.  It is not measure-preserving, so it is only defensible if
+        # it never binds on a selected run.  ~0 here => inert => no distortion.
+        if _celems > 0:
+            summary[f"param_clamp_{_phase}_pct"] = 100.0 * _chits / _celems
 
     wandb.log(summary)
 

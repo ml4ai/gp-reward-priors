@@ -704,7 +704,8 @@ class FPrefNet:
         # only during burn-in (harmless).  Zero overhead — clip_grad_norm_
         # already returns this norm.  Behaviour of the clip itself is unchanged.
         self._grad_norm_stats = {
-            phase: {"count": 0, "sum": 0.0, "max": 0.0, "n_over_clip": 0}
+            phase: {"count": 0, "sum": 0.0, "max": 0.0, "n_over_clip": 0,
+                    "clamp_hits": 0, "clamp_elems": 0}
             for phase in ("burnin", "sampling")
         }
 
@@ -851,6 +852,11 @@ class FPrefNet:
             if _gnorm > _thr:
                 _st["n_over_clip"] += 1
             self.sampler.step()
+            # Momentum-clamp activations for this step.  max_param_step is a
+            # hard nonlinearity that breaks measure preservation whenever it
+            # binds, so a selected run must show ~0 during sampling.
+            _st["clamp_hits"] += int(getattr(self.sampler, "_clamp_hits", 0))
+            _st["clamp_elems"] += int(getattr(self.sampler, "_clamp_elems", 0))
             self.step += 1
 
             # ---- Periodic evaluation (warm-up monitoring) ---------------

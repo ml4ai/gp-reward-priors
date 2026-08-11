@@ -60,6 +60,11 @@ class AdaptiveSGHMC(Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
+        # Per-step momentum-clamp instrumentation (see the clamp site below).
+        # Reset each step so the caller can attribute activations to a phase.
+        self._clamp_hits = 0
+        self._clamp_elems = 0
+
         for group in self.param_groups:
             # PERF: hoist scalar group values out of the inner parameter loop
             # so they are not re-looked-up on every iteration.
@@ -161,7 +166,19 @@ class AdaptiveSGHMC(Optimizer):
                 # so it only fires during pathological phases (e.g. the first
                 # hot-phase steps when the preconditioner was calibrated for a
                 # much smaller gradient scale).
+                #
+                # This clamp is NOT measure-preserving: it is a hard
+                # nonlinearity applied to the momentum every step, including
+                # during sampling, so whenever it binds the chain is no longer
+                # simulating the dynamics whose stationary measure is the
+                # target.  It is therefore only defensible if it never fires on
+                # a run that gets selected -- which is an empirical claim, so
+                # count activations and let the run report them.
+                self._clamp_elems += momentum.numel()
                 if max_param_step is not None:
+                    self._clamp_hits += int(
+                        (momentum.abs() > max_param_step).sum().item()
+                    )
                     momentum.clamp_(-max_param_step, max_param_step)
 
                 # parameter += momentum
