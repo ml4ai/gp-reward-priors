@@ -3,8 +3,21 @@ program: run_bnn_training_antmaze_eval.py
 method: bayes
 run_cap: 130   # safety limit only -- the K=15 stopping rule decides (see below)
 metric:
-  name: val_mean_cross_entropy
+  name: val_predictive_cross_entropy
   goal: minimize
+
+# SELECTION METRIC (round 2b): the posterior-predictive cross-entropy of
+# Wu et al. (2025) Eq. (10) -- p(y*|x*,D) ~= (1/S) sum_j p(y*|f(x*;w_j)), i.e.
+# the LIKELIHOOD averaged over function draws, E[sigma(f)].
+#
+# NOT `val_mean_cross_entropy`, which averages the reward over draws and
+# squashes once, sigma(E[f]).  That plug-in is blind to posterior WIDTH: two
+# posteriors with the same mean reward and very different spread score
+# identically (measured: holding the mean fixed and inflating the posterior 6x
+# moves the plug-in CE by 0.010 and the predictive CE by 0.174).  Selecting on
+# a width-blind statistic and then deploying CVaR_0.05 -- a functional of
+# exactly that width -- was a misalignment between the procedure and the
+# method it is meant to evaluate.  Both are logged; only this one selects.
 
 # ROUND 2 (2026-08-08): a SINGLE merged sweep replacing the round-1 two-tier
 # design (warm-up tier -> sampling tier).  Architecture, prior strength and

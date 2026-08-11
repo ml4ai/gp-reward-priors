@@ -416,6 +416,75 @@ class FPrefNet:
 
         return np.concatenate(parts_1), np.concatenate(parts_2)
 
+    def _predict_pairs_per_draw(self, x_1, x_2, am_1, am_2, T, batch_size=256):
+        """Per-draw pooled Bradley-Terry logits, shape [n_draws, N] per member.
+
+        Same masking and pooling as ``_predict_pairs_batched``, but WITHOUT the
+        average over sampled weights -- each draw is kept separate so the
+        likelihood can be averaged in probability space (Eq. 10) rather than the
+        function being averaged first.
+        """
+        N = am_1.shape[0]
+        S = len(self.sampled_weights)
+        out_1 = np.empty((S, N), dtype=np.float64)
+        out_2 = np.empty((S, N), dtype=np.float64)
+        x1_t = torch.from_numpy(np.asarray(x_1)).float().to(self.device)
+        x2_t = torch.from_numpy(np.asarray(x_2)).float().to(self.device)
+        self.net.eval()
+        with torch.no_grad():
+            for s, weights in enumerate(self.sampled_weights):
+                self.network_weights = weights
+                for start in range(0, N, batch_size):
+                    end = min(start + batch_size, N)
+                    b = end - start
+                    p1 = self.net(x1_t[start * T:end * T]).cpu().numpy().reshape(b, T)
+                    p2 = self.net(x2_t[start * T:end * T]).cpu().numpy().reshape(b, T)
+                    out_1[s, start:end] = bt_pool_logit_np(
+                        p1 * am_1[start:end], am_1[start:end], self._bt_pool)
+                    out_2[s, start:end] = bt_pool_logit_np(
+                        p2 * am_2[start:end], am_2[start:end], self._bt_pool)
+        return out_1, out_2
+
+    def eval_test_data_predictive(self, x, y, eval_batch_size=256):
+        """Posterior-predictive CE and accuracy, per Wu et al. (2025) Eq. (10).
+
+        Eq. (10) defines the predictive as an average of the LIKELIHOOD over
+        function draws, ``p(y*|x*,D) ~= (1/S) sum_j p(y*|f(x*; w_j))``, i.e.
+        ``E[sigma(f)]``.  ``eval_test_data`` instead averages the reward over
+        draws and squashes once, ``sigma(E[f])`` -- a plug-in estimate that is
+        blind to posterior width, since two posteriors with the same mean reward
+        and very different spread score identically.  That matters here because
+        the downstream quantity is CVaR_0.05, a functional of exactly that
+        spread.
+
+        Both are reported; this one is the theory-aligned quantity.
+
+        Returns:
+            (ce, acc): float cross-entropy and accuracy of the predictive.
+        """
+        B, _, T, d_dim = x.shape
+        obs_dim = d_dim - 1
+        am_1 = x[:, 0, :, obs_dim].astype(np.float32)
+        am_2 = x[:, 1, :, obs_dim].astype(np.float32)
+        x_1 = x[:, 0, :, :obs_dim].reshape(-1, obs_dim)
+        x_2 = x[:, 1, :, :obs_dim].reshape(-1, obs_dim)
+
+        s1, s2 = self._predict_pairs_per_draw(
+            x_1, x_2, am_1, am_2, T, batch_size=eval_batch_size)
+        # Stable sigmoid of the per-draw logit difference, then average the
+        # PROBABILITIES over draws.
+        d = s1 - s2
+        p1 = np.exp(-np.logaddexp(0.0, -d))
+        pbar = p1.mean(axis=0)
+
+        yv = np.asarray(y, dtype=np.float64)
+        eps = 1e-12
+        ce = float(-(yv[:, 0] * np.log(pbar + eps)
+                     + yv[:, 1] * np.log(1.0 - pbar + eps)).mean())
+        acc = float(((pbar > 0.5) == (yv[:, 0] > 0.5)).mean())
+        self.net.train()
+        return ce, acc
+
     def _ce_and_acc(self, sum_pred_1, sum_pred_2, y):
         """Cross-entropy and accuracy from per-pair reward sums."""
         fx = np.stack([sum_pred_1, sum_pred_2], axis=1).astype(np.float32)

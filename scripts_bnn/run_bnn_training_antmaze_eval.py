@@ -723,12 +723,32 @@ def train(config: TrainConfig):
 
         mean_ce = []
         mean_acc = []
+        pred_ce = []
+        pred_acc = []
         pred_chains = []
         for i in range(config.num_chains):
             bayes_net_f.sampled_weights = chains_weights[i]
             ce, acc = bayes_net_f.eval_test_data(X_e, y_e, eval_batch_size=4096)
             mean_ce.append(ce)
             mean_acc.append(acc)
+            # Posterior-predictive per Wu et al. (2025) Eq. (10): average the
+            # likelihood over draws, E[sigma(f)], rather than the reward,
+            # sigma(E[f]).  The plug-in above is blind to posterior width; the
+            # downstream CVaR is a functional of exactly that width.  Wrapped
+            # defensively so a failure here cannot discard an expensive run.
+            try:
+                _pce, _pacc = bayes_net_f.eval_test_data_predictive(
+                    X_e, y_e, eval_batch_size=4096
+                )
+            except Exception as e:  # noqa: BLE001 — keep the run, surface the cause
+                warnings.warn(
+                    f"[{label}] predictive CE failed on chain {i} "
+                    f"({type(e).__name__}: {e}); logging NaN.",
+                    RuntimeWarning,
+                )
+                _pce = _pacc = float("nan")
+            pred_ce.append(_pce)
+            pred_acc.append(_pacc)
             bayes_net_f.net.eval()
             with torch.no_grad():
                 chain_preds = []
@@ -790,6 +810,13 @@ def train(config: TrainConfig):
             ess_pred_cvar = mcse_pred_cvar = rhat_pred_cvar = mcse_pred_cvar_rel = _nan_pred
 
         return {
+            # Theory-aligned predictive (Wu et al. Eq. 10) — the SELECTION
+            # metric.  Averages the likelihood over draws, so it is sensitive to
+            # posterior width, which the plug-in below is not.
+            f"{label}_predictive_cross_entropy": float(np.mean(pred_ce)),
+            f"{label}_predictive_accuracy": float(np.mean(pred_acc)),
+            # Plug-in sigma(E[f]) — retained for continuity with round-1/round-2
+            # numbers and as the paired comparison, NOT for selection.
             f"{label}_mean_cross_entropy": np.mean(mean_ce),
             f"{label}_mean_accuracy": np.mean(mean_acc),
             f"{label}_pred_within_chain_var": pred_within_chain_var,
