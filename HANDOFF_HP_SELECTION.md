@@ -855,13 +855,30 @@ friction-hungry during burn-in.
 
 ## 8. Tooling
 
-**`launch_hp_sweeps.sh <phase1|phase2>`** (repo root) — creates and runs the
-sweeps on the GPU box. Preflights the seed-0 data splits, tuning sets, env, and
-GPU count; refuses phase 2 while any `FILL_ME` value remains; caches sweep ids
-in `exp/sweep_ids_<phase>.txt` so re-runs resume rather than duplicate; launches
-exactly **one agent per sweep** (serial trials give the Bayes optimiser full
-history, and the eval scripts write to deterministic per-seed output paths that
-two concurrent runs would clobber).
+**`launch_hp_sweeps.sh <bnn|baselines>`** (repo root) — creates and runs the
+sweeps on the GPU box. The old `phase1`/`phase2` arguments are gone: those
+numbers encoded the retired two-tier BNN structure. `bnn` launches the four
+round-2 merged sweeps on GPUs 0–3; `baselines` launches the eight MR/PT sweeps,
+which are already complete and reuse their cached ids. There is no combined
+mode — the two GPU maps overlap.
+
+Preflights the seed-0 data splits, tuning sets, env, and GPU count; rejects any
+`FILL_ME` left in a sweep yaml; and, for `bnn`, **refuses to launch if a base
+config sets `burn_in_lr`** — burn-in must inherit the swept `sghmc_lr`, and a
+base config that overrides it would have the sweep scoring configurations it is
+not actually running, invisibly (§3.7). Caches sweep ids per set
+(`exp/sweep_ids_bnn_merged.txt`, `exp/sweep_ids_phase1.txt`) so re-runs resume
+rather than duplicate, with the BNN set on a fresh file so it cannot resurrect a
+retired tier sweep. Exports the §10.7 thread caps, matching `train_rewards.sh`,
+so selection and evaluation runs share numerics. Launches exactly **one agent
+per sweep** (serial trials give the Bayes optimiser full history, and the eval
+scripts write to deterministic per-seed output paths that two concurrent runs
+would clobber).
+
+Note it does **not** refuse on the `SUPERSEDED-ROUND1` marker that
+`train_rewards.sh` blocks on. That is deliberate: the merged sweep overrides
+every swept field of its base config, whereas `train_rewards.sh` trains from
+those values directly.
 
 **`check_sweep_convergence.py`** (repo root) — evaluates the stopping rule
 out-of-band:
@@ -962,9 +979,17 @@ stay in §6 as the record, and §3.7 is why. Read §3.7 before anything else.
   header when transcribing the round-2 winner; that removes the marker and
   re-arms the launcher.
 
-**To launch:** one agent per sweep, four concurrently. `num_chains: 4`,
-`chains_per_gpu: 4` puts each on a single GPU, leaving two of six free, and
-under the §10.7 thread caps four jobs need ~128 of 255 threads.
+**To launch**, from the repo root on the box:
+
+```
+./launch_hp_sweeps.sh bnn
+```
+
+That creates the four sweeps and starts one agent each on GPUs 0–3, leaving two
+of six free; under the §10.7 thread caps the four jobs need ~128 of 255 threads.
+It is idempotent — a re-run after a reboot or a killed agent resumes rather than
+duplicating. The preflight will refuse if any base config has regained
+`burn_in_lr`.
 
 Expected cost: ~6 h per trial at mid-range `cycle_length` (1.7 h at 500, 10 h at
 3000), plus the longer 20,000-step burn-in (~+11% at mid-range). The `run_cap`

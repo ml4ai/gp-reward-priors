@@ -1,18 +1,34 @@
 #!/usr/bin/env bash
-# launch_hp_sweeps.sh — create and run the post-sampler-fix HP re-selection
-# sweeps on the GPU box (Ubuntu, 6x RTX A6000, conda env `pt` activated).
+# launch_hp_sweeps.sh — create and run the HP selection sweeps on the GPU box
+# (Ubuntu, 6x RTX A6000, conda env `pt` activated).
 #
 # Usage (from anywhere; the script cd's to the repo root):
-#   ./launch_hp_sweeps.sh phase1   # MR + PT + BNN warm-up tier  (12 sweeps)
-#   ./launch_hp_sweeps.sh phase2   # BNN sampling tier            (4 sweeps)
+#   ./launch_hp_sweeps.sh bnn        # round-2 MERGED BNN sweeps      (4 sweeps)
+#   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
 #
-# phase2 requires the FILL_ME placeholders in the
-# scripts_bnn/sweep_antmaze_*_bnn_sampling_antmaze_eval.yaml templates to be
-# replaced with the tier-1 winners first; the preflight refuses otherwise.
+# There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
+# running them together would oversubscribe.  The baselines are complete in any
+# case; that set exists to make them reproducible, not to be re-run.
 #
-# Idempotent: sweep IDs are cached in exp/sweep_ids_<phase>.txt, so a re-run
-# reuses the existing sweeps and only starts agents that are not already
-# running (safe after a reboot or a killed agent).
+# ROUND 2: the BNN's two-tier structure (warm-up tier -> sampling tier, launched
+# here as phase1/phase2) is retired.  Architecture, prior strength and sampler
+# schedule are now searched by ONE sweep per variant, exactly as the baselines
+# are — see HANDOFF_HP_SELECTION.md sections 3 and 3.7.  The set names replace
+# the old phase numbers because those numbers encoded the retired tiering.
+#
+# The BNN merged sweeps require their base config NOT to set `burn_in_lr`, so
+# that burn-in inherits the swept `sghmc_lr`.  The preflight enforces this: a
+# base config that sets it would silently reinstate the mismatch that ended
+# round 1, and nothing downstream would show that it had.
+#
+# NOTE: the BNN base configs deliberately still carry a STATUS:
+# SUPERSEDED-ROUND1 marker and round-1's values.  That is correct here — the
+# sweep overrides all nine swept fields — and this launcher must NOT refuse on
+# it, unlike train_rewards.sh, which trains from those values directly.
+#
+# Idempotent: sweep IDs are cached per set, so a re-run reuses the existing
+# sweeps and only starts agents that are not already running (safe after a
+# reboot or a killed agent).
 #
 # Exactly ONE wandb agent per sweep, by design:
 #   * serial runs give the Bayes optimizer the full result history;
@@ -31,40 +47,56 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 export PYTHONPATH="$ROOT"
 
-PHASE="${1:-}"
-if [[ "$PHASE" != "phase1" && "$PHASE" != "phase2" ]]; then
-    echo "usage: $0 phase1|phase2" >&2
+# --- CPU thread caps (see HANDOFF_HP_SELECTION.md section 10.7) ---------------
+# Must match train_rewards.sh.  Thread count changes floating-point reduction
+# order, so the selection runs launched here and the seed 1-10 evaluation runs
+# have to agree; a sweep run uncapped would not be comparable to the production
+# runs that use its winner.  Capping is also simply faster (-27% measured).
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-$OMP_NUM_THREADS}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
+export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"
+
+SET="${1:-}"
+if [[ "$SET" != "bnn" && "$SET" != "baselines" ]]; then
+    echo "usage: $0 bnn|baselines" >&2
     exit 1
 fi
 
 # ---------------------------------------------------------------- sweep maps
-# Entries are "key|sweep_yaml|gpu".  GPU packing (phase1): MR is a small MLP
-# (all 4 agents share GPU 0), PT fits 2/GPU, BNN warm-up is a single-network
-# phase (medium variants pair on GPU 3, large variants get their own GPU).
-# phase2: each sampling run needs a full GPU (4 chains, chains_per_gpu=4);
-# GPUs 4-5 stay free.
-if [[ "$PHASE" == "phase1" ]]; then
-    ENTRIES=(
-        "mr_medium_play|scripts_mr/sweep_antmaze_medium_play_mr_antmaze_eval.yaml|0"
-        "mr_medium_diverse|scripts_mr/sweep_antmaze_medium_diverse_mr_antmaze_eval.yaml|0"
-        "mr_large_play|scripts_mr/sweep_antmaze_large_play_mr_antmaze_eval.yaml|0"
-        "mr_large_diverse|scripts_mr/sweep_antmaze_large_diverse_mr_antmaze_eval.yaml|0"
-        "pt_medium_play|scripts_pt/sweep_antmaze_medium_play_pt_antmaze_eval.yaml|1"
-        "pt_medium_diverse|scripts_pt/sweep_antmaze_medium_diverse_pt_antmaze_eval.yaml|1"
-        "pt_large_play|scripts_pt/sweep_antmaze_large_play_pt_antmaze_eval.yaml|2"
-        "pt_large_diverse|scripts_pt/sweep_antmaze_large_diverse_pt_antmaze_eval.yaml|2"
-        "bnn_warmup_medium_play|scripts_bnn/sweep_antmaze_medium_play_bnn_warmup_antmaze_eval.yaml|3"
-        "bnn_warmup_medium_diverse|scripts_bnn/sweep_antmaze_medium_diverse_bnn_warmup_antmaze_eval.yaml|3"
-        "bnn_warmup_large_play|scripts_bnn/sweep_antmaze_large_play_bnn_warmup_antmaze_eval.yaml|4"
-        "bnn_warmup_large_diverse|scripts_bnn/sweep_antmaze_large_diverse_bnn_warmup_antmaze_eval.yaml|5"
-    )
+# Entries are "key|sweep_yaml|gpu".
+#   bnn:       each merged trial is 4 chains with chains_per_gpu=4, i.e. one
+#              full GPU per sweep -> GPUs 0-3, leaving 4-5 free.
+#   baselines: MR is a small MLP (all 4 agents share GPU 0); PT fits 2/GPU.
+#
+# Sweep-id caches are per set.  `baselines` deliberately reads the historical
+# exp/sweep_ids_phase1.txt: the MR/PT sweeps in it are complete round-1 sweeps
+# that are unaffected by the round-2 redesign, and reusing their ids is what
+# stops a re-run from creating duplicates.  The BNN set gets a fresh file so it
+# can never resurrect a retired warm-up/sampling-tier sweep.
+BNN_ENTRIES=(
+    "bnn_merged_medium_play|scripts_bnn/sweep_antmaze_medium_play_bnn_merged_antmaze_eval.yaml|0"
+    "bnn_merged_medium_diverse|scripts_bnn/sweep_antmaze_medium_diverse_bnn_merged_antmaze_eval.yaml|1"
+    "bnn_merged_large_play|scripts_bnn/sweep_antmaze_large_play_bnn_merged_antmaze_eval.yaml|2"
+    "bnn_merged_large_diverse|scripts_bnn/sweep_antmaze_large_diverse_bnn_merged_antmaze_eval.yaml|3"
+)
+BASELINE_ENTRIES=(
+    "mr_medium_play|scripts_mr/sweep_antmaze_medium_play_mr_antmaze_eval.yaml|0"
+    "mr_medium_diverse|scripts_mr/sweep_antmaze_medium_diverse_mr_antmaze_eval.yaml|0"
+    "mr_large_play|scripts_mr/sweep_antmaze_large_play_mr_antmaze_eval.yaml|0"
+    "mr_large_diverse|scripts_mr/sweep_antmaze_large_diverse_mr_antmaze_eval.yaml|0"
+    "pt_medium_play|scripts_pt/sweep_antmaze_medium_play_pt_antmaze_eval.yaml|1"
+    "pt_medium_diverse|scripts_pt/sweep_antmaze_medium_diverse_pt_antmaze_eval.yaml|1"
+    "pt_large_play|scripts_pt/sweep_antmaze_large_play_pt_antmaze_eval.yaml|2"
+    "pt_large_diverse|scripts_pt/sweep_antmaze_large_diverse_pt_antmaze_eval.yaml|2"
+)
+
+if [[ "$SET" == "bnn" ]]; then
+    ENTRIES=("${BNN_ENTRIES[@]}")
+    IDS_FILE="exp/sweep_ids_bnn_merged.txt"
 else
-    ENTRIES=(
-        "bnn_sampling_medium_play|scripts_bnn/sweep_antmaze_medium_play_bnn_sampling_antmaze_eval.yaml|0"
-        "bnn_sampling_medium_diverse|scripts_bnn/sweep_antmaze_medium_diverse_bnn_sampling_antmaze_eval.yaml|1"
-        "bnn_sampling_large_play|scripts_bnn/sweep_antmaze_large_play_bnn_sampling_antmaze_eval.yaml|2"
-        "bnn_sampling_large_diverse|scripts_bnn/sweep_antmaze_large_diverse_bnn_sampling_antmaze_eval.yaml|3"
-    )
+    ENTRIES=("${BASELINE_ENTRIES[@]}")
+    IDS_FILE="exp/sweep_ids_phase1.txt"
 fi
 
 # ----------------------------------------------------------------- preflight
@@ -101,15 +133,37 @@ for variant in antmaze-medium-play-v2 antmaze-medium-diverse-v2 \
     [[ -f "$t" ]] || { echo "PREFLIGHT: missing $t (needed by the BNN prior)" >&2; fail=1; }
 done
 
-# sweep yamls exist; phase2 must have its tier-1 winners filled in
+# sweep yamls exist and are launchable
 for entry in "${ENTRIES[@]}"; do
     yaml="${entry#*|}"; yaml="${yaml%%|*}"
-    [[ -f "$yaml" ]] || { echo "PREFLIGHT: missing sweep yaml $yaml" >&2; fail=1; }
-    # Match FILL_ME only as a parameter VALUE — the yamls' header comments
-    # legitimately mention FILL_ME when describing this very guard.
-    if [[ "$PHASE" == "phase2" ]] && grep -qE "value: *FILL_ME" "$yaml" 2>/dev/null; then
-        echo "PREFLIGHT: $yaml still contains FILL_ME values — transcribe the tier-1 winners first" >&2
+    if [[ ! -f "$yaml" ]]; then
+        echo "PREFLIGHT: missing sweep yaml $yaml" >&2; fail=1; continue
+    fi
+    # Match FILL_ME only as a parameter VALUE — a yaml's header comments may
+    # legitimately mention FILL_ME when describing this very guard.  The merged
+    # sweeps inherit nothing and so have none, but the check is generic.
+    if grep -qE "value: *FILL_ME" "$yaml" 2>/dev/null; then
+        echo "PREFLIGHT: $yaml still contains FILL_ME values" >&2
         fail=1
+    fi
+    # BNN merged sweeps: burn-in must inherit the swept `sghmc_lr`, so the base
+    # config must not set `burn_in_lr`.  If it does, burn-in silently uses that
+    # value, the sweep scores configurations it is not actually running, and
+    # nothing downstream reveals it — this is the seam that ended round 1
+    # (HANDOFF_HP_SELECTION.md section 3.7).  A null in the sweep cannot undo
+    # it: wandb serialises null onto argv as "None" and pyrallis rejects that.
+    if [[ "$SET" == "bnn" ]]; then
+        base=$(awk '$1=="config_path:"{f=1;next} f&&$1=="value:"{v=$2; gsub(/"/,"",v); print v; exit}' "$yaml")
+        if [[ -z "$base" ]]; then
+            echo "PREFLIGHT: could not read config_path from $yaml" >&2; fail=1
+        elif [[ ! -f "$base" ]]; then
+            echo "PREFLIGHT: base config $base (from $yaml) not found" >&2; fail=1
+        elif grep -qE '^[[:space:]]*burn_in_lr[[:space:]]*:' "$base"; then
+            echo "PREFLIGHT: $base sets burn_in_lr — remove it." >&2
+            echo "  The merged sweep needs burn-in to inherit the swept sghmc_lr;" >&2
+            echo "  setting it here reinstates the round-1 mismatch invisibly." >&2
+            fail=1
+        fi
     fi
 done
 
@@ -121,8 +175,7 @@ echo "Preflight OK."
 
 # ------------------------------------------------- sweep creation (idempotent)
 mkdir -p exp/sweep_logs
-IDS_FILE="exp/sweep_ids_${PHASE}.txt"
-touch "$IDS_FILE"
+touch "$IDS_FILE"   # set above, per sweep set
 
 get_or_create_sweep() {
     # echoes the sweep path (entity/project/id) for $1=key $2=yaml
@@ -174,5 +227,5 @@ for entry in "${ENTRIES[@]}"; do
 done
 
 echo
-echo "$PHASE: $launched agent(s) launched (sweep IDs cached in $IDS_FILE)."
+echo "$SET: $launched agent(s) launched (sweep IDs cached in $IDS_FILE)."
 echo "Monitor with: tail -f exp/sweep_logs/agent_*.log"
