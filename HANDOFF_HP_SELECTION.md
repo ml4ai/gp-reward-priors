@@ -694,9 +694,30 @@ configuration in §3.4.
 
 ## 6. Results
 
-Entity `champlin-university-of-arizona`. Status as of 2026-07-30.
+Entity `champlin-university-of-arizona`. Verified 2026-08-08.
 
-### Stage 1 — MR (`MR-training`, metric `eval_loss_best`) — complete
+**Read the headings carefully.** MR and PT are unaffected by the round-2
+redesign and stand as reported. Everything labelled ROUND 1 below is the record
+of a **discarded** design (§3.7) — it is kept because the discard itself has to
+be reportable, not because those hyperparameters are in use. No BNN result in
+this document is currently valid.
+
+### Stage 1 — BNN merged sweep (metric `val_mean_cross_entropy`) — NOT YET RUN
+
+| variant | sweep | winner | trial / trigger | val CE | diverged |
+|---|---|---|---|---|---|
+| medium_play | *(pending)* | | | | |
+| medium_diverse | *(pending)* | | | | |
+| large_play | *(pending)* | | | | |
+| large_diverse | *(pending)* | | | | |
+
+Launch with `./launch_hp_sweeps.sh bnn` (§10.2). When each fires, record here:
+sweep id, rule winner, trial/trigger, val CE, whether rule winner = best-of-all,
+the divergence count, and — new in round 2 — the winner's
+`sampling_weight_growth`, since a winner that drifts is exactly what round 1
+failed to notice.
+
+### Stage 1 — MR (`MR-training`, metric `eval_loss_best`) — complete, unaffected
 
 | variant | sweep | winner | trial / trigger | metric | width | depth | lr |
 |---|---|---|---|---|---|---|---|
@@ -708,7 +729,7 @@ Entity `champlin-university-of-arizona`. Status as of 2026-07-30.
 Transcribed into `scripts_mr/antmaze_<variant>_mr_antmaze_eval.yaml` with
 provenance headers and `criteria_key: loss`.
 
-### Stage 1 — PT (`PT-training`, metric `eval_loss_best`) — complete
+### Stage 1 — PT (`PT-training`, metric `eval_loss_best`) — complete, unaffected
 
 | variant | sweep | winner | trial / trigger | metric | embd | head | layers | lr |
 |---|---|---|---|---|---|---|---|---|
@@ -726,7 +747,7 @@ of 1e-5, so the optimum may lie below the searched range. The range is
 pre-registered and was **not** widened; record it as a limitation. The note also
 lives in the config file itself.
 
-### Stage 1 — BNN warm-up tier (`BNN-training`, metric `warmup_final_nll`) — complete
+### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
 | variant | sweep | winner | trial / trigger | nll | width | depth | n_meas | map_amp2 |
 |---|---|---|---|---|---|---|---|---|
@@ -735,13 +756,16 @@ lives in the config file itself.
 | large_play | `jhpdsl60` | `3orxv3kl` | 10 / 25 | 0.227336 | 7 | 6 | 10 | 623.485 |
 | large_diverse | `in2p7l17` | `st3a5fgh` | 17 / 32 | 0.235876 | 6 | 3 | 11 | 459.295 ⚠️ |
 
-**Result worth stating in the paper:** every variant selected a large
-`map_amp2` (313–773) together with a non-trivial `n_meas` (10–35). The
-functional prior is retained everywhere, at roughly 18–28× the legacy amplitude.
-This replicates an earlier, less clean run and is now established under a fully
-pre-registered procedure.
+**A round-1 finding worth re-testing, not citing.** Every variant selected a
+large `map_amp2` (313–773) with a non-trivial `n_meas` (10–35) — the functional
+prior retained everywhere at roughly 18–28× the legacy amplitude. It replicated
+an earlier, less clean run, so it is probably real. But it was selected on
+`warmup_final_nll`, the metric round 2 retires, so **cite the round-2 numbers
+instead once they exist.** If round 2 reproduces it across all four variants
+under an end-to-end metric and a range extended to 1e4, that is a considerably
+stronger result than round 1 could have supported.
 
-### Stage 2 — BNN sampling tier (metric `val_mean_cross_entropy`) — complete, 4 of 4 fired
+### ROUND 1 (superseded) — BNN sampling tier, metric `val_mean_cross_entropy`
 
 Sweeps: `ld9oi90s` (medium_play), `o9g70yby` (medium_diverse), `u5snid84`
 (large_play), `gnlrcb7y` (large_diverse). These are the **second** stage-2
@@ -803,53 +827,88 @@ was removed. None had fired, so no winner was ever read from them; they inform
 
 ## 7. Disclosures required in the write-up
 
-**Rule-vs-best disagreements.** In two sweeps the stopping-rule winner is not
-the best trial observed, because a better configuration arrived after the
-trigger and was discarded per the pre-registered rule:
+Split into what is settled and what is still pending round 2.
 
-| sweep | rule winner | best-of-all | gap | affects |
-|---|---|---|---|---|
-| BNN warm-up / large_diverse | t17, nll 0.235876 | t38, nll 0.226704 | 4.0% | the proposed method |
-| MR / large_diverse | t5, 0.210400 | t27, 0.203892 | 3.2% | a baseline |
+### 7.1 Settled — report these regardless of how round 2 turns out
 
-State the gap convention explicitly: these are quoted as *"the rule winner is X%
-worse than best-of-all"* (rule ÷ best − 1). The reverse convention gives 3.9%
-and 3.1%; pick one and use it consistently.
+**The BNN search was redesigned mid-project, and the first design was
+discarded.** This is the most important disclosure in the document and it should
+be stated plainly rather than buried. The original two-tier BNN search
+(architecture selected on a warm-up-only metric, then a schedule selected on top
+of it) produced a configuration that was **non-stationary at production length**:
+run at the full draw budget its weight norm grew 4.09× across 310 draws in all
+eight chains, validation CE degraded monotonically 0.2843 → 0.4252, and *every*
+convergence diagnostic improved while it happened, because a drifting chain's
+growing within-chain variance pushes R-hat toward 1 and inflates ESS. Per §0's
+standing rule the round was restarted from scratch rather than patched, so no
+post-hoc adjustment appears in the reported procedure. §3.7 has the full
+account.
 
-Note that one disagreement hurts the proposed method and the other hurts a
-baseline, so the rule cannot be characterised as self-serving. Note also that
-MR/large_diverse's discarded config sits in a very different regime
-(lr 2.579e-4 vs 5.840e-3) — the sweep found a distinct basin late, not a
-near-tie.
+Two methodological points are worth making in their own right, since they
+generalise beyond this project:
 
-**Budget.** Report that every family received 130 trials under the same
-stopping rule, and that sweeps ran until the rule fired rather than to the cap.
+- **Convergence diagnostics can be actively misleading, not merely silent,**
+  when a sampler is drifting. Anything certified on R-hat/ESS alone is unsafe
+  unless drift is separately excluded.
+- **Selecting a sampler at a much shorter horizon than it will be deployed at
+  biases toward instability**, rather than merely failing to detect it: at a
+  short horizon a larger step size buys a better score and its cost has not yet
+  appeared. Round 1 selected at 35 draws and deployed at 310.
 
-**Boundary winners.** PT/medium_diverse (if its lr-floor leader holds) and any
-stage-1 `map_amp2` near 1000 should be flagged as possibly range-limited.
+**Budget.** Every family received `run_cap: 130` under the same stopping rule,
+and sweeps ran until the rule fired rather than to the cap. Note the invariant
+is one-sided — the fairness claim requires the BNN to get *no more* tuning than
+the baselines — so a BNN sweep that stops earlier strengthens it. Report also
+that the BNN searches 9 dimensions against MR's 3 and PT's 4 at the same cap,
+i.e. thinner coverage per dimension for the proposed method.
 
-**Numerically divergent stage-2 trial counts** (report these, final): medium_play
-0/21, large_diverse 0/35, large_play 7/26, medium_diverse 8/25 — 15 of 107 trials
-overall. No winner is divergence-flagged. Report alongside these that the flag
-combines a NaN/Inf condition with a 1%-over-clip threshold, and that in
-medium_diverse only 3 of the 8 are outright blow-ups (§3.6.1) — quoting the raw
-count without that split overstates the instability.
+**Rule-vs-best disagreement (MR/large_diverse).** The stopping-rule winner is
+not the best trial observed: t5, 0.210400 against t27's 0.203892 — the rule
+winner is 3.2% worse. State the gap convention explicitly (rule ÷ best − 1; the
+reverse convention gives 3.1%) and use it consistently. The discarded config
+sits in a very different regime (lr 2.579e-4 vs 5.840e-3), so the sweep found a
+distinct basin late rather than a near-tie. This affects a **baseline**, i.e. it
+costs the comparison nothing in the proposed method's favour.
 
-**Numerically divergent stage-2 trials.** Removing the warm-up gate (§3.5) let
-low-friction schedules run to completion, and some diverge outright — Inf
-gradients, NaN convergence diagnostics, a reward function collapsed to a
-constant scoring exactly `ln 2` (§3.6). They are correctly ranked as bad and so
-do not threaten selection, but the count should be reported, and no divergent
-configuration may be carried into stage 3.
+**Boundary winner (PT/medium_diverse).** `lr = 1.365e-5` against a swept floor
+of 1e-5, so the optimum may lie below the searched range. Pre-registered and not
+widened; record as a limitation.
 
-**Residual burn-in/sampling confound in stage 2.** `mdecay` sets friction during
-both burn-in and sampling, so a schedule's warm-up quality is not independent of
-the schedule being tested. Removing the warm-up gate (§3.5) stops this from
-hard-rejecting configurations, but low-friction schedules are still penalised
-through a poor warm-up rather than judged purely on their sampling behaviour.
-This is a known limitation of the stage-2 search, most likely to matter for
-medium_diverse, whose network is the largest and therefore the most
-friction-hungry during burn-in.
+**Search-range changes between rounds.** Two BNN ranges were expanded for round
+2 — `map_amp2` 1e3 → 1e4 and `mdecay` 1e-1 → 1.0 — on the ground that round-1
+winners sat against those caps (89–95% for `mdecay`; the top ~20% of log-space
+for `map_amp2`). Nothing was narrowed. `width`/`depth` were left alone despite
+round-1 ceiling hits, because those hits occurred under the retired metric.
+Disclose the expansions: they were decided from round-1 results, which is
+legitimate only because round 1 was discarded wholesale and round 2 was
+pre-registered before it ran.
+
+**Stage 4's statistic is a max over 200 checkpoints** (§5) — optimistic relative
+to final-checkpoint reporting, applied identically to every method, and worth
+naming rather than leaving implicit.
+
+### 7.2 Pending — fill in from round 2
+
+These have round-1 values recorded in §6, but round-1's BNN numbers are not
+reportable. Re-derive each from the merged sweeps:
+
+- **Divergent trial counts.** Round 1's were 15 of 107 across the four sampling
+  sweeps. When reporting round 2's, note that the `!! DIVERGED` flag combines a
+  NaN/Inf condition with a 1%-over-clip threshold, and give the split — in
+  round 1 only 3 of medium_diverse's 8 were outright blow-ups, so the raw count
+  overstates instability (§3.6.1).
+- **Whether rule winner = best-of-all** for each of the four sweeps.
+- **Weight-norm drift of each winner** (`sampling_weight_growth`, now logged on
+  every run). Round 2's whole justification is that this is visible; report it
+  even when it is unremarkable.
+- **Whether the large-`map_amp2` finding replicates** under the end-to-end
+  metric and the extended range (§6).
+
+**No longer applicable.** Round 1's "residual burn-in/sampling confound"
+disclosure is retired: it arose only because a separately-chosen architecture
+was held fixed while a schedule was searched around it. With one merged sweep,
+friction acting during burn-in as well as sampling is simply a property of the
+candidate being scored (§3.7). Do not carry that disclosure forward.
 
 ---
 
@@ -947,16 +1006,31 @@ stopping rule, metric) first; everything else can be looked up as needed.
 
 | stage | family | state |
 |---|---|---|
-| 1 | MR | 4/4 sweeps fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml`, `criteria_key: loss` |
-| 1 | PT | 4/4 sweeps fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml`, `criteria_key: loss` |
-| 1 | BNN warm-up | 4/4 sweeps fired; winners transcribed into the stage-2 sweep yamls |
-| 2 | BNN sampling | **4/4 fired**; winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| — | BNN configs | production configs written and verified against wandb (§10.3) |
-| 3 | BNN | **not started — this is the next action** |
+| 1 | MR | 4/4 sweeps fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml`, `criteria_key: loss`. **Unaffected by round 2.** |
+| 1 | PT | 4/4 sweeps fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml`, `criteria_key: loss`. **Unaffected by round 2.** |
+| 1 | BNN | **not run** — the four merged sweeps are written and preflighted but not launched. This is the next action (§10.2). |
+| 3 | BNN | not started; blocked on stage 1 |
 | 4 | all | not started |
 
+**No BNN hyperparameter is currently selected.** Round 1's two-tier BNN search
+completed and all eight of its sweeps fired, but the design was discarded
+(§3.7); its results are retained in §6 under ROUND 1 headings as the record of a
+discarded round, not as values in use.
+
+Ready and verified, not yet run:
+
+- `scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml` — all four,
+  generated from one template, 9 swept params, `run_cap: 130`;
+- `burn_in_lr` removed from all four BNN base configs, enforced by the
+  `launch_hp_sweeps.sh bnn` preflight;
+- those base configs marked `STATUS: SUPERSEDED-ROUND1`, which blocks
+  `train_rewards.sh` until a round-2 winner is transcribed;
+- thread caps exported by both launchers (§10.7).
+
 Every fired sweep has provenance (run id, trial, metric, trigger) recorded as a
-comment in the config it was written into.
+comment in the config it was written into. The BNN configs currently carry a
+superseded-round header instead, and it must be replaced by a real provenance
+block when round 2's winner is transcribed.
 
 ### 10.2 Immediate next action
 
@@ -1063,65 +1137,93 @@ the start — so decide it deliberately if it matters.
 If a stage-2 agent is still alive on the box, it is now doing discardable work —
 trials after the trigger are outside the rule. §10.6's kill caution applies.
 
-### 10.3 Done: the BNN production configs
+### 10.3 The BNN production configs — done for round 1, to be redone
 
-Completed 2026-08-08 for all four variants; kept here because it documents a
-**trap** that will re-appear if these configs are ever regenerated.
+Done once already, for round-1's winners, and **now void**: those values are
+superseded and the configs carry a `STATUS: SUPERSEDED-ROUND1` header that
+blocks `train_rewards.sh`. The transcription has to be repeated when the merged
+sweeps fire — with two changes from the procedure below:
+
+- there is **one** source sweep per variant now, not two, so a single provenance
+  block replaces the stage-1/stage-2 pair;
+- **`burn_in_lr` must NOT be re-added.** It was deliberately removed; the merged
+  design requires burn-in to inherit the swept `sghmc_lr`, and re-adding it
+  reinstates the exact mismatch that ended round 1 (§3.7). The
+  `launch_hp_sweeps.sh bnn` preflight refuses to launch if it reappears, but
+  nothing catches it once the sweep has already run.
+
+Replacing the superseded header with a real provenance block is also what
+re-arms `train_rewards.sh`, so it is not optional.
+
+The rest of this section is the round-1 record, kept because it documents a
+**trap** that will re-appear when these configs are regenerated.
 `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml` carried pre-selection
 values from an earlier era, **and was missing `map_amp2` and `burn_in_lr`
 entirely**. Fields absent from the yaml fall back to `TrainConfig` defaults
 (verified in `run_bnn_training_antmaze_eval.py`: `map_amp2: float = 1.0` at
 :229, `burn_in_lr: Optional[float] = None` at :113), which would silently give:
 
-- `map_amp2 = 1.0` — discarding the stage-1 prior-amplitude result (the winners
-  are 313–773), i.e. throwing away the project's main prior finding;
-- `burn_in_lr = None` — reinstating the burn-in/sampling confound that §3.5
-  exists to describe.
+- `map_amp2 = 1.0` — discarding the prior-amplitude result (round-1 winners were
+  313–773), i.e. throwing away the project's main prior finding;
+- `burn_in_lr = None` — which in round 1 reinstated a confound, and in round 2
+  is the **correct and required** value (see below).
 
-Both lines must be **added**, not merely edited. Each config must end up with:
+**Round-2 target state.** `map_amp2` must be **added**, not merely edited. Each
+config must end up with:
 
 | field | source |
 |---|---|
-| `width`, `depth`, `n_meas`, `map_amp2` | stage-1 winner (§6; also present in the stage-2 sweep yamls) |
-| `sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`, `fraction_cool` | stage-2 winner (§6) |
-| `burn_in_lr: 0.002` | fixed, uniform (§3.2) |
-| `num_chains`, `num_samples`, `chains_per_gpu` | **stage 3 decides these** — leave until then |
+| `width`, `depth`, `n_meas`, `map_amp2`, `sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`, `fraction_cool` | the merged sweep's winner — all nine from one run (§6) |
+| `burn_in_lr` | **absent.** Burn-in inherits `sghmc_lr`; adding it back breaks the merge (§3.7) |
+| `num_samples: 75` | pinned to the sweep horizon, not a free choice (§4) |
+| `num_chains`, `chains_per_gpu` | **stage 3 decides these** — leave until then |
+| `n_discarded` | owned by no stage; decide deliberately rather than inheriting |
 | `seed` | leave at 1; `train_rewards.sh` overrides it per evaluation seed |
 
-Afterwards verify that each parsed config contains `map_amp2`, `burn_in_lr` and
-all five schedule fields, and that they match the winning wandb runs
+Also replace the `STATUS: SUPERSEDED-ROUND1` header with the provenance block —
+that is what re-arms `train_rewards.sh`.
+
+Afterwards verify that each parsed config contains `map_amp2`, all nine selected
+fields, and **no** `burn_in_lr`, and that the values match the winning wandb run
 field-by-field. (The same verification caught nothing wrong for MR and PT, but it
 is cheap and these are the numbers every reported result depends on.)
 
-**What was done.** All four configs were rewritten with a provenance header
-naming both sweeps, both winning runs, their trials, triggers and metrics, and —
-for large_diverse — the §7 stage-1 rule-vs-best disclosure. Then each config was
-parsed with `yaml.safe_load` and compared field-by-field against the two winning
-wandb run configs: all nine selected fields plus `burn_in_lr` matched exactly for
-all four variants. `bt_pool: "mean"`, `clip_during_sampling: false`,
+**What was done in round 1** (the pattern to repeat, with one source sweep
+instead of two). All four configs were rewritten with a provenance header naming
+the sweeps, winning runs, trials, triggers and metrics, plus any §7 rule-vs-best
+disclosure for that variant. Then each config was parsed with `yaml.safe_load`
+and compared field-by-field against the winning wandb run configs: all nine
+selected fields matched exactly for all four variants. `bt_pool: "mean"`, `clip_during_sampling: false`,
 `clip_grad_norm_value: 100.0`, `samples_per_cycle: 1` and `chain_init_jitter: 0.0`
 are deliberately left to `TrainConfig` defaults, which carry the correct values —
 this is the one place §3.4's "never read from a dataclass default" is knowingly
-relaxed, because these are genuinely uniform project-wide and the stage-2 sweep
-yamls say so explicitly.
+relaxed, because these are genuinely uniform project-wide and the sweep yamls say
+so explicitly. `burn_in_lr` joins that list in round 2, but for the opposite
+reason: its default of `None` is the behaviour the design requires.
 
-`num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2` and `n_discarded: 5` are
-still the **pre-selection reference values** — stage 3 sets the first three, and
-`n_discarded` is set by neither stage (§4 scopes stage 3 to chains and draws), so
-decide it deliberately rather than inheriting it by accident.
+The `num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2` values still sitting
+in these files are round-1 reference values and are **void** — `num_samples` is
+now pinned at 75 and only `num_chains`/`chains_per_gpu` are stage 3's to set.
 
 ### 10.4 Then: stage 3, then stage 4
 
-Stage 3 (§4) raises `num_chains` / `num_samples` until the CVaR tail diagnostics
-are acceptable — judged on `val_pred_cvar_ess_min`, `val_pred_cvar_mcse_rel_max`,
-`val_pred_folded_rhat_*` and `gradnorm_sampling_pct_over_clip ≈ 0`, **not** on
-`val_mean_cross_entropy` and **not** on `param_*`. The pre-selection reference
-point was `num_chains: 8`, `num_samples: 310`, `chains_per_gpu: 2`.
+Stage 3 (§4) raises **`num_chains` only**, until the CVaR tail diagnostics are
+acceptable — judged on `val_pred_cvar_*`, `val_pred_folded_rhat_*` and
+`gradnorm_sampling_pct_over_clip ≈ 0`, **not** on `param_*`.
+`num_samples` is pinned at the sweep's 75 draws per chain: selection and
+production must run at the same horizon, which is the round-1 mistake §3.7
+exists to prevent. Round 1's `num_chains: 8`, `num_samples: 310` reference point
+is void.
 
-**Read the censoring warning in §4 before using any of those numbers.** At the
-stage-2 budget the `_max`/`_min` extremes are pinned at estimator ceilings and
-rank nothing; steer on the median / 95th-pct / `pct_over_1.01` variants and
-confirm the extremes de-saturate at the production draw count.
+Two round-1 lessons carry into how stage 3 is read:
+
+- **The `_max`/`_min` extremes are censored at small budgets** and rank nothing;
+  steer on the median / 95th-pct / `pct_over_1.01` variants (§4). At the round-1
+  production budget they did de-saturate (`cvar_rhat_max` 1.2556 → 1.0651), but
+  on a run that was itself drifting, so re-confirm on a healthy one.
+- **Check `sampling_weight_growth` before believing any of them.** If the
+  weights drift, improving R-hat/ESS is an artifact and the budget question is
+  moot until the schedule is fixed.
 
 Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
 seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
@@ -1130,16 +1232,29 @@ seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
 
 Entity `champlin-university-of-arizona`.
 
+**In use:**
+
 | family / stage | medium_play | medium_diverse | large_play | large_diverse |
 |---|---|---|---|---|
 | MR stage 1 | `70742ym5` | `vilrah4f` | `qkjet6r3` | `59czpdwf` |
 | PT stage 1 | `z6nrw1vy` | `sridqxoj` | `1z6xo2u0` | `gjphiwvs` |
-| BNN stage 1 | `kk79h8xf` | `pyrz4qou` | `jhpdsl60` | `in2p7l17` |
-| BNN stage 2 | `ld9oi90s` | `o9g70yby` | `u5snid84` | `gnlrcb7y` |
+| BNN stage 1 (merged, round 2) | *(pending)* | *(pending)* | *(pending)* | *(pending)* |
 
-Superseded, not to be used: the first clean-restart stage-2 attempt (`zkkg4kdu`,
+Round-2 ids are cached in `exp/sweep_ids_bnn_merged.txt` once
+`./launch_hp_sweeps.sh bnn` creates them; record them here as well.
+
+**Superseded — do not read winners from these:**
+
+| round-1 BNN tier | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| warm-up tier | `kk79h8xf` | `pyrz4qou` | `jhpdsl60` | `in2p7l17` |
+| sampling tier | `ld9oi90s` | `o9g70yby` | `u5snid84` | `gnlrcb7y` |
+
+Also superseded: the first clean-restart sampling-tier attempt (`zkkg4kdu`,
 `jpu2vqce`, `7kfieu41`, `c05yyh72`), and everything from the pre-restart round
-described in §0.
+described in §0. The round-1 tiers above *did* fire and their numbers are real —
+they are superseded because the design was discarded (§3.7), not because the
+sweeps failed.
 
 ### 10.6 Monitoring habits worth keeping
 
