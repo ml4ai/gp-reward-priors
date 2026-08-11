@@ -279,25 +279,55 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
         print(f"[ce] chain {c} done")
 
     y_t = torch.from_numpy(y).float().to(device)
+    yv = np.asarray(y, dtype=np.float64)
     levels = sorted({n for n in levels if 0 < n <= n_draws}) or [n_draws]
     if levels[-1] != n_draws:
         levels.append(n_draws)
 
-    print(f"\n=== CE LADDER (posterior-predictive, {num_chains} chains) ===")
-    print(f"  {'draws/ch':>8} {'total':>7} | {'val CE':>9} {'accuracy':>9}")
-    print("  " + "-" * 40)
+    def _ce_acc_from_probs(p1):
+        """CE and accuracy from P(member 1 preferred), matching the training
+        script's soft-label CrossEntropyLoss when p1 = softmax(plug-in logits)."""
+        eps = 1e-12
+        ce = -(yv[:, 0] * np.log(p1 + eps) + yv[:, 1] * np.log(1.0 - p1 + eps)).mean()
+        acc = ((p1 > 0.5) == (yv[:, 0] > 0.5)).mean()
+        return float(ce), float(acc)
+
+    print(f"\n=== CE LADDER ({num_chains} chains) ===")
+    print("  plug-in   sigma(E[f])  -- what val_mean_cross_entropy logs today")
+    print("  predictive E[sigma(f)] -- Wu et al. Eq. (10), the paper's predictive")
+    print(f"  {'draws/ch':>8} {'total':>7} | {'plugin CE':>9} {'pred CE':>9} "
+          f"{'delta':>8} | {'plugin acc':>10} {'pred acc':>9}")
+    print("  " + "-" * 68)
     for n in levels:
-        ces, accs = [], []
+        ces, accs, pces, paccs = [], [], [], []
         for c in range(num_chains):
-            fx = np.stack([S1[c, :n].mean(0), S2[c, :n].mean(0)], axis=1).astype(np.float32)
-            fx_t = torch.from_numpy(fx).to(device)
-            ces.append(float(torch.nn.CrossEntropyLoss()(fx_t, y_t).cpu()))
+            # --- plug-in: average f over draws, then squash ---
+            m1, m2 = S1[c, :n].mean(0), S2[c, :n].mean(0)
+            fx_t = torch.from_numpy(np.stack([m1, m2], 1).astype(np.float32)).to(device)
+            ce_torch = float(torch.nn.CrossEntropyLoss()(fx_t, y_t).cpu())
+            ces.append(ce_torch)
             accs.append(float(accuracy(fx_t, y_t).cpu()))
-        print(f"  {n:>8} {n * num_chains:>7} | {np.mean(ces):>9.4f} "
-              f"{np.mean(accs):>9.4f}")
+            # cross-check our manual formula against the training script's loss
+            p1_plug = 1.0 / (1.0 + np.exp(-(m1 - m2)))
+            ce_manual, _ = _ce_acc_from_probs(p1_plug)
+            if abs(ce_manual - ce_torch) > 1e-4:
+                print(f"  [warn] chain {c}: manual CE {ce_manual:.6f} != torch "
+                      f"{ce_torch:.6f}; predictive column may not be comparable")
+            # --- predictive: squash each draw, then average the probabilities ---
+            d = S1[c, :n] - S2[c, :n]                    # [draw, pair]
+            p1_pred = (1.0 / (1.0 + np.exp(-d))).mean(0)
+            pce, pacc = _ce_acc_from_probs(p1_pred)
+            pces.append(pce); paccs.append(pacc)
+        plug, pred = np.mean(ces), np.mean(pces)
+        print(f"  {n:>8} {n * num_chains:>7} | {plug:>9.4f} {pred:>9.4f} "
+              f"{pred - plug:>+8.4f} | {np.mean(accs):>10.4f} {np.mean(paccs):>9.4f}")
     print(f"\n  ln 2 = {np.log(2):.4f} is chance.  A CE that RISES with draws means")
-    print("  the added draws are worse than the ones before them -- the chains")
-    print("  are leaving the region they burned in to, not refining it.")
+    print("  the added draws are worse than the ones before them.")
+    print("  delta > 0 means the plug-in is OPTIMISTIC: it scores the posterior")
+    print("  better than the paper's predictive does.  The plug-in is blind to")
+    print("  posterior WIDTH -- two posteriors with the same mean reward and very")
+    print("  different spread score identically -- while the downstream CVaR is")
+    print("  entirely a function of that spread.")
 
 
 def compute_stats(pred_chains, alpha=0.05):
