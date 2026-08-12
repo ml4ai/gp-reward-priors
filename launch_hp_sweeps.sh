@@ -3,7 +3,7 @@
 # (Ubuntu, 6x RTX A6000, conda env `pt` activated).
 #
 # Usage (from anywhere; the script cd's to the repo root):
-#   ./launch_hp_sweeps.sh bnn        # round-2 MERGED BNN sweeps      (4 sweeps)
+#   ./launch_hp_sweeps.sh bnn        # round-2 BNN sweeps             (4 sweeps)
 #   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
 #
 # There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
@@ -16,7 +16,7 @@
 # are — see HANDOFF_HP_SELECTION.md sections 3 and 3.7.  The set names replace
 # the old phase numbers because those numbers encoded the retired tiering.
 #
-# The BNN merged sweeps require their base config NOT to set `burn_in_lr`, so
+# The BNN sweeps require their base config NOT to set `burn_in_lr`, so
 # that burn-in inherits the swept `sghmc_lr`.  The preflight enforces this: a
 # base config that sets it would silently reinstate the mismatch that ended
 # round 1, and nothing downstream would show that it had.
@@ -65,20 +65,26 @@ fi
 
 # ---------------------------------------------------------------- sweep maps
 # Entries are "key|sweep_yaml|gpu".
-#   bnn:       each merged trial is 4 chains with chains_per_gpu=4, i.e. one
+#   bnn:       each trial is 4 chains with chains_per_gpu=4, i.e. one
 #              full GPU per sweep -> GPUs 0-3, leaving 4-5 free.
 #   baselines: MR is a small MLP (all 4 agents share GPU 0); PT fits 2/GPU.
 #
 # Sweep-id caches are per set.  `baselines` deliberately reads the historical
 # exp/sweep_ids_phase1.txt: the MR/PT sweeps in it are complete round-1 sweeps
 # that are unaffected by the round-2 redesign, and reusing their ids is what
-# stops a re-run from creating duplicates.  The BNN set gets a fresh file so it
-# can never resurrect a retired warm-up/sampling-tier sweep.
+# stops a re-run from creating duplicates.
+#
+# The BNN cache filename is versioned (sweep_ids_bnn_round2.txt) ON PURPOSE.
+# The cache is keyed by entry name, so reusing a filename across a procedure
+# change silently RESUMES the old sweeps -- which would carry the old selection
+# metric and the old search ranges while appearing to start fresh.  Any change
+# to the metric, the ranges or the per-trial budget must come with a new cache
+# filename.
 BNN_ENTRIES=(
-    "bnn_merged_medium_play|scripts_bnn/sweep_antmaze_medium_play_bnn_merged_antmaze_eval.yaml|0"
-    "bnn_merged_medium_diverse|scripts_bnn/sweep_antmaze_medium_diverse_bnn_merged_antmaze_eval.yaml|1"
-    "bnn_merged_large_play|scripts_bnn/sweep_antmaze_large_play_bnn_merged_antmaze_eval.yaml|2"
-    "bnn_merged_large_diverse|scripts_bnn/sweep_antmaze_large_diverse_bnn_merged_antmaze_eval.yaml|3"
+    "bnn_medium_play|scripts_bnn/sweep_antmaze_medium_play_bnn_antmaze_eval.yaml|0"
+    "bnn_medium_diverse|scripts_bnn/sweep_antmaze_medium_diverse_bnn_antmaze_eval.yaml|1"
+    "bnn_large_play|scripts_bnn/sweep_antmaze_large_play_bnn_antmaze_eval.yaml|2"
+    "bnn_large_diverse|scripts_bnn/sweep_antmaze_large_diverse_bnn_antmaze_eval.yaml|3"
 )
 BASELINE_ENTRIES=(
     "mr_medium_play|scripts_mr/sweep_antmaze_medium_play_mr_antmaze_eval.yaml|0"
@@ -93,7 +99,7 @@ BASELINE_ENTRIES=(
 
 if [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
-    IDS_FILE="exp/sweep_ids_bnn_merged.txt"
+    IDS_FILE="exp/sweep_ids_bnn_round2.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
     IDS_FILE="exp/sweep_ids_phase1.txt"
@@ -140,13 +146,13 @@ for entry in "${ENTRIES[@]}"; do
         echo "PREFLIGHT: missing sweep yaml $yaml" >&2; fail=1; continue
     fi
     # Match FILL_ME only as a parameter VALUE — a yaml's header comments may
-    # legitimately mention FILL_ME when describing this very guard.  The merged
+    # legitimately mention FILL_ME when describing this very guard.  The round-2
     # sweeps inherit nothing and so have none, but the check is generic.
     if grep -qE "value: *FILL_ME" "$yaml" 2>/dev/null; then
         echo "PREFLIGHT: $yaml still contains FILL_ME values" >&2
         fail=1
     fi
-    # BNN merged sweeps: burn-in must inherit the swept `sghmc_lr`, so the base
+    # BNN sweeps: burn-in must inherit the swept `sghmc_lr`, so the base
     # config must not set `burn_in_lr`.  If it does, burn-in silently uses that
     # value, the sweep scores configurations it is not actually running, and
     # nothing downstream reveals it — this is the seam that ended round 1

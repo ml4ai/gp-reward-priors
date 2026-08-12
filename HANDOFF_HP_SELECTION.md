@@ -173,7 +173,7 @@ Fixed: `epochs: 5000`, `criteria_key: loss`, `seed: 0`.
 Fixed: `epochs: 5000`, `criteria_key: loss`, `seed: 0`.
 
 **BNN — merged sweep**
-(`scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml`)
+(`scripts_bnn/sweep_antmaze_<variant>_bnn_antmaze_eval.yaml`)
 
 | param | distribution | range | vs round 1 |
 |---|---|---|---|
@@ -1091,7 +1091,7 @@ discarded round, not as values in use.
 
 Ready and verified, not yet run:
 
-- `scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml` — all four,
+- `scripts_bnn/sweep_antmaze_<variant>_bnn_antmaze_eval.yaml` — all four,
   generated from one template, 9 swept params, `run_cap: 130`;
 - `burn_in_lr` removed from all four BNN base configs, enforced by the
   `launch_hp_sweeps.sh bnn` preflight;
@@ -1112,7 +1112,7 @@ stay in §6 as the record, and §3.7 is why. Read §3.7 before anything else.
 **Preconditions — all done as of 2026-08-08:**
 
 - All four merged sweep yamls exist:
-  `scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml`. They are
+  `scripts_bnn/sweep_antmaze_<variant>_bnn_antmaze_eval.yaml`. They are
   generated from one template and differ only in `config_path` and per-variant
   round-1 notes.
 - `burn_in_lr` has been **removed** from all four

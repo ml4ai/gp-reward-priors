@@ -8,7 +8,7 @@
 #
 # These values are retained ONLY so this file remains a valid base config for
 # the round-2 merged sweep
-# (scripts_bnn/sweep_antmaze_<variant>_bnn_merged_antmaze_eval.yaml), which
+# (scripts_bnn/sweep_antmaze_<variant>_bnn_antmaze_eval.yaml), which
 # overrides all nine of them: width, depth, n_meas, map_amp2, sghmc_lr,
 # sghmc_lr_max, cycle_length, mdecay, fraction_cool.  Reading any of them as a
 # selected hyperparameter is a mistake.
