@@ -463,9 +463,24 @@ Two consequences that are easy to get wrong, and were:
   310 draws. `param_rhat`, `param_ess`, `param_within_chain_var` and the
   sampling weight-norm statistics have been **removed** for this reason.
 - **Stationarity is a claim about f.** `util.function_space_drift` compares the
-  first half of each chain's draws against the second in function space:
-  *location* `|E₂[f] − E₁[f]| / sd(f)` and *scale* `sd₂(f)/sd₁(f)`. Stationary
-  chains give ~0 and ~1.
+  first half of each chain's draws against the second, **relative to that
+  comparison's own Monte Carlo error**:
+
+  | metric | read as |
+  |---|---|
+  | `fn_drift_loc_z_median` | location shift ÷ MCSE. Stationary ⇒ **~0.67**, 95th **~2** |
+  | `fn_drift_scale_z_median` | \|log(sd₂/sd₁)\| ÷ its ESS-based SE. Same scale |
+  | `fn_drift_loc_sd_median` | raw shift in posterior-sd units — magnitude only |
+  | `fn_drift_scale_ratio_median` | raw sd₂/sd₁ — magnitude only |
+
+  **Do not read the raw sd-unit shift as evidence.** It has no fixed null: on
+  *stationary* AR(1) chains at the production shape (4 chains × 75 draws) it
+  rises from 0.08 to 0.31 as autocorrelation goes ρ = 0 → 0.95, while the
+  z-score stays flat at ~0.6–0.7. An early round-2 reading of ~0.27 raw looked
+  like drift and was almost certainly just autocorrelation. The z-scores divide
+  by an MCSE computed from ESS, so they are on the same scale whatever the draw
+  budget or the mixing rate, and they still fire on real problems (a location
+  trend gives z ≈ 2.7; a 4× spread ramp gives z_scale ≈ 2.6).
 
 **The predictive is `E[σ(f)]`, not `σ(E[f])`.** Equation (10) defines
 `p(y*|x*,D) ≈ (1/S) Σⱼ p(y*|f(x*; wⱼ))` — the *likelihood* averaged over draws.

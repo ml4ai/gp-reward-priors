@@ -376,48 +376,90 @@ def bt_pool_logit_np(pred_masked, mask, mode="mean"):
 
 
 def function_space_drift(pred_chains, eps=1e-12):
-    """Does the induced function-space measure change with draw index?
+    """Is the induced function-space measure stationary across draw index?
 
     `pred_chains` is [chain, draw, point] — the predictive f at the diagnostic
-    inputs.  Under Wu et al. (2025) the stationary measure of the dynamics is
+    inputs.  Under Wu et al. (2025) the stationary measure of these dynamics is
     the function-space posterior P_{f|D}, so f is the object of inference and
     the weights are not: weight-space statistics say nothing about convergence
     here, because U(w) depends on w only through f and the chain diffuses freely
-    along f-preserving directions.  Stationarity is therefore a statement about
-    f, and this measures it directly.
+    along f-preserving directions.  Stationarity is a claim about f.
 
-    Compares the first half of each chain's draws with the second half:
+    Compares the first half of each chain's draws against the second half, and
+    -- this is the part that makes it readable -- reports the difference
+    RELATIVE TO ITS OWN MONTE CARLO ERROR.  A raw shift in units of posterior sd
+    cannot be interpreted without knowing the noise floor, which depends on the
+    draw count and the autocorrelation; the z-scores below divide by an MCSE
+    computed from the effective sample size, so they are on a fixed scale
+    whatever the budget:
 
-      * location — |E2[f] - E1[f]| / sd(f), the shift in units of posterior sd;
-      * scale    — sd2(f) / sd1(f), inflation or collapse of the spread.
+        z_loc   = |E2[f] - E1[f]| / sqrt(mcse1^2 + mcse2^2)
+        z_scale = |log(sd2/sd1)| / sqrt(1/(2*ess1) + 1/(2*ess2))
 
-    A stationary chain gives location ~ 0 and scale ~ 1.  A drifting one shows
-    location growing and/or scale departing from 1.  This also tests the
-    cyclical step-size schedule, which is an addition to Wu et al.: early and
-    late cycles should be samples from the same measure.
+    Under stationarity both behave like |N(0,1)|: **median ~0.67, 95th ~2**.
+    Values well above that are drift, not noise.  The raw sd-unit shift and the
+    scale ratio are also returned, because they say how *large* the drift is
+    once the z-scores say it is real.
+
+    This also tests the cyclical step-size schedule, which is an addition to
+    Wu et al.: early and late cycles must be samples from one measure.
 
     Returns a dict of `fn_drift_*` metrics (empty if too few draws to split).
     """
+    import arviz_stats as azs
+
     a = np.asarray(pred_chains, dtype=np.float64)
     C, D, P = a.shape
     h = D // 2
-    if h < 2:
+    if h < 4:
         return {}
     first, second = a[:, :h, :], a[:, h:2 * h, :]
+
     sd = a.reshape(-1, P).std(axis=0) + eps
-    loc = np.abs(second.mean(axis=(0, 1)) - first.mean(axis=(0, 1))) / sd
-    scale = (second.std(axis=1).mean(axis=0) + eps) / (first.std(axis=1).mean(axis=0) + eps)
-    fin = lambda x: np.asarray(x, float)[np.isfinite(x)]
-    out = {
-        "fn_drift_loc_median": float(np.median(fin(loc))),
-        "fn_drift_loc_95th": float(np.percentile(fin(loc), 95)),
-        "fn_drift_scale_median": float(np.median(fin(scale))),
-        "fn_drift_scale_95th": float(np.percentile(fin(scale), 95)),
-    }
-    print(
-        f"[diag] function-space drift (first vs second half of draws): "
-        f"location {out['fn_drift_loc_median']:.3f} sd (95th "
-        f"{out['fn_drift_loc_95th']:.3f}), scale {out['fn_drift_scale_median']:.3f}x "
-        f"(95th {out['fn_drift_scale_95th']:.3f}x)"
-    )
+    m1, m2 = first.mean(axis=(0, 1)), second.mean(axis=(0, 1))
+    raw_loc = np.abs(m2 - m1) / sd
+
+    sd1 = first.reshape(-1, P).std(axis=0) + eps
+    sd2 = second.reshape(-1, P).std(axis=0) + eps
+    ratio = sd2 / sd1
+
+    try:
+        mcse1 = np.asarray(azs.mcse(first, method="mean"), dtype=np.float64)
+        mcse2 = np.asarray(azs.mcse(second, method="mean"), dtype=np.float64)
+        ess1 = np.asarray(azs.ess(first, method="mean"), dtype=np.float64)
+        ess2 = np.asarray(azs.ess(second, method="mean"), dtype=np.float64)
+        z_loc = np.abs(m2 - m1) / (np.sqrt(mcse1 ** 2 + mcse2 ** 2) + eps)
+        z_scale = np.abs(np.log(ratio)) / (
+            np.sqrt(1.0 / (2.0 * np.maximum(ess1, 2.0))
+                    + 1.0 / (2.0 * np.maximum(ess2, 2.0))) + eps
+        )
+    except Exception as e:  # noqa: BLE001 — diagnostics must not kill a run
+        warnings.warn(
+            f"function_space_drift: MCSE/ESS calibration failed "
+            f"({type(e).__name__}: {e}); reporting raw shifts only.",
+            RuntimeWarning,
+        )
+        z_loc = z_scale = np.full(P, np.nan)
+
+    def fin(x):
+        x = np.asarray(x, float)
+        return x[np.isfinite(x)]
+
+    out = {}
+    for name, arr in (("loc_z", z_loc), ("scale_z", z_scale),
+                      ("loc_sd", raw_loc), ("scale_ratio", ratio)):
+        v = fin(arr)
+        if v.size:
+            out[f"fn_drift_{name}_median"] = float(np.median(v))
+            out[f"fn_drift_{name}_95th"] = float(np.percentile(v, 95))
+    if "fn_drift_loc_z_median" in out:
+        print(
+            f"[diag] function-space drift (first vs second half): "
+            f"z_loc {out['fn_drift_loc_z_median']:.2f} (95th "
+            f"{out.get('fn_drift_loc_z_95th', float('nan')):.2f}), "
+            f"z_scale {out.get('fn_drift_scale_z_median', float('nan')):.2f}  "
+            f"[stationary ~0.67 / 95th ~2]; raw shift "
+            f"{out.get('fn_drift_loc_sd_median', float('nan')):.3f} sd, "
+            f"scale {out.get('fn_drift_scale_ratio_median', float('nan')):.3f}x"
+        )
     return out
