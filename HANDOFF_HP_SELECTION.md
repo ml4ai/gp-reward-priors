@@ -481,6 +481,25 @@ between the procedure and the method it evaluates. **The selection metric is now
 cycle onset (not zeroed); a fresh measurement set `X_M` drawn every inner step;
 one sample collected per outer iteration.
 
+**A consequence of mean pooling worth understanding, not just disclosing.** With
+T = 100, `bt_pool: "mean"` divides the Bradley–Terry logit by exactly 100
+relative to the return convention. Matching that logit scale requires rewards
+100× larger, and `map_amp2` scales the *kernel*, so reward sd goes as
+`√map_amp2` — putting the natural prior amplitude at roughly **100² = 10⁴ times**
+the sum-pooling value. This is not a tuning observation; it follows from the
+likelihood.
+
+It also explains a pattern that had been read as an empirical finding. Round 1
+capped `map_amp2` at 1e3 and all four winners landed at 313–773; round 2 capped
+at 1e4 and two leaders landed at 6647 and 8699. In both rounds the cap sat at or
+below the scale the likelihood implies, so the search was boundary-limited, and
+"every variant prefers a large `map_amp2`" was substantially a statement about
+the cap. The range is now 1–1e6, giving two decades above the predicted scale.
+**Re-read the prior-strength result in that light**: the informative question is
+whether `map_amp2` lands near 10⁴ (the likelihood's own scale, i.e. the prior is
+doing nothing beyond matching units) or materially away from it (the prior is
+carrying real information).
+
 **Known deviations, to disclose:**
 
 | deviation | status |
@@ -488,7 +507,7 @@ one sample collected per outer iteration.
 | **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. |
 | **`max_param_step: 0.5`** clamps momentum every step, sampling included | Not measure-preserving when it binds, and unlike the gradient clip it was never scoped to burn-in. Now instrumented: `param_clamp_sampling_pct` must be ~0 on any selected run, else that run sampled the wrong measure. |
 | **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
-| **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | Applied identically in MR, PT and BNN, so cross-family comparability holds. If all segments have equal valid length the two differ by a constant 1/T — a temperature rescaling absorbed by the reward scale that `map_amp2` controls. **Verify the valid lengths are constant**; if they vary, mean and sum are genuinely different likelihoods (mean being the one without a length confound). |
+| **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action. |
 
 ### 3.7 Why round 1 was discarded: the two-tier design
 

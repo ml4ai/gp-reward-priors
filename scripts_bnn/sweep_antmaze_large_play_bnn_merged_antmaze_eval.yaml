@@ -146,15 +146,24 @@ parameters:
     distribution: int_uniform
     min: 0
     max: 64
-  # Prior amplitude multiplier (K -> map_amp2*K).  EXPANDED 1e3 -> 1e4.
-  # All four round-1 winners landed at 313-773, i.e. the top ~20% of a
-  # log-uniform 1-1e3 range, and section 7 already flagged this as possibly
-  # range-limited.  Expanded, not narrowed, so the round-1 optimum stays
-  # reachable.
+  # Prior amplitude multiplier (K -> map_amp2*K).  EXPANDED 1e3 -> 1e6.
+  #
+  # Justified by the likelihood, not by observed winners.  Every preference
+  # segment is exactly T=100 valid timesteps (verified across all four variants,
+  # train and val), so bt_pool="mean" divides the Bradley-Terry logit by exactly
+  # 100 relative to the return-based "sum" convention.  Matching that logit scale
+  # needs rewards 100x larger; map_amp2 scales the kernel, so reward sd goes as
+  # sqrt(map_amp2), and the natural amplitude under mean pooling is therefore
+  # ~100^2 = 1e4 times the sum-pooling value.
+  #
+  # A cap AT the predicted optimum is a cap that binds.  Round 1 (cap 1e3) put
+  # all four winners at 313-773; round 2 at cap 1e4 put two leaders at 6647 and
+  # 8699.  1e6 leaves two decades of headroom above the predicted scale so the
+  # search is not boundary-limited a third time.
   map_amp2:
     distribution: log_uniform_values
     min: 1
-    max: 10000
+    max: 1000000
 
   # ---- Swept: sampler schedule -----------------------------------------
   # Cool-phase / minimum step size (lr_min), and in round 2 also the BURN-IN
