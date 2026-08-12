@@ -524,6 +524,53 @@ carrying real information).
 | **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
 | **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action. |
 
+### 3.6.3 Winner acceptance criteria
+
+Pre-registered 2026-08-12, **before any round-2 sweep fired**. A configuration
+that samples something other than `P_{f|D}` is not a valid winner however good
+its score, so selection is a *constrained* minimisation: the winner is the
+**lowest `val_predictive_cross_entropy` among ELIGIBLE trials up to the stopping
+trigger**.
+
+**Eligibility.** All three must hold:
+
+| criterion | threshold | why this number |
+|---|---|---|
+| `val_fn_drift_loc_z_median` | ≤ 2.0 | The per-point stationary null is \|N(0,1)\|: median ~0.67, 95th ~2. A median at 2.0 means the *typical* point has shifted 3× the null median, so this is deliberately lenient — set to avoid rejecting on noise, not to be strict. |
+| `val_fn_drift_scale_z_median` | ≤ 2.0 | Same null, same reasoning. |
+| `param_clamp_sampling_pct` | ≤ 0.01% | `max_param_step` is not measure-preserving when it binds. 0 is the exact null; observed values are 0.0000–0.0030%, so this is "inert" with margin. |
+
+**Divergence.** A trial with NaN/Inf convergence diagnostics is ineligible — it
+is unusable, not merely suspect. `gradnorm_sampling_pct_over_clip` is
+**reported but does NOT gate**, resolving the question §3.6.1 left open. The
+reason is that the gradient clip is disabled during sampling
+(`clip_during_sampling: false`), so that percentage measures a *symptom* of
+large gradients rather than a distortion of the measure; the two criteria that
+do measure distortion — the momentum clamp and function-space drift — now carry
+the decision. The 1% cutoff was always a threshold on a continuum (§3.6.1).
+
+**Procedure when a sweep fires:**
+
+1. Take trials up to the trigger in ascending `val_predictive_cross_entropy`.
+2. For each in turn: if it lacks `fn_drift_*` (it predates the metric, §3.6.2),
+   **re-run that exact config once** to populate diagnostics. Re-runs are for
+   diagnostics ONLY — **rank on the original trial's CE**, never the re-run's.
+   Same config and seed, but GPU nondeterminism makes a re-run a second draw,
+   and taking whichever score came out better would be selection bias.
+3. The winner is the first trial that satisfies all three criteria.
+4. **Do not extend the search because the best trial was ineligible.** The
+   stopping rule governs how many trials the search gets; these criteria govern
+   which are eligible. Resuming to find a better-behaved configuration is
+   exactly the result-driven extension §9 prohibits.
+5. If **no** trial in the search is eligible, that is a finding about the
+   sampler at these settings, not a licence to keep drawing. Resume only then,
+   and disclose that the search was extended and why.
+
+**Disclose:** the eligibility rule, the thresholds and their derivation from the
+stationary null, how many trials each sweep rejected, and each winner's three
+numbers. If a winner was not the lowest-CE trial, report the gap — the same
+convention §7 uses for rule-vs-best.
+
 ### 3.7 Why round 1 was discarded: the two-tier design
 
 Round 1 split the BNN search into a **warm-up tier** (architecture + prior
@@ -798,11 +845,13 @@ this document is currently valid.
 | large_play | *(pending)* | | | | |
 | large_diverse | *(pending)* | | | | |
 
-Launch with `./launch_hp_sweeps.sh bnn` (§10.2). When each fires, record here:
-sweep id, rule winner, trial/trigger, val CE, whether rule winner = best-of-all,
-the divergence count, and — new in round 2 — the winner's
-`sampling_weight_growth`, since a winner that drifts is exactly what round 1
-failed to notice.
+Launch with `./launch_hp_sweeps.sh bnn` (§10.2). When each fires, apply the
+**§3.6.3 acceptance procedure** — the winner is the lowest-CE *eligible* trial,
+not simply the lowest-CE trial — and record here: sweep id, winner, trial /
+trigger, predictive CE, whether the winner was also the lowest-CE trial (and the
+gap if not), how many trials were rejected as ineligible, and the winner's
+`fn_drift_loc_z_median`, `fn_drift_scale_z_median` and
+`param_clamp_sampling_pct`.
 
 ### Stage 1 — MR (`MR-training`, metric `eval_loss_best`) — complete, unaffected
 
