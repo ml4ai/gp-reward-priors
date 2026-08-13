@@ -62,6 +62,21 @@ import warnings
 from dataclasses import asdict, dataclass
 from typing import Optional
 
+# --- CPU thread caps (see HANDOFF_HP_SELECTION.md section 10.7) --------------
+# Set HERE, before torch/numpy are imported, because the intra-op thread pools
+# are sized at import time.  Both launchers export these as well, but a run
+# started any other way — a hand-typed diagnostic re-run, say — would otherwise
+# inherit torch's default of one thread per core (255 on leviathan).  That
+# oversubscribes the box, and more importantly thread count changes
+# floating-point reduction order, so such a run would not be numerically
+# comparable to the sweep trials it is meant to be compared against.
+#
+# setdefault, so an explicit environment value still wins — e.g. deliberately
+# running uncapped to reproduce the section 10.7 A/B.
+for _thr_var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    os.environ.setdefault(_thr_var, "8")
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+
 import matplotlib as mpl
 import pyrallis
 
@@ -70,6 +85,13 @@ import arviz_stats as azs
 import numpy as np
 import torch
 import wandb
+
+# Enforce the cap on torch's own intra-op pool as well.  The environment
+# variables above are read by OpenMP/MKL/OpenBLAS, but not every torch build
+# honours them (a macOS build without OpenMP ignores OMP_NUM_THREADS entirely),
+# so setting it explicitly makes the cap hold wherever this runs.  Reads the
+# value back from the environment so an explicit override still wins.
+torch.set_num_threads(int(os.environ["OMP_NUM_THREADS"]))
 
 warnings.simplefilter("ignore", UserWarning)
 
