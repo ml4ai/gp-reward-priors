@@ -555,9 +555,23 @@ the decision. The 1% cutoff was always a threshold on a continuum (§3.6.1).
 2. For each in turn: if it lacks `fn_drift_*` (it predates the metric, §3.6.2),
    **re-run that exact config once** to populate diagnostics. Re-runs are for
    diagnostics ONLY — **rank on the original trial's CE**, never the re-run's.
-   Same config and seed, but GPU nondeterminism makes a re-run a second draw,
-   and taking whichever score came out better would be selection bias.
+   Nominally same config and seed, so a re-run should reproduce closely (the
+   `limlikvn` re-run matched to six significant figures), but it is formally a
+   second draw and taking whichever score came out better would be selection
+   bias.
+
+   **Launch a diagnostic re-run with `OUT_DIR` containing `diag_rerun`** — that
+   substring is how `check_winner_eligibility.py` finds it. The re-run is a
+   separate wandb run, so the sweep trial's own summary still shows nothing;
+   without the marker the diagnostics exist but are invisible at winner
+   selection, which is exactly how `limlikvn` first appeared ineligible when it
+   was not. A distinct `OUT_DIR` is required anyway, or the re-run clobbers
+   whatever that sweep's in-flight trial is writing (§8).
 3. The winner is the first trial that satisfies all three criteria.
+   `check_winner_eligibility.py` (repo root) does steps 1–3 mechanically: it
+   ranks by the metric, applies the thresholds, resolves paired diagnostic
+   re-runs by matching swept parameters, and reports the winner, the gap to the
+   lowest-metric trial, and how many trials were rejected.
 4. **Do not extend the search because the best trial was ineligible.** The
    stopping rule governs how many trials the search gets; these criteria govern
    which are eligible. Resuming to find a better-behaved configuration is
@@ -1074,6 +1088,16 @@ Note it does **not** refuse on the `SUPERSEDED-ROUND1` marker that
 `train_rewards.sh` blocks on. That is deliberate: the merged sweep overrides
 every swept field of its base config, whereas `train_rewards.sh` trains from
 those values directly.
+
+**`check_winner_eligibility.py`** (repo root) — applies the §3.6.3 acceptance
+criteria and names the winner, which `check_sweep_convergence.py` does not: that
+script reports the best-*metric* trial, which is not the same thing. Ranks the
+trials up to the stopping trigger, applies the pre-registered thresholds, and
+reports the winner, the gap to the lowest-metric trial (disclose it) and the
+rejection count. Resolves paired diagnostic re-runs automatically by matching
+swept parameters — normalising `width`, since a sweep trial logs the log2
+exponent while a hand-launched run logs the expanded value, and an unnormalised
+comparison silently matches nothing.
 
 **`check_sweep_convergence.py`** (repo root) — evaluates the stopping rule
 out-of-band:
