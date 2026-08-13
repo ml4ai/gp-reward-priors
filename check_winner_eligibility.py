@@ -127,31 +127,11 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
     trials = [(r, _num(dict(r.summary or {}), metric)) for r in runs]
     trials = [(r, v) for r, v in trials if v == v]
 
-    # Patience trigger — mirrors check_sweep_convergence.summarize(), which is
-    # the source of truth for the stopping rule.
-    best, since, trigger = None, 0, None
-    for i, (_, v) in enumerate(trials, 1):
-        if better(v, best, goal):
-            best, since = v, 0
-        else:
-            since += 1
-            if since >= patience and trigger is None:
-                trigger = i
-    eligible_pool = trials[:trigger] if trigger else trials
-
-    print(f"\n=== {project}/{sweep_id} ===")
-    print(f"  metric   : {metric} ({goal})")
-    print(f"  trials   : {len(trials)} scored"
-          + (f"; STOP FIRED at {trigger} — ranking trials 1-{trigger} only"
-             if trigger else "; stop NOT fired — ranking is provisional"))
-
+    # Resolve eligibility once, in chronological order, borrowing diagnostics
+    # from a paired re-run where the trial itself has none.
     diag_pool = find_diag_reruns(api, entity, project, pattern)
-    ranked = sorted(eligible_pool, key=lambda t: t[1], reverse=(goal != "minimize"))
-
-    winner, n_reject, n_nodiag = None, 0, 0
-    print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'loc_z':>6} {'scl_z':>6} "
-          f"{'clamp%':>7} {'clip%':>6}  verdict")
-    for rk, (r, v) in enumerate(ranked, 1):
+    resolved = []
+    for r, v in trials:
         summ = dict(r.summary or {})
         verdict, bad = eligibility(summ, loc_z, scale_z, clamp_pct)
         src = ""
@@ -162,6 +142,59 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
                     verdict, bad = eligibility(summ, loc_z, scale_z, clamp_pct)
                     src = f"  [diagnostics from re-run {d.id[:8]}]"
                     break
+        resolved.append((r, v, summ, verdict, bad, src))
+
+    # Patience trigger on the RAW metric — mirrors
+    # check_sweep_convergence.summarize(), which is the source of truth.  The
+    # rule is deliberately NOT eligibility-aware: it can only ever extend a
+    # sweep, and the §3.1 budget invariant is one-sided (the BNN must receive no
+    # MORE tuning than the baselines).  See the frontier note below.
+    best, since, trigger = None, 0, None
+    for i, (_, v, *_ ) in enumerate(resolved, 1):
+        if better(v, best, goal):
+            best, since = v, 0
+        else:
+            since += 1
+            if since >= patience and trigger is None:
+                trigger = i
+
+    # Eligible frontier: when did the best ELIGIBLE trial last improve?  Because
+    # the stopping rule tracks the raw metric, a sweep can fire while the
+    # eligible frontier is still moving — the search stops on progress that
+    # cannot become a winner.  That is a known limitation of applying acceptance
+    # as a filter over an unconstrained search, and it is disclosed rather than
+    # fixed (§3.6.3).  This measures whether it actually bit.
+    # Scan only the trials the rule KEPT: an eligible improvement after the
+    # trigger is discarded like any other post-trigger trial, and counting it
+    # would give a negative staleness.
+    cut = trigger if trigger else len(resolved)
+    ebest, elast = None, None
+    for i, (_, v, _, verdict, *_ ) in enumerate(resolved[:cut], 1):
+        if verdict == "ELIGIBLE" and better(v, ebest, goal):
+            ebest, elast = v, i
+    stale = (cut - elast) if elast else None
+
+    print(f"\n=== {project}/{sweep_id} ===")
+    print(f"  metric   : {metric} ({goal})")
+    print(f"  trials   : {len(resolved)} scored"
+          + (f"; STOP FIRED at {trigger} — ranking trials 1-{trigger} only"
+             if trigger else "; stop NOT fired — ranking is provisional"))
+    if elast is None:
+        print("  frontier : no eligible trial yet")
+    else:
+        print(f"  frontier : best eligible last improved at trial {elast} "
+              f"({stale} trial(s) before {'the trigger' if trigger else 'now'})")
+        if trigger and stale < patience:
+            print(f"             !! the eligible frontier was STILL IMPROVING when "
+                  f"the rule fired ({stale} < patience {patience}).")
+            print(f"             The stopping rule tracks the raw metric, so the "
+                  f"search stopped on progress it could not use. DISCLOSE (§3.6.3).")
+
+    ranked = sorted(resolved[:cut], key=lambda t: t[1], reverse=(goal != "minimize"))
+    winner, n_reject, n_nodiag = None, 0, 0
+    print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'loc_z':>6} {'scl_z':>6} "
+          f"{'clamp%':>7} {'clip%':>6}  verdict")
+    for rk, (r, v, summ, verdict, bad, src) in enumerate(ranked, 1):
         if verdict == "NO DIAGS":
             n_nodiag += 1
         elif verdict == "REJECT":

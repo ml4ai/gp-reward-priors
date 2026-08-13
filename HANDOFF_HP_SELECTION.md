@@ -576,6 +576,25 @@ the decision. The 1% cutoff was always a threshold on a continuum (§3.6.1).
    stopping rule governs how many trials the search gets; these criteria govern
    which are eligible. Resuming to find a better-behaved configuration is
    exactly the result-driven extension §9 prohibits.
+
+   The stopping rule is deliberately **not** eligibility-aware, and it was
+   considered. Making it so is defensible statistically — right now the counter
+   can be reset by a trial that cannot win — and the obvious fairness objection
+   fails, since MR and PT have no eligibility constraint and the rule would be
+   formally identical across families. It fails on the **budget** instead:
+   eligibility-aware stopping can only ever *extend* a sweep, so the BNN would
+   systematically receive more trials than the baselines, and §3.1's invariant
+   is one-sided — the proposed method must get no **more** tuning. Changing a
+   pre-registered rule after observing that ineligible runs reset counters would
+   also be reactive under §9.
+
+   **The cost is real and is disclosed, not fixed:** because the counter tracks
+   the raw metric, a sweep can fire while the *eligible* frontier is still
+   improving — the search stops on progress it cannot use. This is the known
+   limitation of applying acceptance as a filter over an unconstrained search.
+   `check_winner_eligibility.py` reports when the best eligible trial last
+   improved, and warns if that was within K trials of the trigger. If it warns,
+   say so in the write-up.
 5. If **no** trial in the search is eligible, that is a finding about the
    sampler at these settings, not a licence to keep drawing. Resume only then,
    and disclose that the search was extended and why.
