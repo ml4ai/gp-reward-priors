@@ -1127,7 +1127,19 @@ that predate the drift metric and are unclassifiable. The criteria are **not**
 lenient in practice: they reject roughly half the search. §3.6.3 describes the
 z ≤ 2 threshold as deliberately permissive relative to the |N(0,1)| null, and
 that is true of the threshold, but the observed drift is large enough that it
-still excludes most trials. Almost all are
+still excludes most trials.
+
+**The four searches were very uneven in how many valid candidates they
+contained, and this should be reported rather than averaged away.** Rejection
+rates run from 33% (medium_diverse) to **55% (large_diverse)**, which leaves
+large_diverse with only **15 eligible trials out of 40** — roughly a third of
+what medium_diverse had. Its winner `yjezedlk` satisfies every criterion, so the
+result stands, but the effective search behind it was much thinner than the
+headline "40 trials" suggests. State the eligible counts alongside the trial
+counts; quoting the latter alone overstates how much of each space was
+searched with usable configurations.
+
+Almost all rejections are
 `scale_z` above 2 rather than location drift, and they concentrate near the top
 of the ranking (8 of large_diverse's top 11; 5 of large_play's top 7). The
 honest summary is that **the best-scoring configurations are disproportionately
