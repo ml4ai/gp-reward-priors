@@ -876,10 +876,10 @@ trial.
 
 | variant | sweep | winner | trial / trigger | predictive CE | accuracy | rejected |
 |---|---|---|---|---|---|---|
-| medium_play | `9gifb8sa` | `0t5bqw02` | 27 / 40 | 0.193983 | 0.9156 | 7 / 40 |
-| large_play | `ojk7k4vb` | `oi7cqb9o` | 21 / 29 | 0.204685 | 0.8981 | 6 / 29 |
-| medium_diverse | `bq7ygeqe` | `n1ztawsx` | 27 / 42 | 0.237685 | 0.8925 | 3 / 42 |
-| large_diverse | `m5sp9bw9` | `yjezedlk` | 25 / 40 | 0.246561 | 0.8818 | 8 / 40 |
+| medium_play | `9gifb8sa` | `0t5bqw02` | 27 / 40 | 0.193983 | 0.9156 | 17 / 40 |
+| large_play | `ojk7k4vb` | `oi7cqb9o` | 21 / 29 | 0.204685 | 0.8981 | 12 / 29 |
+| medium_diverse | `bq7ygeqe` | `n1ztawsx` | 27 / 42 | 0.237685 | 0.8925 | 14 / 42 |
+| large_diverse | `m5sp9bw9` | `yjezedlk` | 25 / 40 | 0.246561 | 0.8818 | 22 / 40 |
 
 Architecture and prior strength:
 
@@ -914,8 +914,10 @@ is the next eligible one. In the other two the lowest-CE trial was already
 eligible and there was nothing to trade.
 
 **Rejections are overwhelmingly *scale* drift and concentrate at the top of the
-ranking.** 24 of 151 trials up to the triggers were rejected, almost all for
-`scale_z` above 2 (values to 5.21) rather than location drift. In large_diverse
+ranking.** 65 of 151 trials up to the triggers were rejected — **43%**, not a
+long tail — almost all for `scale_z` above 2 (values to 12.72) rather than
+location drift. A further 16 trials predate the drift metric and cannot be
+classified; none was a winner candidate. In large_diverse
 8 of the top 11 trials rejected; in large_play 5 of the top 7. The best-scoring
 configurations are disproportionately the ones not sampling a stationary
 function-space measure — precisely the trade §3.6.3 exists to refuse.
@@ -1119,8 +1121,13 @@ large_play (8 before). Disclose this as a limitation of applying acceptance as a
 filter over an unconstrained search; §3.6.3 records why the rule was
 deliberately not made eligibility-aware.
 
-**Rejection counts** (report per variant): medium_play 7/40, large_play 6/29,
-medium_diverse 3/42, large_diverse 8/40 — 24 of 151 trials, ~16%. Almost all are
+**Rejection counts** (report per variant): medium_play 17/40, large_play 12/29,
+medium_diverse 14/42, large_diverse 22/40 — **65 of 151 trials, 43%**, plus 16
+that predate the drift metric and are unclassifiable. The criteria are **not**
+lenient in practice: they reject roughly half the search. §3.6.3 describes the
+z ≤ 2 threshold as deliberately permissive relative to the |N(0,1)| null, and
+that is true of the threshold, but the observed drift is large enough that it
+still excludes most trials. Almost all are
 `scale_z` above 2 rather than location drift, and they concentrate near the top
 of the ranking (8 of large_diverse's top 11; 5 of large_play's top 7). The
 honest summary is that **the best-scoring configurations are disproportionately
@@ -1133,8 +1140,9 @@ direction for §3.1's one-sided invariant and strengthens the fairness claim.
 **The prior-strength result did not replicate, and should not be reported as
 one.** Round 1 had all four variants selecting `map_amp2` in a tight 313–773
 band, which read as a finding. Round 2's winners span 9.5e4 to 9.3e5, and within
-a sweep the metric is close to flat across decades of amplitude — in large_play,
-clean trials from 408 to 793,444 all scored 0.2148–0.2391. Combined with §3.6.2's
+a sweep the metric is close to flat across decades of amplitude — in large_play, eligible
+trials spanning `map_amp2` 157 to 925,895 — nearly four decades — all scored
+between 0.2047 and 0.2400. Combined with §3.6.2's
 observation that mean pooling alone implies an amplitude ~1e4 times the
 sum-pooling value, the defensible statement is that **predictive CE does not
 identify prior strength above a floor**, not that a large amplitude is preferred.

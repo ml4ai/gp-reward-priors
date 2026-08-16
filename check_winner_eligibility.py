@@ -191,14 +191,17 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
                   f"search stopped on progress it could not use. DISCLOSE (§3.6.3).")
 
     ranked = sorted(resolved[:cut], key=lambda t: t[1], reverse=(goal != "minimize"))
-    winner, n_reject, n_nodiag = None, 0, 0
+    # Count over EVERY ranked trial, not just the ones displayed.  The display
+    # loop below stops early once a winner is found, and counting inside it
+    # silently undercounted the rejections — §3.6.3 requires reporting how many
+    # trials the criteria rejected, so the tally must cover the whole pool.
+    n_reject = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "REJECT")
+    n_nodiag = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "NO DIAGS")
+
+    winner = None
     print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'loc_z':>6} {'scl_z':>6} "
           f"{'clamp%':>7} {'clip%':>6}  verdict")
     for rk, (r, v, summ, verdict, bad, src) in enumerate(ranked, 1):
-        if verdict == "NO DIAGS":
-            n_nodiag += 1
-        elif verdict == "REJECT":
-            n_reject += 1
         if winner is None and verdict == "ELIGIBLE":
             winner = (r.id, v, rk)
         if rk <= 12 or verdict == "ELIGIBLE":
@@ -209,8 +212,9 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
         if winner and rk > 12:
             break
 
-    print(f"  rejected : {n_reject} ineligible, {n_nodiag} still missing "
-          f"diagnostics (re-run those configs — §3.6.3)")
+    print(f"  rejected : {n_reject} of {len(ranked)} ineligible "
+          f"({100.0 * n_reject / max(len(ranked), 1):.0f}%), {n_nodiag} still "
+          f"missing diagnostics (re-run those configs — §3.6.3)")
     if winner:
         rid, v, rk = winner
         gap = v - ranked[0][1]
