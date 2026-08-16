@@ -387,7 +387,9 @@ diverged trial completed and logged; it did not crash. But its gradients reached
 `Inf`, its per-chain and predictive variances, R-hat, ESS and every CVaR
 diagnostic came back `NaN`, and its reward function collapsed to a constant.
 
-**`val_mean_cross_entropy` is not monotone in brokenness.** A run that collapses
+**Cross-entropy is not monotone in brokenness** (true of both the plug-in
+`val_mean_cross_entropy` and the selection metric
+`val_predictive_cross_entropy`). A run that collapses
 to constant output scores exactly `ln 2 = 0.6931` — every pair gets p = 0.5 —
 which is *better* than a confidently-wrong run (0.858 above). Among failures,
 total collapse looks less bad than partial failure. Harmless for ranking here,
@@ -644,8 +646,14 @@ chain has a large and growing *within*-chain variance, which pushes R-hat toward
 1 and inflates ESS. **The tail diagnostics are not merely blind to this failure;
 they are fooled by it, in the direction that makes a diverging run look
 converged.** Anything selected or certified on them alone is unsafe when drift
-is possible, which is why `sampling_weight_growth` is now logged on every run
-(§8) — reported, never gated.
+is possible, which is why stationarity is now measured directly and gated on:
+`fn_drift_loc_z_median` / `fn_drift_scale_z_median` (§3.6.2, §3.6.3).
+
+*Historical note:* the first response to this was a weight-norm statistic,
+`sampling_weight_growth`. It was later removed — the weight norm of this sampler
+diffuses freely by construction and measures nothing about convergence (§3.6.2).
+The function-space drift metrics replaced it. Do not go looking for the weight
+statistic; it is gone.
 
 **Three separate seams contributed, all products of the split:**
 
@@ -690,89 +698,145 @@ no post-hoc adjustment appears anywhere in the reported procedure.
 
 ---
 
-## 4. Stage 3 (BNN only): hand-tuning the draw budget
+## 4. Stage 3 (BNN only): the draw budget
 
-Stage 1 selects a *schedule*; it does not select how many chains to run. This is
-the one deliberately manual step in the procedure.
+**Read §3.6.2 before this section.** It establishes what these dynamics target
+and therefore which diagnostics mean anything; several natural-looking
+statistics measure nothing here.
 
-**What is adjusted: `num_chains`, plus `chains_per_gpu` for placement.**
-The schedule (`sghmc_lr`, `sghmc_lr_max`, `cycle_length`, `mdecay`,
-`fraction_cool`), architecture, and prior strength stay exactly as selected.
+### 4.1 What stage 3 chooses
 
-**Round 2 rule: `num_samples` is NOT a free parameter — it is pinned to the
-sweep's per-trial horizon (75).** Total draws are bought with chains alone.
-Chains do not extend a chain's horizon, so selection and production run at the
-same horizon by construction, and a configuration cannot be certified at one
-draw count and deployed at another. Round 1 selected at 35 draws and deployed at
-310, and the resulting configuration was non-stationary by draw 33 (§3.7). If
-the tail diagnostics cannot be satisfied by adding chains at a fixed horizon,
-that is a finding about the schedule, not a licence to lengthen the chains.
+**`num_chains` only.** `chains_per_gpu` follows from it as placement. Everything
+else — the nine selected fields, `num_samples`, `num_burn_in_steps` — stays
+exactly as transcribed.
 
-**Why it is not a sweep:** the quantity being improved is Monte-Carlo error on
-the downstream CVaR₀.₀₅, not model quality. It is not visible in
-`val_mean_cross_entropy` — a chain can have excellent predictive CE and still
-resolve the lower 5% tail poorly. More draws essentially always help; the only
-question is how many are enough, which is read off convergence diagnostics
-rather than searched.
+**`num_samples` is pinned at 75 and is NOT a free parameter.** Stage 1 scored
+candidates at 75 draws per chain, so 75 is the horizon at which the winners were
+certified. Total draws are bought with chains, which do not extend any chain's
+horizon, so selection and production run at the same horizon by construction.
 
-**What it is judged on** (all logged by the eval block; see
-`HANDOFF_CVAR_SAMPLER_2026-08.md` §3):
+This is the round-1 mistake, and it is worth understanding rather than just
+obeying: round 1 selected at 35 draws and deployed at 310, and the selected
+configuration was already non-stationary by draw 33 (§3.7). **If the tail
+diagnostics cannot be satisfied by adding chains at a fixed horizon, that is a
+finding about the schedule — not a licence to lengthen the chains.**
 
-- `val_pred_cvar_ess_min` — effective sample size for the CVaR integrand
-- `val_pred_cvar_mcse_rel_max` — relative MC standard error of the CVaR
-- `val_pred_cvar_rhat_max`, `val_pred_folded_rhat_*` — between-chain agreement
-- `val_pred_q05_ess_*` — ESS at the 5% quantile (the VaR)
-- `gradnorm_sampling_pct_over_clip` — should be ~0
+**Why it is not a sweep.** The quantity being improved is Monte-Carlo error on
+the downstream CVaR₀.₀₅, not model quality, and it is not visible in
+`val_predictive_cross_entropy` — a chain can have excellent predictive CE and
+still resolve the lower 5% tail poorly.
 
-Do **not** judge this by `param_*` diagnostics — they no longer exist, and §3.6.2
-explains why weight-space statistics measure nothing for this sampler — or by
-bulk `pred_rhat`/`pred_ess` (they certify the median, not the tail). Check
-`fn_drift_*` and `param_clamp_sampling_pct` before trusting any of the tail
-numbers: a non-stationary or clamp-distorted run is not sampling the target.
+Note that "more draws always help" is **false here** and was falsified in round
+1: past a point, additional draws came from a drifting chain and made the model
+worse. That is why §4.2 gates on stationarity first.
 
-**Warning: at the stage-2 budget, the `_max` / `_min` extremes above are
-censored and carry no ranking information.** Measured 2026-08-08 across all
-four stage-2 sweeps: `val_pred_cvar_rhat_max` is **1.2555612045333548 on nearly
-every healthy trial** — identical across variants, architectures and schedules,
-and identical to 16 digits between the val and test splits of the same run
-(winner `k83frxm7`). `val_pred_q05_ess_min` is likewise pinned at 12.5367 in a
-large majority of trials, with the remainder in a narrow 11.3–14.5 band.
+### 4.2 Prerequisite: re-check stationarity at the new chain count
 
-This is the attainable ceiling (resp. floor) of the rank-normalized estimators
-at 4 chains × 33 retained draws, reached as soon as *any one* of the ~640
-evaluation points has fully separated chains. It is real information — some
-point is badly mixed — but it is saturated, so it cannot rank one schedule
-against another, and it cannot get worse.
+Before reading any tail number, confirm the run is still sampling the target:
 
-Two consequences for stage 3:
+    val_fn_drift_loc_z_median    <= 2.0
+    val_fn_drift_scale_z_median  <= 2.0     (stationary null: median ~0.67, 95th ~2)
+    param_clamp_sampling_pct     <= 0.01%
 
-- **Judge on the distributional statistics, which do vary:**
-  `val_pred_cvar_rhat_median`, `val_pred_cvar_rhat_pct_over_1.01`,
-  `val_pred_folded_rhat_95th_pct`, `val_pred_cvar_ess_median`,
-  `val_pred_q05_ess_median`, `val_pred_cvar_mcse_rel_median`. The `_max`/`_min`
-  extremes are worth recording but not steering on.
-- **Verify the censoring lifts before trusting the extremes at production
-  budget.** 2480 draws is ~19× the stage-2 budget and the saturation may
-  disappear, but check it explicitly — otherwise the failure mode is
-  "diagnostics didn't improve when I added draws", which is indistinguishable
-  from a mixing problem (see the last paragraph of this section) and would send
-  you chasing `lr_max` / `chain_init_jitter` for no reason.
+These are the §3.6.3 criteria the winners already satisfy at 4 chains × 75
+draws. **Changing the chain count does not automatically preserve them** — more
+chains means more chances that one wanders — so re-check rather than assume. A
+run failing these is not sampling `P_{f|D}`, and every tail statistic computed
+from it is meaningless regardless of how good it looks.
 
-Note the *diverged* trials are the ones with unpinned values here (CVaR ESS 25–89,
-R-hat 0.997–1.085) — a broken run whose predictive has collapsed to a constant
-mixes "perfectly". Do not read a good-looking extreme as evidence of health.
+### 4.3 Starting point (measured, the four stage-1 winners at 4 chains × 75)
 
-**Reference point:** the production configs before this selection round used
-`num_chains: 8`, `num_samples: 310` (2480 draws) with `chains_per_gpu: 2`. The
-offline validator `scripts_bnn/diagnose_sampling_tail.py --run-dir <OUT_DIR>`
-recomputes all tail diagnostics from saved chains without re-sampling, and
-`--worst-k` lists the least-converged points with their torso (x, y) so you can
-judge whether unresolved points are genuinely multimodal states.
+| metric | medium_play | large_play | medium_diverse | large_diverse |
+|---|---|---|---|---|
+| `cvar_ess_median` | 52.9 | 210 | 272 | 57.4 |
+| `cvar_mcse_rel_median` | 0.220 | 0.195 | 0.143 | 0.319 |
+| `cvar_rhat_median` | 1.113 | 1.013 | 1.013 | 1.077 |
+| `cvar_rhat_pct_over_1.01` | 99.9% | 59.0% | 61.4% | 99.4% |
+| `q05_ess_median` | 33.5 | 184 | 245 | 42.1 |
+| `folded_rhat_95th_pct` | 1.541 | 1.082 | 1.086 | 1.312 |
 
-Increasing draws does not fix everything: between-chain mode separation is
-resolved by hot-phase mixing (`lr_max`, `fraction_cool`) and by
-`chain_init_jitter`, not by more samples. If R-hat stays high with large ESS,
-that is a mixing problem, not a budget problem.
+**medium_play and large_diverse are the weak pair** — roughly 4–5× less CVaR ESS
+and near-universal R-hat exceedance. large_play and medium_diverse are already in
+good shape. Expect the work to be concentrated on the first two, and do not
+assume a single chain count suits all four.
+
+Relative MCSE is already comfortably below 1 everywhere (0.14–0.32), so the
+binding constraint is R-hat, not Monte-Carlo noise — which matters, because of
+§4.5.
+
+### 4.4 Procedure
+
+Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
+`scripts_bnn/`, with a distinct `OUT_DIR` per candidate so runs do not clobber
+one another (the deterministic `{OUT_DIR}_{seed}` path has destroyed evidence
+twice — §10.3):
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=<gpus> nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains <N> --chains_per_gpu <N/gpus> \
+    --OUT_DIR ./exp/stage3_<variant>_c<N> > ../exp/stage3_<variant>_c<N>.log 2>&1 &
+```
+
+`--config_path` and `--OUT_DIR` are repo-root-relative and resolve *after* the
+script's `os.chdir("..")`; the shell redirect is not, hence `../exp/`. Thread
+caps are set inside the script (§10.7) — do not override them.
+
+A sensible ladder is **4 → 8 → 16 chains**, stopping when §4.6 is satisfied.
+`num_chains: 8` at `chains_per_gpu: 2` uses 4 GPUs; 16 at 4 uses 4 GPUs.
+
+### 4.5 What to judge it on — and the ceiling that limits it
+
+Judge on the **distributional** statistics: `cvar_ess_median`,
+`cvar_mcse_rel_median`, `cvar_rhat_median`, `cvar_rhat_pct_over_1.01`,
+`q05_ess_median`, `folded_rhat_95th_pct`.
+
+The `_max`/`_min` extremes were fully censored in round 1 (`cvar_rhat_max` pinned
+at 1.2555612 on nearly every trial). At the round-2 budget they **partly**
+recover — across the four winners `cvar_rhat_max` takes three distinct values,
+but medium_play and large_diverse share 1.268552 to six decimals, so the ceiling
+still binds for some runs. Record the extremes; do not steer on them.
+
+Do **not** use `param_*` diagnostics (they no longer exist — §3.6.2 explains
+why weight-space statistics measure nothing for this sampler) or bulk
+`pred_rhat`/`pred_ess` (they certify the median, not the tail).
+
+**Chains buy precision, not mixing.** ESS and MCSE improve roughly with total
+draws; R-hat does not, because it measures between-chain *disagreement*. Two
+things follow:
+
+- If R-hat stays high while ESS grows, that is a mixing problem and more chains
+  will not fix it. Mode separation is addressed by hot-phase mixing (`lr_max`,
+  `fraction_cool`) and `chain_init_jitter` — none of which stage 3 may change.
+- **`chain_init_jitter` is 0.0, so every chain starts from the same burn-in
+  point.** R-hat therefore *understates* disagreement, and adding chains from a
+  shared start adds little independent information about multimodality. Treat
+  the R-hat numbers as optimistic, and say so in the write-up.
+
+Given §4.3 shows R-hat is the binding constraint for medium_play and
+large_diverse, the realistic outcome is that chains improve their ESS/MCSE while
+`rhat_pct_over_1.01` stays high. That is a reportable finding about the sampler
+at these settings, not a failure to run enough chains.
+
+### 4.6 When to stop, and what to record
+
+Stop when, for each variant, the median statistics have flattened between
+successive chain counts and §4.2 still passes. Concretely: `cvar_ess_median` and
+`q05_ess_median` scale roughly linearly with total draws while
+`cvar_mcse_rel_median` falls as 1/√(draws) — once an extra doubling buys little,
+the budget is enough.
+
+Record per variant: the chosen `num_chains` / `chains_per_gpu`, the full table
+of §4.3 metrics at each candidate, the §4.2 numbers at the chosen budget, and
+whether the extremes de-censored. Then transcribe `num_chains` and
+`chains_per_gpu` into the production configs (§10.3) and re-run the field-by-field
+verification.
+
+`scripts_bnn/diagnose_sampling_tail.py --run-dir <OUT_DIR>` recomputes every tail
+statistic from saved chains without re-sampling; `--worst-k` lists the
+least-converged points with their torso (x, y) so you can judge whether the
+unresolved ones are genuinely multimodal states. `--ce-ladder` and
+`--draw-ladder` answer "would fewer draws have done?" from a completed run.
 
 ---
 
@@ -1349,23 +1413,13 @@ them.
 
 ### 10.4 Then: stage 3, then stage 4
 
-Stage 3 (§4) raises **`num_chains` only**, until the CVaR tail diagnostics are
-acceptable — judged on `val_pred_cvar_*`, `val_pred_folded_rhat_*` and
-`gradnorm_sampling_pct_over_clip ≈ 0`, **not** on `param_*`.
-`num_samples` is pinned at the sweep's 75 draws per chain: selection and
-production must run at the same horizon, which is the round-1 mistake §3.7
-exists to prevent. Round 1's `num_chains: 8`, `num_samples: 310` reference point
-is void.
-
-Two round-1 lessons carry into how stage 3 is read:
-
-- **The `_max`/`_min` extremes are censored at small budgets** and rank nothing;
-  steer on the median / 95th-pct / `pct_over_1.01` variants (§4). At the round-1
-  production budget they did de-saturate (`cvar_rhat_max` 1.2556 → 1.0651), but
-  on a run that was itself drifting, so re-confirm on a healthy one.
-- **Check `sampling_weight_growth` before believing any of them.** If the
-  weights drift, improving R-hat/ESS is an artifact and the budget question is
-  moot until the schedule is fixed.
+**Stage 3 is specified in full in §4** — what it chooses, the stationarity
+precondition, the measured starting point, the launch command, what to judge it
+on, and when to stop. That section is the single source of truth; this one only
+says where it sits in the sequence. Do not follow a summary of §4 written
+elsewhere, including an earlier version of this paragraph, which told the reader
+to check a `sampling_weight_growth` metric that no longer exists (§3.6.2
+explains why weight-space statistics were removed).
 
 Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
 seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
@@ -1419,6 +1473,29 @@ Operational trap: killing a sweep agent does **not** kill its training process.
 The child is orphaned and keeps running on the GPU. Kill by process group and
 match the full config name (`antmaze_large_play_bnn_antmaze_eval`, not `large`),
 or you will take down a neighbouring variant. This has happened.
+
+### 10.6.1 Where things run
+
+Two environments, and the split matters for anything you try to do:
+
+- **Training runs execute on `leviathan`**, the lab GPU box (6× RTX A6000, conda
+  env `pt`). Everything in §4.4, `launch_hp_sweeps.sh` and `train_rewards.sh`
+  runs there. `data/` is gitignored and lives on the box (and locally); it is
+  not in the repo.
+- **Analysis runs locally** against the wandb API — `check_sweep_convergence.py`,
+  `check_winner_eligibility.py`, and any ad-hoc query. On the analysis Mac use
+  `/opt/anaconda3/envs/irl/bin/python`; on the box the `pt` env's `python` is
+  fine. No GPU or box access is needed for any of it, which is why every reading
+  in this project was produced without touching `leviathan`.
+
+`diagnose_sampling_tail.py` is the exception: it needs a run's saved chains, so
+it runs on the box (or wherever `OUT_DIR` was written).
+
+If you are an assistant working on this: **do not log into `leviathan`.** Hand
+the user the exact command to run and interpret the output they paste back. The
+wandb API plus the repo answers more than it first appears — run `config`,
+`summary` and `metadata` (which carries `host`, `cpu_count`, `gpu_count`) cover
+most "what is the box doing" questions without any shell access.
 
 ### 10.7 Concurrent sweeps oversubscribe the CPU (~2.8×) — confirmed
 
