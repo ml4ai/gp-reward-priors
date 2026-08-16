@@ -1,53 +1,67 @@
-# ============================================================================
-# STATUS: SUPERSEDED-ROUND1 -- do NOT run production training from this file.
-# ============================================================================
-# Every selected value below is ROUND 1's.  Round 1's two-tier BNN design was
-# discarded (HANDOFF_HP_SELECTION.md section 3.7) after its selected
-# configuration proved non-stationary at production length: weight norm grew
-# 4.09x over 310 draws while every convergence diagnostic improved.
+# Hyperparameters selected by the ROUND-2 merged BNN sweep (seed-0 data split).
+# See HANDOFF_HP_SELECTION.md §3 for the procedure and §3.7 for why round 1 was
+# discarded.
 #
-# These values are retained ONLY so this file remains a valid base config for
-# the round-2 merged sweep
-# (scripts_bnn/sweep_antmaze_<variant>_bnn_antmaze_eval.yaml), which
-# overrides all nine of them: width, depth, n_meas, map_amp2, sghmc_lr,
-# sghmc_lr_max, cycle_length, mdecay, fraction_cool.  Reading any of them as a
-# selected hyperparameter is a mistake.
+#   Sweep    BNN-training/ojk7k4vb   metric val_predictive_cross_entropy
+#            (Wu et al. 2025 Eq. 10 posterior predictive, E[sigma(f)] — NOT the
+#            width-blind plug-in sigma(E[f]); see §3.6.2).
+#   Winner   run oi7cqb9o, trial 21; stopping rule fired at trial 29.
+#            val_predictive_cross_entropy = 0.204685
+#            val_predictive_accuracy      = 0.898148
 #
-# `burn_in_lr` has been REMOVED, deliberately.  The merged sweep requires
-# burn-in to inherit the swept `sghmc_lr`; setting it here would silently
-# override that and reinstate exactly the mismatch that ended round 1.
-# Do not add it back (section 3.2).
+#   Acceptance criteria (§3.6.3), all satisfied:
+#            fn_drift_loc_z_median   = 0.9168   (<= 2.0)
+#            fn_drift_scale_z_median = 1.6286   (<= 2.0)
+#            param_clamp_sampling_pct= 0   (<= 0.01)
+#            gradnorm_sampling_pct_over_clip = 0.14  (reported, not gating)
+#   6 of 29 trials up to the trigger were rejected as ineligible.
 #
-# train_rewards.sh refuses to launch while the SUPERSEDED-ROUND1 marker above
-# is present.  When the merged sweep fires, replace this whole header with the
-# round-2 provenance header and transcribe the winner.
+#   DISCLOSE — rule-vs-eligible gap.  The lowest-metric trial was
+#   0h1oko58 at 0.200631, but it FAILED the acceptance
+#   criteria, so it is not a valid winner (§3.6.3).  The winner below is
+#   2.0% worse on the metric and is sampling the target measure;
+#   the other is not.  Report the gap.
+#
+#   DISCLOSE — eligible frontier still improving at the trigger.  The
+#   best ELIGIBLE trial last improved 8 trials before the rule
+#   fired (patience 15), so the search stopped while eligible progress
+#   was still happening.  The stopping rule tracks the RAW metric and is
+#   deliberately not eligibility-aware (§3.6.3); this is the known cost.
+#
+#   NOT selected here: num_chains / chains_per_gpu — stage 3 sets those (§4).
+#   num_samples is PINNED at the sweep's 75 draws/chain and is not a free
+#   parameter: selection and production must run at the same horizon, which is
+#   the round-1 mistake §3.7 exists to prevent.  Buy total draws with chains.
+#
+#   `burn_in_lr` is deliberately ABSENT — burn-in inherits the swept sghmc_lr.
+#   Do not add it back (§3.2).
 project: BNN-training
 group: BNN
 name: bnn
 
 # --- Model architecture ---
-width: 7                 # log2 exponent; actual width = 2**width (6 → 64)
+width: 9                 # log2 exponent; actual width = 2**width (6 → 64)
 depth: 6
 
 # --- Sampling budget (stage 3 decides these; not selected by the sweeps) ---
-num_chains: 8
-chains_per_gpu: 2        # co-locate 2 chains per GPU; ceil(num_chains / chains_per_gpu) GPUs used
-num_samples: 310          # samples per chain; one per cycle with cyclical lr
+num_chains: 8             # STAGE 3 SETS THIS — round-1 reference value
+chains_per_gpu: 2         # STAGE 3 SETS THIS
+num_samples: 75          # PINNED to the sweep horizon (§4) — not a free parameter
 n_discarded: 5           # discard first N cycles as extra post-burn-in warm-up
-num_burn_in_steps: 5000  # steps for preconditioner adaptation (shared warm-up
+num_burn_in_steps: 20000  # matches the sweep (§3.2)
                          # + per-chain burn-in each run this many steps)
 
 # --- SGHMC core hyperparameters ---
-sghmc_lr: 0.00044675299100389534          # lr_min: cool-phase (sampling) step size
-mdecay: 0.022440542355891248             # friction; acts during burn-in as well as
+sghmc_lr: 0.00014202619756261976          # lr_min: cool-phase AND burn-in step size
+mdecay: 0.031180675606103936             # friction; acts during burn-in as well
                          # sampling (the stage-2 confound, HANDOFF section 7)
 batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
-n_meas: 10
+n_meas: 29
 # Prior amplitude multiplier (K -> map_amp2*K): scales the map kernel's reward
 # amplitude while leaving its correlation structure untouched.  Absent this line
 # the field falls back to TrainConfig's 1.0, discarding the stage-1 result.
-map_amp2: 623.4845757821569
+map_amp2: 925894.9223848848
 meas_jitter: .000001
 gp_cov_scale: 1.0
 reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py
@@ -74,9 +88,9 @@ map_xy_source: obs       # read torso (x,y) from obs[:, :2] (antmaze convention)
 # collected at the final step.  The adaptive preconditioner is frozen after
 # burn-in, so only lr cycles.
 use_cyclical_lr: true
-sghmc_lr_max: 0.004123441940823021       # lr_max: hot-phase peak step size
-cycle_length: 1500       # total steps per cycle (hot + cool)
-fraction_cool: 0.4464505988695707   # ~669 cool / ~831 hot steps per cycle
+sghmc_lr_max: 0.000912361127342144       # lr_max: hot-phase peak step size
+cycle_length: 500       # total steps per cycle (hot + cool)
+fraction_cool: 0.12040238184663106   # ~60 cool / ~440 hot steps per cycle
 
 # keep_every is used only when use_cyclical_lr: false
 keep_every: 1000
