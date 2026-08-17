@@ -1,11 +1,13 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Status 2026-08-15. **Stage 1 is complete for all three families.** The BNN's
+> Status 2026-08-16. **Stage 1 is complete for all three families; stage 3 is
+> in progress** — medium_play's 4-chain rung is measured (§4.5, §10.2). The BNN's
 > round-2 merged sweeps have all fired and their winners are transcribed into
 > `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, verified field-by-field
 > against wandb. Round 1's two-tier BNN design was discarded (§3.7); its results
-> remain in §6 as the record. **Stage 3 (BNN draw budget) is the next action;
-> stage 4 not started.** MR and PT are unaffected throughout.
+> remain in §6 as the record. **Stage 3 (BNN draw budget) is under way — the
+> exact next command is in §10.2; stage 4 not started.** MR and PT are
+> unaffected throughout.
 > Start at §10 if you are picking this up cold.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
@@ -885,7 +887,7 @@ the budget is enough.
 
 Record per variant: the chosen `num_chains` / `chains_per_gpu`, the full table
 of §4.3 metrics at each candidate, the §4.2 numbers at the chosen budget, and
-whether the extremes de-censored. Then transcribe `num_chains` and
+what the `_max` extremes did (they are sparse, not censored — §4.5). Then transcribe `num_chains` and
 `chains_per_gpu` into the production configs (§10.3) and re-run the field-by-field
 verification.
 
@@ -1140,7 +1142,8 @@ instability: 3 of its 8 are outright blow-ups, the other 5 are 1.1–2.1%
 over-clip with otherwise healthy diagnostics.
 
 **Predictive-tail health of the four winners at the stage-2 budget** (132 draws;
-the non-censored statistics only, see §4). medium_diverse is the weakest and
+the distributional statistics only — see §4.5, which also corrects the earlier
+claim that the `_max`/`_min` extremes were censored). medium_diverse is the weakest and
 should be expected to need the largest stage-3 draw budget, consistent with its
 being the largest network:
 
@@ -1435,13 +1438,61 @@ Stage 3 raises **`num_chains` only**, with `num_samples` pinned at the sweep's
 the round-1 mistake §3.7 exists to prevent. `chains_per_gpu` is placement.
 
 Judge it on the CVaR tail diagnostics (§4), reading the median / 95th-pct /
-`pct_over_1.01` variants rather than the censored `_max`/`_min` extremes, and
-**check `fn_drift_*_z` and `param_clamp_sampling_pct` first**: a run that is not
-sampling the target measure makes every tail number meaningless. The winners all
-pass those at 4 chains × 75 draws, but the budget change has to be re-checked,
-not assumed.
+`pct_over_1.01` variants rather than the `_max`/`_min` extremes (§4.5 explains
+why those are sparse rather than censored), and **check `fn_drift_*_z` and
+`param_clamp_sampling_pct` first**: a run that is not sampling the target
+measure makes every tail number meaningless. The winners all pass those at
+4 chains × 75 draws, but the budget change has to be re-checked, not assumed.
 
-Then stage 4 (§5), the 8-way normalization grid, outside this repo.
+**Progress so far.** medium_play's `c4` rung is done (2026-08-16): the winner
+reproduced, `fn_drift`/clamp re-verified, and `--worst-k 20` showed only 56 of
+6400 points unresolved (0.88%), clustered in three maze regions rather than
+diffuse — see §4.5. Nothing else has been run.
+
+**Do this next, in order:**
+
+1. **medium_play `c8`.** One command; only the budget fields need overriding,
+   because the production config already carries the winner's nine values:
+
+   ```
+   cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+       --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+       --seed 0 --num_chains 8 --chains_per_gpu 4 \
+       --OUT_DIR ./exp/stage3_medium_play_c8 > ../exp/stage3_medium_play_c8.log 2>&1 &
+   ```
+
+   Then, from the **repo root** (the diagnostic does not `chdir`, unlike the
+   training script, so its `--run-dir` is relative to wherever you launch it):
+
+   ```
+   python scripts_bnn/diagnose_sampling_tail.py \
+       --run-dir exp/stage3_medium_play_c8_0 --worst-k 20 --device cuda
+   ```
+
+   Compare against the `c4` row in §4.3. Expect `cvar_ess_median` and
+   `q05_ess_median` to roughly double, `cvar_mcse_rel_median` to fall by about
+   √2, and **R-hat to rise** — §4.5 explains why that is correct behaviour and
+   not a regression.
+
+2. **medium_play `c16`**, if `c8` still buys a meaningful ESS/MCSE improvement.
+   Stop when a doubling buys little (§4.6).
+
+3. **Repeat the ladder for the other three variants.** They start from very
+   different places: large_play and medium_diverse already sit at
+   `cvar_ess_median` 210 and 272 at `c4` and may need no increase at all, while
+   large_diverse (57) looks like medium_play. Do not assume one chain count
+   suits all four (§4.3).
+
+4. **Transcribe** the chosen `num_chains` / `chains_per_gpu` per variant into
+   `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, then re-run the
+   field-by-field verification (§10.3).
+
+5. **Then stage 4** (§5) — the 8-way normalization grid, which runs outside this
+   repo in the surrounding `iqlpref` pipeline.
+
+Every stage-3 run needs a distinct `OUT_DIR`. The deterministic
+`{OUT_DIR}_{seed}` path has already destroyed evidence three times (§10.3), and
+two runs sharing a path will silently clobber each other.
 
 ### 10.3 The BNN production configs — done for round 2
 
