@@ -153,19 +153,30 @@ def _load_chain_weights(run_dir, i, device):
 
 
 def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
-    """Weight magnitude per draw -- the mechanism check behind a rising CE.
+    """Free-diffusion check on ||w||.  NOT a convergence diagnostic.
 
-    Uses the same definition the training script reports as `avg |w|`:
-    total L2 norm over all parameters / sqrt(n_params), i.e. the RMS weight.
-    That script warns above 5.0 because an MLP's output scales roughly as
-    `w**(depth+1)`, so a drifting weight norm inflates the Bradley-Terry logit
-    and saturates the softmax -- raising cross-entropy while leaving the
-    ranking, and therefore accuracy, largely intact.
+    Under fSGHMC (Wu et al. 2025) the potential `U(f) = Phi(f) + I0(f)` depends
+    on w only through f, so every f-preserving direction is flat and the chain
+    performs an unconfined random walk along it.  **A growing weight norm is
+    what this sampler is supposed to do**, and ||w||^2 should grow linearly in
+    draw index -- see HANDOFF section 3.6.2, which removed `param_rhat`,
+    `param_ess` and the sampling weight-norm statistics for this reason.
 
-    Costs no forward passes: the saved weights are read directly.  A magnitude
-    that climbs monotonically across draws means the chains are drifting rather
-    than sampling a stationary distribution, in which case improving R-hat/ESS
-    is an artifact of the growing within-chain variance, not convergence.
+    An earlier version of this function reported a `growth > 1.5x` verdict of
+    "DRIFTING -- chains are not stationary".  That was the round-1 weight-space
+    reading and it was wrong: at 75 draws the free-diffusion law alone produces
+    growth well past 1.5x, so the check fired on healthy runs.  It has been
+    removed rather than re-thresholded, because no threshold on ||w|| carries
+    information about the convergence of f.
+
+    What this IS good for, and all it is good for: confirming the chains
+    diffuse as theory predicts (||w||^2 linear in t) and at a COMMON rate, so
+    that no chain has a broken step size or a binding `max_param_step` clamp.
+    That is a mechanical check on the integrator, not a statement about f.
+    For stationarity use the function-space drift z-scores (section 4.2); for
+    mixing use the tail R-hat/ESS above.
+
+    Costs no forward passes: the saved weights are read directly.
     """
     mags = []
     for c in range(num_chains):
@@ -184,30 +195,49 @@ def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
     if levels[0] != 1:
         levels.insert(0, 1)
 
-    print(f"\n=== WEIGHT MAGNITUDE TRACE ({num_chains} chains, {m} draws) ===")
+    print(f"\n=== WEIGHT FREE-DIFFUSION CHECK ({num_chains} chains, {m} draws) ===")
+    print("  NOT A CONVERGENCE DIAGNOSTIC.  U(w) depends on w only through f, so")
+    print("  every f-preserving direction is flat and |w| random-walks along it:")
+    print("  a rising |w| is CORRECT behaviour here (section 3.6.2).  Read this")
+    print("  only as a check that the chains diffuse as theory predicts, at a")
+    print("  common rate.  For stationarity of f use the drift z-scores (4.2).")
     print("  avg |w| = total L2 norm / sqrt(n_params), matching the training")
-    print(f"  script's warm-up readout.  It warns above 5.0; outputs scale as")
-    print(f"  ~|w|^(depth+1) = |w|^{depth + 1} here.")
+    print("  script's warm-up readout.")
     print(f"  {'at draw':>8} | {'avg|w| mean':>11} {'min':>9} {'max':>9} "
-          f"{'x vs draw 1':>11} | {'~logit scale':>13}")
+          f"{'x vs draw 1':>11} | {'||w||^2 mean':>13}")
     print("  " + "-" * 72)
     base = float(mags[:, 0].mean())
     for n in levels:
         col = mags[:, n - 1]
         mean = float(col.mean())
-        scale = mean ** (depth + 1)
         print(f"  {n:>8} | {mean:>11.4f} {col.min():>9.4f} {col.max():>9.4f} "
-              f"{mean / base:>11.2f} | {scale:>13.3e}")
-    growth = float(mags[:, -1].mean()) / base
-    verdict = ("DRIFTING -- chains are not stationary; R-hat/ESS improvements "
-               "are an artifact" if growth > 1.5 else
-               "roughly stable -- weight drift is NOT the mechanism")
-    print(f"\n  first draw {base:.4f} -> last draw {float(mags[:, -1].mean()):.4f} "
-          f"({growth:.2f}x): {verdict}")
-    per_chain_growth = mags[:, -1] / mags[:, 0]
-    print(f"  per-chain growth: min {per_chain_growth.min():.2f}x, "
-          f"max {per_chain_growth.max():.2f}x "
-          f"({'all chains' if per_chain_growth.min() > 1.5 else 'NOT all chains'} drifting)")
+              f"{mean / base:>11.2f} | {mean ** 2:>13.4f}")
+
+    # Free-diffusion law: ||w||^2 = ||w0||^2 + c*t.  Fit c per chain and report
+    # how well the law holds (R^2) and how uniform the rate is across chains.
+    sq = mags ** 2                                            # [chain, draw]
+    t = np.arange(1, m + 1, dtype=np.float64)
+    slopes, r2s = [], []
+    for c in range(sq.shape[0]):
+        slope, intercept = np.polyfit(t, sq[c], 1)
+        resid = sq[c] - (slope * t + intercept)
+        ss_tot = float(((sq[c] - sq[c].mean()) ** 2).sum())
+        slopes.append(float(slope))
+        r2s.append(1.0 - float((resid ** 2).sum()) / ss_tot if ss_tot > 0 else 1.0)
+    slopes, r2s = np.array(slopes), np.array(r2s)
+    spread = slopes.max() / slopes.min() if slopes.min() > 0 else float("inf")
+
+    print(f"\n  free-diffusion fit  ||w||^2 = ||w0||^2 + c*t")
+    print(f"    c (per chain)   mean {slopes.mean():.4f}  "
+          f"min {slopes.min():.4f}  max {slopes.max():.4f}  spread {spread:.2f}x")
+    print(f"    linearity R^2   min {r2s.min():.4f}  median {np.median(r2s):.4f}")
+    law = ("consistent with free diffusion (expected)" if r2s.min() > 0.98
+           else "NOT linear in t -- integrator worth inspecting")
+    rate = ("chains diffuse at a common rate" if spread < 1.5
+            else f"ANOMALOUS: chain rates differ {spread:.2f}x -- check the "
+                 f"step size and max_param_step clamp on the outlier")
+    print(f"    {law}")
+    print(f"    {rate}")
 
 
 def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
@@ -395,8 +425,9 @@ def draw_ladder(pred_chains, levels, alpha=0.05):
 
     print(f"\n=== DRAW LADDER ({C} chains; per-chain draws truncated to first N) ===")
     print("  Steer on the median / 95th-pct / pct columns.  The *_max / *_min")
-    print("  extremes are censored at estimator ceilings -- watch whether they")
-    print("  move at all as draws increase (section 4).")
+    print("  extremes are SPARSE, not censored (section 4.5): only alpha*C*D draws")
+    print("  fall below VaR, so cvar_rhat can take few distinct values and a")
+    print("  repeated one means the tail mass sits in a single chain.")
     hdr = (f"  {'draws/ch':>8} {'total':>7} | {'cvarESSmed':>10} {'cvarESSmin':>10} "
            f"{'cvarRhatMed':>11} {'cvarRhat%>1.01':>14} {'cvarRhatMax':>11} | "
            f"{'relMCSEmed':>10} {'unres%':>7} | {'varESSmed':>9} {'fold95':>7} {'foldMax':>7}")
@@ -520,10 +551,11 @@ def main():
                          "budget is read off a curve instead of costing one "
                          "training run per candidate.")
     ap.add_argument("--weight-trace", action="store_true",
-                    help="Report weight magnitude per draw at each "
-                         "--draw-ladder level. Free (no forward passes). "
-                         "Distinguishes chains that are drifting from chains "
-                         "that are sampling a stationary distribution.")
+                    help="Check ||w||^2 grows linearly in draw index (the "
+                         "free-diffusion law) at a common rate across chains. "
+                         "Free (no forward passes). NOT a convergence "
+                         "diagnostic -- a rising |w| is correct under fSGHMC; "
+                         "see section 3.6.2. Use the drift z-scores instead.")
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "

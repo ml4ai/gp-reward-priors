@@ -215,10 +215,32 @@ def report(entity, project, variant, baseline_id):
             note = "expected to rise (§4.5)" if vb >= va else "fell"
             print(f"       {lbl:22s} {va:9.4f} -> {vb:9.4f}   {note}")
 
-    print("\n  Stop when a doubling buys little on ESS/relMCSE and §4.2 still "
-          "passes (§4.6).\n  Record the unresolved-point count and --worst-k "
-          "from diagnose_sampling_tail.py\n  alongside this table; they are not "
-          "logged to wandb.")
+        # §4.6: ESS flattening only means "budget is enough" if relMCSE is also
+        # falling.  ESS flat while relMCSE rises means sd(u) is growing -- the
+        # sampler is still finding tail mass and the estimand is still moving,
+        # so stopping here would pick the rung that found the LEAST tail.
+        ess_a, ess_b = sa.get("val_pred_cvar_ess_median"), sb.get("val_pred_cvar_ess_median")
+        mc_a, mc_b = (sa.get("val_pred_cvar_mcse_rel_median"),
+                      sb.get("val_pred_cvar_mcse_rel_median"))
+        # mcse = sd(u)/sqrt(ESS), so ESS up AND relMCSE up forces sd(u) up --
+        # no threshold needed, the two moving together is the whole signal.
+        if None not in (ess_a, ess_b, mc_a, mc_b) and ess_a and mc_a:
+            if ess_b > ess_a and mc_b > mc_a:
+                grew = (mc_b / mc_a) * math.sqrt(ess_b / ess_a)
+                print(f"\n       !! ESS ROSE ({ess_b / ess_a:.2f}x) and relMCSE "
+                      f"ROSE ({mc_a:.3f} -> {mc_b:.3f}) together.")
+                print(f"          Since mcse = sd(u)/sqrt(ESS), sd(u)/pred_sd "
+                      f"grew ~{grew:.2f}x: the sampler is")
+                print("          still FINDING tail mass, not resolving it, so "
+                      "the CVaR estimand is still")
+                print("          moving.  §4.6's stop rule does not apply here "
+                      "-- §4.1 does.")
+
+    print("\n  Stop when a doubling buys little on ESS *and* relMCSE is still "
+          "falling, with\n  §4.2 passing (§4.6) — ESS alone will mislead if the "
+          "tail is still being found.\n  Record the unresolved-point count and "
+          "--worst-k from diagnose_sampling_tail.py\n  alongside this table; "
+          "they are not logged to wandb.")
 
 
 def main():

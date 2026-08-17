@@ -810,6 +810,60 @@ the schedule-parameter null above may itself be an artifact — chains sharing a
 start cannot express hot-phase exploration as between-chain diversity, which is
 exactly what R-hat measures.
 
+### 4.3.1 medium_play ladder — measured 2026-08-17, and what it shows
+
+| metric | `c4` (300 draws) | `c8` (600 draws) | ratio | §4.6 ideal |
+|---|---|---|---|---|
+| `ess_bulk` median | 6.73 | 14.57 | **2.16×** | 2.00× |
+| `rhat_bulk` median | 1.7208 | 1.5972 | fell | — |
+| `cvar_ess_median` | 52.9 | 59.2 | **1.12×** | 2.00× |
+| `q05_ess_median` | 33.5 | 43.2 | 1.29× | 2.00× |
+| `cvar_mcse_rel_median` | 0.2204 | 0.2706 | **1.23×** | 0.71× |
+| `cvar_rhat_median` | 1.1134 | 1.1497 | rise expected (§4.5) | — |
+| `cvar_rhat_max` | 1.2686 | 2.1479 | moved — not a ceiling (§4.5) | — |
+| `folded_rhat_95th` | 1.5405 | 1.3895 | fell | — |
+| unresolved points | 56 (0.88%) | 144 (2.25%) | **2.57×** | — |
+
+The §4.2 gate passes at both rungs (`c8`: loc_z 1.1385, scale_z 1.3564, clamp
+0.0000), so the tail numbers are readable. But the margin to 2.0 narrowed by
+roughly a third from `c4` (0.8256 / 1.0298), so re-read the gate at `c16` rather
+than assuming it holds.
+
+**The `c8` run's first four chains reproduce `c4` exactly.** `--num-chains 4` on
+`exp/stage3_medium_play_c8_0` gives output byte-identical to
+`exp/stage3_medium_play_c4_0` — every digit, bulk through unresolved count.
+Chain initialisation and the per-chain RNG stream are deterministic in (seed,
+chain index), so **the rungs are nested**: `c8` is `c4` plus four new chains.
+Two consequences. §4.3's "reproduced to six significant figures" is exact. And
+the `c4` → `c8` difference carries no run-to-run confound at all — it is
+attributable entirely to chains 5–8. Use `--num-chains` for this check on every
+later rung; it costs no sampling.
+
+**Bulk and tail move in opposite directions, and that is the finding.** Adding
+chains improves the bulk slightly *better* than the ideal (ESS 2.16×, R-hat
+falling), while the tail barely moves and its relative MCSE goes the wrong way.
+Since `mcse = sd(u)/√ESS` on the Rockafellar–Uryasev integrand
+`u = min(f − VaR, 0)/α`, and ESS rose, `sd(u)/pred_sd` must have grown ~30%:
+chains 5–8 agree with chains 1–4 about the bulk and **disagree about how deep
+the lower tail goes**. The worst points corroborate it — `pred_sd` up to 20.0
+and CVaR down to −61.6 at `c8`, against §4.5's `c4` record of `pred_sd` 5–15 and
+O(10) magnitudes — and they sit in the *same* maze regions `c4` flagged
+(x ≈ 19–21, y ≈ 4–5; y ≈ 20.7). More of them, not elsewhere.
+
+**The draw ladder shows the same thing with the chains held fixed**, so it is
+not an artifact of adding chains. Within the `c8` run, truncated to the first N
+draws per chain:
+
+| draws/chain | total | `cvar_ess_median` | `cvar_mcse_rel_median` | unresolved |
+|---|---|---|---|---|
+| 25 | 200 | 44.6 | 0.251 | 2.59% |
+| 50 | 400 | 54.4 | 0.252 | 1.30% |
+| 75 | 600 | 59.2 | 0.271 | 2.25% |
+
+ESS gains 1.22× then 1.09× per step, and relMCSE *rises* over the last step with
+the chains identical. **More sampling of either kind keeps finding deeper
+excursions.** Read §4.6's stop rule with that in mind — it does not apply here.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -857,6 +911,26 @@ rather than as a censored statistic.
 Do **not** use `param_*` diagnostics (they no longer exist — §3.6.2 explains
 why weight-space statistics measure nothing for this sampler) or bulk
 `pred_rhat`/`pred_ess` (they certify the median, not the tail).
+
+**`--weight-trace` was printing a false verdict; fixed 2026-08-17.** It declared
+`DRIFTING -- chains are not stationary; R-hat/ESS improvements are an artifact`
+whenever RMS `‖w‖` grew more than 1.5× — a `param_*`-era check that survived the
+§3.6.2 audit by being in a different file. Under fSGHMC that threshold fires on
+*healthy* runs: `‖w‖² = ‖w₀‖² + c·t` is the expected free diffusion along
+f-preserving flat directions, which at 75 draws alone gives ~2.7× growth in
+`‖w‖`. medium_play `c8` duly tripped it, with per-draw `Δ‖w‖²` of 0.3310 /
+0.3263 / 0.3118 across the three intervals — linear in t to ~3%, i.e. textbook
+free diffusion, reported as non-stationarity. No threshold on `‖w‖` carries
+information about the convergence of f, so the verdict was removed rather than
+re-tuned. The flag now checks what it validly can: that `‖w‖²` is linear in
+draw index (R² per chain) and that the diffusion rate `c` is common across
+chains, which catches a broken step size or a binding `max_param_step` clamp.
+That is a mechanical check on the integrator, not a statement about f.
+
+The same commit fixed the `--draw-ladder` banner, which still asserted the
+`_max`/`_min` extremes "are censored at estimator ceilings" — the claim this
+section corrected in `fd74b28`. medium_play's own ladder refutes it:
+`cvar_rhat_max` moves 2.2188 → 2.0871 → 2.1479.
 
 **Chains buy precision, not mixing.** ESS and MCSE improve roughly with total
 draws; R-hat does not, because it measures between-chain *disagreement*.
@@ -906,6 +980,22 @@ successive chain counts and §4.2 still passes. Concretely: `cvar_ess_median` an
 `cvar_mcse_rel_median` falls as 1/√(draws) — once an extra doubling buys little,
 the budget is enough.
 
+**Flattening only means "enough" if `cvar_mcse_rel_median` is also falling.**
+The rule above presumes a *fixed estimand* whose Monte-Carlo error shrinks with
+draws; then ESS flattening says the error is as small as it needs to be. If ESS
+flattens while relMCSE **rises**, that premise has failed: `sd(u)` is growing,
+the sampler is still discovering tail mass, and the CVaR estimate itself is
+still moving. Flattening then measures the sampler's inability to reach the tail
+faster, not the sufficiency of the budget — and stopping there would freeze the
+budget at the rung whose tail statistics look best *because it found the least
+tail*. medium_play `c4` → `c8` is exactly this case (§4.3.1): read the two
+columns together, never ESS alone.
+
+Where that happens, §4.1 governs: the tail is not satisfiable by adding chains
+at a fixed horizon, and that is a finding about the schedule to be reported, not
+a licence to lengthen the chains. Record the rung anyway — the ladder is the
+evidence for the finding.
+
 Record per variant: the chosen `num_chains` / `chains_per_gpu`, the full table
 of §4.3 metrics at each candidate, the §4.2 numbers at the chosen budget, and
 what the `_max` extremes did (they are sparse, not censored — §4.5). Then transcribe `num_chains` and
@@ -928,6 +1018,11 @@ statistic from saved chains without re-sampling; `--worst-k` lists the
 least-converged points with their torso (x, y) so you can judge whether the
 unresolved ones are genuinely multimodal states. `--ce-ladder` and
 `--draw-ladder` answer "would fewer draws have done?" from a completed run.
+`--num-chains N` reads only the first N chains, which — because chains are
+deterministic in (seed, index) — reproduces the lower rung exactly and isolates
+what the added chains changed (§4.3.1). `--weight-trace` is **not** a
+convergence diagnostic: it checks the free-diffusion law and the per-chain
+diffusion rate, nothing about f (§4.5).
 Pipe it through `tee exp/<run>_diag_tail.txt` — its unresolved-point count and
 `--worst-k` listing are the parts of §4.6's record that never reach wandb.
 
@@ -1457,7 +1552,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **in progress** — medium_play `c4` measured (§4.3, §10.2); `c8` is the next action |
+| 3 | BNN | **in progress** — medium_play `c4` and `c8` measured (§4.3.1); `c16` next, as mechanism evidence rather than a budget candidate |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -1486,21 +1581,25 @@ why those are sparse rather than censored), and **check `fn_drift_*_z` and
 measure makes every tail number meaningless. The winners all pass those at
 4 chains × 75 draws, but the budget change has to be re-checked, not assumed.
 
-**Progress so far.** medium_play's `c4` rung is done (2026-08-16): the winner
-reproduced, `fn_drift`/clamp re-verified, and `--worst-k 20` showed only 56 of
-6400 points unresolved (0.88%), clustered in three maze regions rather than
-diffuse — see §4.5. Nothing else has been run.
+**Progress so far.** medium_play's `c4` and `c8` rungs are done (2026-08-16 /
+2026-08-17) and §4.3.1 records both. The headline is not a budget number: the
+bulk scales as intended (ESS 2.16× for 2× draws) while the tail does not
+(CVaR ESS 1.12×) and its relative MCSE *rises*, at `c8` and again along the
+draw ladder within `c8`. The lower tail is still being discovered rather than
+resolved, so §4.6's flattening rule does not license stopping.
 
 **Do this next, in order:**
 
-1. **medium_play `c8`.** One command; only the budget fields need overriding,
-   because the production config already carries the winner's nine values:
+1. **medium_play `c16`.** Run it as **evidence for the §4.1 schedule finding,
+   not as a budget candidate** — on the `c4` → `c8` evidence it is unlikely to
+   resolve the tail, and the point is to establish that a second doubling
+   doesn't either.
 
    ```
-   cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+   cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
        --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
-       --seed 0 --num_chains 8 --chains_per_gpu 4 \
-       --OUT_DIR ./exp/stage3_medium_play_c8 > ../exp/stage3_medium_play_c8.log 2>&1 &
+       --seed 0 --num_chains 16 --chains_per_gpu 4 \
+       --OUT_DIR ./exp/stage3_medium_play_c16 > ../exp/stage3_medium_play_c16.log 2>&1 &
    ```
 
    Then, from the **repo root** (the diagnostic does not `chdir`, unlike the
@@ -1508,8 +1607,8 @@ diffuse — see §4.5. Nothing else has been run.
 
    ```
    python scripts_bnn/diagnose_sampling_tail.py \
-       --run-dir exp/stage3_medium_play_c8_0 --worst-k 20 --device cuda \
-       2>&1 | tee exp/stage3_medium_play_c8_0_diag_tail.txt
+       --run-dir exp/stage3_medium_play_c16_0 --worst-k 20 --device cuda \
+       2>&1 | tee exp/stage3_medium_play_c16_0_diag_tail.txt
    ```
 
    **Always capture the diagnostic to a file next to the run.** The
@@ -1518,16 +1617,22 @@ diffuse — see §4.5. Nothing else has been run.
    only copy otherwise, and `exp/` is gitignored — the file stays local and can
    be pulled off the box for analysis.
 
-   Then, locally, `python stage3_ladder.py medium_play` prints both rungs side
-   by side with the §4.2 gate and the §4.6 ratios (§8).
+   Read it against three things, in this order: the **§4.2 gate** (scale_z was
+   1.3564 at `c8` and climbing — if it crosses 2.0 the rung is unusable, and
+   that is itself the §4.1 finding); `--num-chains 8`, which must reproduce the
+   `c8` output exactly and isolates what chains 9–16 added (§4.3.1); and only
+   then `cvar_ess_median` **together with** `cvar_mcse_rel_median` — ESS alone
+   will mislead here (§4.6).
 
-   Compare against the `c4` row in §4.3. Expect `cvar_ess_median` and
-   `q05_ess_median` to roughly double, `cvar_mcse_rel_median` to fall by about
-   √2, and **R-hat to rise** — §4.5 explains why that is correct behaviour and
-   not a regression.
+   Then, locally, `python stage3_ladder.py medium_play` prints all three rungs
+   side by side with the §4.2 gate and the §4.6 ratios (§8).
 
-2. **medium_play `c16`**, if `c8` still buys a meaningful ESS/MCSE improvement.
-   Stop when a doubling buys little (§4.6).
+2. **Decide medium_play's budget on the three-rung picture.** If `c16` repeats
+   the `c8` pattern, the choice is between rungs that all fail to resolve the
+   tail, so pick on cost and on the §4.2 gate rather than on the tail metrics,
+   and write up §4.1's conclusion: the tail is not reachable by adding chains at
+   a 75-draw horizon. That is a result about the cyclical schedule composed with
+   fSGHMC (§3.6.2's known deviation), and it belongs in the paper.
 
 3. **Repeat the ladder for the other three variants.** They start from very
    different places: large_play and medium_diverse already sit at
