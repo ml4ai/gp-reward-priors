@@ -764,6 +764,29 @@ Relative MCSE is already comfortably below 1 everywhere (0.14–0.32), so the
 binding constraint is R-hat, not Monte-Carlo noise — which matters, because of
 §4.5.
 
+**Architecture, not schedule, is what tracks mixing — but do not over-read
+which part of the architecture.** Across all 140 round-2 trials carrying tail
+diagnostics, the swept *schedule* parameters are uncorrelated with every mixing
+metric: `sghmc_lr_max` gives ρ = −0.03 / −0.01 / −0.02 and `fraction_cool`
+0.08 / 0.12 / −0.13 against CVaR R-hat, folded R-hat and CVaR ESS. The two
+levers cyclical SGMCMC is built around do nothing measurable for mixing here.
+`depth` is the only variable clearing a Bonferroni bar (ρ = **+0.456** with CVaR
+ESS, **−0.354** with CVaR R-hat); `width` is weaker (−0.256 with folded R-hat).
+
+Among the four winners, however, `depth` does **not** explain the spread —
+medium_diverse is `depth: 2` and mixes best. What lines up there is `width`:
+both `width: 64` winners (medium_play, large_diverse) are the two poor mixers,
+and both wide winners (512, 1024) are the two good ones. With n = 4 that is
+anecdote, and it conflicts with the population correlation, so **treat the
+per-variant cause as unidentified**. What is solid: mixing quality varies ~5×
+across winners (CVaR ESS 53–272), it is an architecture effect rather than a
+schedule one, and nothing in stage 3 can change it.
+
+Note also §4.5: with `chain_init_jitter: 0.0` these R-hats are optimistic, and
+the schedule-parameter null above may itself be an artifact — chains sharing a
+start cannot express hot-phase exploration as between-chain diversity, which is
+exactly what R-hat measures.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -1202,6 +1225,19 @@ result stands, but the effective search behind it was much thinner than the
 headline "40 trials" suggests. State the eligible counts alongside the trial
 counts; quoting the latter alone overstates how much of each space was
 searched with usable configurations.
+
+**Mixing quality varies ~5× across the four winners, and the search never
+optimised for it.** CVaR ESS runs 53 (medium_play) to 272 (medium_diverse) and
+folded R-hat 1.027 to 1.270, on winners selected by a predictive-CE metric that
+is blind to mixing. Across 140 trials the swept schedule parameters —
+`sghmc_lr_max`, `fraction_cool` — show no correlation with any mixing metric
+(|ρ| ≤ 0.13), while `depth` is the strongest single predictor (ρ = +0.46 with
+CVaR ESS). Report the per-winner tail diagnostics rather than an average, and do
+not describe the sampler schedule as having been tuned for mixing: it was tuned
+for predictive cross-entropy, and mixing is whatever the selected architecture
+happened to deliver. The per-variant cause is not identified — among the four
+winners `width` lines up better than `depth`, which contradicts the
+population-level correlation, and n = 4 cannot separate them.
 
 Almost all rejections are
 `scale_z` above 2 rather than location drift, and they concentrate near the top
