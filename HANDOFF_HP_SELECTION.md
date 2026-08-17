@@ -757,6 +757,17 @@ from it is meaningless regardless of how good it looks.
 | `q05_ess_median` | 33.5 | 184 | 245 | 42.1 |
 | `folded_rhat_95th_pct` | 1.541 | 1.082 | 1.086 | 1.312 |
 
+**Provenance of this row.** These are the winners' own stage-1 sweep trials,
+which already ran at 4 chains × 75 draws — the stage-3 `c4` rung is not a
+separate experiment for three of the four variants, it is the configuration the
+sweep selected, read back. Only medium_play also has a dedicated `c4` run
+(`exp/stage3_medium_play_c4_0`, 2026-08-16), made because its sweep trial's saved
+chains had been overwritten and `--worst-k` needs them (§10.3). That run
+reproduced its trial to six significant figures, so the two sources are
+interchangeable; if a later `c4` number appears with a different provenance,
+that is why, and it does not indicate a discrepancy. Any variant needing
+`--worst-k` will likewise need its `c4` re-run first, for the same reason.
+
 **medium_play and large_diverse are the weak pair** — roughly 4–5× less CVaR ESS
 and near-universal R-hat exceedance. large_play and medium_diverse are already in
 good shape. Expect the work to be concentrated on the first two, and do not
