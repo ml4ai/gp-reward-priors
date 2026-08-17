@@ -14,7 +14,9 @@
 #            fn_drift_scale_z_median = 1.1323   (<= 2.0)
 #            param_clamp_sampling_pct= 0   (<= 0.01)
 #            gradnorm_sampling_pct_over_clip = 0.00  (reported, not gating)
-#   8 of 40 trials up to the trigger were rejected as ineligible.
+#   22 of 40 trials up to the trigger were rejected as ineligible (55%) — the
+#   thinnest eligible field of the four; 22 rejected and 3 unclassifiable leave
+#   only 15 eligible trials of 40 (§7.2).
 #
 #   NOT selected here: num_chains / chains_per_gpu — stage 3 sets those (§4).
 #   num_samples is PINNED at the sweep's 75 draws/chain and is not a free

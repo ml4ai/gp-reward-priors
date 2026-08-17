@@ -14,7 +14,7 @@
 #            fn_drift_scale_z_median = 1.0298   (<= 2.0)
 #            param_clamp_sampling_pct= 0   (<= 0.01)
 #            gradnorm_sampling_pct_over_clip = 0.00  (reported, not gating)
-#   7 of 40 trials up to the trigger were rejected as ineligible.
+#   17 of 40 trials up to the trigger were rejected as ineligible (42%).
 #
 #   DISCLOSE — rule-vs-eligible gap.  The lowest-metric trial was
 #   ecfd7ko7 at 0.190494, but it FAILED the acceptance

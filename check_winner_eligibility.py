@@ -197,6 +197,10 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
     # trials the criteria rejected, so the tally must cover the whole pool.
     n_reject = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "REJECT")
     n_nodiag = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "NO DIAGS")
+    # Trials that lack their OWN diagnostics split into two counts, and
+    # conflating them is how §7.2 came to report 16 unclassifiable when 15 were:
+    # n_nodiag are unclassifiable, n_borrowed were recovered by a paired re-run.
+    n_borrowed = sum(1 for t in ranked if t[5])
 
     winner = None
     print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'loc_z':>6} {'scl_z':>6} "
@@ -215,6 +219,10 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
     print(f"  rejected : {n_reject} of {len(ranked)} ineligible "
           f"({100.0 * n_reject / max(len(ranked), 1):.0f}%), {n_nodiag} still "
           f"missing diagnostics (re-run those configs — §3.6.3)")
+    print(f"  no-diags : {n_nodiag + n_borrowed} trial(s) predate the drift "
+          f"metric — {n_borrowed} recovered from a paired re-run, {n_nodiag} "
+          f"unclassifiable.\n             Report the second number as the "
+          f"unclassifiable count (§7.2).")
     if winner:
         rid, v, rk = winner
         gap = v - ranked[0][1]

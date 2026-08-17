@@ -765,8 +765,18 @@ sweep selected, read back. Only medium_play also has a dedicated `c4` run
 chains had been overwritten and `--worst-k` needs them (§10.3). That run
 reproduced its trial to six significant figures, so the two sources are
 interchangeable; if a later `c4` number appears with a different provenance,
-that is why, and it does not indicate a discrepancy. Any variant needing
-`--worst-k` will likewise need its `c4` re-run first, for the same reason.
+that is why, and it does not indicate a discrepancy.
+
+**This row is aggregate statistics only — no winner's chains survive, for any
+variant.** The overwrite is structural, not bad luck: the sweep yamls do not
+override `OUT_DIR`, so every trial in a sweep writes to the same deterministic
+`{OUT_DIR}_{seed}` path and each one clobbers its predecessor's
+`sampling_f/chain_*`. The winners were trials 27 / 21 / 27 / 25 of 40 / 29 / 42 /
+40, so in all four sweeps later trials overwrote them. Everything logged to
+wandb survives — which is the whole of the table above — but anything needing
+saved chains does not: `--worst-k`, `--draw-ladder`, `--ce-ladder`. Those need a
+fresh run at some rung, and the cheapest way to get them is to read them off the
+`c8` run rather than re-run `c4` a second time for the sake of the diagnostic.
 
 **medium_play and large_diverse are the weak pair** — roughly 4–5× less CVaR ESS
 and near-universal R-hat exceedance. large_play and medium_diverse are already in
@@ -902,11 +912,24 @@ what the `_max` extremes did (they are sparse, not censored — §4.5). Then tra
 `chains_per_gpu` into the production configs (§10.3) and re-run the field-by-field
 verification.
 
+`stage3_ladder.py <variant>` (repo root, runs locally against the wandb API)
+assembles the ladder: it finds the rungs by their `stage3_<variant>_c<N>`
+`OUT_DIR` marker, prints the §4.2 gate first and marks any rung that fails it,
+then the §4.3 table and the rung-to-rung ratios against the §4.6 ideals
+(ESS ~linear in draws, relMCSE ~1/√draws), labelling a rising R-hat as expected
+rather than flagging it. It also checks that stage 3 moved `num_chains` *only* —
+`num_samples` still 75, seed still 0, `burn_in_lr` still absent. With no
+dedicated `c4` run it falls back to the recorded stage-1 winner for that rung
+(§4.3). It cannot report the unresolved-point count or `--worst-k`, which are
+not logged to wandb; take those from the diagnostic below.
+
 `scripts_bnn/diagnose_sampling_tail.py --run-dir <OUT_DIR>` recomputes every tail
 statistic from saved chains without re-sampling; `--worst-k` lists the
 least-converged points with their torso (x, y) so you can judge whether the
 unresolved ones are genuinely multimodal states. `--ce-ladder` and
 `--draw-ladder` answer "would fewer draws have done?" from a completed run.
+Pipe it through `tee exp/<run>_diag_tail.txt` — its unresolved-point count and
+`--worst-k` listing are the parts of §4.6's record that never reach wandb.
 
 ---
 
@@ -1050,8 +1073,12 @@ eligible and there was nothing to trade.
 **Rejections are overwhelmingly *scale* drift and concentrate at the top of the
 ranking.** 65 of 151 trials up to the triggers were rejected — **43%**, not a
 long tail — almost all for `scale_z` above 2 (values to 12.72) rather than
-location drift. A further 16 trials predate the drift metric and cannot be
-classified; none was a winner candidate. In large_diverse
+location drift. A further 16 trials predate the drift metric; one of them —
+large_play's `limlikvn` — was classified from its paired diagnostic re-run
+(§3.6.3), leaving **15 unclassifiable**. None was a winner candidate:
+`limlikvn` is eligible on the borrowed diagnostics (loc_z 0.84, scale_z 1.07,
+clamp 0) but its CE of 0.2148 ranks below large_play's winner at 0.2047, so the
+re-run changed its label without changing the outcome. In large_diverse
 8 of the top 11 trials rejected; in large_play 5 of the top 7. The best-scoring
 configurations are disproportionately the ones not sampling a stationary
 function-space measure — precisely the trade §3.6.3 exists to refuse.
@@ -1258,7 +1285,11 @@ deliberately not made eligibility-aware.
 
 **Rejection counts** (report per variant): medium_play 17/40, large_play 12/29,
 medium_diverse 14/42, large_diverse 22/40 — **65 of 151 trials, 43%**, plus 16
-that predate the drift metric and are unclassifiable. The criteria are **not**
+that predate the drift metric, of which one was recovered by a paired
+diagnostic re-run, leaving **15 unclassifiable** (3 / 4 / 5 / 3 by variant).
+Quote 15 as the unclassifiable count and 16 as the number lacking their own
+diagnostics; they are different quantities and the distinction is the re-run
+mechanism §3.6.3 specifies. The criteria are **not**
 lenient in practice: they reject roughly half the search. §3.6.3 describes the
 z ≤ 2 threshold as deliberately permissive relative to the |N(0,1)| null, and
 that is true of the threshold, but the observed drift is large enough that it
@@ -1426,7 +1457,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **not started — this is the next action** |
+| 3 | BNN | **in progress** — medium_play `c4` measured (§4.3, §10.2); `c8` is the next action |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -1477,8 +1508,18 @@ diffuse — see §4.5. Nothing else has been run.
 
    ```
    python scripts_bnn/diagnose_sampling_tail.py \
-       --run-dir exp/stage3_medium_play_c8_0 --worst-k 20 --device cuda
+       --run-dir exp/stage3_medium_play_c8_0 --worst-k 20 --device cuda \
+       2>&1 | tee exp/stage3_medium_play_c8_0_diag_tail.txt
    ```
+
+   **Always capture the diagnostic to a file next to the run.** The
+   unresolved-point count and the `--worst-k` listing are the two things §4.6
+   asks to be recorded that are *not* logged to wandb, so the terminal is their
+   only copy otherwise, and `exp/` is gitignored — the file stays local and can
+   be pulled off the box for analysis.
+
+   Then, locally, `python stage3_ladder.py medium_play` prints both rungs side
+   by side with the §4.2 gate and the §4.6 ratios (§8).
 
    Compare against the `c4` row in §4.3. Expect `cvar_ess_median` and
    `q05_ess_median` to roughly double, `cvar_mcse_rel_median` to fall by about
@@ -1493,6 +1534,12 @@ diffuse — see §4.5. Nothing else has been run.
    `cvar_ess_median` 210 and 272 at `c4` and may need no increase at all, while
    large_diverse (57) looks like medium_play. Do not assume one chain count
    suits all four (§4.3).
+
+   Their `c4` rows come from the sweep trials, whose saved chains no longer
+   exist (§4.3), so run `--worst-k` on their **`c8`** run — §4.5 asks for the
+   per-point diagnosis on every variant, and taking it at `c8` avoids re-running
+   `c4` purely to regenerate chains. Even a variant that needs no chain increase
+   therefore needs one run to produce it.
 
 4. **Transcribe** the chosen `num_chains` / `chains_per_gpu` per variant into
    `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, then re-run the
