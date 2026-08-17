@@ -808,38 +808,72 @@ caps are set inside the script (§10.7) — do not override them.
 A sensible ladder is **4 → 8 → 16 chains**, stopping when §4.6 is satisfied.
 `num_chains: 8` at `chains_per_gpu: 2` uses 4 GPUs; 16 at 4 uses 4 GPUs.
 
-### 4.5 What to judge it on — and the ceiling that limits it
+### 4.5 What to judge it on — and how R-hat will behave
 
 Judge on the **distributional** statistics: `cvar_ess_median`,
 `cvar_mcse_rel_median`, `cvar_rhat_median`, `cvar_rhat_pct_over_1.01`,
 `q05_ess_median`, `folded_rhat_95th_pct`.
 
-The `_max`/`_min` extremes were fully censored in round 1 (`cvar_rhat_max` pinned
-at 1.2555612 on nearly every trial). At the round-2 budget they **partly**
-recover — across the four winners `cvar_rhat_max` takes three distinct values,
-but medium_play and large_diverse share 1.268552 to six decimals, so the ceiling
-still binds for some runs. Record the extremes; do not steer on them.
+**The repeated `cvar_rhat_max` values are sparsity, not a ceiling** — an earlier
+version of this section said otherwise and was wrong. Measured 2026-08-16: with
+4 chains × 75 draws the *attainable* folded R-hat maximum (chains forced to
+maximal separation) is **1.778**, well above the 1.2686 that medium_play and
+large_diverse both report, so nothing is saturating.
+
+The real cause is that the CVaR integrand is mostly zeros. Only `alpha · C · D`
+draws fall below VaR — **15 of 300** at 4 × 75 — so R-hat is determined by how
+that handful distributes across the chains, and can take only a few distinct
+values. In medium_play's worst-20 points, just four distinct values appear and
+1.269 occurs 15 times; the most plausible reading is that at those points
+essentially all the tail mass comes from a *single chain*. That also explains
+round 1's identical-to-16-digits values without invoking a ceiling: fewer draws
+below VaR, fewer reachable configurations. Record the extremes; still do not
+steer on them, but read a repeated value as tail mass concentrated in one chain
+rather than as a censored statistic.
 
 Do **not** use `param_*` diagnostics (they no longer exist — §3.6.2 explains
 why weight-space statistics measure nothing for this sampler) or bulk
 `pred_rhat`/`pred_ess` (they certify the median, not the tail).
 
 **Chains buy precision, not mixing.** ESS and MCSE improve roughly with total
-draws; R-hat does not, because it measures between-chain *disagreement*. Two
-things follow:
+draws; R-hat does not, because it measures between-chain *disagreement*.
 
-- If R-hat stays high while ESS grows, that is a mixing problem and more chains
-  will not fix it. Mode separation is addressed by hot-phase mixing (`lr_max`,
-  `fraction_cool`) and `chain_init_jitter` — none of which stage 3 may change.
+**Expect R-hat to RISE as chains are added, and do not read that as a
+regression.** More chains give more power to detect disagreement that is already
+there, so a real difference shows up more strongly rather than averaging away.
+Measured on simulated chains at 75 draws (2026-08-16):
+
+| case | 4 chains | 16 chains |
+|---|---|---|
+| iid — true R-hat = 1 | 0.9985 | 0.9995 |
+| chains offset 0.3 sd | 1.0106 | 1.0921 |
+| chains offset 0.8 sd | 1.0466 | 1.2540 |
+
+Under the null the statistic is essentially unbiased at 4 chains (median 0.9985,
+9% over 1.01), so **medium_play's observed 1.1134 with 99.9% over 1.01 is
+genuine disagreement, not small-sample noise** — it exceeds even the 0.8-sd
+offset case. Adding chains there should push it *up*, toward the truth.
+
+The correct reading of the ladder is therefore: **ESS and MCSE improve, R-hat
+gets worse, and both are working as intended.** Judge the budget on
+ESS/MCSE/unresolved-point count; treat R-hat as characterising the sampler, not
+as something the chain count is supposed to fix.
+
+- Mode separation is addressed by hot-phase mixing (`lr_max`, `fraction_cool`)
+  and `chain_init_jitter` — none of which stage 3 may change. §4.3 records that
+  neither swept schedule parameter correlates with any mixing metric anyway.
 - **`chain_init_jitter` is 0.0, so every chain starts from the same burn-in
   point.** R-hat therefore *understates* disagreement, and adding chains from a
   shared start adds little independent information about multimodality. Treat
   the R-hat numbers as optimistic, and say so in the write-up.
 
-Given §4.3 shows R-hat is the binding constraint for medium_play and
-large_diverse, the realistic outcome is that chains improve their ESS/MCSE while
-`rhat_pct_over_1.01` stays high. That is a reportable finding about the sampler
-at these settings, not a failure to run enough chains.
+**What the medium_play c4 diagnosis showed** (`--worst-k 20`, 2026-08-16): only
+**56 of 6400 points (0.88%)** are unresolved, and they cluster spatially — three
+at (2.6, 12.87), a group at x ∈ [15.7, 20.7] with y ≈ 20.5–21.0, another at
+(20.5–20.7, 4.95). So the problem is **localised multimodality in a few maze
+regions, not diffuse failure**, and reward magnitudes are O(10) with `pred_sd`
+5–15 — nothing like round 1's O(10³). Run `--worst-k` on each variant before
+concluding anything from the aggregate R-hat.
 
 ### 4.6 When to stop, and what to record
 

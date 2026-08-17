@@ -1,0 +1,47 @@
+[split] val  (from val_dataset) -> compare against this run's logged val_pred_* metrics
+[run] exp/stage3_medium_play_c4_0
+[run] seed=0 width=64 depth=2 num_chains=4 num_samples=75
+[data] data/antmaze/antmaze-medium-play-v2/eval/seed_0/antmaze-medium-play-v2_pref_val_0.hdf5
+[data] x_rhat (6400, 37)  (6400/6400 valid, input_dim=37)
+[chains] loaded [75, 75, 75, 75] -> using 4x75 = 300 draws
+
+=== BULK (should match logged pred_* ESS/R-hat) ===
+  ess_bulk                   min    5.0608  median    6.7335  max   46.2951
+  rhat_bulk (rank)           min    1.0381  median    1.7208  max    2.7090
+
+=== VaR (lower 5% quantile = 95% lower bound) ===
+  VaR ESS                    min   11.5296  median   33.5308  max  210.4442
+  VaR ESS min / total        0.0384
+  VaR R-hat (folded)         min    0.9983  median    1.2704  max    2.0176
+  VaR MCSE / pred_sd         min    0.0316  median    0.2799  max    1.3698
+
+=== CVaR (mean of lowest 5% — the downstream quantity) ===
+  CVaR effective draws       min   13.1745  median   52.8948  max  306.6175
+  raw draws below VaR        15 of 300
+  CVaR R-hat (folded)        min    0.9989  median    1.1134  max    1.2686
+  CVaR MCSE / pred_sd        min    0.0288  median    0.2204  max    2.2115
+    cross-check (between-chain) min    0.0263  median    0.2390  max    1.7542
+  points MCSE>sd (unresolved) 56 of 6400 (0.88%)
+
+=== WORST 20 POINTS by CVaR rel-MCSE (coords = torso x,y = obs[:, :2]) ===
+     idx        x        y | cvar_relMCSE cvar_Rhat cvar_ESS var_relMCSE  pred_mean    pred_sd       CVaR
+    5252    2.594   12.863 |        2.212     1.269     13.2       1.370      8.850     15.003    -39.735
+    5229    2.658   12.874 |        1.480     1.269     13.2       1.129      7.520      7.944    -15.887
+    2986    6.550    7.958 |        1.407     1.269     23.0       1.023      3.047      8.943    -24.692
+    2600   18.782   15.155 |        1.396     1.269     17.5       0.898      7.769      5.469     -6.493
+    1409   20.730    4.954 |        1.327     1.269     14.5       1.085     -3.343     15.512    -50.288
+    5089   18.076   20.486 |        1.318     1.269     15.6       1.053      8.837      6.903     -9.835
+    6193    0.739   17.284 |        1.307     1.182     19.4       0.788      6.430      9.806    -21.731
+     719    4.363    5.968 |        1.303     1.269     16.6       1.187      3.595     11.711    -32.977
+    5732   15.747   20.621 |        1.302     1.224     19.3       0.822      1.836     11.681    -29.597
+    3855   20.483   14.973 |        1.299     1.269     19.2       0.869     11.570      9.948    -16.604
+    3259   14.155    5.039 |        1.270     1.188     21.3       0.881      5.347     10.615    -24.765
+    3747   20.032   20.957 |        1.251     1.269     17.2       0.822     12.949     13.400    -24.446
+    3531   13.583    5.631 |        1.215     1.224     25.6       0.753     10.264     10.018    -16.595
+    4165   18.238   21.036 |        1.195     1.269     18.9       1.121      8.692     10.033    -20.421
+    5237    2.646   12.858 |        1.192     1.269     15.4       1.058      5.779      8.621    -18.759
+    1783   17.859   20.934 |        1.172     1.269     18.5       0.790      8.793     11.150    -22.460
+    4527   20.518    4.983 |        1.171     1.269     15.3       1.061      0.544     11.661    -34.012
+     543   20.709   21.021 |        1.168     1.269     18.9       0.782      8.897      9.571    -16.064
+    4635   20.709   21.021 |        1.168     1.269     18.9       0.782      8.897      9.571    -16.064
+     675    8.134    7.131 |        1.164     1.269     16.6       0.860      6.850      8.121    -15.417
