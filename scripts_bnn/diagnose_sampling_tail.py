@@ -441,6 +441,56 @@ def draw_ladder(pred_chains, levels, alpha=0.05):
     print("  will not fix it (section 4).")
 
 
+def drift_diagnostics(pred_chains):
+    """Recompute the section 4.2 stationarity gate from these chains.
+
+    `util.function_space_drift` normally runs inside training and its
+    `fn_drift_*` metrics reach wandb for the run as a WHOLE.  Recomputing it
+    here is what makes a chain SUBSET measurable: wandb has no per-half figure,
+    so comparing the chains a rung added against the ones it added them to
+    (section 4.3.2) is only possible offline, from the saved chains.
+
+    Prints the raw effect sizes beside the z-scores, because the z's are not
+    comparable across selections of different chain count -- see section 4.2.1.
+    """
+    d = util.function_space_drift(pred_chains)
+    if not d:
+        print("\n=== SECTION 4.2 DRIFT GATE ===")
+        print("  too few draws to split into halves -- not computed.")
+        return d
+
+    C, D = pred_chains.shape[0], pred_chains.shape[1]
+
+    def g(name, stat):
+        return d.get(f"fn_drift_{name}_{stat}", float("nan"))
+
+    loc_z, scale_z = g("loc_z", "median"), g("scale_z", "median")
+    loc_sd, ratio = g("loc_sd", "median"), g("scale_ratio", "median")
+
+    print("\n=== SECTION 4.2 DRIFT GATE (first vs second half of each chain) ===")
+    print(f"  {C} chains x {D} draws")
+    print(f"  {'':8} {'median':>9} {'95th':>9}")
+    for label, name, note in (
+        ("loc_z", "loc_z", "<= 2.0 ; stationary ~0.67 median, ~2 at 95th"),
+        ("scale_z", "scale_z", "<= 2.0 ; same reference"),
+        ("loc_sd", "loc_sd", "RAW |E2-E1| in posterior-sd units"),
+        ("ratio", "scale_ratio", "RAW sd2/sd1"),
+    ):
+        print(f"  {label:<8} {g(name, 'median'):>9.4f} {g(name, '95th'):>9.4f}"
+              f"   {note}")
+    verdict = ("PASS" if (loc_z <= 2.0 and scale_z <= 2.0) else
+               "FAIL -- these chains are not sampling P_{f|D}; every tail "
+               "number below is meaningless")
+    print(f"  verdict  {verdict}")
+    print( "  NOTE: both z-scores divide by an MCSE, so their POWER grows with")
+    print(f"  the {C} chains selected here.  A PASS at a low chain count is NOT")
+    print( "  evidence of stationarity, and these z's are NOT comparable to a")
+    print( "  selection of a different size (4.2.1).  Two subsets of EQUAL size")
+    print( "  ARE comparable -- that is what makes chains 0:8 vs 8:16 a fair")
+    print( "  test.  Either way the raw loc_sd is the effect size; prefer it.")
+    return d
+
+
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics.
 
@@ -453,6 +503,8 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     flat = pred_chains.reshape(-1, P)
     pred_sd = flat.std(axis=0)                               # per-point spread
     eps = 1e-8
+
+    drift_diagnostics(pred_chains)
 
     print("\n=== BULK (should match logged pred_* ESS/R-hat) ===")
     _summ("ess_bulk", azs.ess(pred_chains))
