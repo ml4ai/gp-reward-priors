@@ -91,13 +91,93 @@ def _to_numpy_weights(weights):
     )
 
 
-def build_pred_chains(run_dir, dataset, width, depth, num_chains, b_rhat, device):
+def _chain_label(chain_ids):
+    """Describe a chain selection by its on-disk `chain_N` names.
+
+    Always names the directories rather than a count, because the two natural
+    ways to say "the second half of a 16-chain run" differ by one: section 4.3.2
+    calls them chains 9-16 (1-indexed prose) and they are chain_8..chain_15 on
+    disk.  Printing the directory names makes the selection unambiguous in the
+    captured output.
+    """
+    ids = list(chain_ids)
+    contiguous = len(ids) > 1 and ids == list(range(ids[0], ids[-1] + 1))
+    if len(ids) == 1:
+        span = f"chain_{ids[0]}"
+    elif contiguous:
+        span = f"chain_{ids[0]}..chain_{ids[-1]}"
+    else:
+        span = "chain_" + ",".join(str(i) for i in ids)
+    return f"{len(ids)} chain{'' if len(ids) == 1 else 's'} ({span})"
+
+
+def _resolve_chain_ids(run_dir, num_chains_arg, chain_range_arg, cfg_num_chains):
+    """Turn --num-chains / --chain-range into an explicit list of chain indices.
+
+    Indices are 0-based and half-open, matching both Python slices and the
+    on-disk `chain_N` names: `--chain-range 8:16` is chain_8..chain_15, the
+    upper half of a 16-chain run.  `--num-chains N` remains exactly
+    `--chain-range 0:N`, so every previously captured output is reproducible.
+    """
+    total = cfg_num_chains
+    if num_chains_arg is not None and chain_range_arg is not None:
+        sys.exit("--num-chains and --chain-range are mutually exclusive; "
+                 "--num-chains N is the same as --chain-range 0:N.")
+
+    if chain_range_arg is not None:
+        raw = chain_range_arg.strip()
+        if ":" not in raw:
+            sys.exit(f"--chain-range must be START:END (0-based, END exclusive), "
+                     f"got {chain_range_arg!r}.  For the upper half of a "
+                     f"16-chain run use 8:16.")
+        lo_s, hi_s = raw.split(":", 1)
+        try:
+            lo = 0 if not lo_s.strip() else int(lo_s)
+            hi = total if not hi_s.strip() else int(hi_s)
+        except ValueError:
+            sys.exit(f"--chain-range bounds must be integers, got "
+                     f"{chain_range_arg!r}")
+        if lo < 0 or hi < 0:
+            sys.exit("--chain-range bounds must be non-negative; negative "
+                     "(from-the-end) indices are not supported.")
+        if lo >= hi:
+            sys.exit(f"--chain-range {lo}:{hi} is empty (END is exclusive).")
+        ids = list(range(lo, hi))
+    else:
+        n = num_chains_arg if num_chains_arg is not None else total
+        if n < 1:
+            sys.exit("--num-chains must be >= 1")
+        ids = list(range(n))
+
+    # The config's num_chains is what the run was launched with, but the
+    # authority on what exists is the filesystem -- a crashed or still-running
+    # job can leave fewer.  Check before loading so the failure names the
+    # missing directory instead of surfacing as a torch.load traceback.
+    missing = [i for i in ids
+               if not os.path.isdir(os.path.join(run_dir, "sampling_f",
+                                                 f"chain_{i}"))]
+    if missing:
+        present = sorted(
+            int(d.split("_")[1])
+            for d in os.listdir(os.path.join(run_dir, "sampling_f"))
+            if d.startswith("chain_") and d.split("_")[1].isdigit()
+        )
+        sys.exit(f"No saved chains at {['chain_%d' % i for i in missing]} in "
+                 f"{run_dir}/sampling_f (config says num_chains={total}; "
+                 f"present: {present or 'none'}).")
+    return ids
+
+
+def build_pred_chains(run_dir, dataset, width, depth, chain_ids, b_rhat, device):
     """Load saved chains and evaluate each weight set at the diagnostic inputs.
 
     Mirrors the eval block of run_bnn_training.py exactly: the first `b_rhat`
     preference pairs, member 0, all non-padded timesteps, features only (the
     trailing attn_mask column is dropped).  Returns (pred_chains, x_rhat) with
     pred_chains shaped [chain, draw, point].
+
+    `chain_ids` is an explicit list of on-disk chain indices (the N in
+    `chain_N`), so a subset need not be a prefix -- see `_resolve_chain_ids`.
     """
     X, _ = util.load_pref_data(dataset, training_ratio=1.0)
     obs_dim = X.shape[-1] - 1
@@ -115,7 +195,7 @@ def build_pred_chains(run_dir, dataset, width, depth, num_chains, b_rhat, device
     x_t = torch.from_numpy(x_rhat).to(device)
 
     pred_chains, n_loaded = [], []
-    for i in range(num_chains):
+    for i in chain_ids:
         path = os.path.join(run_dir, "sampling_f", f"chain_{i}",
                             "sampled_weights", "sampled_weights_0000000")
         ckpt = torch.load(path, weights_only=False, map_location=device)
@@ -133,8 +213,8 @@ def build_pred_chains(run_dir, dataset, width, depth, num_chains, b_rhat, device
     if len(set(n_loaded)) > 1:
         print(f"[warn] uneven sample counts {n_loaded}; truncating to {m}")
     pred_chains = np.stack([p[:m] for p in pred_chains])     # [chain, draw, point]
-    print(f"[chains] loaded {n_loaded} -> using {num_chains}x{m} = "
-          f"{num_chains * m} draws")
+    print(f"[chains] loaded {n_loaded} -> using {len(chain_ids)}x{m} = "
+          f"{len(chain_ids) * m} draws")
     return pred_chains, x_rhat
 
 
@@ -152,7 +232,7 @@ def _load_chain_weights(run_dir, i, device):
     return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
 
 
-def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
+def weight_trace(run_dir, chain_ids, depth, levels, device="cpu"):
     """Free-diffusion check on ||w||.  NOT a convergence diagnostic.
 
     Under fSGHMC (Wu et al. 2025) the potential `U(f) = Phi(f) + I0(f)` depends
@@ -179,7 +259,7 @@ def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
     Costs no forward passes: the saved weights are read directly.
     """
     mags = []
-    for c in range(num_chains):
+    for c in chain_ids:
         chain = []
         for w in _load_chain_weights(run_dir, c, device):
             sq = sum(float(np.sum(np.asarray(a, dtype=np.float64) ** 2)) for a in w)
@@ -195,7 +275,8 @@ def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
     if levels[0] != 1:
         levels.insert(0, 1)
 
-    print(f"\n=== WEIGHT FREE-DIFFUSION CHECK ({num_chains} chains, {m} draws) ===")
+    print(f"\n=== WEIGHT FREE-DIFFUSION CHECK "
+          f"({_chain_label(chain_ids)}, {m} draws) ===")
     print("  NOT A CONVERGENCE DIAGNOSTIC.  U(w) depends on w only through f, so")
     print("  every f-preserving direction is flat and |w| random-walks along it:")
     print("  a rising |w| is CORRECT behaviour here (section 3.6.2).  Read this")
@@ -240,7 +321,7 @@ def weight_trace(run_dir, num_chains, depth, levels, device="cpu"):
     print(f"    {rate}")
 
 
-def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
+def ce_ladder(run_dir, dataset, width, depth, chain_ids, levels,
               device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
               chunk_pairs=64):
     """Posterior-predictive cross-entropy and accuracy vs per-chain draw count.
@@ -282,18 +363,19 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
     x1_t = torch.from_numpy(x1).to(device)
     x2_t = torch.from_numpy(x2).to(device)
 
+    C = len(chain_ids)
     n_draws = min(len(_load_chain_weights(run_dir, i, device))
-                  for i in range(num_chains))
+                  for i in chain_ids)
     if max_draws is not None:
         n_draws = min(n_draws, max_draws)
-    print(f"[ce] {B} pairs x {T} steps, {num_chains} chains x {n_draws} draws "
-          f"-> {2 * B * T * n_draws * num_chains:,} forward rows "
+    print(f"[ce] {B} pairs x {T} steps, {_chain_label(chain_ids)} x {n_draws} "
+          f"draws -> {2 * B * T * n_draws * C:,} forward rows "
           f"(device={device}; use --device cuda and/or --ce-pairs if slow)")
 
-    S1 = np.zeros((num_chains, n_draws, B), dtype=np.float64)
-    S2 = np.zeros((num_chains, n_draws, B), dtype=np.float64)
-    for c in range(num_chains):
-        weights = _load_chain_weights(run_dir, c, device)[:n_draws]
+    S1 = np.zeros((C, n_draws, B), dtype=np.float64)
+    S2 = np.zeros((C, n_draws, B), dtype=np.float64)
+    for c, cid in enumerate(chain_ids):
+        weights = _load_chain_weights(run_dir, cid, device)[:n_draws]
         for d, w in enumerate(weights):
             p1 = np.empty((B, T), dtype=np.float32)
             p2 = np.empty((B, T), dtype=np.float32)
@@ -306,7 +388,7 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
                     p2[s:e] = net(x2_t[s * T:e * T]).cpu().numpy().reshape(e - s, T)
             S1[c, d] = bt_pool_logit_np(p1 * am1, am1, bt_pool)
             S2[c, d] = bt_pool_logit_np(p2 * am2, am2, bt_pool)
-        print(f"[ce] chain {c} done")
+        print(f"[ce] chain {cid} done")
 
     y_t = torch.from_numpy(y).float().to(device)
     yv = np.asarray(y, dtype=np.float64)
@@ -322,7 +404,7 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
         acc = ((p1 > 0.5) == (yv[:, 0] > 0.5)).mean()
         return float(ce), float(acc)
 
-    print(f"\n=== CE LADDER ({num_chains} chains) ===")
+    print(f"\n=== CE LADDER ({_chain_label(chain_ids)}) ===")
     print("  plug-in   sigma(E[f])  -- what val_mean_cross_entropy logs today")
     print("  predictive E[sigma(f)] -- Wu et al. Eq. (10), the paper's predictive")
     print(f"  {'draws/ch':>8} {'total':>7} | {'plugin CE':>9} {'pred CE':>9} "
@@ -330,7 +412,7 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
     print("  " + "-" * 68)
     for n in levels:
         ces, accs, pces, paccs = [], [], [], []
-        for c in range(num_chains):
+        for c in range(C):
             # --- plug-in: average f over draws, then squash ---
             m1, m2 = S1[c, :n].mean(0), S2[c, :n].mean(0)
             fx_t = torch.from_numpy(np.stack([m1, m2], 1).astype(np.float32)).to(device)
@@ -341,15 +423,16 @@ def ce_ladder(run_dir, dataset, width, depth, num_chains, levels,
             p1_plug = 1.0 / (1.0 + np.exp(-(m1 - m2)))
             ce_manual, _ = _ce_acc_from_probs(p1_plug)
             if abs(ce_manual - ce_torch) > 1e-4:
-                print(f"  [warn] chain {c}: manual CE {ce_manual:.6f} != torch "
-                      f"{ce_torch:.6f}; predictive column may not be comparable")
+                print(f"  [warn] chain {chain_ids[c]}: manual CE {ce_manual:.6f} "
+                      f"!= torch {ce_torch:.6f}; predictive column may not be "
+                      f"comparable")
             # --- predictive: squash each draw, then average the probabilities ---
             d = S1[c, :n] - S2[c, :n]                    # [draw, pair]
             p1_pred = (1.0 / (1.0 + np.exp(-d))).mean(0)
             pce, pacc = _ce_acc_from_probs(p1_pred)
             pces.append(pce); paccs.append(pacc)
         plug, pred = np.mean(ces), np.mean(pces)
-        print(f"  {n:>8} {n * num_chains:>7} | {plug:>9.4f} {pred:>9.4f} "
+        print(f"  {n:>8} {n * C:>7} | {plug:>9.4f} {pred:>9.4f} "
               f"{pred - plug:>+8.4f} | {np.mean(accs):>10.4f} {np.mean(paccs):>9.4f}")
     print(f"\n  ln 2 = {np.log(2):.4f} is chance.  A CE that RISES with draws means")
     print("  the added draws are worse than the ones before them.")
@@ -540,7 +623,24 @@ def main():
     ap.add_argument("--width", type=int, default=None,
                     help="Actual (already-expanded) layer width; default from config.")
     ap.add_argument("--depth", type=int, default=None)
-    ap.add_argument("--num-chains", type=int, default=None)
+    # Mutually exclusive so the conflict is reported before the run directory
+    # is touched; _resolve_chain_ids repeats the check for programmatic callers.
+    chain_sel = ap.add_mutually_exclusive_group()
+    chain_sel.add_argument("--num-chains", type=int, default=None,
+                    help="Use only the first N chains (default: all). Because "
+                         "chains are deterministic in (seed, index), this "
+                         "reproduces a lower rung of the section 4.3 ladder "
+                         "exactly from a higher rung's saved chains. Same as "
+                         "--chain-range 0:N.")
+    chain_sel.add_argument("--chain-range", default=None,
+                    help="Use chains START:END -- 0-based, END exclusive, like "
+                         "a Python slice and like the on-disk chain_N names. "
+                         "'8:16' is the upper half of a 16-chain run (the "
+                         "chains section 4.3.2 calls 9-16 in 1-indexed prose). "
+                         "Either bound may be omitted. Mutually exclusive with "
+                         "--num-chains, which is the same as 0:N. Use this to "
+                         "test whether the chains ADDED at a rung drift more "
+                         "than the ones they were added to (section 4.3.2).")
     ap.add_argument("--max-draws", type=int, default=None,
                     help="Use only the first N draws per chain (default: all). "
                          "Lets one completed run stand in for a smaller budget.")
@@ -575,13 +675,19 @@ def main():
           f"logged {args.split}_pred_* metrics")
     width = args.width or cfg["width"]
     depth = args.depth or cfg["depth"]
-    num_chains = args.num_chains or cfg["num_chains"]
+    chain_ids = _resolve_chain_ids(args.run_dir, args.num_chains,
+                                   args.chain_range, cfg["num_chains"])
     print(f"[run] {args.run_dir}")
     print(f"[run] seed={cfg.get('seed')} width={width} depth={depth} "
-          f"num_chains={num_chains} num_samples={cfg.get('num_samples')}")
+          f"num_chains={cfg['num_chains']} num_samples={cfg.get('num_samples')}")
+    print(f"[chains] using {_chain_label(chain_ids)} of the run's "
+          f"{cfg['num_chains']}")
+    if len(chain_ids) < cfg["num_chains"]:
+        print("[chains] SUBSET -- every statistic below is for these chains "
+              "only, not the full run.")
 
     pred_chains, x_rhat = build_pred_chains(
-        args.run_dir, dataset, width, depth, num_chains, args.b_rhat, args.device)
+        args.run_dir, dataset, width, depth, chain_ids, args.b_rhat, args.device)
 
     if args.max_draws is not None:
         if args.max_draws < 1:
@@ -611,11 +717,11 @@ def main():
             levels = [int(t) for t in args.draw_ladder.split(",") if t.strip()]
 
     if args.weight_trace:
-        weight_trace(args.run_dir, num_chains, depth, levels,
+        weight_trace(args.run_dir, chain_ids, depth, levels,
                      device=args.device)
 
     if args.ce_ladder:
-        ce_ladder(args.run_dir, dataset, width, depth, num_chains, levels,
+        ce_ladder(args.run_dir, dataset, width, depth, chain_ids, levels,
                   device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
                   max_pairs=args.ce_pairs, max_draws=args.max_draws)
 

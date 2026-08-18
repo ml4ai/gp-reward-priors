@@ -993,11 +993,31 @@ while saying nothing new about a within-chain problem, and it costs a full run.
 The next experiment has to move `num_samples` and/or `num_burn_in_steps`, or the
 cyclical step-size schedule that `function_space_drift` also tests (§3.6.2) —
 a drift surviving 20 000 burn-in steps implicates the schedule as much as the
-budget. The cheapest discriminating measurement is a chain-slice comparison
-within the existing `c16` run: chains 9–16 drifted more than chains 1–8 despite
-identical settings, which points at initialisation not equilibrating inside the
-fixed burn-in. `diagnose_sampling_tail.py --num-chains` only reads the *first* N
-chains, so isolating 9–16 needs a range flag it does not currently have.
+budget.
+
+The cheapest discriminating measurement needs no new sampling: compare the two
+halves of the existing `c16` run against each other. The added chains are what
+raised the drift, so if chains 9–16 drift more than chains 1–8 under identical
+settings, the cause is initialisation not equilibrating inside the fixed
+burn-in — a far cheaper thing to fix than the schedule. `--chain-range` selects
+a non-prefix slice (0-based, END exclusive, matching the on-disk `chain_N`
+names, so the chains this section calls 9–16 in prose are `8:16`):
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --chain-range 0:8 \
+    2>&1 | tee exp/stage3_medium_play_c16_0_lower8_diag_tail.txt
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --chain-range 8:16 \
+    2>&1 | tee exp/stage3_medium_play_c16_0_upper8_diag_tail.txt
+```
+
+`0:8` must reproduce the standalone `c8` capture exactly — it is the same
+selection `--num-chains 8` makes, so it doubles as a check that the range
+plumbing is sound before the `8:16` number is trusted. Note that neither half
+answers this on the z-scores: both are 8-chain selections, so they are equal in
+power and directly comparable, but §4.2.1 still applies to reading them against
+the 16-chain numbers. Compare the halves on raw `loc_sd`.
 
 ### 4.4 Procedure
 
@@ -1167,7 +1187,14 @@ unresolved ones are genuinely multimodal states. `--ce-ladder` and
 `--draw-ladder` answer "would fewer draws have done?" from a completed run.
 `--num-chains N` reads only the first N chains, which — because chains are
 deterministic in (seed, index) — reproduces the lower rung exactly and isolates
-what the added chains changed (§4.3.1). `--weight-trace` is **not** a
+what the added chains changed (§4.3.1). `--chain-range START:END` generalises
+that to any slice, so the chains a rung *added* can be measured on their own
+rather than only in aggregate (§4.3.2). It is 0-based with END exclusive, like
+a Python slice and like the `chain_N` directory names; `--num-chains N` is
+exactly `0:N`, and the two are mutually exclusive. Every run prints the
+selection as directory names and flags a subset explicitly, because the
+1-indexed prose of §4.3.2 ("chains 9–16") and the 0-indexed directories
+(`chain_8`..`chain_15`) differ by one. `--weight-trace` is **not** a
 convergence diagnostic: it checks the free-diffusion law and the per-chain
 diffusion rate, nothing about f (§4.5).
 Pipe it through `tee exp/<run>_diag_tail.txt` — its unresolved-point count and
@@ -1770,9 +1797,13 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
    nested to one ULP, and the added chains are what raised the drift. If
    chains 9–16 drift more than 1–8 under identical settings, the cause is
    initialisation not equilibrating within the fixed 20 000-step burn-in — a
-   much cheaper thing to fix than the schedule. This needs no new sampling,
-   only a chain-*range* selector; `--num-chains` reads the first N only, so
-   `diagnose_sampling_tail.py` needs a small flag added first (§4.3.2).
+   much cheaper thing to fix than the schedule. This needs **no new sampling**;
+   `--chain-range` (added 2026-08-18) reads the halves off the existing `c16`
+   chains. Run both commands in §4.3.2, check that the `0:8` half reproduces
+   the standalone `c8` capture, then compare the halves on raw `loc_sd` — they
+   are equal in chain count, so §4.2.1's power confound does not affect the
+   comparison. Do this before any new run: it decides which of step 3's
+   candidates is worth spending a run on.
 
 3. **Then attack stationarity directly, not the budget.** The candidates, in
    increasing cost: raise `num_burn_in_steps`; lengthen `num_samples` (which
