@@ -70,6 +70,19 @@ GATE = (
     ("param_clamp_sampling_pct", 0.01, "clamp%"),
 )
 
+# The z-scores above are NOT comparable across rungs.  From
+# optbnn/utils/util.py:431, z_loc = |m2-m1| / sqrt(mcse1^2 + mcse2^2): the
+# numerator is a first-half-vs-second-half shift in function space, the
+# denominator an MCSE that falls as ~1/sqrt(C).  So the gate is a significance
+# test whose POWER grows with chain count, and a fixed 2.0 threshold tightens
+# mechanically as you climb the ladder.  A rung can fail purely by being
+# measured better.  These raw effect sizes carry no such dependence and are
+# what says whether the drift is actually larger (§4.2.1).
+RAW = (
+    ("val_fn_drift_loc_sd_median", "loc_sd", "{:8.4f}"),
+    ("val_fn_drift_scale_ratio_median", "scaleRatio", "{:10.4f}"),
+)
+
 # §4.3 table, plus the extremes §4.6 asks to be recorded.  Steer on the
 # median / 95th-pct / pct_over columns; the _max values are sparse rather than
 # censored (§4.5) — a repeated value means the tail mass sits in one chain.
@@ -134,6 +147,88 @@ def fmt(summ, key, spec):
     return spec.format(v)
 
 
+def draws(run):
+    return cfg(run, "num_chains") * cfg(run, "num_samples")
+
+
+def gate_verdict(rungs, gate_ok):
+    """Separate the §4.2 gate's growing POWER from a real change in drift.
+
+    Two things a bare `loc_z > 2.0` cannot distinguish, and which point at
+    opposite conclusions:
+
+      * the drift got worse, or
+      * the drift is unchanged and you simply bought the resolution to see it.
+
+    Because z ~ |m2-m1| / mcse and mcse ~ 1/sqrt(C), doubling the chains
+    inflates z by ~sqrt(2) on power alone.  Dividing that out leaves the real
+    component, which the raw effect sizes then confirm independently.
+
+    The stronger test is the last block.  `loc_sd` is |m2-m1| in sd units, a
+    difference of means over ALL draws, so under a stationary sampler it must
+    fall as 1/sqrt(total draws).  A `loc_sd` that stays flat while the draws
+    multiply is a real non-stationarity — and one that was already there in
+    the rungs that PASSED, which simply lacked the power to resolve it.
+    """
+    ladder = sorted(rungs)
+    drift_is_real = False
+    if len(ladder) < 2:
+        return drift_is_real
+
+    print("\n  §4.2.1 power vs effect size — the 2.0 threshold is NOT "
+          "chain-count invariant")
+    for a, b in zip(ladder, ladder[1:]):
+        sa, sb = rungs[a].summary, rungs[b].summary
+        power = math.sqrt(draws(rungs[b]) / draws(rungs[a]))
+        print(f"   c{a} -> c{b}  (z inflates {power:.3f}x on power alone)")
+        for zk, rk, lbl in (
+            ("val_fn_drift_loc_z_median", "val_fn_drift_loc_sd_median", "loc"),
+            ("val_fn_drift_scale_z_median",
+             "val_fn_drift_scale_ratio_median", "scale"),
+        ):
+            za, zb, ra, rb = sa.get(zk), sb.get(zk), sa.get(rk), sb.get(rk)
+            if not all(isinstance(v, (int, float)) and v for v in (za, zb, ra, rb)):
+                continue
+            real = (zb / za) / power
+            note = ("consistent with power alone — nothing degraded"
+                    if real < 1.15 else
+                    f"REAL {real:.2f}x rise beyond power")
+            print(f"       {lbl:5} z {za:7.4f} -> {zb:7.4f}  {zb / za:5.3f}x "
+                  f"= {power:.3f}x power x {real:5.3f}x real   {note}")
+            print(f"       {'':5} raw {ra:7.4f} -> {rb:7.4f}  {rb / ra:5.3f}x "
+                  f"  (independent check on the {real:.2f}x above)")
+
+    print("\n  stationarity test — raw loc_sd must fall as 1/sqrt(total draws)")
+    r0, d0 = rungs[ladder[0]].summary.get("val_fn_drift_loc_sd_median"), draws(rungs[ladder[0]])
+    if not isinstance(r0, (int, float)) or not r0:
+        return drift_is_real
+    worst = 0.0
+    print(f"   {'rung':>5} {'draws':>6} {'loc_sd':>9} {'required':>9} {'obs/req':>8}")
+    for n in ladder:
+        r, d = rungs[n].summary.get("val_fn_drift_loc_sd_median"), draws(rungs[n])
+        if not isinstance(r, (int, float)):
+            continue
+        req = r0 * math.sqrt(d0 / d)
+        worst = max(worst, r / req)
+        print(f"   c{n:<4} {d:6d} {r:9.4f} {req:9.4f} {r / req:8.2f}")
+    if worst > 1.5:
+        drift_is_real = True
+        print(f"\n   !! loc_sd is {worst:.1f}x what stationarity requires at the top rung.")
+        print("      The drift is NOT shrinking with draws, so it is real and")
+        print("      present at EVERY rung — the PASSes below the failing rung")
+        print("      are low-power false negatives, not clean bills of health.")
+        print("      Note this drift is measured WITHIN each chain (first vs")
+        print("      second half of its draws).  Adding chains cannot shrink it;")
+        print("      it only measures it better.  Raising num_chains (§4.1) is")
+        print("      therefore orthogonal to this failure — the next rung has to")
+        print("      move num_samples / num_burn_in_steps, or the cyclical")
+        print("      step-size schedule that function_space_drift also tests.")
+    elif not all(gate_ok.values()):
+        print("\n   The failing rung's raw drift is in line with 1/sqrt(draws),")
+        print("      so the failure is the gate's rising power, not worse drift.")
+    return drift_is_real
+
+
 def report(entity, project, variant, baseline_id):
     api = wandb.Api()
     rungs = rung_runs(api, entity, project, variant)
@@ -155,8 +250,8 @@ def report(entity, project, variant, baseline_id):
 
     print("\n  §4.2 gate — is this still sampling P_{f|D}?  "
           "(loc_z<=2.0, scale_z<=2.0, clamp<=0.01%)")
-    print("   rung  run        chains  draws |   loc_z  scale_z    clamp%  "
-          "verdict")
+    print("   rung  run        chains  draws |   loc_z  scale_z    clamp% | "
+          "  loc_sd scaleRatio  verdict")
     gate_ok = {}
     for n in sorted(rungs):
         run, s = rungs[n], rungs[n].summary
@@ -164,23 +259,33 @@ def report(entity, project, variant, baseline_id):
                  if s.get(k) is None or not s.get(k) <= thr]
         gate_ok[n] = not fails
         vals = "".join(f"{s.get(k, float('nan')):9.4f}" for k, _, _ in GATE)
+        raws = "".join(fmt(s, k, spec) for k, _, spec in RAW)
         # a run synced from an offline directory carries a UUID, not the usual
         # 8-character id; truncate so the columns still line up
         print(f"   c{n:<4} {run.id[:10]:10s} {cfg(run, 'num_chains'):6d} "
-              f"{cfg(run, 'num_chains') * cfg(run, 'num_samples'):6d} |{vals}  "
+              f"{cfg(run, 'num_chains') * cfg(run, 'num_samples'):6d} |{vals} |"
+              f"{raws}  "
               + ("PASS" if not fails else "!! FAIL — " + "; ".join(fails)))
         for msg in check_pinned(run):
             print(f"          !! {msg}")
 
+    drift_is_real = gate_verdict(rungs, gate_ok)
+
     print("\n  §4.3/§4.5 tail statistics — steer on the medians; R-hat rising "
           "with chains is EXPECTED (§4.5)")
+    if drift_is_real:
+        print("  !! EVERY row below is compromised, not just the failing rung:")
+        print("     the stationarity test above puts a real drift at all of")
+        print("     them.  These are Monte Carlo errors about an estimand that")
+        print("     is still moving, so they understate the true uncertainty")
+        print("     however tight they look.  Do not select on them.")
     head = "   rung  draws | " + " ".join(lbl for _, lbl, _ in TAIL)
     print(head)
     print("   " + "-" * (len(head) - 3))
     for n in sorted(rungs):
         s = rungs[n].summary
         row = " ".join(fmt(s, k, spec) for k, _, spec in TAIL)
-        mark = "" if gate_ok[n] else "   << §4.2 FAILED: tail numbers unusable"
+        mark = "" if gate_ok[n] else "   << §4.2 FAILED"
         draws = cfg(rungs[n], "num_chains") * cfg(rungs[n], "num_samples")
         print(f"   c{n:<4} {draws:6d} | {row}{mark}")
 
@@ -236,11 +341,20 @@ def report(entity, project, variant, baseline_id):
                 print("          moving.  §4.6's stop rule does not apply here "
                       "-- §4.1 does.")
 
-    print("\n  Stop when a doubling buys little on ESS *and* relMCSE is still "
-          "falling, with\n  §4.2 passing (§4.6) — ESS alone will mislead if the "
-          "tail is still being found.\n  Record the unresolved-point count and "
-          "--worst-k from diagnose_sampling_tail.py\n  alongside this table; "
-          "they are not logged to wandb.")
+    if drift_is_real:
+        print("\n  §4.6's stop rule DOES NOT APPLY here.  It asks whether the "
+              "budget has\n  resolved the estimand; the stationarity test says "
+              "the sampler is not\n  holding still long enough for there to be "
+              "a fixed estimand to resolve.\n  Climbing to the next chain count "
+              "would buy more power to detect the\n  same within-chain drift, "
+              "not less drift.  Fix stationarity first (§4.1).")
+    else:
+        print("\n  Stop when a doubling buys little on ESS *and* relMCSE is "
+              "still falling, with\n  §4.2 passing (§4.6) — ESS alone will "
+              "mislead if the tail is still being found.")
+    print("  Record the unresolved-point count and --worst-k from "
+          "diagnose_sampling_tail.py\n  alongside this table; they are not "
+          "logged to wandb.")
 
 
 def main():

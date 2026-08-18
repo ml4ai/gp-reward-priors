@@ -746,6 +746,42 @@ chains means more chances that one wanders — so re-check rather than assume. A
 run failing these is not sampling `P_{f|D}`, and every tail statistic computed
 from it is meaningless regardless of how good it looks.
 
+### 4.2.1 The z-gate is not comparable across rungs — read the effect size too
+
+**A rung can fail the gate above purely by being measured better.** From
+`optbnn/utils/util.py:431`,
+
+    z_loc = |m2 - m1| / sqrt(mcse1^2 + mcse2^2)
+
+The numerator is a first-half-vs-second-half shift in function space. The
+denominator is an MCSE, which falls as ~1/√C. So `loc_z` is a *significance
+test whose power grows with chain count*, and holding it to a fixed 2.0
+tightens the criterion mechanically as you climb the ladder — doubling the
+chains inflates `z` by ~√2 on power alone, with the sampler behaving
+identically. `scale_z` has the same 1/√ESS denominator and the same property.
+
+The companion raw metrics carry no chain-count dependence and are what say
+whether the drift is actually *larger*:
+
+    val_fn_drift_loc_sd_median        |m2 - m1| in sd units
+    val_fn_drift_scale_ratio_median   sd2 / sd1
+
+Always read the pair. `stage3_ladder.py` now prints both and divides each
+rung-to-rung `z` change into its power component (√ of the draw ratio) and the
+real component that survives it, with the raw ratio as an independent check.
+
+**The sharper test is on `loc_sd` alone.** It is a difference of means over
+*all* draws, so under a stationary sampler it must fall as 1/√(total draws). A
+`loc_sd` that stays flat while the draws multiply is a real non-stationarity —
+and, critically, one that was already present in the rungs that *passed*, which
+merely lacked the power to resolve it. A PASS at a low chain count is therefore
+**not** evidence of stationarity; it is evidence of not having looked hard
+enough. §4.3.2 is the worked case.
+
+This does not make the gate useless — a run that fails it is still not to be
+trusted. It means a failure is a prompt to decompose, not a verdict on its own,
+and that the direction of the raw drift across rungs is the real diagnostic.
+
 ### 4.3 Starting point (measured, the four stage-1 winners at 4 chains × 75)
 
 | metric | medium_play | large_play | medium_diverse | large_diverse |
@@ -829,6 +865,14 @@ The §4.2 gate passes at both rungs (`c8`: loc_z 1.1385, scale_z 1.3564, clamp
 roughly a third from `c4` (0.8256 / 1.0298), so re-read the gate at `c16` rather
 than assuming it holds.
 
+> **Superseded by §4.3.2.** Both PASSes here are low-power false negatives, and
+> the narrowing margin is mostly the √C denominator effect of §4.2.1, not the
+> sampler degrading. The `c16` rung showed the raw drift never shrinks with
+> draws: it is real at `c4` and `c8` too. The tail numbers in this table are
+> **not** readable in the sense claimed above. The nesting result and the
+> bulk-vs-tail finding below are unaffected — both rest on measured quantities,
+> not on the gate.
+
 **The `c8` run's first four chains reproduce `c4` exactly.** `--num-chains 4` on
 `exp/stage3_medium_play_c8_0` gives output byte-identical to
 `exp/stage3_medium_play_c4_0` — every digit, bulk through unresolved count.
@@ -863,6 +907,97 @@ draws per chain:
 ESS gains 1.22× then 1.09× per step, and relMCSE *rises* over the last step with
 the chains identical. **More sampling of either kind keeps finding deeper
 excursions.** Read §4.6's stop rule with that in mind — it does not apply here.
+
+### 4.3.2 The `c16` rung — measured 2026-08-17. Stage 3's axis is the wrong one.
+
+| metric | `c4` (300) | `c8` (600) | `c16` (1200) | §4.6 ideal per step |
+|---|---|---|---|---|
+| `ess_bulk` median | 6.73 | 14.57 | 26.83 | 2.00× |
+| `rhat_bulk` median | 1.7208 | 1.5972 | 1.7037 | → 1 |
+| `cvar_ess_median` | 52.9 | 59.2 | 89.4 | 2.00× |
+| `cvar_mcse_rel_median` | 0.2204 | 0.2706 | 0.2234 | 0.71× |
+| `cvar_rhat_median` | 1.1134 | 1.1497 | 1.1802 | rise expected (§4.5) |
+| `folded_rhat_95th` | 1.5405 | 1.3895 | 1.3676 | — |
+| unresolved points | 56 (0.88%) | 144 (2.25%) | 42 (0.66%) | — |
+| `loc_z` / `scale_z` | 0.826 / 1.030 | 1.139 / 1.356 | **2.515** / 1.996 | ≤ 2.0 |
+| `loc_sd` / `scaleRatio` | 0.4319 / 1.4731 | 0.4222 / 1.4361 | 0.6460 / 1.4664 | — |
+
+All three rungs differ in `num_chains` **only** — 75 draws, 20 000 burn-in
+steps, seed 0, `chains_per_gpu: 4`, same host — so the movement is attributable
+to chain count alone.
+
+**The rungs are nested exactly, again.** `--num-chains 8` on the `c16` run
+reproduces the standalone `c8` output to within one ULP on a single value
+(`cvar_ess_max` 434.5072 vs 434.5073, float summation order); every other digit,
+including the full worst-20 listing, is identical. So `c16` is `c8` plus eight
+new chains, and everything below is attributable to chains 9–16.
+
+**The gate failure at `c16` is mostly, but not entirely, the §4.2.1 artifact.**
+Decomposing each step (√2 expected from power alone):
+
+| step | `loc_z` | = power × real | raw `loc_sd` |
+|---|---|---|---|
+| `c4`→`c8` | 1.379× | 1.414 × **0.975** | **0.978×** |
+| `c8`→`c16` | 2.209× | 1.414 × **1.562** | **1.530×** |
+
+The whole `c4`→`c8` rise was denominator shrinkage — nothing degraded. Scale is
+the same story at both steps (`scaleRatio` 0.975×, 1.021×). Location at
+`c8`→`c16` is different: a real 1.53× rise that the raw metric confirms
+independently.
+
+**And that exposed the actual problem.** `loc_sd` must fall as 1/√(total draws)
+under stationarity (§4.2.1). It does not:
+
+| rung | draws | `loc_sd` | stationarity requires | obs/req |
+|---|---|---|---|---|
+| `c4` | 300 | 0.4319 | 0.4319 | 1.00 |
+| `c8` | 600 | 0.4222 | 0.3054 | 1.38 |
+| `c16` | 1200 | 0.6460 | 0.2160 | **2.99** |
+
+Quadrupling the draws should have halved that shift. It grew by half instead.
+**There is a real location drift of ~0.4–0.65 sd units that does not shrink with
+sampling, and it is present at every rung** — `c4` and `c8` passed the gate only
+because 300 and 600 draws lack the power to resolve it.
+
+**Why more chains cannot fix it.** `function_space_drift` splits each chain's
+own draws in half and pools; the drift is *within-chain*. Adding chains does not
+lengthen any chain, so it cannot reduce a per-chain drift — it only measures it
+with more precision. §4.1 raises `num_chains` with `num_samples` pinned at 75,
+so **stage 3 as specified ladders an axis orthogonal to the binding
+constraint.** The flat `cvar_mcse_rel_median` across 4× the compute (0.220 →
+0.271 → 0.223, against an ideal 0.110) is the same fact seen from the tail: you
+cannot drive down the Monte-Carlo error of an estimand that is still moving.
+
+Note also `rhat_bulk` median never converges (1.72 → 1.60 → 1.70) and
+`cvar_rhat_median` rises monotonically. §4.5 attributes rising R-hat to
+detection power, which is correct as far as it goes — but it is the same power
+argument that made the gate look fine at `c4`, and here it coexists with a
+target that genuinely is not fixed.
+
+**This is not specific to medium_play.** All four stage-1 winners carry
+substantial raw drift at `c4` while all four pass the z-gate:
+
+| variant | `loc_z` (≤2.0) | raw `loc_sd` |
+|---|---|---|
+| medium_play | 0.8256 | 0.4319 |
+| large_play | 0.9168 | 0.2108 |
+| medium_diverse | 1.3408 | 0.3902 |
+| large_diverse | 0.7951 | 0.3778 |
+
+Only medium_play has been laddered far enough to expose it. Do not read the
+other three's §3.6.3 acceptance as established stationarity — it is the same
+low-power PASS.
+
+**What follows.** Do not launch `c32`: it would fail the gate harder on power
+while saying nothing new about a within-chain problem, and it costs a full run.
+The next experiment has to move `num_samples` and/or `num_burn_in_steps`, or the
+cyclical step-size schedule that `function_space_drift` also tests (§3.6.2) —
+a drift surviving 20 000 burn-in steps implicates the schedule as much as the
+budget. The cheapest discriminating measurement is a chain-slice comparison
+within the existing `c16` run: chains 9–16 drifted more than chains 1–8 despite
+identical settings, which points at initialisation not equilibrating inside the
+fixed burn-in. `diagnose_sampling_tail.py --num-chains` only reads the *first* N
+chains, so isolating 9–16 needs a range flag it does not currently have.
 
 ### 4.4 Procedure
 
@@ -996,6 +1131,13 @@ at a fixed horizon, and that is a finding about the schedule to be reported, not
 a licence to lengthen the chains. Record the rung anyway — the ladder is the
 evidence for the finding.
 
+**Before applying any of the above, check §4.2.1's stationarity test.** The
+whole stop rule presumes a fixed estimand that more draws will resolve. If raw
+`loc_sd` is not falling as 1/√draws, there is no fixed estimand to resolve and
+the rule does not apply at any rung — not just the one that failed the z-gate.
+That is the state medium_play is in (§4.3.2), and it is why the ladder was
+halted at `c16` rather than continued to `c32`.
+
 Record per variant: the chosen `num_chains` / `chains_per_gpu`, the full table
 of §4.3 metrics at each candidate, the §4.2 numbers at the chosen budget, and
 what the `_max` extremes did (they are sparse, not censored — §4.5). Then transcribe `num_chains` and
@@ -1007,7 +1149,12 @@ assembles the ladder: it finds the rungs by their `stage3_<variant>_c<N>`
 `OUT_DIR` marker, prints the §4.2 gate first and marks any rung that fails it,
 then the §4.3 table and the rung-to-rung ratios against the §4.6 ideals
 (ESS ~linear in draws, relMCSE ~1/√draws), labelling a rising R-hat as expected
-rather than flagging it. It also checks that stage 3 moved `num_chains` *only* —
+rather than flagging it. The gate block also prints the raw `loc_sd` /
+`scaleRatio` beside the z-scores, splits each rung-to-rung `z` change into its
+power and real components, and runs §4.2.1's 1/√draws test on `loc_sd`. When
+that test fails it says so before the tail table, marks every row compromised
+rather than only the failing rung, and replaces §4.6's stop rule with the
+reason it does not apply. It also checks that stage 3 moved `num_chains` *only* —
 `num_samples` still 75, seed still 0, `burn_in_lr` still absent. With no
 dedicated `c4` run it falls back to the recorded stage-1 winner for that rung
 (§4.3). It cannot report the unresolved-point count or `--worst-k`, which are
@@ -1322,6 +1469,17 @@ generalise beyond this project:
   biases toward instability**, rather than merely failing to detect it: at a
   short horizon a larger step size buys a better score and its cost has not yet
   appeared. Round 1 selected at 35 draws and deployed at 310.
+- **A drift check that is a significance test will clear a drifting sampler at
+  small sample sizes.** Round 1's lesson was to exclude drift separately; stage 3
+  found that the drift metric itself has the same failure mode one level down.
+  `fn_drift_loc_z` divides a first-half-vs-second-half shift by an MCSE, so its
+  power grows as ~√(chains) and a fixed threshold clears low-chain-count runs
+  that are drifting exactly as much as the ones it rejects (§4.2.1, §4.3.2).
+  Report the effect size (`loc_sd`) next to the test statistic, and check that
+  it falls as 1/√draws rather than that the z-score sits under a threshold.
+  This is the disclosure that the four stage-1 winners' §3.6.3 stationarity
+  acceptance rests on: it was a z-gate PASS at 4 chains, which §4.3.2 shows is
+  not by itself evidence of stationarity.
 
 **Budget.** Every family received `run_cap: 130` under the same stopping rule,
 and sweeps ran until the rule fired rather than to the cap. Note the invariant
@@ -1552,7 +1710,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **in progress** — medium_play `c4` and `c8` measured (§4.3.1); `c16` next, as mechanism evidence rather than a budget candidate |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2). The ladder's axis is orthogonal to the binding constraint: a within-chain drift that does not shrink with draws. No budget selected; `c32` is not to be run (§4.3.2) |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -1576,82 +1734,74 @@ the round-1 mistake §3.7 exists to prevent. `chains_per_gpu` is placement.
 
 Judge it on the CVaR tail diagnostics (§4), reading the median / 95th-pct /
 `pct_over_1.01` variants rather than the `_max`/`_min` extremes (§4.5 explains
-why those are sparse rather than censored), and **check `fn_drift_*_z` and
+why those are sparse rather than censored), and **check `fn_drift_*` and
 `param_clamp_sampling_pct` first**: a run that is not sampling the target
-measure makes every tail number meaningless. The winners all pass those at
-4 chains × 75 draws, but the budget change has to be re-checked, not assumed.
+measure makes every tail number meaningless. Read the raw `loc_sd` alongside
+the z-scores — the z's are not comparable across chain counts, and a PASS at a
+low count is not evidence of stationarity (§4.2.1). The winners pass the
+z-gate at 4 chains × 75 draws; §4.3.2 shows that PASS does not survive
+contact with a longer ladder.
 
-**Progress so far.** medium_play's `c4` and `c8` rungs are done (2026-08-16 /
-2026-08-17) and §4.3.1 records both. The headline is not a budget number: the
-bulk scales as intended (ESS 2.16× for 2× draws) while the tail does not
-(CVaR ESS 1.12×) and its relative MCSE *rises*, at `c8` and again along the
-draw ladder within `c8`. The lower tail is still being discovered rather than
-resolved, so §4.6's flattening rule does not license stopping.
+**Progress so far — and why the ladder stopped.** medium_play's `c4`, `c8` and
+`c16` rungs are done (2026-08-16 / 08-17 / 08-17), recorded in §4.3.1 and
+§4.3.2. `c16` changed the question. Raw `loc_sd` — the drift effect size, which
+unlike the z-scores does not depend on chain count — went 0.4319 → 0.4222 →
+0.6460 while stationarity requires it to fall as 1/√draws (0.4319 → 0.3054 →
+0.2160). It never falls. **There is a real within-chain location drift at every
+rung, and the `c4`/`c8` gate PASSes were low-power false negatives** (§4.2.1).
+
+Because `function_space_drift` splits each chain's *own* draws in half, adding
+chains cannot reduce that drift — it only measures it better. Stage 3 as
+specified (§4.1: `num_chains` only, `num_samples` pinned at 75) therefore
+ladders an axis orthogonal to the binding constraint. **No budget can be
+selected from this ladder**, and the flat `cvar_mcse_rel_median` across 4× the
+compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
 
 **Do this next, in order:**
 
-1. **medium_play `c16`.** Run it as **evidence for the §4.1 schedule finding,
-   not as a budget candidate** — on the `c4` → `c8` evidence it is unlikely to
-   resolve the tail, and the point is to establish that a second doubling
-   doesn't either.
+1. **Do not run `c32`, and do not start the other three variants' ladders.**
+   A further doubling buys power to detect the same within-chain drift, not
+   less drift, at the cost of a full run. The other three variants show the
+   same signature at `c4` — raw `loc_sd` 0.21–0.43 while all four pass the
+   z-gate (§4.3.2) — so laddering them would reproduce this result three more
+   times rather than test it.
 
-   ```
-   cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
-       --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
-       --seed 0 --num_chains 16 --chains_per_gpu 4 \
-       --OUT_DIR ./exp/stage3_medium_play_c16 > ../exp/stage3_medium_play_c16.log 2>&1 &
-   ```
+2. **Isolate which chains drift.** `c16` is `c8` plus eight chains, verified
+   nested to one ULP, and the added chains are what raised the drift. If
+   chains 9–16 drift more than 1–8 under identical settings, the cause is
+   initialisation not equilibrating within the fixed 20 000-step burn-in — a
+   much cheaper thing to fix than the schedule. This needs no new sampling,
+   only a chain-*range* selector; `--num-chains` reads the first N only, so
+   `diagnose_sampling_tail.py` needs a small flag added first (§4.3.2).
 
-   Then, from the **repo root** (the diagnostic does not `chdir`, unlike the
-   training script, so its `--run-dir` is relative to wherever you launch it):
+3. **Then attack stationarity directly, not the budget.** The candidates, in
+   increasing cost: raise `num_burn_in_steps`; lengthen `num_samples` (which
+   breaks the §3.7 selection/production horizon match, so it changes what
+   stage 1 selected and cannot be done casually); or revisit the cyclical
+   step-size schedule, which `function_space_drift` was written to test
+   (§3.6.2) and which a drift surviving 20 000 burn-in steps implicates. Run
+   this on medium_play alone until something moves `loc_sd` in the right
+   direction.
 
-   ```
-   python scripts_bnn/diagnose_sampling_tail.py \
-       --run-dir exp/stage3_medium_play_c16_0 --worst-k 20 --device cuda \
-       2>&1 | tee exp/stage3_medium_play_c16_0_diag_tail.txt
-   ```
-
-   **Always capture the diagnostic to a file next to the run.** The
-   unresolved-point count and the `--worst-k` listing are the two things §4.6
-   asks to be recorded that are *not* logged to wandb, so the terminal is their
-   only copy otherwise, and `exp/` is gitignored — the file stays local and can
-   be pulled off the box for analysis.
-
-   Read it against three things, in this order: the **§4.2 gate** (scale_z was
-   1.3564 at `c8` and climbing — if it crosses 2.0 the rung is unusable, and
-   that is itself the §4.1 finding); `--num-chains 8`, which must reproduce the
-   `c8` output exactly and isolates what chains 9–16 added (§4.3.1); and only
-   then `cvar_ess_median` **together with** `cvar_mcse_rel_median` — ESS alone
-   will mislead here (§4.6).
-
-   Then, locally, `python stage3_ladder.py medium_play` prints all three rungs
-   side by side with the §4.2 gate and the §4.6 ratios (§8).
-
-2. **Decide medium_play's budget on the three-rung picture.** If `c16` repeats
-   the `c8` pattern, the choice is between rungs that all fail to resolve the
-   tail, so pick on cost and on the §4.2 gate rather than on the tail metrics,
-   and write up §4.1's conclusion: the tail is not reachable by adding chains at
-   a 75-draw horizon. That is a result about the cyclical schedule composed with
-   fSGHMC (§3.6.2's known deviation), and it belongs in the paper.
-
-3. **Repeat the ladder for the other three variants.** They start from very
-   different places: large_play and medium_diverse already sit at
-   `cvar_ess_median` 210 and 272 at `c4` and may need no increase at all, while
-   large_diverse (57) looks like medium_play. Do not assume one chain count
-   suits all four (§4.3).
-
-   Their `c4` rows come from the sweep trials, whose saved chains no longer
-   exist (§4.3), so run `--worst-k` on their **`c8`** run — §4.5 asks for the
-   per-point diagnosis on every variant, and taking it at `c8` avoids re-running
-   `c4` purely to regenerate chains. Even a variant that needs no chain increase
-   therefore needs one run to produce it.
-
-4. **Transcribe** the chosen `num_chains` / `chains_per_gpu` per variant into
-   `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, then re-run the
+4. **Only then** resume the ladder, transcribe `num_chains` / `chains_per_gpu`
+   into `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, and re-run the
    field-by-field verification (§10.3).
 
 5. **Then stage 4** (§5) — the 8-way normalization grid, which runs outside this
    repo in the surrounding `iqlpref` pipeline.
+
+The §4.1 write-up conclusion stands and is strengthened: the tail is not
+reachable by adding chains at a 75-draw horizon. The reason is now identified —
+the sampler is not stationary at that horizon — which makes it a result about
+the cyclical schedule composed with fSGHMC (§3.6.2's known deviation), and it
+belongs in the paper.
+
+**Always capture the diagnostic to a file next to the run.** The
+unresolved-point count and the `--worst-k` listing are the two things §4.6 asks
+to be recorded that are *not* logged to wandb, so the terminal is their only
+copy otherwise, and `exp/` is gitignored — the file stays local and can be
+pulled off the box for analysis. The `c4`/`c8`/`c16` captures are in `exp/` on
+the analysis Mac.
 
 Every stage-3 run needs a distinct `OUT_DIR`. The deterministic
 `{OUT_DIR}_{seed}` path has already destroyed evidence three times (§10.3), and
