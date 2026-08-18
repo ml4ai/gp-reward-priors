@@ -232,95 +232,6 @@ def _load_chain_weights(run_dir, i, device):
     return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
 
 
-def weight_trace(run_dir, chain_ids, depth, levels, device="cpu"):
-    """Free-diffusion check on ||w||.  NOT a convergence diagnostic.
-
-    Under fSGHMC (Wu et al. 2025) the potential `U(f) = Phi(f) + I0(f)` depends
-    on w only through f, so every f-preserving direction is flat and the chain
-    performs an unconfined random walk along it.  **A growing weight norm is
-    what this sampler is supposed to do**, and ||w||^2 should grow linearly in
-    draw index -- see HANDOFF section 3.6.2, which removed `param_rhat`,
-    `param_ess` and the sampling weight-norm statistics for this reason.
-
-    An earlier version of this function reported a `growth > 1.5x` verdict of
-    "DRIFTING -- chains are not stationary".  That was the round-1 weight-space
-    reading and it was wrong: at 75 draws the free-diffusion law alone produces
-    growth well past 1.5x, so the check fired on healthy runs.  It has been
-    removed rather than re-thresholded, because no threshold on ||w|| carries
-    information about the convergence of f.
-
-    What this IS good for, and all it is good for: confirming the chains
-    diffuse as theory predicts (||w||^2 linear in t) and at a COMMON rate, so
-    that no chain has a broken step size or a binding `max_param_step` clamp.
-    That is a mechanical check on the integrator, not a statement about f.
-    For stationarity use the function-space drift z-scores (section 4.2); for
-    mixing use the tail R-hat/ESS above.
-
-    Costs no forward passes: the saved weights are read directly.
-    """
-    mags = []
-    for c in chain_ids:
-        chain = []
-        for w in _load_chain_weights(run_dir, c, device):
-            sq = sum(float(np.sum(np.asarray(a, dtype=np.float64) ** 2)) for a in w)
-            n = sum(np.asarray(a).size for a in w)
-            chain.append(np.sqrt(sq / n))
-        mags.append(chain)
-    m = min(len(c) for c in mags)
-    mags = np.array([c[:m] for c in mags])                    # [chain, draw]
-
-    levels = sorted({n for n in levels if 0 < n <= m}) or [m]
-    if levels[-1] != m:
-        levels.append(m)
-    if levels[0] != 1:
-        levels.insert(0, 1)
-
-    print(f"\n=== WEIGHT FREE-DIFFUSION CHECK "
-          f"({_chain_label(chain_ids)}, {m} draws) ===")
-    print("  NOT A CONVERGENCE DIAGNOSTIC.  U(w) depends on w only through f, so")
-    print("  every f-preserving direction is flat and |w| random-walks along it:")
-    print("  a rising |w| is CORRECT behaviour here (section 3.6.2).  Read this")
-    print("  only as a check that the chains diffuse as theory predicts, at a")
-    print("  common rate.  For stationarity of f use the drift z-scores (4.2).")
-    print("  avg |w| = total L2 norm / sqrt(n_params), matching the training")
-    print("  script's warm-up readout.")
-    print(f"  {'at draw':>8} | {'avg|w| mean':>11} {'min':>9} {'max':>9} "
-          f"{'x vs draw 1':>11} | {'||w||^2 mean':>13}")
-    print("  " + "-" * 72)
-    base = float(mags[:, 0].mean())
-    for n in levels:
-        col = mags[:, n - 1]
-        mean = float(col.mean())
-        print(f"  {n:>8} | {mean:>11.4f} {col.min():>9.4f} {col.max():>9.4f} "
-              f"{mean / base:>11.2f} | {mean ** 2:>13.4f}")
-
-    # Free-diffusion law: ||w||^2 = ||w0||^2 + c*t.  Fit c per chain and report
-    # how well the law holds (R^2) and how uniform the rate is across chains.
-    sq = mags ** 2                                            # [chain, draw]
-    t = np.arange(1, m + 1, dtype=np.float64)
-    slopes, r2s = [], []
-    for c in range(sq.shape[0]):
-        slope, intercept = np.polyfit(t, sq[c], 1)
-        resid = sq[c] - (slope * t + intercept)
-        ss_tot = float(((sq[c] - sq[c].mean()) ** 2).sum())
-        slopes.append(float(slope))
-        r2s.append(1.0 - float((resid ** 2).sum()) / ss_tot if ss_tot > 0 else 1.0)
-    slopes, r2s = np.array(slopes), np.array(r2s)
-    spread = slopes.max() / slopes.min() if slopes.min() > 0 else float("inf")
-
-    print(f"\n  free-diffusion fit  ||w||^2 = ||w0||^2 + c*t")
-    print(f"    c (per chain)   mean {slopes.mean():.4f}  "
-          f"min {slopes.min():.4f}  max {slopes.max():.4f}  spread {spread:.2f}x")
-    print(f"    linearity R^2   min {r2s.min():.4f}  median {np.median(r2s):.4f}")
-    law = ("consistent with free diffusion (expected)" if r2s.min() > 0.98
-           else "NOT linear in t -- integrator worth inspecting")
-    rate = ("chains diffuse at a common rate" if spread < 1.5
-            else f"ANOMALOUS: chain rates differ {spread:.2f}x -- check the "
-                 f"step size and max_param_step clamp on the outlier")
-    print(f"    {law}")
-    print(f"    {rate}")
-
-
 def ce_ladder(run_dir, dataset, width, depth, chain_ids, levels,
               device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
               chunk_pairs=64):
@@ -650,12 +561,12 @@ def main():
                          "each level from this one run, so the stage-3 draw "
                          "budget is read off a curve instead of costing one "
                          "training run per candidate.")
-    ap.add_argument("--weight-trace", action="store_true",
-                    help="Check ||w||^2 grows linearly in draw index (the "
-                         "free-diffusion law) at a common rate across chains. "
-                         "Free (no forward passes). NOT a convergence "
-                         "diagnostic -- a rising |w| is correct under fSGHMC; "
-                         "see section 3.6.2. Use the drift z-scores instead.")
+    # --weight-trace was removed 2026-08-18.  No statistic computed from w
+    # belongs here: U depends on w only through f, so weight space carries no
+    # information about convergence (section 3.6.2), and the mechanical
+    # integrator check it was re-scoped to is already covered directly by
+    # param_clamp_sampling_pct, which section 4.2 gates on.  Section 4.5 has the
+    # full argument; section 3.6.2 keeps the one measurement it produced.
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "
@@ -711,16 +622,10 @@ def main():
                      f"{args.draw_ladder!r}")
         draw_ladder(pred_chains, levels, alpha=args.alpha)
 
-    if args.weight_trace or args.ce_ladder:
+    if args.ce_ladder:
         levels = []
         if args.draw_ladder:
             levels = [int(t) for t in args.draw_ladder.split(",") if t.strip()]
-
-    if args.weight_trace:
-        weight_trace(args.run_dir, chain_ids, depth, levels,
-                     device=args.device)
-
-    if args.ce_ladder:
         ce_ladder(args.run_dir, dataset, width, depth, chain_ids, levels,
                   device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
                   max_pairs=args.ce_pairs, max_draws=args.max_draws)

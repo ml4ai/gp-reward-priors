@@ -465,6 +465,18 @@ Two consequences that are easy to get wrong, and were:
   ‖w‖ followed the free-diffusion law ‖w‖² = ‖w₀‖² + c·t to within 5% across
   310 draws. `param_rhat`, `param_ess`, `param_within_chain_var` and the
   sampling weight-norm statistics have been **removed** for this reason.
+
+  **Re-confirmed on round 2** (medium_play `c8`, 8 chains × 75 draws,
+  2026-08-17), which matters because the round-1 measurement above was taken on
+  the design §3.7 discarded. Per-draw `Δ‖w‖²` over the three printed intervals
+  was 0.3310 / 0.3263 / 0.3118 — linear in draw index to ~3%, with RMS ‖w‖
+  growing 1.9838 → 5.2756 (2.66×). Per-chain growth spanned 2.44×–2.78×, i.e.
+  the rate `c` varies ~1.30× across chains. Textbook free diffusion, on a
+  healthy run that passes every function-space check. **This is the number to
+  cite when explaining why a growing weight norm is not evidence of anything**,
+  and it is why the `--weight-trace` flag that produced it was subsequently
+  deleted rather than kept (§4.5): having confirmed the law, there is no
+  standing question left for a weight-space statistic to answer.
 - **Stationarity is a claim about f.** `util.function_space_drift` compares the
   first half of each chain's draws against the second, **relative to that
   comparison's own Monte Carlo error**:
@@ -1067,20 +1079,39 @@ Do **not** use `param_*` diagnostics (they no longer exist — §3.6.2 explains
 why weight-space statistics measure nothing for this sampler) or bulk
 `pred_rhat`/`pred_ess` (they certify the median, not the tail).
 
-**`--weight-trace` was printing a false verdict; fixed 2026-08-17.** It declared
-`DRIFTING -- chains are not stationary; R-hat/ESS improvements are an artifact`
-whenever RMS `‖w‖` grew more than 1.5× — a `param_*`-era check that survived the
-§3.6.2 audit by being in a different file. Under fSGHMC that threshold fires on
-*healthy* runs: `‖w‖² = ‖w₀‖² + c·t` is the expected free diffusion along
-f-preserving flat directions, which at 75 draws alone gives ~2.7× growth in
-`‖w‖`. medium_play `c8` duly tripped it, with per-draw `Δ‖w‖²` of 0.3310 /
-0.3263 / 0.3118 across the three intervals — linear in t to ~3%, i.e. textbook
-free diffusion, reported as non-stationarity. No threshold on `‖w‖` carries
-information about the convergence of f, so the verdict was removed rather than
-re-tuned. The flag now checks what it validly can: that `‖w‖²` is linear in
-draw index (R² per chain) and that the diffusion rate `c` is common across
-chains, which catches a broken step size or a binding `max_param_step` clamp.
-That is a mechanical check on the integrator, not a statement about f.
+**`--weight-trace` printed a false verdict, and has been removed entirely
+(2026-08-18).** It declared `DRIFTING -- chains are not stationary; R-hat/ESS
+improvements are an artifact` whenever RMS `‖w‖` grew more than 1.5× — a
+`param_*`-era check that survived the §3.6.2 audit by being in a different file.
+Under fSGHMC that threshold fires on *healthy* runs: `‖w‖² = ‖w₀‖² + c·t` is the
+expected free diffusion along f-preserving flat directions, which at 75 draws
+alone gives ~2.7× growth in `‖w‖`. medium_play `c8` duly tripped it (§3.6.2 now
+records that measurement, which is the one useful thing the flag ever produced).
+
+It was first re-scoped rather than deleted — the verdict dropped, the function
+kept as a check that `‖w‖²` is linear in draw index and that the rate `c` is
+common across chains, on the theory that this catches a broken step size or a
+binding `max_param_step` clamp. **That re-scoping does not survive scrutiny
+either, for a reason that applies to any weight-space check here:**
+
+- The clamp is already measured *directly*. `param_clamp_sampling_pct` exists
+  precisely because `max_param_step` is not measure-preserving when it binds,
+  and §4.2 gates on it at ≤ 0.01%. Inferring the same condition from a
+  norm-growth rate is strictly worse than reading the instrument built for it.
+- There is no per-chain step size to be "broken". It is one config value shared
+  by every chain, so the failure mode the rate-spread check was aimed at has no
+  mechanism.
+- Both thresholds were invented, not calibrated. `R² > 0.98` and
+  `spread < 1.5×` had no null distribution behind them — and the cyclical step
+  size (§3.6.2's first known deviation) makes the diffusion coefficient vary
+  *within* a cycle, so exact linearity is not even the right prediction; it
+  holds only cycle-averaged.
+
+So the residual justification was two uncalibrated thresholds detecting a
+condition that a gating metric already measures directly. The whole function and
+its flag are gone. **The general rule stands: no statistic computed from `w`
+belongs in this pipeline** (§3.6.2), and "but this one is only a mechanical
+check" is exactly how the first one got in.
 
 The same commit fixed the `--draw-ladder` banner, which still asserted the
 `_max`/`_min` extremes "are censored at estimator ceilings" — the claim this
@@ -1194,9 +1225,9 @@ a Python slice and like the `chain_N` directory names; `--num-chains N` is
 exactly `0:N`, and the two are mutually exclusive. Every run prints the
 selection as directory names and flags a subset explicitly, because the
 1-indexed prose of §4.3.2 ("chains 9–16") and the 0-indexed directories
-(`chain_8`..`chain_15`) differ by one. `--weight-trace` is **not** a
-convergence diagnostic: it checks the free-diffusion law and the per-chain
-diffusion rate, nothing about f (§4.5).
+(`chain_8`..`chain_15`) differ by one. There is deliberately **no weight-space
+option**: `--weight-trace` was removed on 2026-08-18 and should not be
+reintroduced in any form (§4.5).
 Pipe it through `tee exp/<run>_diag_tail.txt` — its unresolved-point count and
 `--worst-k` listing are the parts of §4.6's record that never reach wandb.
 
