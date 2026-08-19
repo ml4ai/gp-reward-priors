@@ -534,7 +534,7 @@ carrying real information).
 
 | deviation | status |
 |---|---|
-| **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. |
+| **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. **2026-08-18: that check has now fired.** medium_play carries a location drift common to 14 of 16 chains (alignment 0.7564) that does not shrink with chain count, alongside a growing spread (`scale_ratio` 1.47). The schedule is the leading suspect — sampling runs 220 000 steps against 20 000 of burn-in, and burn-in happens at `lr_min` *before* cycling starts, so any schedule-induced drift begins at the first sampling step and no burn-in reaches it. **Not yet established**; the compute-matched `use_cyclical_lr False` run in §4.3.5 is the decisive test. If it is the cause, this row stops being a disclosure and becomes a finding. |
 | **`max_param_step: 0.5`** clamps momentum every step, sampling included | Not measure-preserving when it binds, and unlike the gradient clip it was never scoped to burn-in. Now instrumented: `param_clamp_sampling_pct` must be ~0 on any selected run, else that run sampled the wrong measure. |
 | **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
 | **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action. |
@@ -1145,6 +1145,116 @@ If it reports COMMON drift, the shared start is implicated and
 configs always intended stage 3 to set. If it names a few outlier chains,
 check what they share (GPU index above all) before touching any schedule
 setting.
+
+### 4.3.5 Per-chain result — measured 2026-08-18. The drift is common and ongoing.
+
+`--per-chain-drift` on all 16 `c16` chains:
+
+| | value | reference |
+|---|---|---|
+| ALIGNMENT | **0.7564** | 1.00 = one common drift; 0.25 = 16 independent |
+| signed shift | **14/16 positive** | sign test p = 0.0042 |
+| per-chain `loc_sd` | median 1.2098, max/median **1.33×** | ≥3× would mean outlier chains |
+| mean signed shift | **+0.647** | pooled `loc_sd` = 0.6460 |
+
+**The drift is common to essentially every chain.** The mean of the per-chain
+signed shifts lands on the pooled `loc_sd`, so the pooled number *is* the common
+component rather than an aggregation artifact. A shift shared by all chains
+cannot average out over chains, which is §4.3.2's non-shrinking `loc_sd`
+demonstrated directly rather than inferred. `max/median` 1.33× rules out the
+outlier-chain case.
+
+**This also explains §4.3.3's 2.10×, and it was not what it looked like.**
+Per-chain `loc_sd` by half is lower 1.084 vs upper 1.232 — only **1.14×**. The
+*signed* shifts split lower +0.412 vs upper +0.756 — **1.83×**, essentially the
+whole pooled gap. The cause is chains **3 (−0.4618)** and **4 (−0.6390)**, the
+only two counter-drifting chains in the run, both of which happen to sit in the
+lower half where they partially cancel. The lower half looked better because it
+contained the cancellation. This also closes the GPU question left open in
+§4.3.3: with `chains_per_gpu: 4`, chain 3 is on GPU0 and chain 4 on GPU1, so the
+counter-drifting pair is not a placement group. Four chains per GPU is thin
+evidence, but nothing in the table suggests placement matters.
+
+**Correction to §10.2: `chain_init_jitter` is the wrong fix for *this*.** A
+common directional drift is not a dispersion problem. Jitter spreads chains
+*around* the shared start; if the start is off in a common direction, every
+chain still relaxes the same way and the common component survives. Jitter
+remains worth setting for **R-hat honesty** — shared starts understate
+between-chain variance, per `f_pref_net.py:130` — but that is a separate defect
+and it will not move `loc_sd`. §4.1 still holds that stage 3 owns the parameter.
+
+**The schedule is the leading suspect, and the arithmetic favours it.**
+From the `c16` config: `sghmc_lr` 2.4897e-4, `sghmc_lr_max` 8.7152e-4
+(**3.50×**), `cycle_length` 2750, `samples_per_cycle` 1, `fraction_cool` 0.337,
+`n_discarded` 5. So 80 cycles × 2750 = **220 000 sampling steps against 20 000
+of burn-in — the sampling phase is 11× the burn-in.** Three consequences:
+
+- **A start transient is a poor explanation.** It would have to survive burn-in
+  *and* still produce a 0.65 sd shift between step ~100 000 and ~206 000. More
+  burn-in is unlikely to be the fix.
+- **Burn-in runs at `lr_min` and cycling begins only after it**
+  (`f_pref_net.py:724–745`; `burn_in_lr` is None in all these runs). The chain
+  equilibrates at one step size and is then driven by a schedule it never saw
+  during burn-in. Any drift the schedule causes therefore starts *at the first
+  sampling step*, which no amount of burn-in reaches.
+- **The spread grows as well as the location** (`scale_ratio` 1.4664). A
+  widening chain is being heated, which fits a per-cycle energy injection better
+  than a decaying transient. Momentum is resampled at every cycle start at the
+  `lr_max` scale (`f_pref_net.py:746–772`), though with `mdecay` 0.1946 the
+  momentum relaxation time is ~5 steps, so momentum equilibrates long before the
+  sample is taken at the coldest step — the plausible mechanism is the
+  *position* distribution not returning fully during the ~927-step cool phase,
+  netting a displacement per cycle.
+
+This is a deviation from Wu et al. (2025), which uses a fixed step size; the
+cyclical schedule is a bolt-on carrying no stationarity guarantee for these
+dynamics, and §3.6.2 records that `function_space_drift` was written partly to
+test it. **Treat "the cyclical schedule causes the drift" as the leading
+hypothesis, not as established.**
+
+**`--drift-blocks K` is the shape test, and at 75 draws it is underpowered.**
+It splits the draws into K blocks and reports the block-to-block shift against
+a noise floor of `0.6745*sqrt(2/ess_block)` — a stationary chain sits *at* the
+floor, so "flat" only means an ongoing drive when the shifts clear it. With
+`ess_bulk` ≈ 26.8 over 1200 draws (~2% efficiency), the per-block floor at K=5
+is ≈ 0.41 while a linear drift totalling 0.646 gives only ≈ 0.16 per step. It
+will almost certainly report SHAPE NOT RESOLVED. Run it anyway — the `sd/first`
+column is far better determined than a difference of means and will show
+whether the widening is progressive — but do not expect it to settle the
+question:
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --drift-blocks 5 \
+    2>&1 | tee exp/stage3_medium_play_c16_0_blocks_diag_tail.txt
+```
+
+**The decisive experiment is one run: turn the schedule off at matched
+compute.** Constant step size at the value samples are currently taken at, same
+total gradient steps, same burn-in, everything else identical:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 \
+    --use_cyclical_lr False --keep_every 2750 \
+    --OUT_DIR ./exp/stage3_medium_play_nocyc > ../exp/stage3_medium_play_nocyc.log 2>&1 &
+```
+
+`keep_every 2750` matches `cycle_length`, so 75 draws cost the same 206 250
+steps and the comparison is compute-matched rather than confounded by budget.
+In non-cyclical mode the LR stays at `sghmc_lr` throughout (`burn_in_lr` is
+None), which is exactly the `lr_min` the cyclical run samples at. Eight chains
+is enough: `loc_sd` is a raw effect size and the comparison is against the `c8`
+/ lower-half numbers (`loc_sd` 0.4222, alignment to be read from
+`--per-chain-drift`).
+
+Read the result on **raw `loc_sd` and ALIGNMENT**, not on the tail statistics —
+§4.3.3 showed those improve as drift worsens. If `loc_sd` collapses, the
+schedule is the cause and stage 3's remit changes from a budget to a schedule
+decision. If it survives, the schedule is exonerated and the next suspect is
+weight-space diffusion along directions that are only approximately
+f-preserving (§3.6.2) — which would show up as `loc_sd` tracking ‖w‖ growth.
 
 ### 4.4 Procedure
 
@@ -1953,27 +2063,32 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
    initialisation, so the chains are exchangeable and a lower-vs-upper gap
    cannot be a property of "later" chains.
 
-   **Still to run, and it needs no new sampling:** `--per-chain-drift` on the
-   existing `c16` chains (§4.3.4). It says whether the drift is one common
-   transient in every chain — which would implicate the shared start, and
-   therefore `chain_init_jitter` — or a few outlier chains, which would point
-   at GPU placement first. **Do this before any new run:** it decides which of
-   step 3's candidates is worth spending a run on, and the two answers lead to
-   different experiments.
+   `--per-chain-drift` is **done** (§4.3.5): alignment 0.7564, 14/16 chains
+   drifting the same way (sign test p = 0.0042), no outlier chains. The drift
+   is common to essentially every chain, which settles §4.3.2's non-shrinking
+   `loc_sd` on direct evidence. It also explains §4.3.3's 2.10× — two
+   counter-drifting chains happened to land in the lower half — and closes the
+   GPU question, since those two sit on different GPUs.
 
-3. **Then attack stationarity directly, not the budget.** The candidates, in
-   increasing cost: **`chain_init_jitter > 0`**, which stage 3 was always meant
-   to set (§4.1) and which is the direct remedy if step 2 reports a common
-   drift — it is also the only one of these that does not disturb the §3.7
-   horizon match or the nine selected fields; raise `num_burn_in_steps`;
-   lengthen `num_samples` (which *does* break the §3.7 selection/production
-   horizon match, so it changes what stage 1 selected and cannot be done
-   casually); or revisit the cyclical step-size schedule, which
-   `function_space_drift` was written to test (§3.6.2) and which a drift
-   surviving 20 000 burn-in steps implicates. Run this on medium_play alone
-   until something moves raw `loc_sd` in the right direction — and judge it on
-   `loc_sd`, not on the tail statistics, which §4.3.3 shows improve when drift
-   gets worse.
+3. **Test the cyclical schedule — one run, compute-matched (§4.3.5).** This is
+   now the leading hypothesis and the ordering has changed on evidence:
+
+   - **`use_cyclical_lr False --keep_every 2750` — do this first.** The
+     schedule is a bolt-on to Wu et al. (2025) with no stationarity guarantee
+     for these dynamics, sampling runs 220 000 steps against 20 000 of burn-in,
+     burn-in happens at `lr_min` *before* cycling starts, and the spread grows
+     alongside the location. One run settles it.
+   - **`chain_init_jitter > 0`** — still stage 3's to set (§4.1), but for
+     **R-hat honesty**, not for this drift. A common directional shift is not a
+     dispersion problem and jitter will not move `loc_sd` (§4.3.5).
+   - **`num_burn_in_steps`** — weak prior. A transient would have to survive
+     burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
+   - **`num_samples`** — last resort; it breaks the §3.7 selection/production
+     horizon match, so it changes what stage 1 selected.
+
+   Run on medium_play alone until something moves raw `loc_sd`, and judge on
+   `loc_sd` and ALIGNMENT — never on the tail statistics, which §4.3.3 shows
+   improve as drift gets worse.
 
 4. **Only then** resume the ladder, transcribe `num_chains` / `chains_per_gpu`
    into `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, and re-run the

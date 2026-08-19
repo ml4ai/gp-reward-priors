@@ -42,6 +42,7 @@ Examples
 import argparse
 import contextlib
 import io
+import math
 import os
 import sys
 
@@ -571,8 +572,21 @@ def per_chain_drift(pred_chains, chain_ids=None):
             print("     chains have in common (GPU, index) before changing any")
             print("     schedule setting.")
     n_pos = int((sgn > 0).sum())
-    print(f"  signed shift: {n_pos}/{len(sgn)} chains positive "
-          f"({'one direction' if n_pos in (0, len(sgn)) else 'mixed'})")
+    n_tot = len(sgn)
+    # Two-sided sign test.  The earlier "one direction / mixed" label only fired
+    # at a unanimous split, which called 14/16 (p ~ 0.004) "mixed" while the
+    # alignment statistic below called the same data a common drift.
+    k = max(n_pos, n_tot - n_pos)
+    p_sign = min(1.0, 2.0 * sum(math.comb(n_tot, i)
+                                for i in range(k, n_tot + 1)) / 2.0 ** n_tot)
+    if p_sign < 0.01:
+        sign_verdict = "STRONGLY directional"
+    elif p_sign < 0.05:
+        sign_verdict = "directional"
+    else:
+        sign_verdict = "no clear direction"
+    print(f"  signed shift: {n_pos}/{n_tot} chains positive -- {sign_verdict} "
+          f"(sign test p = {p_sign:.4f})")
 
     num = np.abs(delta.mean(axis=0))
     den = np.abs(delta).mean(axis=0) + eps
@@ -595,6 +609,128 @@ def per_chain_drift(pred_chains, chain_ids=None):
     print("  NOTE: single-chain loc_z has the fewest draws behind it of any")
     print("  reading here, so it is the LOWEST-power form of the gate (4.2.1).")
     print("  Rank chains on loc_sd; use loc_z only to compare like with like.")
+
+
+def drift_blocks(pred_chains, n_blocks=5):
+    """Is the drift DECAYING (a transient) or CONSTANT (an ongoing drive)?
+
+    The 4.2 gate splits each chain in half, which gives one number and cannot
+    tell those apart -- yet they call for opposite fixes:
+
+      * A relaxation transient from a start that is not in the typical set
+        decays as the chain approaches equilibrium.  Block-to-block shifts
+        shrink.  MORE BURN-IN fixes it.
+      * An ongoing systematic drive -- a step-size schedule that injects energy
+        faster than it dissipates, or weight-space diffusion along directions
+        that are only approximately f-preserving (section 3.6.2) -- displaces
+        the chain by the same amount every cycle.  Block-to-block shifts stay
+        flat, and NO amount of burn-in helps because the drive acts during
+        sampling, after burn-in has ended.
+
+    Splits the draws into consecutive blocks and reports, per block, the shift
+    from the previous block and the cumulative shift from the first, both in
+    pooled-sd units, plus each block's spread relative to the first.  The
+    spread column matters independently: a chain being progressively HEATED
+    widens without its mean necessarily moving, which is what `scale_ratio`
+    in the 4.2 gate reports as a single number.
+
+    Draws are collected one per cycle at the coldest step, so block index is
+    proportional to cycle count and a flat shift column means a fixed
+    displacement per cycle.
+    """
+    a = np.asarray(pred_chains, dtype=np.float64)
+    C, D, P = a.shape
+    print(f"\n=== DRIFT ACROSS DRAW BLOCKS ({n_blocks} blocks) ===")
+    if n_blocks < 3 or D // n_blocks < 3:
+        print(f"  need >= 3 blocks of >= 3 draws each; have {D} draws "
+              f"-- not computed.")
+        return
+    w = D // n_blocks
+    eps = 1e-12
+    sd = a.reshape(-1, P).std(axis=0) + eps
+    means, sds = [], []
+    for b in range(n_blocks):
+        blk = a[:, b * w:(b + 1) * w, :]
+        means.append(blk.reshape(-1, P).mean(axis=0))
+        sds.append(blk.reshape(-1, P).std(axis=0) + eps)
+
+    # Noise floor.  Without it a STATIONARY chain reads as a constant drive:
+    # its block-to-block shifts are pure Monte Carlo scatter, which is flat by
+    # construction.  For a block of `ess_b` effective draws the median |shift|
+    # of a stationary chain is ~0.6745*sqrt(1/ess_a + 1/ess_b) in sd units.
+    # ESS is taken on the full chains and scaled by the block fraction -- a
+    # per-block ESS on w draws is too unstable to trust.
+    ess_full = float(np.median(np.asarray(azs.ess(a), dtype=np.float64)))
+    ess_blk = max(ess_full * (w / float(D)), 1.0)
+    floor = 0.6745 * math.sqrt(2.0 / ess_blk)
+
+    print(f"  {'block':>6} {'draws':>9} {'shift/prev':>11} {'x floor':>8} "
+          f"{'cum/first':>10} {'sd/first':>9}")
+    print("  " + "-" * 59)
+    steps = []
+    for b in range(n_blocks):
+        lo, hi = b * w, (b + 1) * w
+        cum = float(np.median(np.abs(means[b] - means[0]) / sd))
+        sdr = float(np.median(sds[b] / sds[0]))
+        if b == 0:
+            print(f"  {b:>6} {f'{lo}-{hi - 1}':>9} {'--':>11} {'--':>8} "
+                  f"{cum:>10.4f} {sdr:>9.4f}")
+        else:
+            stp = float(np.median(np.abs(means[b] - means[b - 1]) / sd))
+            steps.append(stp)
+            print(f"  {b:>6} {f'{lo}-{hi - 1}':>9} {stp:>11.4f} "
+                  f"{stp / floor:>8.2f} {cum:>10.4f} {sdr:>9.4f}")
+
+    print(f"\n  noise floor {floor:.4f} per block step "
+          f"(ESS {ess_full:.1f} over {D} draws -> {ess_blk:.1f} per block).")
+    print("  A STATIONARY chain sits AT the floor, so 'flat' only means")
+    print("  'ongoing drive' when the shifts CLEAR it.")
+
+    sd_last = float(np.median(sds[-1] / sds[0]))
+    if max(steps) < 2.0 * floor:
+        print(f"  -> SHAPE NOT RESOLVED.  No block step reaches 2x the floor "
+              f"(max {max(steps) / floor:.2f}x),")
+        print("     so the mean shifts here are consistent with noise and the")
+        print("     decaying-vs-flat question CANNOT be answered at this block")
+        print("     count.  Re-run with fewer blocks, and read the two columns")
+        print("     that are better determined: cum/first, and sd/first -- a")
+        print("     variance ratio converges faster than a difference of means.")
+        if sd_last > 1.2:
+            print(f"     sd/first reaches {sd_last:.4f}: the chain IS widening")
+            print("     even though the location shape is unresolved, which")
+            print("     points at energy injected per cycle (heating) rather")
+            print("     than a start transient.")
+        return
+
+    if len(steps) < 2:
+        return
+    half = max(1, len(steps) // 2)
+    early = float(np.mean(steps[:half]))
+    late = float(np.mean(steps[-half:]))
+    ratio = late / max(early, eps)
+    print(f"  early block-to-block shift {early:.4f} -> late {late:.4f}  "
+          f"({ratio:.2f}x)")
+    if ratio < 0.5:
+        print("  -> DECAYING.  The shift is dying out, consistent with a")
+        print("     relaxation transient from the shared start.  MORE BURN-IN")
+        print("     is the fix; the drive is not ongoing.")
+    elif ratio > 1.5:
+        print("  -> GROWING.  The chain is being driven harder as sampling")
+        print("     proceeds, not settling.  Suspect an energy injection that")
+        print("     accumulates -- the cyclical schedule is the first thing to")
+        print("     rule out (run with use_cyclical_lr=False at matched steps).")
+    else:
+        print("  -> FLAT.  A constant displacement per block, i.e. per cycle.")
+        print("     This is an ONGOING DRIVE acting during sampling, not a")
+        print("     transient, so MORE BURN-IN CANNOT FIX IT -- burn-in ends")
+        print("     before the drive starts.  Rule out the cyclical schedule")
+        print("     first (use_cyclical_lr=False at matched total steps); if")
+        print("     the drift survives that, suspect weight-space diffusion")
+        print("     that is only approximately f-preserving (section 3.6.2).")
+    if sds and float(np.median(sds[-1] / sds[0])) > 1.2:
+        print("  NOTE: the spread is also growing (sd/first > 1.2 at the last")
+        print("  block).  A widening chain is being heated, which points at")
+        print("  energy injected per cycle rather than at a start transient.")
 
 
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
@@ -718,6 +854,13 @@ def main():
                          "equilibrated -- more chains cannot help) from "
                          "independent per-chain wandering (more chains do "
                          "help). Needs no extra sampling (section 4.3.4).")
+    ap.add_argument("--drift-blocks", type=int, default=None, metavar="K",
+                    help="Split the draws into K consecutive blocks and report "
+                         "the block-to-block shift. Separates a DECAYING "
+                         "transient (fix: more burn-in) from a FLAT per-cycle "
+                         "drive (burn-in cannot fix it -- it acts during "
+                         "sampling). Try K=5. Needs no extra sampling "
+                         "(section 4.3.5).")
     ap.add_argument("--max-draws", type=int, default=None,
                     help="Use only the first N draws per chain (default: all). "
                          "Lets one completed run stand in for a smaller budget.")
@@ -782,6 +925,9 @@ def main():
 
     if args.per_chain_drift:
         per_chain_drift(pred_chains, chain_ids=chain_ids)
+
+    if args.drift_blocks:
+        drift_blocks(pred_chains, n_blocks=args.drift_blocks)
 
     if args.draw_ladder:
         try:
