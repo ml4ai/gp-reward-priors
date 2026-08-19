@@ -534,7 +534,7 @@ carrying real information).
 
 | deviation | status |
 |---|---|
-| **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. **2026-08-18: that check has now fired.** medium_play carries a location drift common to 14 of 16 chains (alignment 0.7564) that does not shrink with chain count, alongside a growing spread (`scale_ratio` 1.47). The schedule is the leading suspect — sampling runs 220 000 steps against 20 000 of burn-in, and burn-in happens at `lr_min` *before* cycling starts, so any schedule-induced drift begins at the first sampling step and no burn-in reaches it. **Not yet established**; the compute-matched `use_cyclical_lr False` run in §4.3.5 is the decisive test. If it is the cause, this row stops being a disclosure and becomes a finding. |
+| **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. **2026-08-18: that check fired** — medium_play carries a location drift common to 14 of 16 chains (alignment 0.7564) that does not shrink with chain count. **2026-08-19: the schedule was tested directly and CLEARED** (§4.3.6). At matched compute, `use_cyclical_lr False` made the drift *worse* on every axis (`loc_sd` 0.4222 → 0.5443, `scale_ratio` 1.4361 → 2.1326, `scale_z` 1.3564 → 2.5834, failing a gate it had passed), so the drift is intrinsic to the sampler or model, not the schedule. **That run also supplies the empirical support this row previously lacked:** without cycling, predictive CE degrades 0.2029 → 0.3580 and accuracy drops 6.3 points. Report the composition as tested and retained on evidence, not merely assumed. **One new caveat to disclose:** the cyclical run's average LR is ~2.25× the constant-LR run's, yet its spread grows far *less* (1.44× vs 2.13×), so the per-cycle anneal appears to re-concentrate the chain. Sampling only at the cold point may therefore under-disperse relative to the true posterior — untested, and not measured by `scale_ratio`, which is a growth ratio rather than an absolute width. |
 | **`max_param_step: 0.5`** clamps momentum every step, sampling included | Not measure-preserving when it binds, and unlike the gradient clip it was never scoped to burn-in. Now instrumented: `param_clamp_sampling_pct` must be ~0 on any selected run, else that run sampled the wrong measure. |
 | **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
 | **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action. |
@@ -1183,6 +1183,12 @@ remains worth setting for **R-hat honesty** — shared starts understate
 between-chain variance, per `f_pref_net.py:130` — but that is a separate defect
 and it will not move `loc_sd`. §4.1 still holds that stage 3 owns the parameter.
 
+> **The schedule hypothesis below was REFUTED by direct test on 2026-08-19 —
+> see §4.3.6.** Turning the schedule off made the drift *worse* on every axis.
+> The per-chain result above stands; only the attribution paragraphs that
+> follow are wrong. They are kept because the reasoning was sound and the
+> refutation is the useful part of the record.
+
 **The schedule is the leading suspect, and the arithmetic favours it.**
 From the `c16` config: `sghmc_lr` 2.4897e-4, `sghmc_lr_max` 8.7152e-4
 (**3.50×**), `cycle_length` 2750, `samples_per_cycle` 1, `fraction_cool` 0.337,
@@ -1255,6 +1261,97 @@ schedule is the cause and stage 3's remit changes from a budget to a schedule
 decision. If it survives, the schedule is exonerated and the next suspect is
 weight-space diffusion along directions that are only approximately
 f-preserving (§3.6.2) — which would show up as `loc_sd` tracking ‖w‖ growth.
+
+### 4.3.6 The schedule is exonerated — measured 2026-08-19
+
+The compute-matched `use_cyclical_lr False` run (`stage3_medium_play_nocyc_0`,
+wandb `60a6b467`) against the `c8` cyclical run. Both 8 chains, so the z-scores
+are comparable as well as the raw effect sizes; identical `sghmc_lr`, `mdecay`,
+`num_samples` 75, `num_burn_in_steps` 20 000, `n_discarded` 5, seed 0,
+`batch_size` 64, `n_meas` 35, `chain_init_jitter` 0. Runtimes 8 879 s vs 8 304 s
+confirm the compute match.
+
+| metric | `c8` cyclical | `nocyc` | |
+|---|---|---|---|
+| raw `loc_sd` | 0.4222 | **0.5443** | 1.29× **worse** |
+| `loc_z` | 1.1385 | 1.3217 | worse |
+| raw `scale_ratio` | 1.4361 | **2.1326** | 1.49× **worse** |
+| `scale_z` | 1.3564 | **2.5834** | now **FAILS** the 2.0 gate |
+| predictive CE | 0.2029 | **0.3580** | much worse |
+| predictive accuracy | 0.9172 | 0.8539 | −6.3 points |
+
+**The cyclical schedule does not cause the drift.** Removing it made every
+stationarity metric worse and pushed `scale_z` past a gate it had passed. The
+drift is present with a constant step size, so it is intrinsic to the sampler or
+the model. §4.3.5's hypothesis is refuted.
+
+**The schedule is also doing real work, which closes a gap in §3.6.2.** That
+deviation was recorded as deliberate but *unsupported* — justified on the
+argument that standard SGHMC gets trapped in a single basin, with no empirical
+evidence. This run is that evidence: without cycling, CE degrades 0.2029 →
+0.3580 and accuracy drops 6.3 points at matched compute. The most-suspected
+deviation turns out to be the one carrying measured support.
+
+**The momentum-resampling confound is quantitatively void.** Momentum
+resampling fires only inside the cyclical branch (`f_pref_net.py:772`), so the
+`nocyc` run dropped both cycling *and* resampling, and this was initially
+flagged as a confound. The arithmetic dismisses it. The update is
+`m <- m*(1 - mdecay) + force + noise` (`adaptive_sghmc.py:156–159`), so with
+`mdecay` 0.19462 the momentum autocorrelation time is **4.62 steps** and the
+fraction retained after one 2750-step cycle is **3e-259** — the memory is gone
+within ~100 steps. A resample at cycle start cannot influence a sample collected
+2750 steps later, in either the location or the spread. Resampling from the
+*stationary* law is measure-preserving anyway; it only decorrelates. **So the
+run does isolate the LR schedule after all**, and the confound needs no
+follow-up. It would only matter at cycle lengths under ~50 steps.
+
+**Therefore the spread difference is the schedule's doing, not momentum's**, and
+its direction is worth noting. The cyclical run's *average* LR over a cycle is
+`(lr_min + lr_max)/2` = 5.6e-4, about 2.25× the constant 2.49e-4, so naively it
+should diffuse more — yet its spread grows far less (1.44× vs 2.13×). The
+per-cycle anneal appears to re-concentrate the chain, with each sample taken at
+the coldest step after a quench. Two consequences, both to carry forward:
+
+- It supports **weight-space diffusion** (§3.6.2) as the underlying driver: free
+  diffusion accumulates monotonically at constant LR, and the quench partially
+  counteracts it.
+- It raises a **new question about the cyclical run itself** — sampling only at
+  the cold point may *under-disperse* relative to the true posterior, which
+  would flatter every diagnostic. Note `scale_ratio` measures spread *growth*
+  between halves, not absolute width, so nothing here measures that bias. It is
+  untested and belongs on the disclosure list.
+
+**What remains, and what discriminates.** Both surviving hypotheses must explain
+a drift common to 14/16 chains (alignment 0.7564) — random slow mixing would
+give ~0.25, so the cause is systematic:
+
+1. **Common relaxation from the shared start.** `chain_init_jitter` is 0, so
+   every chain begins at the *identical* warm-up point. §4.3.5 demoted this too
+   quickly; with the schedule exonerated it is the remaining mechanism that
+   naturally produces a common *direction*.
+2. **Weight-space diffusion only approximately f-preserving** (§3.6.2). §7.1
+   records round 1's weight norm growing 4.09× in *all eight* chains, so
+   systematic norm growth is common across chains too and survives the alignment
+   test.
+
+`chain_init_jitter` now discriminates rather than merely fixing R-hat. It is a
+per-tensor relative perturbation, `chain_init_jitter * std(w)` seeded per chain
+(`f_pref_net.py:136–143`). **If the common drift comes from the shared start,
+jittering the starts must drop ALIGNMENT.** If alignment stays near 0.75 with
+jittered starts, hypothesis 1 is dead and the cause is diffusion. Run it
+cyclical — `nocyc` is worse on every axis and is not the configuration to build
+on:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 --chain_init_jitter 0.1 \
+    --OUT_DIR ./exp/stage3_medium_play_jit > ../exp/stage3_medium_play_jit.log 2>&1 &
+```
+
+Then `--per-chain-drift` and compare ALIGNMENT against 0.7564, and `loc_sd`
+against `c8`'s 0.4222. Unlike the burn-in lever, this gives a different answer
+under each hypothesis.
 
 ### 4.4 Procedure
 
@@ -1999,7 +2096,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2) plus the half-split (§4.3.3). The ladder's axis is orthogonal to the binding constraint: a within-chain drift that does not shrink with draws. No budget selected; `c32` is not to be run. Next is `--per-chain-drift` on the existing chains (§4.3.4), then `chain_init_jitter`, which §4.1 shows stage 3 always owned and never set |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared. Next is `chain_init_jitter 0.1`, which now discriminates between the shared start and weight-space diffusion (§4.3.6) |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2046,6 +2143,13 @@ ladders an axis orthogonal to the binding constraint. **No budget can be
 selected from this ladder**, and the flat `cvar_mcse_rel_median` across 4× the
 compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
 
+**Since then**, `--per-chain-drift` showed the drift is common to 14/16 chains
+(alignment 0.7564, §4.3.5), and the compute-matched non-cyclical control cleared
+the cyclical schedule while incidentally supplying the empirical support §3.6.2
+lacked for it (§4.3.6). The cause is still unidentified; the shared start and
+weight-space diffusion are the two survivors, and `chain_init_jitter`
+distinguishes them.
+
 **Do this next, in order:**
 
 1. **Do not run `c32`, and do not start the other three variants' ladders.**
@@ -2070,17 +2174,21 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
    counter-drifting chains happened to land in the lower half — and closes the
    GPU question, since those two sit on different GPUs.
 
-3. **Test the cyclical schedule — one run, compute-matched (§4.3.5).** This is
-   now the leading hypothesis and the ordering has changed on evidence:
+3. **The cyclical schedule is CLEARED — done 2026-08-19 (§4.3.6).** Turning it
+   off at matched compute made the drift worse on every axis and cost 6.3
+   accuracy points, so the drift is intrinsic to the sampler or model. Do not
+   build on the `nocyc` configuration. Remaining levers, reordered on that
+   evidence:
 
-   - **`use_cyclical_lr False --keep_every 2750` — do this first.** The
-     schedule is a bolt-on to Wu et al. (2025) with no stationarity guarantee
-     for these dynamics, sampling runs 220 000 steps against 20 000 of burn-in,
-     burn-in happens at `lr_min` *before* cycling starts, and the spread grows
-     alongside the location. One run settles it.
-   - **`chain_init_jitter > 0`** — still stage 3's to set (§4.1), but for
-     **R-hat honesty**, not for this drift. A common directional shift is not a
-     dispersion problem and jitter will not move `loc_sd` (§4.3.5).
+   - **`chain_init_jitter 0.1`, cyclical — do this first.** It is now a
+     *discriminating* experiment, not just an R-hat fix: if the common drift
+     comes from the shared start, jittering must drop ALIGNMENT from 0.7564;
+     if alignment holds, the shared start is dead and the cause is weight-space
+     diffusion (§4.3.6). Different answer under each hypothesis, one run.
+   - **Test the diffusion hypothesis** if jitter does not move alignment: check
+     whether `loc_sd` tracks ‖w‖ growth across draws (§3.6.2). §7.1 records the
+     round-1 norm growing 4.09× in every chain, so this is the mechanism with a
+     precedent in this project.
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production
