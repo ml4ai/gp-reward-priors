@@ -1338,20 +1338,86 @@ give ~0.25, so the cause is systematic:
 per-tensor relative perturbation, `chain_init_jitter * std(w)` seeded per chain
 (`f_pref_net.py:136–143`). **If the common drift comes from the shared start,
 jittering the starts must drop ALIGNMENT.** If alignment stays near 0.75 with
-jittered starts, hypothesis 1 is dead and the cause is diffusion. Run it
-cyclical — `nocyc` is worse on every axis and is not the configuration to build
-on:
+jittered starts, hypothesis 1 is dead and the cause is diffusion.
+
+> **Sizing correction (§4.3.7).** This was first run at **8 chains** to save
+> compute, which made it uninformative: ALIGNMENT varies by 0.41 and pooled
+> `loc_sd` by 2.10× between the two halves of a single jitter-0 run, against a
+> jitter effect of 0.046. Run it at **16 chains**, the only size with a matched
+> baseline (`c16`: ALIGNMENT 0.7564, `loc_sd` 0.6460). Command in §4.3.7.
+
+Run it cyclical — `nocyc` is worse on every axis and is not the configuration
+to build on.
+
+### 4.3.7 The jitter test — measured 2026-08-19. Inconclusive, and why.
+
+`chain_init_jitter 0.1`, 8 chains, cyclical, against `c8` (identical but
+jitter 0):
+
+| metric | `c8` (jitter 0) | `jit 0.1` | |
+|---|---|---|---|
+| raw `loc_sd` | 0.4222 | 0.3493 | −17% |
+| `loc_z` | 1.1385 | 0.9599 | better |
+| raw `scale_ratio` | 1.4361 | **1.5750** | +10% worse |
+| `scale_z` | 1.3564 | **1.7807** | +31% worse |
+| ALIGNMENT | 0.5414 | 0.4955 | −0.046 |
+| unresolved points | 2.25% | 3.11% | worse |
+| `rhat_bulk` median | 1.5972 | 1.4737 | better |
+| `ess_bulk` median | 14.57 | 16.58 | better |
+| per-chain `loc_sd` max/median | 1.33× | 2.07× | outlier chain 2 |
+
+**The experiment cannot answer the question, because 8 chains cannot resolve
+the statistic.** Measuring ALIGNMENT on both halves of the *single* `c16` run —
+same schedule, same jitter 0, same 8 chains each, same draws — gives:
+
+| chains | GPUs | ALIGNMENT | signed | pooled `loc_sd` | verdict |
+|---|---|---|---|---|---|
+| 0–7 | 0,1 | 0.5414 | 6/8, p = 0.2891 | 0.4222 | INDEPENDENT |
+| 8–15 | 2,3 | **0.9516** | **8/8, p = 0.0078** | **0.8877** | COMMON, gate FAILS |
+
+Within one run the C=8 ALIGNMENT spans **0.41** and pooled `loc_sd` spans
+**2.10×**. The jitter effect being tested was 0.046 — **swamped roughly 9×**.
+Both statistics are too variable at 8 chains for this comparison to mean
+anything. The 17% `loc_sd` gain is likewise inside the run-internal range
+(`jit` 0.3493 sits below both halves, which is weakly encouraging and nothing
+more). **Treat jitter as untested, not as refuted.**
+
+**§4.3.5's "common drift" claim stands.** The halves differ for the reason
+§4.3.5 already identified: chains 3 and 4 are the run's only counter-drifting
+chains and both sit in the lower half, where they cancel. Under chance
+placement two counter-drifters land in the same half 47% of the time and in the
+lower half specifically 23% of the time — unremarkable. The 16-chain
+measurement (ALIGNMENT 0.7564, 14/16 positive, p = 0.0042) pools both halves
+and is the reliable one; the two 8-chain readings straddle it. **Prefer the
+16-chain figure and do not read half-splits as independent evidence** — that
+error produced §4.3.3's since-corrected hypothesis and nearly produced a second
+one here.
+
+**GPU placement remains unimplicated but is not fully excluded.** All 16 chains
+ran in one wave (`max_concurrent = num_gpus * chains_per_gpu` = 16), so the
+lower half is GPUs 0,1 and the upper half GPUs 2,3 — the split is exactly along
+a GPU boundary. Chance placement of two chains explains it without invoking
+hardware, and there is no mechanism by which a GPU would bias drift
+*direction*; but with 4 chains per GPU this cannot be settled from the data. If
+the 16-chain jitter run below reproduces a clean lower/upper split, revisit it.
+
+**Redo the test at 16 chains.** That is the only configuration with a matched
+baseline (`c16`: ALIGNMENT 0.7564, `loc_sd` 0.6460), and 8 chains has now been
+shown to be below the resolution of both statistics:
 
 ```
-cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
     --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
-    --seed 0 --num_chains 8 --chains_per_gpu 4 --chain_init_jitter 0.1 \
-    --OUT_DIR ./exp/stage3_medium_play_jit > ../exp/stage3_medium_play_jit.log 2>&1 &
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --chain_init_jitter 0.1 \
+    --OUT_DIR ./exp/stage3_medium_play_jit16 > ../exp/stage3_medium_play_jit16.log 2>&1 &
 ```
 
-Then `--per-chain-drift` and compare ALIGNMENT against 0.7564, and `loc_sd`
-against `c8`'s 0.4222. Unlike the burn-in lever, this gives a different answer
-under each hypothesis.
+**Methodological note for the write-up.** Choosing 8 chains to save compute
+made the run worthless for its purpose; the 16-chain run it was meant to avoid
+is now needed anyway, at a total cost higher than running it first. Where a
+diagnostic's sampling variability is unknown, measure that variability before
+sizing the experiment — here it was available for free from an existing run's
+two halves.
 
 ### 4.4 Procedure
 
@@ -2096,7 +2162,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared. Next is `chain_init_jitter 0.1`, which now discriminates between the shared start and weight-space diffusion (§4.3.6) |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6). The 8-chain `chain_init_jitter` test is inconclusive — 8 chains is below the resolution of both ALIGNMENT and `loc_sd` (§4.3.7). Next is the same test at **16 chains** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2146,9 +2212,11 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
 **Since then**, `--per-chain-drift` showed the drift is common to 14/16 chains
 (alignment 0.7564, §4.3.5), and the compute-matched non-cyclical control cleared
 the cyclical schedule while incidentally supplying the empirical support §3.6.2
-lacked for it (§4.3.6). The cause is still unidentified; the shared start and
-weight-space diffusion are the two survivors, and `chain_init_jitter`
-distinguishes them.
+lacked for it (§4.3.6). The `chain_init_jitter` test meant to separate the two
+remaining hypotheses was run at 8 chains and is **inconclusive**: ALIGNMENT and
+`loc_sd` both vary more between halves of one run than the effect being tested
+(§4.3.7). The cause is still unidentified; the shared start and weight-space
+diffusion are both still live, and the 16-chain jitter run distinguishes them.
 
 **Do this next, in order:**
 
@@ -2180,11 +2248,13 @@ distinguishes them.
    build on the `nocyc` configuration. Remaining levers, reordered on that
    evidence:
 
-   - **`chain_init_jitter 0.1`, cyclical — do this first.** It is now a
-     *discriminating* experiment, not just an R-hat fix: if the common drift
+   - **`chain_init_jitter 0.1` at 16 chains, cyclical — do this first.** It is
+     a *discriminating* experiment, not just an R-hat fix: if the common drift
      comes from the shared start, jittering must drop ALIGNMENT from 0.7564;
      if alignment holds, the shared start is dead and the cause is weight-space
-     diffusion (§4.3.6). Different answer under each hypothesis, one run.
+     diffusion (§4.3.6). **The 8-chain version was run 2026-08-19 and is
+     inconclusive** — 8 chains is below the resolution of both ALIGNMENT and
+     `loc_sd` (§4.3.7). Use 16, and compare against `c16`, not `c8`.
    - **Test the diffusion hypothesis** if jitter does not move alignment: check
      whether `loc_sd` tracks ‖w‖ growth across draws (§3.6.2). §7.1 records the
      round-1 norm growing 4.09× in every chain, so this is the mechanism with a
