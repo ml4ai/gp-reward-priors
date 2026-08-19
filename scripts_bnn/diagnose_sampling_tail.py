@@ -40,6 +40,8 @@ Examples
 """
 
 import argparse
+import contextlib
+import io
 import os
 import sys
 
@@ -491,6 +493,110 @@ def drift_diagnostics(pred_chains):
     return d
 
 
+def per_chain_drift(pred_chains, chain_ids=None):
+    """Per-chain 4.2 gate, and the test that says WHAT KIND of drift it is.
+
+    The pooled gate reports one number for a set of chains, so it cannot
+    distinguish "every chain carries the same drift" from "two chains drift
+    badly and the rest are fine".  Those call for opposite fixes, and the
+    lower-half/upper-half split of 4.3.2 cannot separate them either -- with
+    `chain_init_jitter = 0` every chain starts from the SAME warm-up point and
+    differs only in its RNG stream (`set_seed(seed + chain_idx)`), so chains are
+    exchangeable and any lower-vs-upper gap is chance or GPU placement, not a
+    property of "later" chains.
+
+    The discriminating statistic is the ALIGNMENT of the half-to-half shift
+    across chains.  Let delta[c, p] = E2[f] - E1[f] for chain c at point p, in
+    pooled-sd units.  Then per point compare
+
+        |mean_c delta[c, p]|   (do the chains move TOGETHER?)
+        mean_c |delta[c, p]|   (how far does a typical chain move?)
+
+    Their ratio is ~1 when every chain follows one common trajectory, and
+    ~1/sqrt(C) when the chains wander independently (for iid deltas the numerator
+    is E|N(0, sigma^2/C)| = sigma*sqrt(2/(pi*C)) and the denominator is
+    sigma*sqrt(2/pi)).  A common shift is the signature of a shared start that
+    has not equilibrated: the transient is identical in every chain, so it does
+    not average out over chains and adding chains cannot reduce it -- which is
+    exactly the non-shrinking loc_sd of 4.3.2.  Independent wandering instead
+    says each chain is exploring on its own and pooling more of them helps.
+    """
+    a = np.asarray(pred_chains, dtype=np.float64)
+    C, D, P = a.shape
+    h = D // 2
+    print("\n=== PER-CHAIN DRIFT (section 4.2 gate, one chain at a time) ===")
+    if h < 4 or C < 2:
+        print("  needs >= 2 chains and >= 8 draws -- not computed.")
+        return
+    ids = list(chain_ids) if chain_ids is not None else list(range(C))
+
+    eps = 1e-12
+    sd = a.reshape(-1, P).std(axis=0) + eps
+    delta = (a[:, h:2 * h, :].mean(axis=1) - a[:, :h, :].mean(axis=1)) / sd
+
+    print(f"  {'chain':>6} {'loc_z':>9} {'loc_sd':>9} {'ratio':>9} "
+          f"{'signedShift':>12}")
+    print("  " + "-" * 50)
+    rows = []
+    for k, cid in enumerate(ids):
+        with contextlib.redirect_stdout(io.StringIO()):   # mute its [diag] line
+            d = util.function_space_drift(a[k:k + 1])
+        loc_z = d.get("fn_drift_loc_z_median", float("nan"))
+        loc_sd = d.get("fn_drift_loc_sd_median", float("nan"))
+        ratio = d.get("fn_drift_scale_ratio_median", float("nan"))
+        signed = float(np.median(delta[k]))
+        rows.append((cid, loc_z, loc_sd, ratio, signed))
+        print(f"  {cid:>6} {loc_z:>9.4f} {loc_sd:>9.4f} {ratio:>9.4f} "
+              f"{signed:>12.4f}")
+
+    locs = np.array([r[2] for r in rows], dtype=float)
+    sgn = np.array([r[4] for r in rows], dtype=float)
+    finite = locs[np.isfinite(locs)]
+    spread = float("nan")
+    if finite.size:
+        med = max(float(np.median(finite)), eps)
+        spread = float(finite.max()) / med
+        print(f"\n  loc_sd across chains: min {finite.min():.4f}  "
+              f"median {np.median(finite):.4f}  max {finite.max():.4f}  "
+              f"(max/median {spread:.2f}x)")
+        if spread >= 3.0:
+            worst = [str(r[0]) for r in rows
+                     if np.isfinite(r[2]) and r[2] >= 3.0 * med]
+            print(f"  !! A FEW CHAINS DOMINATE: chain(s) {', '.join(worst)} "
+                  f"drift >=3x the median.")
+            print("     The pooled gate is then reporting those chains, not the")
+            print("     sampler as a whole.  This is a THIRD case, distinct from")
+            print("     both verdicts below: neither one common transient nor")
+            print("     uniform independent wandering.  Look at what those")
+            print("     chains have in common (GPU, index) before changing any")
+            print("     schedule setting.")
+    n_pos = int((sgn > 0).sum())
+    print(f"  signed shift: {n_pos}/{len(sgn)} chains positive "
+          f"({'one direction' if n_pos in (0, len(sgn)) else 'mixed'})")
+
+    num = np.abs(delta.mean(axis=0))
+    den = np.abs(delta).mean(axis=0) + eps
+    align = float(np.median(num / den))
+    indep = 1.0 / np.sqrt(C)
+    print(f"\n  ALIGNMENT  {align:.4f}   (~1.00 = one common drift in every "
+          f"chain;")
+    print(f"  {'':13}~{indep:.4f} = {C} chains wandering independently)")
+    if align >= 0.5 * (1.0 + indep):
+        print("  -> COMMON drift.  Every chain carries the same shift, so it")
+        print("     does not average out over chains and MORE CHAINS CANNOT")
+        print("     REDUCE IT (4.3.2).  Consistent with a shared start that")
+        print("     has not equilibrated: with chain_init_jitter = 0 all chains")
+        print("     begin at the identical warm-up point.  Attack it with")
+        print("     burn-in / chain_init_jitter / the cyclical schedule.")
+    else:
+        print("  -> INDEPENDENT wandering.  The chains are not sharing one")
+        print("     trajectory, so the shared-start transient does NOT explain")
+        print("     the pooled drift, and pooling more chains does help.")
+    print("  NOTE: single-chain loc_z has the fewest draws behind it of any")
+    print("  reading here, so it is the LOWEST-power form of the gate (4.2.1).")
+    print("  Rank chains on loc_sd; use loc_z only to compare like with like.")
+
+
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics.
 
@@ -603,7 +709,15 @@ def main():
                          "Either bound may be omitted. Mutually exclusive with "
                          "--num-chains, which is the same as 0:N. Use this to "
                          "test whether the chains ADDED at a rung drift more "
-                         "than the ones they were added to (section 4.3.2).")
+                         "than the ones they were added to (section 4.3.3).")
+    ap.add_argument("--per-chain-drift", action="store_true",
+                    help="Also run the section 4.2 gate on each chain "
+                         "separately, and report how ALIGNED the chains' "
+                         "half-to-half shifts are. Separates one common drift "
+                         "shared by every chain (a shared start that has not "
+                         "equilibrated -- more chains cannot help) from "
+                         "independent per-chain wandering (more chains do "
+                         "help). Needs no extra sampling (section 4.3.4).")
     ap.add_argument("--max-draws", type=int, default=None,
                     help="Use only the first N draws per chain (default: all). "
                          "Lets one completed run stand in for a smaller budget.")
@@ -665,6 +779,9 @@ def main():
 
     tail_diagnostics(pred_chains, x_rhat=x_rhat, alpha=args.alpha,
                      worst_k=args.worst_k)
+
+    if args.per_chain_drift:
+        per_chain_drift(pred_chains, chain_ids=chain_ids)
 
     if args.draw_ladder:
         try:

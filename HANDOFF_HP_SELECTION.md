@@ -724,6 +724,31 @@ statistics measure nothing here.
 else — the nine selected fields, `num_samples`, `num_burn_in_steps` — stays
 exactly as transcribed.
 
+**Correction (2026-08-18): stage 3 also owns `chain_init_jitter` and
+`samples_per_cycle`.** Every sweep config holds both fixed with the note that
+"their real effects (wall-clock vs tail-ESS; R-hat honesty) are invisible to a
+val-loss metric, so they are set with the tail diagnostics after this sweep, not
+searched by it" — and *this* is that stage. This section said `num_chains` only,
+so the ladder climbed the one axis the sweeps never deferred, while the two they
+did defer stayed at their placeholders. `chain_init_jitter` is still **0.0**,
+which gives every chain an identical start; `f_pref_net.py:136` skips the jitter
+entirely at that value, and its own comment warns that shared starts
+"under-estimate R-hat (chains are artificially similar)". That is a live threat
+to every R-hat in §4.3 and §4.5 and it is where §4.3.2's drift most likely comes
+from — see §4.3.3 and §4.3.4.
+
+When jitter *is* non-zero it is applied **once per chain, in the worker
+process** ([f_pref_net.py:126–143](optbnn/sgmcmc_bayes_net/f_pref_net.py:126)):
+after the shared warm-up weights are copied in, and **before** that chain's own
+`num_burn_in_steps` burn-in and any sampling. Per parameter tensor it adds
+`randn_like(param) * chain_init_jitter * std(param)` — a *relative* perturbation
+scaled by each tensor's own spread, drawn from the chain's RNG stream
+(`set_seed(seed + chain_idx)`), so it is deterministic in (seed, chain index)
+and tensors with zero spread are left alone. Note the ordering consequence: the
+per-chain burn-in runs *after* the jitter, so a small jitter can be substantially
+washed out before the first draw is kept, and the dispersion that reaches the
+samples is not the dispersion that was injected.
+
 **`num_samples` is pinned at 75 and is NOT a free parameter.** Stage 1 scored
 candidates at 75 draws per chain, so 75 is the horizon at which the winners were
 certified. Total draws are bought with chains, which do not extend any chain's
@@ -1002,16 +1027,19 @@ low-power PASS.
 
 **What follows.** Do not launch `c32`: it would fail the gate harder on power
 while saying nothing new about a within-chain problem, and it costs a full run.
-The next experiment has to move `num_samples` and/or `num_burn_in_steps`, or the
-cyclical step-size schedule that `function_space_drift` also tests (§3.6.2) —
-a drift surviving 20 000 burn-in steps implicates the schedule as much as the
-budget.
+The next experiment has to move `chain_init_jitter` (§4.1 — the sweeps always
+deferred it to this stage, and it is still at the 0.0 that gives every chain an
+identical start), `num_burn_in_steps` and/or `num_samples`, or the cyclical
+step-size schedule that `function_space_drift` also tests (§3.6.2) — a drift
+surviving 20 000 burn-in steps implicates the schedule as much as the budget.
+
+> **§4.3.3 corrects two things below.** The `c16` unresolved-count improvement
+> in the table above is a drift artifact, not progress; and the initialisation
+> hypothesis at the end of this section is refuted — with `chain_init_jitter =
+> 0` there is no per-chain initialisation to equilibrate.
 
 The cheapest discriminating measurement needs no new sampling: compare the two
-halves of the existing `c16` run against each other. The added chains are what
-raised the drift, so if chains 9–16 drift more than chains 1–8 under identical
-settings, the cause is initialisation not equilibrating inside the fixed
-burn-in — a far cheaper thing to fix than the schedule. `--chain-range` selects
+halves of the existing `c16` run against each other. `--chain-range` selects
 a non-prefix slice (0-based, END exclusive, matching the on-disk `chain_N`
 names, so the chains this section calls 9–16 in prose are `8:16`):
 
@@ -1030,6 +1058,93 @@ plumbing is sound before the `8:16` number is trusted. Note that neither half
 answers this on the z-scores: both are 8-chain selections, so they are equal in
 power and directly comparable, but §4.2.1 still applies to reading them against
 the 16-chain numbers. Compare the halves on raw `loc_sd`.
+
+### 4.3.3 The half-split — measured 2026-08-18. Two corrections to §4.3.2.
+
+Both halves are 8 chains × 75 draws from the same run, so they are equal in
+power and directly comparable (§4.2.1).
+
+| | lower `0:8` | upper `8:16` | full `c16` |
+|---|---|---|---|
+| `loc_z` median | 1.1385 | **2.5848** | 2.5152 |
+| `loc_sd` median | **0.4222** | **0.8877** (2.10×) | 0.6460 |
+| `scale_z` / ratio | 1.3564 / 1.4361 | 1.4599 / 1.4897 | 1.9962 / 1.4664 |
+| §4.2 verdict | PASS | **FAIL** | FAIL |
+| `rhat_bulk` median | 1.5972 | 1.8072 | 1.7037 |
+| `cvar_ess_median` | 59.2 | **66.2** | 89.4 |
+| `cvar_mcse_rel_median` | 0.2706 | **0.1810** | 0.2234 |
+| unresolved | 144 (2.25%) | **22 (0.34%)** | 42 (0.66%) |
+
+`0:8` reproduced the standalone `c8` capture exactly, so the range plumbing is
+sound. The upper half drifts **2.10×** more on raw effect size. Two things
+follow, and both correct §4.3.2.
+
+**Correction 1 — the initialisation hypothesis is refuted, not confirmed.**
+§4.3.2 proposed that chains 9–16 drift more because initialisation had not
+equilibrated inside the burn-in. There is no per-chain initialisation to fail.
+**`chain_init_jitter = 0`** for every run in this project (the sweeps set it
+explicitly, the production configs omit it and take the same code default), and
+at `f_pref_net.py:136` the jitter block is skipped entirely at zero — the
+comment there reads `0.0 -> identical shared start`. All 16 chains begin at the
+*same* warm-up point and differ only in `set_seed(seed + chain_idx)`, which
+drives the SGHMC noise stream and the minibatch order. The chains are therefore
+**exchangeable by construction**, and no mechanism makes "later" ones worse.
+What is left for the 2.10× is chance across 8-vs-8 exchangeable chains, or GPU
+placement — `device_idx = rank // chains_per_gpu` puts 0–7 on GPUs 0–1 and 8–15
+on GPUs 2–3. The half-split cannot separate those; §4.3.4 can.
+
+**Correction 2 — `c16`'s tail improvement is a drift artifact.** §4.3.2 records
+unresolved falling 2.25% → 0.66% at `c16` without comment. The half that drifts
+*more* has the **better** tail statistics: higher CVaR ESS, lower relative
+MCSE, and 6.5× fewer unresolved points. Drift inflates within-chain variance and
+widens the predictive spread (`sd2/sd1 ≈ 1.49`), which populates the lower 5%
+and makes the tail look better resolved. So `c16`'s headline improvement is
+contributed by its worst-behaved chains. This is §7.1's round-1 pathology
+recurring inside the tail diagnostics that were built to replace R-hat — the
+same lesson, one level further in. Note `rhat_bulk` moves the other way
+(1.5972 → 1.8072), which is why the two must be read together.
+
+### 4.3.4 Per-chain drift — what to measure instead
+
+The pooled gate cannot distinguish one drift shared by every chain from two
+chains drifting badly among fourteen that are fine, and those call for opposite
+fixes. `--per-chain-drift` runs the §4.2 gate on each chain separately and adds
+the statistic that separates them. With `delta[c,p] = E2[f] - E1[f]` for chain
+`c` at point `p` in pooled-sd units, compare per point
+
+    |mean_c delta[c,p]|   do the chains move TOGETHER?
+    mean_c |delta[c,p]|   how far does a typical chain move?
+
+Their ratio is ~1 when every chain follows one common trajectory and ~1/√C when
+the chains wander independently. **A common shift is the signature of a shared
+start that has not equilibrated**: the transient is identical in every chain, so
+it does not average out over chains, and adding chains cannot reduce it — which
+is exactly the non-shrinking `loc_sd` of §4.3.2. Independent wandering says the
+opposite, that pooling more chains does help. A third case — a few chains
+dominating — is flagged separately when the per-chain `loc_sd` max is ≥3× the
+median, because the pooled gate is then reporting those chains rather than the
+sampler.
+
+Verified on synthetic chains: a common ramp gives alignment 0.9987 with 16/16
+chains shifting one way, independent random-sign ramps give 0.0904, and two
+planted outliers among fourteen stationary chains are named individually at
+6.20× the median.
+
+This is the measurement that decides what the next *sampling* run should change,
+so run it before choosing between burn-in, `chain_init_jitter`, and the
+schedule:
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --per-chain-drift \
+    2>&1 | tee exp/stage3_medium_play_c16_0_perchain_diag_tail.txt
+```
+
+If it reports COMMON drift, the shared start is implicated and
+`chain_init_jitter` is the first thing to move — see §4.1, which the sweep
+configs always intended stage 3 to set. If it names a few outlier chains,
+check what they share (GPU index above all) before touching any schedule
+setting.
 
 ### 4.4 Procedure
 
@@ -1218,7 +1333,13 @@ unresolved ones are genuinely multimodal states. `--ce-ladder` and
 `--draw-ladder` answer "would fewer draws have done?" from a completed run.
 `--num-chains N` reads only the first N chains, which — because chains are
 deterministic in (seed, index) — reproduces the lower rung exactly and isolates
-what the added chains changed (§4.3.1). `--chain-range START:END` generalises
+what the added chains changed (§4.3.1). `--chain-range START:END` selects any
+slice, so the chains a rung *added* can be read on their own (§4.3.3).
+`--per-chain-drift` runs the gate on each chain separately and reports how
+aligned the chains' shifts are, separating one common drift from a few outlier
+chains (§4.3.4). Every capture now leads with the §4.2 gate recomputed from the
+saved chains, which is the only way to get it for a chain subset — wandb has
+`fn_drift_*` for the run as a whole and nothing finer. `--chain-range START:END` generalises
 that to any slice, so the chains a rung *added* can be measured on their own
 rather than only in aggregate (§4.3.2). It is 0-based with END exclusive, like
 a Python slice and like the `chain_N` directory names; `--num-chains N` is
@@ -1768,7 +1889,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2). The ladder's axis is orthogonal to the binding constraint: a within-chain drift that does not shrink with draws. No budget selected; `c32` is not to be run (§4.3.2) |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2) plus the half-split (§4.3.3). The ladder's axis is orthogonal to the binding constraint: a within-chain drift that does not shrink with draws. No budget selected; `c32` is not to be run. Next is `--per-chain-drift` on the existing chains (§4.3.4), then `chain_init_jitter`, which §4.1 shows stage 3 always owned and never set |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -1824,26 +1945,35 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
    z-gate (§4.3.2) — so laddering them would reproduce this result three more
    times rather than test it.
 
-2. **Isolate which chains drift.** `c16` is `c8` plus eight chains, verified
-   nested to one ULP, and the added chains are what raised the drift. If
-   chains 9–16 drift more than 1–8 under identical settings, the cause is
-   initialisation not equilibrating within the fixed 20 000-step burn-in — a
-   much cheaper thing to fix than the schedule. This needs **no new sampling**;
-   `--chain-range` (added 2026-08-18) reads the halves off the existing `c16`
-   chains. Run both commands in §4.3.2, check that the `0:8` half reproduces
-   the standalone `c8` capture, then compare the halves on raw `loc_sd` — they
-   are equal in chain count, so §4.2.1's power confound does not affect the
-   comparison. Do this before any new run: it decides which of step 3's
-   candidates is worth spending a run on.
+2. **Isolate which chains drift.** The half-split is **done** (§4.3.3): the
+   upper half drifts 2.10× more on raw `loc_sd`, and the half that drifts more
+   has the *better* tail statistics, so `c16`'s unresolved-count improvement is
+   a drift artifact rather than progress. It also refuted the hypothesis it was
+   built to test — `chain_init_jitter = 0` means there is no per-chain
+   initialisation, so the chains are exchangeable and a lower-vs-upper gap
+   cannot be a property of "later" chains.
+
+   **Still to run, and it needs no new sampling:** `--per-chain-drift` on the
+   existing `c16` chains (§4.3.4). It says whether the drift is one common
+   transient in every chain — which would implicate the shared start, and
+   therefore `chain_init_jitter` — or a few outlier chains, which would point
+   at GPU placement first. **Do this before any new run:** it decides which of
+   step 3's candidates is worth spending a run on, and the two answers lead to
+   different experiments.
 
 3. **Then attack stationarity directly, not the budget.** The candidates, in
-   increasing cost: raise `num_burn_in_steps`; lengthen `num_samples` (which
-   breaks the §3.7 selection/production horizon match, so it changes what
-   stage 1 selected and cannot be done casually); or revisit the cyclical
-   step-size schedule, which `function_space_drift` was written to test
-   (§3.6.2) and which a drift surviving 20 000 burn-in steps implicates. Run
-   this on medium_play alone until something moves `loc_sd` in the right
-   direction.
+   increasing cost: **`chain_init_jitter > 0`**, which stage 3 was always meant
+   to set (§4.1) and which is the direct remedy if step 2 reports a common
+   drift — it is also the only one of these that does not disturb the §3.7
+   horizon match or the nine selected fields; raise `num_burn_in_steps`;
+   lengthen `num_samples` (which *does* break the §3.7 selection/production
+   horizon match, so it changes what stage 1 selected and cannot be done
+   casually); or revisit the cyclical step-size schedule, which
+   `function_space_drift` was written to test (§3.6.2) and which a drift
+   surviving 20 000 burn-in steps implicates. Run this on medium_play alone
+   until something moves raw `loc_sd` in the right direction — and judge it on
+   `loc_sd`, not on the tail statistics, which §4.3.3 shows improve when drift
+   gets worse.
 
 4. **Only then** resume the ladder, transcribe `num_chains` / `chains_per_gpu`
    into `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, and re-run the
