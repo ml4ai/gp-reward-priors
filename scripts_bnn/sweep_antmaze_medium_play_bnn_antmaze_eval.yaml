@@ -67,9 +67,9 @@ parameters:
   # 4 chains on a single GPU, so all four variants' sweeps run concurrently
   # on 4 of leviathan's 6 GPUs under the section 10.7 thread caps.
   num_chains:
-    value: 8
+    value: 4
   chains_per_gpu:
-    value: 2
+    value: 4
   # 75 draws/chain, NOT round 1's 35.  Round 1's horizon was ~1/9 of
   # production, and the failure mode it missed only becomes visible in the
   # metric with length: in the round-1 pilot val CE ran 0.2953 -> 0.3036 ->
@@ -81,7 +81,7 @@ parameters:
   # horizon, so selection and production then run at the same horizon by
   # construction and the round-1 mismatch cannot recur.
   num_samples:
-    value: 310
+    value: 75
   n_discarded:
     value: 5
   # 20000, NOT round 1's 5000.  Burn-in now runs at the swept `sghmc_lr`,
