@@ -1748,6 +1748,108 @@ itself needs revisiting. Note the halves being compared grow with the run
 (75 vs 37 draws), so this is not an apples-to-apples ratio — it is the right
 comparison anyway, because the question is whether a *longer* chain equilibrates.
 
+### 4.3.12 The `d150` run — measured 2026-08-20. Both budget axes are exhausted.
+
+`num_samples 150`, 16 chains, otherwise identical to `c16`. **Diagnostic only —
+it breaks §3.7's horizon match and its CE/accuracy must never feed selection.**
+
+| metric | `c16` (75 draws) | `d150` (150 draws) | |
+|---|---|---|---|
+| centred `loc_sd` | 0.3232 | 0.3243 | **1.003×** — unchanged |
+| centred `ratio` | 1.6026 | 1.5470 | 0.965× |
+| centred `scale_z` | 2.5906 | 2.3741 | still **FAIL** |
+| raw `ratio` | 1.4664 | 1.5063 | worse |
+| raw `scale_z` | 1.9962 | 2.0226 | now **FAIL** too |
+
+§4.3.11 posed the test as: falling toward 1 means the horizon was simply too
+short; holding at ~1.6 means an instability no budget fixes. **It held.** A 3.5%
+reduction on double the sampling is not equilibration.
+
+**The budget bought nothing at all.** This is the part that settles stage 3:
+
+| | `c16` | `d150` | |
+|---|---|---|---|
+| `ess_bulk` median | 26.83 | 27.98 | **+4%** on 2× the draws |
+| sampling efficiency | 2.24% | 1.17% | **halved** |
+| `cvar_ess_median` | 89.42 | 83.59 | **0.935× — went DOWN** |
+
+Doubling the draws per chain produced 4% more effective samples and *fewer*
+effective CVaR draws. §4.6's failure mode — ESS flat while the estimand is still
+moving — now holds on the **draws** axis as well as the chains axis. Stage 3
+raises `num_chains`; §4.1's other lever is `num_samples`; **neither works.**
+
+**Why: the spread grows as a scale-free power law.** From the block `sd/first`
+column, fitting `sd(t) ∝ t^α` at block centres 15/45/75/105/135 draws:
+
+| t | `sd/first` | α |
+|---|---|---|
+| 45 | 1.4337 | 0.328 |
+| 75 | 1.8282 | 0.375 |
+| 105 | 2.2232 | 0.411 |
+| 135 | 2.3256 | 0.384 |
+
+α ≈ 0.37–0.41, against **0.5 for free diffusion**. The half-split ratio implies
+α = 0.397 independently. A power law is **scale-invariant**: `sd2/sd1` over
+halves does not depend on the horizon, which is exactly why 1.6026 at 37-vs-37
+draws became 1.5470 at 75-vs-75. **No draw budget can fix a scale-free
+widening** — that is a property of the process, not of the window. The spread
+reaches 2.33× its initial value within a single chain's 150 draws.
+
+The identified component is therefore **diffusing, not mixing**, at a rate
+slightly sub-diffusive. That is the concrete form of the §3.6.2 hypothesis: the
+weight-space diffusion is *not* purely f-preserving; a component of it leaks
+into the spread of the identified shape.
+
+**The block location test still cannot resolve, and now we know it never will.**
+Max block step is 0.89× the noise floor even at 150 draws, because the floor
+depends on **ESS, not draws** — and ESS did not grow. The location shifts do
+show a suggestive decay (0.345, 0.358, 0.137, 0.147), and the last `sd/first`
+increment is much smaller than its predecessors (+0.102 against ~+0.40), which
+could be the beginnings of saturation. Both are below resolution. **Do not
+build on either**; recording them only so a future reading is not mistaken for
+confirmation.
+
+**Location remains sound throughout.** Centred `loc_z` is 1.2344 here, 1.0843 at
+`jit16`, 1.0609 at `c8` — every configuration passes. Combined with §4.3.9,
+`E[f]` is stationary and the drift that fails the gate is the likelihood-
+invariant offset. **The defect is confined to the spread.**
+
+### 4.3.13 Stage 3 terminates without a budget — the decision this forces
+
+Both levers §4.1 gives stage 3 are now measured and neither resolves the tail:
+chains (§4.3.2, §4.3.11) and draws (§4.3.12). Selecting `num_chains` on tail
+statistics is therefore not possible, and continuing to ladder is not a
+research plan. **Stage 3 should be closed as a negative result and the budget
+set on cost plus the §4.2 gate.**
+
+What that costs depends on one thing this document cannot settle:
+
+- **If the downstream quantity is `E[f]`** — the reward mean that IQL's greedy
+  policy uses — the position is strong. Centred location passes at every
+  configuration, the offset is invariant to both the BT likelihood and the
+  greedy policy, and the widening affects only the uncertainty. Select on cost,
+  disclose the widening as a limitation on interval estimates, and proceed.
+- **If the downstream quantity is CVaR** — which `diagnose_sampling_tail.py`
+  calls "the downstream quantity" throughout, and which §4 has been steering on
+  — the position is weak. CVaR is a functional of the lower tail, the tail is
+  exactly what the widening inflates, and `cvar_ess_median` *fell* when the
+  budget doubled. A CVaR-based claim rests on a spread that is still growing at
+  the end of every run measured.
+
+**Resolve which of these the paper actually claims before setting the budget.**
+If it is CVaR, the honest options are to fix the sampler (a research task, not
+an HP-selection task) or to restate the claim in terms of `E[f]`. Do not select
+a `num_chains` and let the CVaR numbers inherit an unstated caveat.
+
+**For the write-up**, this is a substantive negative result and belongs in the
+paper: composing a cyclical step-size schedule with fSGHMC at this scale yields
+a sampler whose identified-component spread grows as `t^0.4` over the full
+sampling horizon, so its uncertainty estimates do not converge in either the
+chain or the draw budget, while its posterior *mean* is stationary. §7.1's
+existing lesson — diagnostics can be actively misleading — extends: here R-hat,
+ESS and the drift z-gate were each individually reassuring at some
+configuration, and only the raw effect size on the centred component exposed it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2491,7 +2593,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11); the live defect is a 1.60× widening of the identified shape, unchanged from `c8` to `c16`. Next is a DIAGNOSTIC `num_samples 150` run — the one axis never varied — which must not feed selection (§3.7) |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). Set the budget on cost plus the §4.2 gate, after resolving whether the paper claims `E[f]` or CVaR |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2550,10 +2652,12 @@ chain to ±1%, leaving no leverage (§4.3.9). That test did reveal that most of
 the drift is a shift in the *global offset* of `f`, which the BT/CE likelihood
 is exactly invariant to. Splitting the gate (§4.3.10, §4.3.11) showed the centred
 location PASSES and, redone on centred `loc_sd`, §4.3.2's headline does not
-survive — the identified location drift *does* shrink with chains. **The
-remaining defect is a 1.60× widening of the identified component**, unchanged
-between `c8` and `c16`, which nothing tried so far removes. The only axis never
-varied is `num_samples`, pinned at 75 in every run by §4.1.
+survive — the identified location drift *does* shrink with chains. The
+remaining defect is a widening of the identified component, and `d150`
+(§4.3.12) settled it: the spread grows as a **scale-free power law `t^0.4`**,
+so no horizon fixes it, and doubling the draws bought +4% bulk ESS and a CVaR
+ESS that went *down*. **Both of §4.1's levers are exhausted; stage 3 closes
+without a budget (§4.3.13).**
 
 **Do this next, in order:**
 
@@ -2606,11 +2710,16 @@ varied is `num_samples`, pinned at 75 in every run by §4.1.
      `c8` and `c16` (1.5913 vs 1.6026) while the gate flips PASS→FAIL — a
      textbook §4.2.1 power artifact. Cyclical helps a lot (`nocyc` 2.2478);
      jitter helps slightly; nothing removes it.
-   - **`num_samples 150`, 16 chains — the one axis never varied.** Every run in
-     this project uses 75 draws/chain, so no existing data can say whether the
-     widening is a chain still equilibrating or a genuine instability.
-     **DIAGNOSTIC ONLY — it breaks §3.7's horizon match by construction and
-     must never feed selection.** Command and read-out in §4.3.11.
+   - **`num_samples 150` — DONE (§4.3.12), and it closes stage 3.** The
+     widening held at 1.55× on double the draws, the spread grows as a
+     scale-free `t^0.4` power law, bulk ESS rose 4% and CVaR ESS *fell*. Both
+     of §4.1's levers are now measured and neither resolves the tail.
+   - **Decide what the paper claims — `E[f]` or CVaR — then set the budget on
+     cost plus the §4.2 gate (§4.3.13).** Centred location passes everywhere,
+     so a mean-based claim is sound and the widening is a disclosed limitation.
+     A CVaR-based claim is not sound on this sampler and needs either a sampler
+     fix (research, not HP selection) or a restated claim. **This is the
+     decision blocking stage 4, and it is not one this document can make.**
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production
