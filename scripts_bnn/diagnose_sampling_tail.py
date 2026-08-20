@@ -235,6 +235,92 @@ def _load_chain_weights(run_dir, i, device):
     return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
 
 
+def offset_shape_split(pred_chains):
+    """Split the drift into the UNIDENTIFIED offset and the identified shape.
+
+    The BT/CE likelihood is exactly invariant to a global additive shift of f.
+    `bt_pool_logit` with mode="mean" returns sum(f*mask)/n (util.py:356-364), so
+    a segment's logit is the mean of f over its timesteps; `LikCE` is
+    CrossEntropyLoss on [Phi1, Phi2], and softmax depends only on Phi1 - Phi2.
+    Hence f -> f + c leaves every preference probability UNCHANGED, and the
+    data carry no information about the offset at all.  Only the functional GP
+    prior constrains it, weakly.
+
+    So drift along the offset is not evidence that the sampler is broken -- it
+    is the chain exploring a direction the likelihood does not pin down, and it
+    cancels in every preference prediction.  Drift in the SHAPE (f minus its
+    own mean) is the part that would actually corrupt inference.
+
+    The section 4.2 gate is computed on raw f and so mixes the two.  This
+    recomputes it three ways: raw, centred (shape only), and on the offset
+    alone.  If the centred numbers pass while raw fails, the stationarity
+    problem is confined to a direction that does not matter downstream -- a
+    constant reward offset also leaves the IQL greedy policy unchanged.
+    """
+    a = np.asarray(pred_chains, dtype=np.float64)
+    C, D, P = a.shape
+    print("\n=== OFFSET vs SHAPE DECOMPOSITION ===")
+    print("  The BT/CE likelihood is EXACTLY invariant to f -> f + c:")
+    print("  Phi pools by masked mean (util.py:356-364) and CrossEntropy on")
+    print("  [Phi1, Phi2] depends only on Phi1 - Phi2.  The offset is therefore")
+    print("  unidentified by the data and constrained only by the GP prior.")
+    print("  Drift along it cancels in every preference prediction.")
+
+    off = a.mean(axis=2)                       # [chain, draw] global offset
+    shape = a - off[:, :, None]                # identified part
+
+    rows = []
+    for label, arr in (("raw f", a),
+                       ("centred (shape)", shape),
+                       ("offset only", off[:, :, None])):
+        d = util.function_space_drift(arr)
+        rows.append((label,
+                     d.get("fn_drift_loc_sd_median", float("nan")),
+                     d.get("fn_drift_scale_ratio_median", float("nan")),
+                     d.get("fn_drift_loc_z_median", float("nan")),
+                     d.get("fn_drift_scale_z_median", float("nan"))))
+
+    print(f"\n  {'':17} {'loc_sd':>9} {'ratio':>9} {'loc_z':>9} {'scale_z':>9}")
+    print("  " + "-" * 57)
+    for label, ls, sr, lz, sz in rows:
+        print(f"  {label:<17} {ls:>9.4f} {sr:>9.4f} {lz:>9.4f} {sz:>9.4f}")
+
+    raw_ls, cen_ls = rows[0][1], rows[1][1]
+    raw_lz, cen_lz = rows[0][3], rows[1][3]
+    if np.isfinite(raw_lz) and raw_lz <= 2.0:
+        # Nothing to attribute.  Without this guard a stationary chain gets
+        # told it has "a genuine sampling failure", because the fraction
+        # explained is meaningless when the numerator is noise.
+        print(f"\n  raw f already PASSES the gate (loc_z {raw_lz:.4f} <= 2.0),")
+        print("  so there is no location drift to decompose.  The split below")
+        print("  is noise divided by noise -- do not read a verdict from it.")
+        return rows
+    if raw_ls > 0 and np.isfinite(cen_ls):
+        frac = 1.0 - (cen_ls / raw_ls)
+        print(f"\n  centring removes {frac * 100:.1f}% of the location drift "
+              f"({raw_ls:.4f} -> {cen_ls:.4f}).")
+        if frac > 0.5 and cen_lz <= 2.0 < raw_lz:
+            print("  -> The drift is MOSTLY the unidentified offset, and the")
+            print("     SHAPE PASSES the 2.0 gate.  The sampler is not failing")
+            print("     to sample the part of f the data identifies; it is")
+            print("     wandering along a direction the likelihood leaves free.")
+            print("     Preference predictions are unaffected by construction,")
+            print("     and a constant reward offset leaves the IQL greedy")
+            print("     policy unchanged.  The tail statistics, however, ARE")
+            print("     offset-sensitive: CVaR of f moves with c.  Recompute")
+            print("     them on centred f before selecting on them.")
+        elif frac > 0.5:
+            print("  -> Mostly the unidentified offset, but the centred shape")
+            print("     still misses the gate, so there is a real problem in")
+            print("     the identified part as well.  Both need addressing.")
+        else:
+            print("  -> The drift is NOT mainly the offset: it survives")
+            print("     centring, so it is in the part of f the data does")
+            print("     identify.  This is a genuine sampling failure and the")
+            print("     offset invariance does not excuse it.")
+    return rows
+
+
 def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
                       n_perm=20000, seed=0):
     """Does weight-space growth explain the function-space drift?
@@ -252,6 +338,15 @@ def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
     The test is ACROSS CHAINS: chains that grew their weights more should, under
     the leak hypothesis, have drifted more in f.  That comparison has no common
     trend to fake it.
+
+    KNOWN LIMITATION, measured 2026-08-19 (section 4.3.9): on medium_play every
+    chain grows ||w|| by 1.51x to within +-1%, so the regressor has almost no
+    variation and the test has no leverage -- it returned r ~ 0.02-0.04 with
+    p ~ 0.9 on both c16 and jit16.  That is NO POWER, not no leak: an
+    across-chain correlation can only see a mechanism that VARIES across
+    chains, and a common cause of a common effect is invisible to it.  Check
+    the wGrowth range before reading any verdict here.  `offset_shape_split`
+    is the more informative follow-up.
 
     A within-chain correlation is also printed, but it is CONFOUNDED and must
     not be read as evidence: if ||w|| and f are both monotone in draw index --
@@ -951,6 +1046,12 @@ def main():
                          "equilibrated -- more chains cannot help) from "
                          "independent per-chain wandering (more chains do "
                          "help). Needs no extra sampling (section 4.3.4).")
+    ap.add_argument("--offset-shape-split", action="store_true",
+                    help="Split the section 4.2 drift into the UNIDENTIFIED "
+                         "global offset (which the BT/CE likelihood is exactly "
+                         "invariant to) and the identified shape. Recomputes "
+                         "the gate on raw f, centred f, and the offset alone. "
+                         "Needs no new sampling (section 4.3.9).")
     ap.add_argument("--weight-f-coupling", action="store_true",
                     help="Test whether weight-space growth explains the "
                          "function-space drift, by correlating per-chain ||w|| "
@@ -1032,6 +1133,9 @@ def main():
 
     if args.drift_blocks:
         drift_blocks(pred_chains, n_blocks=args.drift_blocks)
+
+    if args.offset_shape_split:
+        offset_shape_split(pred_chains)
 
     if args.weight_f_coupling:
         weight_f_coupling(args.run_dir, chain_ids, pred_chains,

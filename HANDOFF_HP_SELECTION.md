@@ -1470,6 +1470,13 @@ per-chain ‖w‖ growth against per-chain f drift **across chains**: under the 
 hypothesis, chains that grew their weights more should have drifted more in f.
 Significance is by permutation.
 
+> **Ran 2026-08-19 and came back UNINFORMATIVE, not negative — see §4.3.9.**
+> ‖w‖ growth is 1.51× in every chain to within ±1%, so the regressor has no
+> variation and the across-chain test has no leverage. A common cause of a
+> common effect cannot be detected between chains. The same output did show
+> that most of the drift lies in the *global offset* of `f`, a direction the
+> BT/CE likelihood is exactly invariant to, which is where §4.3.9 goes next.
+
 This is *not* a reinstatement of the removed `--weight-trace`. §3.6.2 remains
 correct that weight-space statistics say nothing about convergence on their
 own; here ‖w‖ is used only as a **regressor** against an f-space quantity
@@ -1492,6 +1499,78 @@ Run it on `c16` (jitter 0, the cleaner baseline) and on `jit16`. **Check the
 growth the regressor has no variation and the test is uninformative rather than
 negative. With n = 16 only a large effect will clear the permutation test, so a
 null is weak evidence of absence — the tool says so in its own output.
+
+### 4.3.9 The coupling test is uninformative — and it pointed somewhere better
+
+`--weight-f-coupling` on `c16` and `jit16`:
+
+| | `wGrowth` median | `wGrowth` range | across-chain r(wGrowth, \|fShift\|) |
+|---|---|---|---|
+| `c16` | 1.5132 | 1.4716–1.5413 (**±1.1%**) | 0.0367, p = 0.8943 |
+| `jit16` | 1.5104 | 1.4770–1.5410 | 0.0173, p = 0.9502 |
+
+**This is the uninformative case, not a negative result** — exactly what the
+tool's own caveat says to check. The regressor varies by ~1% across chains
+while `fShift` varies by ~88% (−5.9 to +17.3 on `c16`). With essentially no
+variation in ‖w‖ growth there is no leverage to correlate against, so the null
+means "no power", not "no leak".
+
+**The design was wrong for the question, and that is worth recording.** An
+across-chain correlation can only detect a mechanism that *varies* across
+chains. The drift we are chasing is COMMON to all chains (§4.3.5), and weight
+growth turns out to be common too — 1.51× in every chain, to ±1%. A common
+cause of a common effect is invisible to a between-chain test by construction.
+The test would only ever have worked if chains happened to differ in growth.
+
+**But the table exposed the real structure.** `fShift` there is the *mean of f
+over the diagnostic points* — the global offset. It moves by up to 17.3 reward
+units, against a per-point `pred_sd` on the order of 10–16. So most of the
+measured drift is a shift in the overall level of `f`.
+
+**And the likelihood is exactly invariant to that shift.** `bt_pool_logit` with
+`mode: "mean"` returns `sum(f*mask)/n` (`util.py:356–364`), so a segment's
+logit is the mean of `f` over its timesteps; `LikCE` is `CrossEntropyLoss` on
+`[Φ₁, Φ₂]`, and softmax depends only on `Φ₁ − Φ₂`. Therefore
+
+> **f → f + c leaves every preference probability unchanged. The data carry no
+> information whatsoever about the global offset of f.**
+
+Only the functional GP prior constrains it, weakly, through
+`-J^T K^{-1}(f - m)` at 35 measurement points. A chain wandering along the
+offset is not a broken sampler — it is exploring a direction the likelihood
+does not pin down. Note this is a *consequence of* the `bt_pool: "mean"`
+choice recorded in §3.6.2, which was analysed there for length confounds and
+cross-family comparability; the offset non-identifiability was not noticed.
+The same invariance holds for `bt_pool: "sum"`.
+
+**`--offset-shape-split` measures how much of the drift this accounts for.** It
+recomputes the §4.2 gate three ways — raw `f`, centred `f` (each draw minus its
+own mean, the identified *shape*), and the offset alone. Validated on synthetic
+chains: a pure-offset drift reports 92.2% removed with the centred `loc_z`
+passing at 0.80 against raw 10.12; a pure-shape drift reports −0.6% removed; and
+a stationary control is caught by a guard that refuses to decompose when raw `f`
+already passes, since otherwise the fraction is noise over noise.
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --offset-shape-split --device cuda \
+    2>&1 | tee exp/stage3_medium_play_c16_0_offsplit_diag_tail.txt
+```
+
+**What each outcome means.** If centring removes most of the drift and the
+shape passes the gate, the stationarity failure is confined to a direction the
+data does not identify — preference predictions are unaffected by construction,
+and a constant reward offset also leaves the IQL greedy policy unchanged, so
+the downstream consequence is small. **The tail statistics are the exception:
+CVaR of `f` is offset-sensitive and moves with `c`, so §4.3's whole table would
+need recomputing on centred `f` before anything is selected on it.** If the
+drift survives centring, it is in the identified part of `f`, the offset
+invariance excuses nothing, and this becomes a genuine sampling failure again.
+
+**Do not treat the offset invariance as a licence in advance of the
+measurement.** It is a reason the drift *may* be benign, not evidence that it
+is; §4.3.5 established the drift is real and common regardless of which
+direction it lies in.
 
 ### 4.4 Procedure
 
@@ -2236,7 +2315,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). Weight-space diffusion is the only hypothesis left; `--weight-f-coupling` tests it on existing chains, no new sampling |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). Most of the drift is in the global offset of `f`, which the BT/CE likelihood is exactly invariant to; `--offset-shape-split` measures how much, no new sampling (§4.3.9) |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2289,9 +2368,11 @@ the cyclical schedule while incidentally supplying the empirical support §3.6.2
 lacked for it (§4.3.6). The `chain_init_jitter` test meant to separate the two
 remaining hypotheses was inconclusive at 8 chains (§4.3.7) and **refuted the
 shared start** when redone at 16 (§4.3.8): ALIGNMENT held at 0.7216 against
-0.7564, where the hypothesis predicted a collapse toward 0.25. **Weight-space
-diffusion that is only approximately f-preserving is the last hypothesis
-standing**, and `--weight-f-coupling` tests it on the chains already saved.
+0.7564, where the hypothesis predicted a collapse toward 0.25. Weight-space
+diffusion could not be tested across chains — ‖w‖ growth is 1.51× in every
+chain to ±1%, leaving no leverage (§4.3.9). That test did reveal that most of
+the drift is a shift in the *global offset* of `f`, which the BT/CE likelihood
+is exactly invariant to; `--offset-shape-split` measures how much.
 
 **Do this next, in order:**
 
@@ -2328,11 +2409,18 @@ standing**, and `--weight-f-coupling` tests it on the chains already saved.
      hypothesis predicted a collapse toward 0.25. Jitter also worsened
      `scale_z` from PASS to FAIL in both the 8- and 16-chain runs. **Leave
      `chain_init_jitter` at 0.**
-   - **Weight-space diffusion is the only hypothesis left — test it next.**
-     `--weight-f-coupling` on the existing `c16` and `jit16` chains correlates
-     per-chain ‖w‖ growth against per-chain f drift across chains (§4.3.8).
-     **No new sampling.** §7.1 records the round-1 norm growing 4.09× in every
-     chain, so this is the mechanism with a precedent here.
+   - **`--weight-f-coupling` — DONE, and uninformative** (§4.3.9). ‖w‖ growth
+     is 1.51× in every chain to ±1%, so an across-chain correlation has no
+     leverage; a common cause of a common effect is invisible to a
+     between-chain test. Not a negative result.
+   - **`--offset-shape-split` — do this next. No new sampling.** The BT/CE
+     likelihood is *exactly* invariant to `f → f + c` (`util.py:356–364`), so
+     the global offset of `f` is unidentified by the data, and `fShift` shows
+     the drift is largely in that direction. Split the gate into offset and
+     shape (§4.3.9). If the shape passes, the failure is in a direction that
+     does not affect preference predictions or the IQL greedy policy — **but
+     the §4.3 tail table is offset-sensitive and must then be recomputed on
+     centred `f` before anything is selected on it.**
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production
