@@ -947,6 +947,16 @@ excursions.** Read §4.6's stop rule with that in mind — it does not apply her
 
 ### 4.3.2 The `c16` rung — measured 2026-08-17. Stage 3's axis is the wrong one.
 
+> **Headline superseded by §4.3.11.** The `loc_sd` trajectory below is
+> raw, and about half of it is the likelihood-invariant offset (§4.3.9).
+> On the identified component `loc_sd` DOES fall with chains (0.3728 →
+> 0.3232, obs/req 1.23 rather than 2.16), so "the drift never shrinks" is
+> not right as stated. The conclusion that stage 3's axis is orthogonal to
+> the binding constraint stands, for the reason §4.3.11 gives instead. The
+> low-power-false-negative argument also stands — but for SCALE, where the
+> effect size is identical at `c8` and `c16` (1.5913 vs 1.6026) while the
+> gate flips PASS→FAIL.
+
 | metric | `c4` (300) | `c8` (600) | `c16` (1200) | §4.6 ideal per step |
 |---|---|---|---|---|
 | `ess_bulk` median | 6.73 | 14.57 | 26.83 | 2.00× |
@@ -1457,6 +1467,13 @@ flattered one (`f_pref_net.py:130`). `rhat_bulk` median instead fell slightly,
 direction, and nothing in this run argues for keeping jitter on. **Leave
 `chain_init_jitter` at 0** absent a reason beyond this evidence.
 
+> **Basis corrected by §4.3.11.** The `scale_z` worsening cited here is on
+> RAW `f`, which is contaminated by the offset. On the identified
+> component jitter is mildly BETTER on both axes (centred `ratio` 1.5047
+> vs 1.6026, centred `loc_sd` 0.2764 vs 0.3232). It still does not fix the
+> widening, so leaving it at 0 remains defensible — but not for the reason
+> stated here.
+
 **What remains: weight-space diffusion that is only approximately
 f-preserving** (§3.6.2). Every alternative has now been eliminated by direct
 test — the cyclical schedule (§4.3.6), the shared start (this section) — and
@@ -1642,6 +1659,94 @@ It also ignored scale entirely, which is where the actual defect turned out to
 be. It now keys on the gate outcomes, judges location and scale separately, and
 reports the fraction as descriptive only. Re-validated on four synthetic cases
 including a mixed offset-drift-plus-shape-widening case matching `c16`.
+
+### 4.3.11 The centred ladder — measured 2026-08-19. §4.3.2's headline does not survive.
+
+All four runs, **centred** (identified shape only):
+
+| run | chains | raw `loc_sd` | centred `loc_sd` | centred `ratio` | centred `scale_z` |
+|---|---|---|---|---|---|
+| `c8` | 8 | 0.4222 | 0.3728 | 1.5913 | 1.8603 PASS |
+| `c16` | 16 | 0.6460 | **0.3232** | **1.6026** | 2.5906 FAIL |
+| `jit16` | 16 | 0.5714 | 0.2764 | 1.5047 | 2.2526 FAIL |
+| `nocyc` | 8 | 0.5443 | 0.4809 | **2.2478** | 2.8559 FAIL |
+
+**§4.3.2's central finding was an artifact of the unidentified offset.** That
+section's headline was that `loc_sd` never falls, so the location drift is real
+at every rung and does not shrink. On the identified component it *does* fall:
+
+| | `c8` → `c16` | required (1/√2) | obs/req |
+|---|---|---|---|
+| raw `loc_sd` | 0.4222 → 0.6460 | 0.2985 | **2.16** |
+| centred `loc_sd` | 0.3728 → **0.3232** | 0.2636 | **1.23** |
+
+Raw said the drift *grew* when it should have shrunk by √2. Centred, it shrinks
+— just not quite fast enough. Fitting `loc_sd² = d² + n²/C` across the two
+points gives a common identified location drift of **d ≈ 0.26 sd** against
+noise `n ≈ 0.74`; the same fit is impossible on raw `loc_sd` (it would need
+negative noise), which is itself a sign that raw is a random walk along the
+free offset rather than drift-plus-noise. **Two points, no error bars — treat
+d ≈ 0.26 as indicative, not measured.**
+
+**The test was also mis-specified, in a way worth recording.** `num_samples` is
+**75 in every run this project has ever done**, so `function_space_drift`
+always compares 37 draws against 37 draws *within* each chain. Adding chains
+cannot shrink a per-chain drift; it only estimates the common component more
+precisely, so `loc_sd` converges to `|d|`, not to zero. A 1/√draws test is only
+valid where the drift is pure noise. §4.3.2 was right that stage 3's axis is
+orthogonal to the binding constraint — but the reason is this, not the raw
+`loc_sd` trajectory it cited.
+
+**Scale is the defect, and here §4.3.2's "low-power false negative" claim is
+vindicated.** The centred ratio is an effect size with no chain-count
+dependence: `c8` 1.5913 and `c16` 1.6026 differ by **0.7%** — the same
+widening — yet `scale_z` reads 1.8603 (PASS) at 8 chains and 2.5906 (FAIL) at
+16. That is §4.2.1 in its purest form, and it means **`c8` passed the scale
+gate only for want of chains.**
+
+**What moves the widening, and what does not.** Ranking on centred `ratio`:
+
+    jit16 1.5047  <  c8 1.5913  ~  c16 1.6026  <<  nocyc 2.2478
+
+- **The cyclical schedule helps substantially** — removing it takes the
+  widening from 1.60× to 2.25×. This corroborates §4.3.6 on the identified
+  component, not merely on raw `f`.
+- **Jitter helps slightly** (1.5047 vs 1.6026, and centred `loc_sd` 0.2764 vs
+  0.3232). **This reverses §4.3.8's recommendation's basis:** that section said
+  "leave `chain_init_jitter` at 0" because raw `scale_z` worsened, but raw
+  `scale_z` was contaminated by the offset. On the identified component jitter
+  is mildly *better* on both axes. It does not fix the widening and the choice
+  is not decisive either way, so leaving it at 0 remains defensible — but not
+  for the reason given there.
+- **Nothing tried so far removes it.** Every configuration widens by ≥1.50×.
+
+**The one axis never varied is `num_samples`.** Every run in this project uses
+75 draws per chain, so nothing measured here can say whether the widening is a
+chain still equilibrating its variance — which more draws would resolve — or a
+genuine instability that more draws would compound. §4.1 pinned `num_samples`
+to preserve §3.7's selection/production horizon match, and that pin is exactly
+why the question is unanswerable from existing data.
+
+**Next: one diagnostic run at double the draws.**
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --num_samples 150 \
+    --OUT_DIR ./exp/stage3_medium_play_d150 > ../exp/stage3_medium_play_d150.log 2>&1 &
+```
+
+**This is a DIAGNOSTIC run and must not be used for selection.** It breaks
+§3.7's horizon match by construction — that is the point of it — so its CE and
+accuracy are not comparable to any selection number, and §3.7 exists precisely
+to stop such a run leaking into a winner. Label the output accordingly.
+
+Read it on centred `ratio` against `c16`'s 1.6026. Falling toward 1 means the
+variance is still equilibrating and the horizon is simply too short; holding at
+~1.6 or rising means an instability that no budget fixes, and the sampler
+itself needs revisiting. Note the halves being compared grow with the run
+(75 vs 37 draws), so this is not an apples-to-apples ratio — it is the right
+comparison anyway, because the question is whether a *longer* chain equilibrates.
 
 ### 4.4 Procedure
 
@@ -2386,7 +2491,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). The location drift is largely the likelihood-invariant offset, but the split (§4.3.10) exposes a 1.60× widening of the identified shape — a variance non-stationarity, which is a different defect from the one nine subsections chased |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11); the live defect is a 1.60× widening of the identified shape, unchanged from `c8` to `c16`. Next is a DIAGNOSTIC `num_samples 150` run — the one axis never varied — which must not feed selection (§3.7) |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2443,10 +2548,12 @@ shared start** when redone at 16 (§4.3.8): ALIGNMENT held at 0.7216 against
 diffusion could not be tested across chains — ‖w‖ growth is 1.51× in every
 chain to ±1%, leaving no leverage (§4.3.9). That test did reveal that most of
 the drift is a shift in the *global offset* of `f`, which the BT/CE likelihood
-is exactly invariant to. Splitting the gate (§4.3.10) showed the centred
-location PASSES while the centred **scale** FAILS at 1.60× widening: **the
-remaining defect is a variance non-stationarity in the identified component**,
-and §4.3.2's 1/√draws test needs redoing on centred `loc_sd`.
+is exactly invariant to. Splitting the gate (§4.3.10, §4.3.11) showed the centred
+location PASSES and, redone on centred `loc_sd`, §4.3.2's headline does not
+survive — the identified location drift *does* shrink with chains. **The
+remaining defect is a 1.60× widening of the identified component**, unchanged
+between `c8` and `c16`, which nothing tried so far removes. The only axis never
+varied is `num_samples`, pinned at 75 in every run by §4.1.
 
 **Do this next, in order:**
 
@@ -2493,10 +2600,17 @@ and §4.3.2's 1/√draws test needs redoing on centred `loc_sd`.
      **scale** gate FAILS at 2.5906, worse than raw's 1.9962 — the offset was
      masking a **1.60× widening of the identified shape**, and scale is not
      invariant. The defect is a variance non-stationarity, not a location one.
-   - **Run the split on `c8`, `jit16` and `nocyc` — no new sampling.** Then
-     redo §4.3.2's 1/√draws test on **centred** `loc_sd` (it was run on raw,
-     which is ~half offset), and compare centred `ratio` across the four runs.
-     `c4` has no saved chains, so only `c8`→`c16` is recoverable.
+   - **Split on `c8`/`jit16`/`nocyc` — DONE (§4.3.11).** §4.3.2's headline does
+     not survive: centred `loc_sd` DOES fall (obs/req 1.23, not 2.16). The
+     defect is the **1.60× widening of the identified shape**, identical at
+     `c8` and `c16` (1.5913 vs 1.6026) while the gate flips PASS→FAIL — a
+     textbook §4.2.1 power artifact. Cyclical helps a lot (`nocyc` 2.2478);
+     jitter helps slightly; nothing removes it.
+   - **`num_samples 150`, 16 chains — the one axis never varied.** Every run in
+     this project uses 75 draws/chain, so no existing data can say whether the
+     widening is a chain still equilibrating or a genuine instability.
+     **DIAGNOSTIC ONLY — it breaks §3.7's horizon match by construction and
+     must never feed selection.** Command and read-out in §4.3.11.
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production
