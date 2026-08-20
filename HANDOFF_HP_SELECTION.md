@@ -1850,6 +1850,96 @@ existing lesson — diagnostics can be actively misleading — extends: here R-h
 ESS and the drift z-gate were each individually reassuring at some
 configuration, and only the raw effect size on the centred component exposed it.
 
+### 4.3.14 Root cause — the selection objective drives the prior to improperness
+
+**Decision recorded 2026-08-20.** §4.3.13's fork is resolved: the paper's claim
+is conservative reward prediction via **CVaR**, hypothesising that induced
+conservatism preserves policy performance under reduced data and increased label
+noise better than a non-Bayesian baseline. There is no theory that the posterior
+*mean* would beat a non-Bayesian method under those conditions — if there were,
+the experiments in question would be unnecessary. **The mean-based fallback is
+not available, so the sampler must be fixed.** §4.3.12's widening is therefore
+load-bearing, not a disclosed limitation.
+
+**The sampler is not the root cause. The selected target is.** The four stage-1
+winners:
+
+| variant | `n_meas` (range 0–64, default 256) | `map_amp2` (range 1–1e6) | % of log range |
+|---|---|---|---|
+| medium_play | 35 | 168 940 | 87% |
+| medium_diverse | 17 | 119 681 | 85% |
+| large_play | 29 | **925 895** | **99.5%** |
+| large_diverse | **7** | 94 945 | 83% |
+
+Both knobs govern how tightly the functional prior constrains `f`, and **the
+sweep pushed both toward removing it**: amplitude near the top of its range,
+measurement points near the bottom of theirs (`n_meas: 0` disables the
+functional prior outright, and large_diverse selected 7).
+
+**`map_amp2` has no interior optimum under CE — it chases the cap.** Across
+three rounds, the winner has sat at 83–99% of the log range every time, and each
+cap expansion moved it:
+
+| round | cap | winners | % of log range |
+|---|---|---|---|
+| 1 | 1e3 | 313–773 | 83–96% |
+| 2 | 1e4 | 6 647, 8 699 | 96–98% |
+| 3 | 1e6 | 94 945–925 895 | 83–99.5% |
+
+The sweep yaml raised the cap to 1e6 specifically so the search would not be
+"boundary-limited a third time". It was anyway — large_play sits at 99.5%.
+**Validation CE improves monotonically as the prior flattens, so there is no
+value of `map_amp2` the objective will settle on.** A flatter prior fits better
+at 75 draws; the cost only appears at horizons the selection never reaches. This
+is §3.7's pathology exactly, on a parameter §3.7 was not written about.
+
+**Why this makes sampling intractable.** `map_amp2` 168 940 puts the prior
+reward sd at √168 940 ≈ **411×** the base kernel scale, against observed
+`pred_sd` of ~10–20. Along directions the preference data identifies weakly, the
+posterior inherits close to that prior width, and the chain must diffuse across
+it. At the measured `t^0.4`, growing from sd ~15 to ~100 needs **115×** the
+current horizon; to 411, **~3 900×** — 590 000 draws per chain. Those are
+ceilings, not forecasts, since the likelihood does constrain identified
+directions and the true equilibration target is unknown. But the order of
+magnitude is the point: **the chain is nowhere near equilibrium and no feasible
+budget gets it there.** That is why §4.3.12 found both budget axes exhausted,
+why ESS is ~28 regardless of draws, and why the location (well-identified)
+passes while the spread does not.
+
+**Why §3.6.3's eligibility gate did not catch it.** It did exactly what it was
+written to do, at 4 chains × 75 draws. §4.2.1 shows the drift z-scores have
+power growing as √(chains), so at `c4` the gate cannot resolve a drift that
+`c16` reports at `scale_z` 2.59. The gate was passing configurations that drift,
+and doing so *systematically* in favour of the flattest priors, because those
+score best on CE. Selection and eligibility were pulling the same direction.
+
+**The plan.** This is a re-selection problem, not a sampler-engineering one, and
+it interacts with the `bt_pool` decision already queued:
+
+1. **Do not sweep `map_amp2` on CE.** The objective has no interior optimum in
+   it. Either fix it at the logit-matching value the sweep yaml derives
+   (~1e4 under mean pooling) or, better, resolve `bt_pool` first: under `"sum"`
+   the natural amplitude is ~1 and the enormous multiplier is unnecessary. The
+   two are the same model up to a global temperature (§3.6.2), but *not* the
+   same weight-space geometry at a fixed step size, so the choice affects
+   sampling even where it does not affect the model.
+2. **Raise the `n_meas` floor.** A range whose lower end disables the prior is
+   the wrong range for a method whose contribution *is* the prior. The default
+   is 256; the sweep caps at 64 and winners sit at 7–35.
+3. **Re-specify eligibility on centred effect sizes with power.** Gate on
+   centred `ratio` and centred `loc_sd` (§4.3.10–§4.3.11), not raw `z` at 4
+   chains. Raw `z` is contaminated by the free offset and low-powered at `c4` —
+   the two failure modes this document spent nine subsections isolating.
+4. **Then re-run stage 1**, and only then stage 3.
+
+**For the write-up**, this is a stronger result than §4.3.13's. The headline is
+not "our sampler mixes poorly" but: **selecting a functional-prior BNN on
+validation CE at a short sampling horizon drives the prior toward improperness,
+which destroys the calibrated uncertainty the method exists to provide, while
+every standard diagnostic looks acceptable.** §7.1 already carries the
+short-horizon lesson for step size; this extends it to the prior itself, and it
+is the sharper instance.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2593,7 +2683,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). Set the budget on cost plus the §4.2 gate, after resolving whether the paper claims `E[f]` or CVaR |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2714,12 +2804,22 @@ without a budget (§4.3.13).**
      widening held at 1.55× on double the draws, the spread grows as a
      scale-free `t^0.4` power law, bulk ESS rose 4% and CVaR ESS *fell*. Both
      of §4.1's levers are now measured and neither resolves the tail.
-   - **Decide what the paper claims — `E[f]` or CVaR — then set the budget on
-     cost plus the §4.2 gate (§4.3.13).** Centred location passes everywhere,
-     so a mean-based claim is sound and the widening is a disclosed limitation.
-     A CVaR-based claim is not sound on this sampler and needs either a sampler
-     fix (research, not HP selection) or a restated claim. **This is the
-     decision blocking stage 4, and it is not one this document can make.**
+   - **DECIDED 2026-08-20: the claim is CVaR (§4.3.14).** The conservatism
+     hypothesis is the paper, and no theory supports the posterior mean beating
+     a non-Bayesian baseline under reduced data or label noise. So the widening
+     is load-bearing and must be fixed, not disclosed.
+   - **The root cause is the selection objective, not the sampler.** Validation
+     CE improves monotonically as the functional prior flattens, so `map_amp2`
+     has no interior optimum and has chased its cap through three rounds, while
+     `n_meas` is selected at 7–35 from a range whose floor disables the prior
+     entirely. §3.6.3's eligibility gate could not catch it: at 4 chains the
+     drift z-scores lack the power (§4.2.1), and selection and eligibility were
+     pulling the same way.
+   - **Therefore stage 1 must be redone before stage 3 can finish**, in this
+     order (§4.3.14): resolve `bt_pool` (it sets whether a huge `map_amp2` is
+     needed at all); stop sweeping `map_amp2` on CE; raise the `n_meas` floor;
+     re-specify eligibility on **centred** effect sizes measured at enough
+     chains to have power. Then stage 1, then stage 3.
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production
