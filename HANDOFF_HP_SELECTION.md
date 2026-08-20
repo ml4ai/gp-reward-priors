@@ -1572,6 +1572,77 @@ measurement.** It is a reason the drift *may* be benign, not evidence that it
 is; §4.3.5 established the drift is real and common regardless of which
 direction it lies in.
 
+### 4.3.10 The split — measured 2026-08-19. The defect is a widening, not a wandering.
+
+`--offset-shape-split` on `c16`:
+
+| | `loc_sd` | `ratio` | `loc_z` | `scale_z` |
+|---|---|---|---|---|
+| raw `f` | 0.6460 | 1.4664 | **2.5152** FAIL | 1.9962 |
+| centred (shape) | 0.3232 | **1.6026** | **1.2566** PASS | **2.5906** FAIL |
+| offset only | 0.8949 | 1.3476 | 3.6054 | 1.5144 |
+
+**Location: the drift is largely in the direction the likelihood cannot see.**
+Centring halves `loc_sd` (0.6460 → 0.3232) and the centred `loc_z` of 1.2566
+**passes** a gate raw `f` fails at 2.5152, while the offset alone carries the
+worst location drift of the three at 3.6054. Preference predictions are
+unaffected by construction, and a constant reward offset leaves the IQL greedy
+policy unchanged.
+
+**Scale: centring made it worse, and that is the real finding.** The centred
+`scale_z` is 2.5906 against raw's 1.9962, and the centred ratio 1.6026 against
+raw's 1.4664. **The offset drift was partly masking a widening of the
+identified shape** — the offset's own ratio (1.3476) is lower than the shape's,
+so mixing them diluted the signal. `f → a·f` changes every preference
+probability, so scale is *identified*: no invariance excuses this.
+
+**The problem has changed shape.** Nine subsections have chased a *location*
+drift; on the identified component the location gate passes, and what remains
+is that **the identified part of `f` widens 1.60× between the first and second
+halves of sampling.** Unlike `loc_z`, the ratio is an effect size with no
+chain-count dependence (§4.2.1), so 1.60× is not a power artifact.
+
+**Three consequences, in order of cost.**
+
+1. **§4.3.2's headline test was run on the wrong quantity.** The 1/√draws
+   stationarity test used raw `loc_sd` (0.4319 / 0.4222 / 0.6460), which this
+   section shows is about half unidentified offset. It must be redone on
+   centred `loc_sd`. `c8` and `c16` both have saved chains, giving two points
+   and a 2× draw ratio — enough to test whether the *identified* location drift
+   falls as √2 the way stationarity requires. `c4` has no saved chains (§4.3),
+   so that rung cannot be recovered.
+2. **The §4.3 tail table is contaminated twice over.** CVaR of `f` is sensitive
+   to both the offset and the scale. Centring removes the first; the second
+   survives centring, so **even a recomputed tail table is an estimate of a
+   still-moving target.** No budget should be selected from either version.
+3. **The remaining defect is a variance non-stationarity**, which is a
+   different problem from everything tried so far. Burn-in, jitter and the
+   schedule were all aimed at a location transient. A chain whose spread is
+   still growing after 220 000 sampling steps has not equilibrated its
+   variance, and §4.3.6 already noted the constant-LR run widened *more*
+   (2.13×), so this is not schedule-induced.
+
+**Do this next — no new sampling:**
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c8_0 --offset-shape-split --device cuda \
+    2>&1 | tee exp/stage3_medium_play_c8_0_offsplit_diag_tail.txt
+```
+
+and the same on `stage3_medium_play_jit16_0` and
+`stage3_medium_play_nocyc_0`. Then compare **centred** `loc_sd` between `c8`
+and `c16` for the 1/√draws test, and **centred** `ratio` across all four for
+whether the widening responds to anything tried so far.
+
+**Tool correction.** The verdict logic branched on `frac > 0.5`, and `c16`
+lands on exactly 0.500 — so the first run of this test printed "NOT mainly the
+offset … a genuine sampling failure" despite the centred location gate passing.
+It also ignored scale entirely, which is where the actual defect turned out to
+be. It now keys on the gate outcomes, judges location and scale separately, and
+reports the fraction as descriptive only. Re-validated on four synthetic cases
+including a mixed offset-drift-plus-shape-widening case matching `c16`.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2315,7 +2386,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). Most of the drift is in the global offset of `f`, which the BT/CE likelihood is exactly invariant to; `--offset-shape-split` measures how much, no new sampling (§4.3.9) |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). The location drift is largely the likelihood-invariant offset, but the split (§4.3.10) exposes a 1.60× widening of the identified shape — a variance non-stationarity, which is a different defect from the one nine subsections chased |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2372,7 +2443,10 @@ shared start** when redone at 16 (§4.3.8): ALIGNMENT held at 0.7216 against
 diffusion could not be tested across chains — ‖w‖ growth is 1.51× in every
 chain to ±1%, leaving no leverage (§4.3.9). That test did reveal that most of
 the drift is a shift in the *global offset* of `f`, which the BT/CE likelihood
-is exactly invariant to; `--offset-shape-split` measures how much.
+is exactly invariant to. Splitting the gate (§4.3.10) showed the centred
+location PASSES while the centred **scale** FAILS at 1.60× widening: **the
+remaining defect is a variance non-stationarity in the identified component**,
+and §4.3.2's 1/√draws test needs redoing on centred `loc_sd`.
 
 **Do this next, in order:**
 
@@ -2413,14 +2487,16 @@ is exactly invariant to; `--offset-shape-split` measures how much.
      is 1.51× in every chain to ±1%, so an across-chain correlation has no
      leverage; a common cause of a common effect is invisible to a
      between-chain test. Not a negative result.
-   - **`--offset-shape-split` — do this next. No new sampling.** The BT/CE
-     likelihood is *exactly* invariant to `f → f + c` (`util.py:356–364`), so
-     the global offset of `f` is unidentified by the data, and `fShift` shows
-     the drift is largely in that direction. Split the gate into offset and
-     shape (§4.3.9). If the shape passes, the failure is in a direction that
-     does not affect preference predictions or the IQL greedy policy — **but
-     the §4.3 tail table is offset-sensitive and must then be recomputed on
-     centred `f` before anything is selected on it.**
+   - **`--offset-shape-split` — DONE on `c16` (§4.3.10), and it reframes the
+     problem.** The centred location gate PASSES (1.2566 vs raw 2.5152): the
+     location drift is largely the unidentified offset. But the centred
+     **scale** gate FAILS at 2.5906, worse than raw's 1.9962 — the offset was
+     masking a **1.60× widening of the identified shape**, and scale is not
+     invariant. The defect is a variance non-stationarity, not a location one.
+   - **Run the split on `c8`, `jit16` and `nocyc` — no new sampling.** Then
+     redo §4.3.2's 1/√draws test on **centred** `loc_sd` (it was run on raw,
+     which is ~half offset), and compare centred `ratio` across the four runs.
+     `c4` has no saved chains, so only `c8`→`c16` is recoverable.
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production

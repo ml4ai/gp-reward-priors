@@ -287,37 +287,77 @@ def offset_shape_split(pred_chains):
 
     raw_ls, cen_ls = rows[0][1], rows[1][1]
     raw_lz, cen_lz = rows[0][3], rows[1][3]
-    if np.isfinite(raw_lz) and raw_lz <= 2.0:
+    raw_sz, cen_sz = rows[0][4], rows[1][4]
+    if (np.isfinite(raw_lz) and raw_lz <= 2.0
+            and np.isfinite(raw_sz) and raw_sz <= 2.0):
         # Nothing to attribute.  Without this guard a stationary chain gets
         # told it has "a genuine sampling failure", because the fraction
         # explained is meaningless when the numerator is noise.
-        print(f"\n  raw f already PASSES the gate (loc_z {raw_lz:.4f} <= 2.0),")
-        print("  so there is no location drift to decompose.  The split below")
+        print(f"\n  raw f already PASSES both gates (loc_z {raw_lz:.4f}, "
+              f"scale_z {raw_sz:.4f}),")
+        print("  so there is no drift to decompose.  The split below")
         print("  is noise divided by noise -- do not read a verdict from it.")
         return rows
-    if raw_ls > 0 and np.isfinite(cen_ls):
-        frac = 1.0 - (cen_ls / raw_ls)
-        print(f"\n  centring removes {frac * 100:.1f}% of the location drift "
-              f"({raw_ls:.4f} -> {cen_ls:.4f}).")
-        if frac > 0.5 and cen_lz <= 2.0 < raw_lz:
-            print("  -> The drift is MOSTLY the unidentified offset, and the")
-            print("     SHAPE PASSES the 2.0 gate.  The sampler is not failing")
-            print("     to sample the part of f the data identifies; it is")
-            print("     wandering along a direction the likelihood leaves free.")
-            print("     Preference predictions are unaffected by construction,")
-            print("     and a constant reward offset leaves the IQL greedy")
-            print("     policy unchanged.  The tail statistics, however, ARE")
-            print("     offset-sensitive: CVaR of f moves with c.  Recompute")
-            print("     them on centred f before selecting on them.")
-        elif frac > 0.5:
-            print("  -> Mostly the unidentified offset, but the centred shape")
-            print("     still misses the gate, so there is a real problem in")
-            print("     the identified part as well.  Both need addressing.")
-        else:
-            print("  -> The drift is NOT mainly the offset: it survives")
-            print("     centring, so it is in the part of f the data does")
-            print("     identify.  This is a genuine sampling failure and the")
-            print("     offset invariance does not excuse it.")
+    if not (raw_ls > 0 and np.isfinite(cen_ls)):
+        return rows
+
+    # Verdict keys on the GATE OUTCOMES, not on the fraction removed.  An
+    # earlier version branched on `frac > 0.5` and mis-verdicted the real c16
+    # run, where frac is exactly 0.500 while the centred loc_z (1.2566) passes
+    # a gate the raw loc_z (2.5152) fails -- the fraction is descriptive, the
+    # gate is what decides.  Scale is judged separately because centring can
+    # make it WORSE: removing a common offset leaves a shape whose spread ratio
+    # is larger than raw f's, and a widening in the identified part is not
+    # excused by any invariance.
+    frac = 1.0 - (cen_ls / raw_ls)
+    print(f"\n  centring removes {frac * 100:.1f}% of the location drift "
+          f"({raw_ls:.4f} -> {cen_ls:.4f}); the fraction is descriptive, the")
+    print("  gate outcomes below are what decide.")
+
+    loc_fixed = np.isfinite(cen_lz) and cen_lz <= 2.0 < raw_lz
+    loc_ok = np.isfinite(cen_lz) and cen_lz <= 2.0
+    scale_fails = np.isfinite(cen_sz) and cen_sz > 2.0
+    scale_worse = np.isfinite(cen_sz) and np.isfinite(raw_sz) and cen_sz > raw_sz
+
+    if loc_fixed:
+        print(f"  -> LOCATION: the centred shape PASSES (loc_z {cen_lz:.4f}) a")
+        print(f"     gate raw f FAILS (loc_z {raw_lz:.4f}), and the offset")
+        print(f"     alone carries loc_z {rows[2][3]:.4f}.  The location drift")
+        print("     is largely in the direction the likelihood cannot see.")
+        print("     Preference predictions are unaffected by construction, and")
+        print("     a constant reward offset leaves the IQL greedy policy")
+        print("     unchanged.")
+    elif loc_ok:
+        print(f"  -> LOCATION: raw f already passed; centred loc_z "
+              f"{cen_lz:.4f}.  Nothing to attribute here.")
+    else:
+        print(f"  -> LOCATION: the centred shape STILL FAILS "
+              f"(loc_z {cen_lz:.4f}).")
+        print("     The location drift is in the part of f the data DOES")
+        print("     identify.  The offset invariance excuses none of it.")
+
+    if scale_fails:
+        print(f"  -> SCALE: the centred shape FAILS (scale_z {cen_sz:.4f}, raw"
+              f" ratio {rows[1][2]:.4f}).")
+        if scale_worse:
+            print(f"     Centring made it WORSE (raw scale_z {raw_sz:.4f}), so")
+            print("     the offset drift was partly MASKING it: the identified")
+            print("     part of f is widening faster than raw f suggested.")
+        print("     Scale is NOT invariant -- f -> a*f changes every preference")
+        print("     probability -- so this is a real non-stationarity in the")
+        print("     identified component, and it is what remains to be fixed.")
+    elif np.isfinite(cen_sz):
+        print(f"  -> SCALE: the centred shape passes (scale_z {cen_sz:.4f}).")
+
+    if loc_fixed and not scale_fails:
+        print("\n  Both centred gates pass: the failure is confined to the")
+        print("  unidentified offset.  NOTE the tail statistics are still")
+        print("  offset-sensitive -- CVaR of f moves with c -- so recompute")
+        print("  them on centred f before selecting on them.")
+    elif loc_fixed and scale_fails:
+        print("\n  MIXED: the location drift is largely the free offset, but a")
+        print("  scale non-stationarity remains in the identified shape.  Do")
+        print("  not read the offset invariance as a clean bill of health.")
     return rows
 
 
