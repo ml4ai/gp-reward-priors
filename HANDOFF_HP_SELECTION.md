@@ -1340,14 +1340,12 @@ per-tensor relative perturbation, `chain_init_jitter * std(w)` seeded per chain
 jittering the starts must drop ALIGNMENT.** If alignment stays near 0.75 with
 jittered starts, hypothesis 1 is dead and the cause is diffusion.
 
-> **Sizing correction (§4.3.7).** This was first run at **8 chains** to save
-> compute, which made it uninformative: ALIGNMENT varies by 0.41 and pooled
-> `loc_sd` by 2.10× between the two halves of a single jitter-0 run, against a
-> jitter effect of 0.046. Run it at **16 chains**, the only size with a matched
-> baseline (`c16`: ALIGNMENT 0.7564, `loc_sd` 0.6460). Command in §4.3.7.
-
-Run it cyclical — `nocyc` is worse on every axis and is not the configuration
-to build on.
+> **DONE, and hypothesis 1 is REFUTED — see §4.3.8.** First run at 8 chains,
+> which was uninformative (§4.3.7: ALIGNMENT varies by 0.41 between halves of a
+> single jitter-0 run, against a jitter effect of 0.046). Redone at 16 chains:
+> **ALIGNMENT held at 0.7216 against `c16`'s 0.7564**, where this hypothesis
+> predicted a collapse toward 0.25. The shared start is not the cause, and
+> hypothesis 2 — weight-space diffusion — is the only one left.
 
 ### 4.3.7 The jitter test — measured 2026-08-19. Inconclusive, and why.
 
@@ -1418,6 +1416,82 @@ is now needed anyway, at a total cost higher than running it first. Where a
 diagnostic's sampling variability is unknown, measure that variability before
 sizing the experiment — here it was available for free from an existing run's
 two halves.
+
+### 4.3.8 The shared start is refuted — measured 2026-08-19
+
+`chain_init_jitter 0.1` at **16 chains**, cyclical, against `c16` (identical but
+jitter 0). This is the matched comparison §4.3.7 said was needed.
+
+| metric | `c16` jitter 0 | `jit16` jitter 0.1 | |
+|---|---|---|---|
+| **ALIGNMENT** | **0.7564** | **0.7216** | −0.035 |
+| signed shift | 14/16, p = 0.0042 | 12/16, p = 0.0768 | |
+| raw `loc_sd` | 0.6460 | 0.5714 | −11.5% |
+| `loc_z` | 2.5152 | 2.2037 | still FAILS |
+| raw `scale_ratio` | 1.4664 | **1.5213** | worse |
+| `scale_z` | 1.9962 | **2.2083** | PASS → **FAIL** |
+| per-chain `loc_sd` max/median | 1.33× | 1.59× | |
+| `rhat_bulk` median | 1.7037 | 1.6685 | |
+| `ess_bulk` median | 26.83 | 27.51 | |
+| unresolved points | 0.66% | 0.58% | |
+
+**Hypothesis 1 is dead.** The shared-start hypothesis predicted that jittering
+the starts would break the common component and drive ALIGNMENT toward 0.25.
+It moved from 0.7564 to **0.7216** — 4.6% relative, still firmly in COMMON
+territory. There is no C=16 replicate to bound the noise directly, but the
+predicted effect was a collapse of two thirds and the observed change is a
+rounding error against it, so the conclusion is robust to any plausible noise
+level. Overdispersing the starts does not remove the common drift, therefore
+the common drift does not come from the shared start.
+
+**Jitter trades location drift for spread drift, and is not a fix.** `loc_sd`
+improved 11.5% while `scale_ratio` worsened and `scale_z` crossed from PASS to
+FAIL. This is the second independent run showing that pattern — the 8-chain
+test did the same (§4.3.7, `scale_ratio` 1.4361 → 1.5750) — so unlike the
+alignment reading it is replicated. Net stationarity is **worse**, not better.
+
+**Its R-hat rationale is also not supported here.** Overdispersed starts are
+supposed to *raise* R-hat, making it an honest convergence check rather than a
+flattered one (`f_pref_net.py:130`). `rhat_bulk` median instead fell slightly,
+1.7037 → 1.6685. The change is small enough to be noise, but it is the wrong
+direction, and nothing in this run argues for keeping jitter on. **Leave
+`chain_init_jitter` at 0** absent a reason beyond this evidence.
+
+**What remains: weight-space diffusion that is only approximately
+f-preserving** (§3.6.2). Every alternative has now been eliminated by direct
+test — the cyclical schedule (§4.3.6), the shared start (this section) — and
+burn-in was argued down on the 11:1 sampling-to-burn-in ratio (§4.3.5). It also
+has a precedent in this project: §7.1 records round 1's weight norm growing
+4.09× in *all eight* chains, which is a common-across-chains mechanism and so
+survives the alignment test that killed the shared start.
+
+**`--weight-f-coupling` tests it, and needs no new sampling.** It correlates
+per-chain ‖w‖ growth against per-chain f drift **across chains**: under the leak
+hypothesis, chains that grew their weights more should have drifted more in f.
+Significance is by permutation.
+
+This is *not* a reinstatement of the removed `--weight-trace`. §3.6.2 remains
+correct that weight-space statistics say nothing about convergence on their
+own; here ‖w‖ is used only as a **regressor** against an f-space quantity
+measured independently, and no claim is read off ‖w‖ by itself. The tool also
+prints a within-chain correlation and explicitly refuses it as evidence: if
+‖w‖ and f are both monotone in draw index — which is what a drifting chain
+looks like — they correlate near 1 whether or not one causes the other.
+Validated on synthetic chains, within-chain r was 0.95 under a true leak and
+0.97 under no leak, while the across-chain test gave r = 0.995 (p < 0.001) and
+r = 0.117 (p = 0.67) respectively. **Read only the across-chain line.**
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_play_c16_0 --weight-f-coupling --device cuda \
+    2>&1 | tee exp/stage3_medium_play_c16_0_wcoupling_diag_tail.txt
+```
+
+Run it on `c16` (jitter 0, the cleaner baseline) and on `jit16`. **Check the
+`wGrowth` range before reading the result**: if the chains barely differ in
+growth the regressor has no variation and the test is uninformative rather than
+negative. With n = 16 only a large effect will clear the permutation test, so a
+null is weak evidence of absence — the tool says so in its own output.
 
 ### 4.4 Procedure
 
@@ -2162,7 +2236,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | MR | 4/4 fired; winners in `scripts_mr/antmaze_<v>_mr_antmaze_eval.yaml` |
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
-| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6). The 8-chain `chain_init_jitter` test is inconclusive — 8 chains is below the resolution of both ALIGNMENT and `loc_sd` (§4.3.7). Next is the same test at **16 chains** |
+| 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). Weight-space diffusion is the only hypothesis left; `--weight-f-coupling` tests it on existing chains, no new sampling |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2213,10 +2287,11 @@ compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
 (alignment 0.7564, §4.3.5), and the compute-matched non-cyclical control cleared
 the cyclical schedule while incidentally supplying the empirical support §3.6.2
 lacked for it (§4.3.6). The `chain_init_jitter` test meant to separate the two
-remaining hypotheses was run at 8 chains and is **inconclusive**: ALIGNMENT and
-`loc_sd` both vary more between halves of one run than the effect being tested
-(§4.3.7). The cause is still unidentified; the shared start and weight-space
-diffusion are both still live, and the 16-chain jitter run distinguishes them.
+remaining hypotheses was inconclusive at 8 chains (§4.3.7) and **refuted the
+shared start** when redone at 16 (§4.3.8): ALIGNMENT held at 0.7216 against
+0.7564, where the hypothesis predicted a collapse toward 0.25. **Weight-space
+diffusion that is only approximately f-preserving is the last hypothesis
+standing**, and `--weight-f-coupling` tests it on the chains already saved.
 
 **Do this next, in order:**
 
@@ -2248,17 +2323,16 @@ diffusion are both still live, and the 16-chain jitter run distinguishes them.
    build on the `nocyc` configuration. Remaining levers, reordered on that
    evidence:
 
-   - **`chain_init_jitter 0.1` at 16 chains, cyclical — do this first.** It is
-     a *discriminating* experiment, not just an R-hat fix: if the common drift
-     comes from the shared start, jittering must drop ALIGNMENT from 0.7564;
-     if alignment holds, the shared start is dead and the cause is weight-space
-     diffusion (§4.3.6). **The 8-chain version was run 2026-08-19 and is
-     inconclusive** — 8 chains is below the resolution of both ALIGNMENT and
-     `loc_sd` (§4.3.7). Use 16, and compare against `c16`, not `c8`.
-   - **Test the diffusion hypothesis** if jitter does not move alignment: check
-     whether `loc_sd` tracks ‖w‖ growth across draws (§3.6.2). §7.1 records the
-     round-1 norm growing 4.09× in every chain, so this is the mechanism with a
-     precedent in this project.
+   - **`chain_init_jitter` — DONE, and the shared start is refuted** (§4.3.8).
+     At 16 chains ALIGNMENT held at 0.7216 against `c16`'s 0.7564, where the
+     hypothesis predicted a collapse toward 0.25. Jitter also worsened
+     `scale_z` from PASS to FAIL in both the 8- and 16-chain runs. **Leave
+     `chain_init_jitter` at 0.**
+   - **Weight-space diffusion is the only hypothesis left — test it next.**
+     `--weight-f-coupling` on the existing `c16` and `jit16` chains correlates
+     per-chain ‖w‖ growth against per-chain f drift across chains (§4.3.8).
+     **No new sampling.** §7.1 records the round-1 norm growing 4.09× in every
+     chain, so this is the mechanism with a precedent here.
    - **`num_burn_in_steps`** — weak prior. A transient would have to survive
      burn-in and still move `f` by 0.65 sd between steps ~100 000 and ~206 000.
    - **`num_samples`** — last resort; it breaks the §3.7 selection/production

@@ -235,6 +235,103 @@ def _load_chain_weights(run_dir, i, device):
     return [_to_numpy_weights(w) for w in ckpt["sampled_weights"]]
 
 
+def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
+                      n_perm=20000, seed=0):
+    """Does weight-space growth explain the function-space drift?
+
+    NOT a convergence diagnostic, and not a reinstatement of the removed
+    `--weight-trace`.  Section 3.6.2 is right that weight-space statistics say
+    nothing about convergence on their own: U(w) depends on w only through f, so
+    the chain diffuses freely along f-preserving directions and a growing ||w||
+    is expected behaviour.  This asks a different question -- whether that
+    diffusion is only APPROXIMATELY f-preserving, which is the last surviving
+    explanation for the common drift (sections 4.3.6, 4.3.8).  ||w|| is used
+    only as a REGRESSOR against an f-space quantity that was measured
+    independently; no claim is read off ||w|| by itself.
+
+    The test is ACROSS CHAINS: chains that grew their weights more should, under
+    the leak hypothesis, have drifted more in f.  That comparison has no common
+    trend to fake it.
+
+    A within-chain correlation is also printed, but it is CONFOUNDED and must
+    not be read as evidence: if ||w|| and f are both monotone in draw index --
+    which is exactly what a drifting chain looks like -- they correlate near 1
+    whether or not one causes the other.  It is shown only because a near-zero
+    within-chain r would be informative in the negative direction.
+    """
+    C, D, P = pred_chains.shape
+    h = D // 2
+    if h < 2:
+        print("\n=== WEIGHT-SPACE / FUNCTION-SPACE COUPLING ===")
+        print("  too few draws -- not computed.")
+        return
+
+    print("\n=== WEIGHT-SPACE / FUNCTION-SPACE COUPLING ===")
+    print("  Tests whether the diffusion is only APPROXIMATELY f-preserving")
+    print("  (3.6.2) -- the last hypothesis standing for the common drift.")
+    rows = []
+    for k, i in enumerate(chain_ids):
+        ws = _load_chain_weights(run_dir, i, device)[:D]
+        wn = np.array([
+            math.sqrt(sum(float(np.square(np.asarray(a, dtype=np.float64)).sum())
+                          for a in w))
+            for w in ws
+        ])
+        f = np.asarray(pred_chains[k], dtype=np.float64).mean(axis=1)
+        w_growth = float(wn[h:2 * h].mean() / max(wn[:h].mean(), 1e-12))
+        f_shift = float(f[h:2 * h].mean() - f[:h].mean())
+        a_, b_ = wn[:2 * h], f[:2 * h]
+        r_in = (float(np.corrcoef(a_, b_)[0, 1])
+                if a_.std() > 0 and b_.std() > 0 else float("nan"))
+        rows.append((i, float(wn[0]), w_growth, f_shift, r_in))
+
+    print(f"  {'chain':>6} {'||w||_0':>10} {'wGrowth':>9} {'fShift':>10} "
+          f"{'r_within':>9}")
+    print("  " + "-" * 49)
+    for i, w0, g, s, r in rows:
+        print(f"  {i:>6} {w0:>10.3f} {g:>9.4f} {s:>10.4f} {r:>9.4f}")
+
+    g = np.array([r[2] for r in rows])
+    s = np.array([r[3] for r in rows])
+    r_in_med = float(np.nanmedian([r[4] for r in rows]))
+    print(f"\n  ||w|| growth (2nd half / 1st half): median {np.median(g):.4f}, "
+          f"range {g.min():.4f}-{g.max():.4f}")
+    print(f"  within-chain r: median {r_in_med:.4f}  "
+          f"(CONFOUNDED by common trend -- do not read as support)")
+
+    if g.std() < 1e-9 or s.std() < 1e-9 or len(g) < 4:
+        print("  across-chain test needs >=4 chains with variation -- skipped.")
+        return
+
+    def _r(x, y):
+        return float(np.corrcoef(x, y)[0, 1])
+
+    rng = np.random.default_rng(seed)
+    for label, y in (("signed fShift", s), ("|fShift|", np.abs(s))):
+        r_obs = _r(g, y)
+        null = np.array([_r(g, rng.permutation(y)) for _ in range(n_perm)])
+        p = float((np.abs(null) >= abs(r_obs)).mean())
+        print(f"  across-chain r(wGrowth, {label:>13}) = {r_obs:>7.4f}   "
+              f"permutation p = {p:.4f}  (n = {len(g)})")
+
+    r_main = _r(g, np.abs(s))
+    null = np.array([_r(g, rng.permutation(np.abs(s))) for _ in range(n_perm)])
+    p_main = float((np.abs(null) >= abs(r_main)).mean())
+    if p_main < 0.05 and r_main > 0:
+        print("  -> SUPPORTS the leak: chains that grew ||w|| more drifted more")
+        print("     in f.  The diffusion is not exactly f-preserving.")
+    elif p_main < 0.05 and r_main < 0:
+        print("  -> Significant but NEGATIVE, which the leak hypothesis does")
+        print("     not predict.  Treat as unexplained, not as support.")
+    else:
+        print("  -> NO across-chain association detected.  Either the leak is")
+        print("     not the mechanism, or 16 chains cannot resolve it -- with")
+        print("     this n only a large effect would show, so this is weak")
+        print("     evidence of absence.  Check the wGrowth range above: if")
+        print("     the chains barely differ in growth, the regressor has no")
+        print("     variation to work with and the test is uninformative.")
+
+
 def ce_ladder(run_dir, dataset, width, depth, chain_ids, levels,
               device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
               chunk_pairs=64):
@@ -854,6 +951,13 @@ def main():
                          "equilibrated -- more chains cannot help) from "
                          "independent per-chain wandering (more chains do "
                          "help). Needs no extra sampling (section 4.3.4).")
+    ap.add_argument("--weight-f-coupling", action="store_true",
+                    help="Test whether weight-space growth explains the "
+                         "function-space drift, by correlating per-chain ||w|| "
+                         "growth against per-chain f drift ACROSS chains. Uses "
+                         "||w|| only as a regressor, never as a convergence "
+                         "diagnostic (section 3.6.2). Needs no new sampling "
+                         "(section 4.3.8).")
     ap.add_argument("--drift-blocks", type=int, default=None, metavar="K",
                     help="Split the draws into K consecutive blocks and report "
                          "the block-to-block shift. Separates a DECAYING "
@@ -928,6 +1032,10 @@ def main():
 
     if args.drift_blocks:
         drift_blocks(pred_chains, n_blocks=args.drift_blocks)
+
+    if args.weight_f_coupling:
+        weight_f_coupling(args.run_dir, chain_ids, pred_chains,
+                          device=args.device)
 
     if args.draw_ladder:
         try:
