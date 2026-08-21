@@ -537,7 +537,7 @@ carrying real information).
 | **Cyclical step size** (Zhang et al. 2020) in place of the paper's decaying ε | Deliberate — standard SGHMC gets trapped in a single basin. Correctly implemented (samples taken only at cool-phase end, momentum resampled at cycle start, structurally close to Alg. 2's outer loop). But the *composition* of cSGMCMC with fSGHMC is analysed by neither paper. `function_space_drift` is the empirical check that early and late cycles are one measure. **2026-08-18: that check fired** — medium_play carries a location drift common to 14 of 16 chains (alignment 0.7564) that does not shrink with chain count. **2026-08-19: the schedule was tested directly and CLEARED** (§4.3.6). At matched compute, `use_cyclical_lr False` made the drift *worse* on every axis (`loc_sd` 0.4222 → 0.5443, `scale_ratio` 1.4361 → 2.1326, `scale_z` 1.3564 → 2.5834, failing a gate it had passed), so the drift is intrinsic to the sampler or model, not the schedule. **That run also supplies the empirical support this row previously lacked:** without cycling, predictive CE degrades 0.2029 → 0.3580 and accuracy drops 6.3 points. Report the composition as tested and retained on evidence, not merely assumed. **One new caveat to disclose:** the cyclical run's average LR is ~2.25× the constant-LR run's, yet its spread grows far *less* (1.44× vs 2.13×), so the per-cycle anneal appears to re-concentrate the chain. Sampling only at the cold point may therefore under-disperse relative to the true posterior — untested, and not measured by `scale_ratio`, which is a growth ratio rather than an absolute width. |
 | **`max_param_step: 0.5`** clamps momentum every step, sampling included | Not measure-preserving when it binds, and unlike the gradient clip it was never scoped to burn-in. Now instrumented: `param_clamp_sampling_pct` must be ~0 on any selected run, else that run sampled the wrong measure. |
 | **Scale** | The paper's networks are 141–10,401 parameters, converging in 500–2,000 iterations. `width: 10, depth: 6` is ~6.3M. Nothing in the paper supports that regime. |
-| **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action. |
+| **`bt_pool: "mean"`** — the likelihood `Φ(f)` pools rewards by masked *mean* over timesteps, where the preference-learning literature uses the *sum* (return) | **Resolved 2026-08-11.** Applied identically in MR, PT and BNN, so cross-family comparability holds. Every segment is exactly T=100 valid timesteps (verified, all four variants, train and val), so mean = sum/100 *exactly*: the two are the same model up to a global temperature, and no length confound exists. One sentence in the paper, no further action.  **2026-08-20: tested directly.** A `bt_pool="sum"` run with `map_amp2` rescaled by 1e4 (the prior is zero-mean, `map_informed_prior.py:4`, so the kernel rescale is the whole correspondence) reproduced the model as claimed but not the sampler: gradients grow ~100x under sum pooling while `sghmc_lr` is a weight-space constant, so the effective step grew ~50x, every drift gate improved and predictive CE doubled (0.2076 -> 0.4158). The equivalence claim in this row is about the MODEL and it survives; the sampler is simply not scale-invariant. Retain `"mean"` in all three families -- switching gains nothing and would break the identical-pooling basis of this row (SS4.3.15). |
 
 ### 3.6.3 Winner acceptance criteria
 
@@ -1940,6 +1940,93 @@ every standard diagnostic looks acceptable.** §7.1 already carries the
 short-horizon lesson for step size; this extends it to the prior itself, and it
 is the sharper instance.
 
+### 4.3.15 The `bt_pool="sum"` run — stationarity can be bought, and it was
+
+Ran `bt_pool sum` with `map_amp2` rescaled 168939.82 → 16.894 (rewards go to
+1/100 under sum, so sd ×1/100, variance ×1/1e4), 16 chains, everything else as
+`c16`:
+
+| metric | `c16` (mean) | `btsum` (sum) | |
+|---|---|---|---|
+| raw `loc_z` / `scale_z` | 2.5152 / 1.9962 | **0.3740 / 1.4966** | both now PASS |
+| raw `loc_sd` | 0.6460 | **0.1075** | 6× better |
+| centred `ratio` | 1.6026 | **1.0661** | **the widening is gone** |
+| centred `scale_z` | 2.5906 | **0.8412** | passes comfortably |
+| **predictive CE** | **0.2076** | **0.4158** | **2× WORSE** |
+| predictive accuracy | 0.9148 | 0.9002 | worse |
+| `gradnorm_burnin_mean` | 0.2034 | 10.8715 | **53×** |
+| `gradnorm_sampling_mean` | 0.2098 | 3.6421 | **17×** |
+
+**The rescaling was correct and the equivalence holds at the model level.** The
+map-informed prior is **zero-mean** — `map_informed_prior.py:4`, "informativeness
+lives entirely in its kernel (zero mean)", confirmed at lines 244 and 293 — so
+there is no prior mean needing a matching rescale, and `amp2` multiplies the
+whole kernel including jitter (`:163–176`), giving `K → K/1e4` exactly. CE is a
+function of `Φ₁ − Φ₂`, which the reparameterisation leaves invariant. **A
+correct equivalence must therefore give identical CE. It gave 2× worse.**
+
+**The sampler is not scale-invariant, and that is the whole explanation.**
+`sghmc_lr`, `mdecay`, `max_param_step` and `clip_grad_norm_value` are all fixed
+constants in *weight* space. Under sum-pooling `∂Φ/∂r_t` is 1 rather than
+`1/T`, so gradients grow ~100× — measured 53× in burn-in, 17× in sampling — and
+with `sghmc_lr` unchanged the effective step grows with them. Neither the
+`max_param_step` clamp nor the gradient clip fired in either run
+(`param_clamp_sampling_pct` 0, `gradnorm_*_pct_over_clip` 0), so nothing
+absorbed it. The sampler simply took ~50× larger steps through the same target.
+
+**Which is why every stationarity number improved while the answer got worse.**
+A step size that large equilibrates fast to a measure that is not the posterior:
+the discretisation error is O(ε), so the chain settles quickly onto something
+too broad and stays there. `function_space_drift` asks whether the sampled
+measure is *stationary*, not whether it is the *right* measure — and a fast,
+stationary, wrong chain passes every gate in §4.2.
+
+> **This is the round-1 failure mode inverted, and it is the most important
+> methodological result in §4.3.** §7.1 records diagnostics looking *good*
+> because a chain was drifting. Here they look good because a chain is moving
+> too fast. In both cases the diagnostic is measuring something real and the
+> inference from it is wrong. **Stationarity is necessary, not sufficient**, and
+> centred `ratio` alone is therefore *not* a valid objective for a sampler fix:
+> it can be driven to 1.0661 by breaking the sampler. Judge any candidate fix
+> **jointly on centred `ratio` and predictive CE**, and treat a fix that improves
+> drift while degrading CE as having made things worse, not better.
+
+**Decision: keep `bt_pool="mean"` in all three families (option (a)).** The
+comparability objection stands on its own — `bt_pool` is shared across
+`scripts_mr/`, `scripts_pt/` and BNN, and §3.6.2 rests cross-family
+comparability on it being identical — and the run adds a second, independent
+reason: the mean-pooled parameterisation is where the tuned sampler
+hyperparameters are actually valid. A fair sum-pooled comparison would need
+`sghmc_lr` re-tuned by roughly the same factor, which at best re-derives the
+posterior we already have. **Nothing is to be gained by switching, and §3.6.2's
+equivalence claim survives** — it is a statement about the model, and the model
+behaved exactly as claimed.
+
+**`map_amp2` is still untested.** `btsum` used the *same* prior amplitude
+expressed in different units, not a smaller one, so §4.3.14's root-cause
+hypothesis — that selection on CE drove the amplitude to 1.69e5 and an
+improper-in-practice prior — has had no experiment aimed at it yet. That is the
+next run, and it should be **mean-pooled**:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --OUT_DIR ./exp/stage3_medium_play_amp1e4 > ../exp/stage3_medium_play_amp1e4.log 2>&1 &
+```
+
+**Eight chains is the right size here**, and this is not the §4.3.7 mistake
+repeated: centred `ratio` is an *effect size* with no chain-count dependence,
+and `c8` 1.5913 against `c16` 1.6026 measures its run-to-run stability at
+**0.7%**. What §4.3.7 showed to be unresolvable at 8 chains was ALIGNMENT and
+pooled `loc_sd`, neither of which is the objective here. That halves the cost
+per rung.
+
+Judge each rung on **centred `ratio` AND CE together**, per the box above. The
+outcome that would confirm §4.3.14 is `ratio` falling toward 1 while CE stays
+near 0.2076; `ratio` falling while CE degrades is the `btsum` failure again and
+means the amplitude is not the mechanism.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2684,6 +2771,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15); `map_amp2` ladder is the live experiment for §4.3.14's root cause. Judge every candidate on centred `ratio` AND CE jointly — §4.3.15 shows drift numbers alone can be bought by breaking the sampler |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -2748,6 +2836,18 @@ remaining defect is a widening of the identified component, and `d150`
 so no horizon fixes it, and doubling the draws bought +4% bulk ESS and a CVaR
 ESS that went *down*. **Both of §4.1's levers are exhausted; stage 3 closes
 without a budget (§4.3.13).**
+
+**The sampler repair is now the work (§4.3.13's fork, resolved).** CVaR is the
+paper's mechanism, no theory makes the posterior *mean* a differentiator under
+reduced data or label noise, and a mean-only fallback would be a different and
+much weaker paper. So the sampler is fixed rather than worked around.
+
+**Judge every candidate fix on centred `ratio` AND predictive CE together.**
+§4.3.15 is the reason: a `bt_pool="sum"` run drove the widening from 1.6026 to
+1.0661 and passed every §4.2 gate while *doubling* CE, because ~50× larger
+effective steps equilibrate fast onto the wrong measure. Stationarity is
+necessary, not sufficient, and centred `ratio` on its own can be bought by
+breaking the sampler.
 
 **Do this next, in order:**
 
