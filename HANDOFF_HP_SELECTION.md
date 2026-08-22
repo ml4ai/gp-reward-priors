@@ -2164,6 +2164,70 @@ derivable from the pooling convention and segment length, and the sweep budget
 it consumes is better spent on parameters that CE can actually select. Then
 re-run the 16-chain confirmation above before anything downstream depends on it.
 
+### 4.3.18 The 16-chain confirmation — gates pass, and the common drift is gone
+
+`map_amp2` 16894.0 at 16 chains, against `c16` (1.69e5, 16 chains):
+
+| metric | `c16` | `amp1e4_c16` | |
+|---|---|---|---|
+| raw `loc_z` / `scale_z` | 2.5152 **FAIL** / 1.9962 | **1.2801 / 1.9308** | both PASS |
+| centred `loc_z` / `scale_z` | 1.2566 / 2.5906 **FAIL** | **1.0251 / 1.7532** | both PASS |
+| centred `ratio` | 1.6026 | **1.3490** | |
+| **ALIGNMENT** | **0.7564** | **0.4593** | |
+| signed shift | 14/16, p = 0.0042 | **10/16, p = 0.4545** | |
+| unresolved | 0.66% | **0.17%** | 3.9× better |
+| relMCSE max | 1.6749 | **1.2697** | better |
+| relMCSE median | 0.2234 | 0.2437 | 9% worse |
+| CE | 0.2076 | 0.2232 | 7.5% worse |
+
+**Both §4.3.17 predictions hold.** Centred `scale_z` came in at **1.7532**
+against a predicted 1.6449 — 6.6% off, and on the right side of the gate. And
+the effect-size stability that justified running the ladder at 8 chains holds:
+centred `ratio` 1.3200 (8ch) vs 1.3490 (16ch), **2.2% apart**. Slightly looser
+than the 0.7% seen at 1.69e5 but well inside what the ladder's conclusions rest
+on. §4.3.16's 8-chain methodology is sound.
+
+**The common drift is gone.** ALIGNMENT collapses 0.7564 → **0.4593** and the
+sign test goes from p = 0.0042 to p = 0.4545 — from "every chain carries the
+same shift" to no detectable common direction, both measured at 16 chains so
+directly comparable. **§4.3.5's common drift was largely an artifact of the
+excessive amplitude**, i.e. of the free offset wandering under a prior too weak
+to pin it. Nine subsections chased a shared cause — start, schedule, GPU
+placement — for something that was mostly a mis-specified prior.
+
+**This changes what the residual is.** The widening that remains
+(`ratio` 1.3490) is *not* shared across chains: each chain's variance grows
+independently. Shared-cause hypotheses are therefore the wrong place to look
+for it. `chain_init_jitter`, the cyclical schedule and burn-in length all act
+on mechanisms common to every chain, and none of them can explain a per-chain
+independent variance growth. **The sampler repair should target within-chain
+equilibration** — the chain's own variance still growing over its 75 draws —
+which is the `num_samples` axis §4.3.12 found exhausted at 150 draws and the
+step-size/friction geometry that §4.3.15 showed the sampler is sensitive to.
+
+> **The gate PASS here is itself power-dependent — do not read it as
+> stationarity.** §4.2.1 cuts both ways: `scale_z` grows with chain count, so
+> passing at 16 says nothing about 32. Applying the measured 1.393 factor,
+> centred `scale_z` at 32 chains projects to **2.44 — a FAIL.** The effect size
+> is what is invariant, and it is **1.3490**, a 35% widening between chain
+> halves. That is a real non-stationarity that this configuration has reduced,
+> not removed, exactly as §4.3.17's plateau at ~1.19 predicts. A configuration
+> that passes §4.2 at the chain count you happen to run is not the same as a
+> sampler that is stationary.
+
+**Tail behaviour repeats §4.3.17's pattern and is the best seen so far.**
+Unresolved points 0.66% → **0.17%** (3.9× better, and the lowest of any run in
+this investigation), relMCSE max 1.6749 → 1.2697, against a 9% worse median.
+The difficulty distribution compresses again: typical points slightly noisier,
+unusable points become usable.
+
+**Status of this configuration.** At the principled amplitude and 16 chains,
+medium_play passes every §4.2 gate raw and centred, resolves 99.83% of points,
+and costs 7.5% CE against the CE-selected amplitude. It is the best-behaved
+configuration produced in this investigation and the first to clear the gate.
+It is **not** stationary, and §7.1's disclosure list should say so plainly
+rather than resting on the gate result.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2666,6 +2730,14 @@ generalise beyond this project:
   biases toward instability**, rather than merely failing to detect it: at a
   short horizon a larger step size buys a better score and its cost has not yet
   appeared. Round 1 selected at 35 draws and deployed at 310.
+- **A gate PASS at the chain count you happened to run is not stationarity.**
+  The converse of the bullet below, and it bit in the other direction: the
+  final medium_play configuration passes every §4.2 gate at 16 chains while
+  its centred `scale_ratio` is 1.3490 — a 35% variance growth between chain
+  halves — and projects to a FAIL at 32 chains (§4.3.18). Report the effect
+  size, which is chain-count invariant, alongside any gate verdict, and do
+  not describe the shipped sampler as stationary. It is not; the drift was
+  reduced from 1.6026 and is expected to plateau near 1.19 (§4.3.17).
 - **A drift check that is a significance test will clear a drifting sampler at
   small sample sizes.** Round 1's lesson was to exclude drift separately; stage 3
   found that the drift metric itself has the same failure mode one level down.
@@ -2908,7 +2980,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). Next: confirm the predicted 16-chain gate PASS at 1e4, then target the residual widening |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared, so shared-cause levers cannot fix it |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
