@@ -2027,6 +2027,83 @@ outcome that would confirm §4.3.14 is `ratio` falling toward 1 while CE stays
 near 0.2076; `ratio` falling while CE degrades is the `btsum` failure again and
 means the amplitude is not the mechanism.
 
+### 4.3.16 The amplitude ladder — §4.3.14 confirmed, and it is a real lever
+
+`map_amp2` 168939.8 → 16894.0 (10× down, to the principled scale), 8 chains,
+mean-pooled, everything else as `c8`:
+
+| metric | `c8` (1.69e5) | `amp1e4` (1.69e4) | |
+|---|---|---|---|
+| **centred `ratio`** | **1.5913** | **1.3200** | **46% of the excess removed** |
+| centred `scale_z` | 1.8603 | 1.1812 | large drop |
+| centred `loc_sd` | 0.3728 | 0.3173 | better |
+| centred `loc_z` | 1.0609 | 0.9576 | better |
+| offset `ratio` | 1.2903 | **1.4677** | **rose** |
+| raw `ratio` | 1.4361 | 1.4422 | flat — the two cancel |
+| raw `loc_sd` | 0.4222 | 0.1744 | 2.4× better |
+| predictive CE | 0.2029 | 0.2232 | +10% |
+| accuracy | 0.9172 | 0.9107 | −0.7 pt |
+| `gradnorm_sampling_mean` | 0.2252 | 0.1856 | no blow-up |
+
+**This is not the `btsum` failure mode.** Gradient norms *fell*, the clamp never
+fired, and CE cost 10% rather than doubling. The stationarity gain is bought
+with a better-specified prior, not with a broken sampler — which is exactly the
+distinction §4.3.15 says to test for.
+
+**Raw `ratio` is not a valid read-out for this question.** It moved 1.4361 →
+1.4422 and reads as "no change", while the centred shape improved 17% and the
+offset *worsened* — the two cancel inside the mixture. Any amplitude comparison
+must be made on the split; the raw number will hide the effect. (This caught me
+out: the wandb-only preliminary read of this run concluded the widening was
+untouched, and it was wrong.)
+
+**§4.3.14's root cause is confirmed, and the sweep yaml documents the mechanism
+itself.** The principled amplitude is derivable, not empirical: every segment is
+exactly T=100 timesteps, so mean pooling divides the BT logit by 100, matching
+that logit scale needs rewards 100× larger, and since `map_amp2` scales the
+kernel (sd as `sqrt(map_amp2)`) the natural mean-pooled amplitude is ~100² =
+**1e4** (`sweep_antmaze_medium_play_bnn_antmaze_eval.yaml:149–157`). The
+selected winner sits **16.9× above** it. And the same comment records the winner
+chasing every cap it was given:
+
+| cap | winner(s) |
+|---|---|
+| 1e3 (round 1) | 313 – 773 |
+| 1e4 (round 2, early) | 6647 / 8699 |
+| 1e6 (round 2, final) | **168940** |
+
+**CE has no interior optimum in `map_amp2`.** Three caps, three winners at or
+near the boundary, each an order of magnitude apart. That is the improper-prior
+limit reached numerically, and it is direct evidence for §4.3.14 sitting in the
+repo's own configuration files — the cap was raised twice *because* the winner
+kept hitting it, which is the selection objective doing exactly what §4.3.14
+says it does.
+
+**But the widening is reduced, not eliminated.** 1.3200 is not 1.0, and at the
+principled amplitude there is still a 32% spread growth between chain halves.
+Amplitude is *a* mechanism, not the only one. Whether it can reach 1.0 at all
+is the next question, and it needs one more rung **below** the principled value
+— which is a diagnostic, not a candidate configuration:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 --map_amp2 1689.3982289052463 \
+    --OUT_DIR ./exp/stage3_medium_play_amp1e3 > ../exp/stage3_medium_play_amp1e3.log 2>&1 &
+```
+
+Read it on centred `ratio` and CE jointly (§4.3.15), and on the split, never on
+raw `ratio`. A continued fall toward 1.0 means amplitude is the dominant
+mechanism and the question becomes where to stop on the CE/stationarity curve —
+a question that must be answered on calibration grounds, since §4.3.14 is
+precisely that CE cannot answer it. A plateau near 1.3 means a second mechanism
+holds the floor, and the residual is what the sampler repair has to target.
+
+**Selection implication, independent of that rung.** `map_amp2` must stop being
+swept on validation CE. The principled value is derivable from the pooling
+convention and the segment length; fix it there, and let the sweep spend its
+budget on parameters that have interior optima.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2771,7 +2848,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15); `map_amp2` ladder is the live experiment for §4.3.14's root cause. Judge every candidate on centred `ratio` AND CE jointly — §4.3.15 shows drift numbers alone can be bought by breaking the sampler |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. Not sufficient on its own — centred `ratio` 1.3200, not 1.0. One rung below principled is running to find whether amplitude alone can reach stationarity |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
