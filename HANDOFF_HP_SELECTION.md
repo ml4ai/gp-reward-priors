@@ -2104,6 +2104,66 @@ swept on validation CE. The principled value is derivable from the pooling
 convention and the segment length; fix it there, and let the sweep spend its
 budget on parameters that have interior optima.
 
+### 4.3.17 The ladder completed — amplitude plateaus, and the tail improves
+
+Three rungs, 8 chains each, mean-pooled, everything else as `c8`:
+
+| `map_amp2` | centred `ratio` | excess | centred `scale_z` | CE | acc | `cvar_ess` | relMCSE med | relMCSE max | unresolved |
+|---|---|---|---|---|---|---|---|---|---|
+| 1.69e5 (selected) | 1.5913 | 0.5913 | 1.8603 | 0.2029 | 0.9172 | 59.21 | 0.2706 | 2.3862 | **2.25%** |
+| 1.69e4 (**principled**) | 1.3200 | 0.3200 | 1.1812 | 0.2232 | 0.9107 | 46.78 | 0.3064 | 1.9029 | **1.44%** |
+| 1.69e3 (diagnostic) | 1.2308 | 0.2308 | 0.9483 | 0.2792 | 0.8864 | 31.03 | 0.3406 | 1.4390 | **0.25%** |
+
+**Amplitude plateaus short of stationarity.** Successive decades remove 0.2713
+then 0.0892 of the excess widening — gains shrinking 0.329× per decade. If that
+holds, the remaining excess is ~0.044 and the floor is **centred `ratio` ≈ 1.19,
+not 1.0**. Three points and a geometric extrapolation, so indicative rather than
+measured, but the direction is unambiguous: **a second mechanism holds the
+floor, and amplitude cannot reach stationarity on its own.** This is §4.3.16's
+plateau branch, and that residual is what the sampler repair must target.
+
+**The returns diminish sharply, which fixes the stopping point.** Excess removed
+per unit of CE paid: **13.36** in the first decade, **1.59** in the second — an
+8.4× collapse in efficiency. Combined with the derivation, that makes the
+principled ~1e4 the defensible stopping point: it captures 46% of the excess for
+10% CE, and everything past it costs roughly eight times more per unit gained.
+
+> **Correction to the `cvar_ess` reading.** The falling `cvar_ess` median (59.21
+> → 46.78 → 31.03) was flagged as a degradation of the paper's core quantity.
+> That was wrong. The metric that decides whether a point's CVaR is *usable* is
+> whether its MC error exceeds the posterior sd, and unresolved points fall
+> **2.25% → 1.44% → 0.25%, a 9× improvement**, while relMCSE *max* falls 2.3862
+> → 1.4390. Only the *median* worsens (0.2706 → 0.3406). So the difficulty
+> distribution compresses: the typical point gets slightly noisier while the
+> points that were unusable become usable. For a method whose claim is
+> per-point conservative reward estimates, that is the right direction, and it
+> is the opposite of the conclusion drawn from the median alone.
+>
+> Part of the median move is likely §7.1's inflation unwinding — a drifting
+> chain inflates ESS, so the higher `cvar_ess` at 1.69e5 was partly an artifact
+> of the drift being removed. These runs cannot separate that from a genuine
+> efficiency cost, and no claim either way should be made from them.
+
+**Checkable prediction.** The `c8` → `c16` centred `scale_z` factor was measured
+at 1.393 (1.8603 → 2.5906), close to the √2 §4.2.1 predicts. Applying it:
+
+| `map_amp2` | 8-chain | 16-chain (est.) | |
+|---|---|---|---|
+| 1.69e5 | 1.8603 | 2.5906 | FAIL (measured) |
+| 1.69e4 | 1.1812 | **1.6449** | **PASS** |
+| 1.69e3 | 0.9483 | 1.3206 | PASS |
+
+**At the principled amplitude the run is predicted to pass §4.2's scale gate at
+16 chains** — the first configuration in this investigation that would. Verify
+it rather than assume it; §4.2.1 exists because chain-count extrapolations of
+z-scores are exactly what goes wrong here.
+
+**Recommendation.** Fix `map_amp2` at the principled value and remove it from
+the sweep. It has no interior optimum under CE (§4.3.16's cap history), it is
+derivable from the pooling convention and segment length, and the sweep budget
+it consumes is better spent on parameters that CE can actually select. Then
+re-run the 16-chain confirmation above before anything downstream depends on it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2848,7 +2908,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. Not sufficient on its own — centred `ratio` 1.3200, not 1.0. One rung below principled is running to find whether amplitude alone can reach stationarity |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). Next: confirm the predicted 16-chain gate PASS at 1e4, then target the residual widening |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
