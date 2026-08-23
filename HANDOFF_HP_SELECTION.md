@@ -2228,6 +2228,86 @@ configuration produced in this investigation and the first to clear the gate.
 It is **not** stationary, and §7.1's disclosure list should say so plainly
 rather than resting on the gate result.
 
+### 4.3.19 The residual — `n_meas` is a second lever, and both plateau together
+
+Two runs at the principled amplitude, 8 chains, against the `amp1e4` baseline:
+
+| run | `n_meas` | draws | centred `ratio` | centred `scale_z` | CE | acc | `cvar_ess` | unresolved |
+|---|---|---|---|---|---|---|---|---|
+| `amp1e4` | 35 | 75 | 1.3200 | 1.1812 | 0.2232 | 0.9107 | 46.78 | 1.44% |
+| `nmeas256` | **256** | 75 | **1.2297** | 0.9372 | 0.2865 | 0.8831 | 27.39 | **0.28%** |
+| `d150` (first 75) | 35 | 75 | 1.3200 | 1.1812 | — | — | — | 1.44% |
+| `d150` (full) | 35 | **150** | 1.2975 | 1.1114 | 0.2134 | 0.9107 | **17.19** | **42.09%** |
+
+`d150`'s first 75 draws reproduce `amp1e4` **digit-for-digit** — same centred
+`ratio`, `loc_sd`, `scale_z` and unresolved count — so the two are properly
+nested and every comparison below is controlled.
+
+**Longer chains do not equilibrate the variance.** Under `sd(t) ∝ t^α` a
+half-split ratio is `3^α`, **independent of window length**, so a saturating
+variance must show a *falling* ratio as the window grows. Doubling the window
+moved it only −1.7% (1.3200 → 1.2975; α = 0.2527 → 0.2371). The growth is
+essentially scale-free: a power law that does not saturate. **§4.3.12's
+conclusion survives correction of the amplitude** — this was worth re-testing,
+because it was originally measured under a mis-specified prior, but the answer
+is unchanged.
+
+> **The non-stationarity actively destroys CVaR, and more draws makes it
+> worse.** `d150` doubles the draws and unresolved points go **1.44% → 42.09%**
+> while `cvar_ess` *falls* 46.78 → 17.19. Pooling draws from a chain whose
+> variance is still growing mixes narrow early draws with wide late ones, and
+> the between-draw heterogeneity inflates the MCSE faster than the extra draws
+> reduce it. This is the concrete cost of the widening to the quantity the
+> paper's claim rests on, and it means **the tail cannot be bought with
+> budget**: spending more draws on this sampler makes the CVaR estimate worse,
+> not better. It also retires any lingering idea that the widening is a
+> cosmetic diagnostic complaint.
+
+**`n_meas` is confirmed as a second lever, as §4.3.19's hypothesis predicted.**
+256 measurement points cut the excess widening 0.3200 → 0.2297 (28% of what
+remained), took centred `scale_z` to 0.9372, and improved unresolved points
+**5× to 0.28%** — the best in the investigation. The cost is real: CE +28%
+(0.2232 → 0.2865), accuracy −2.8 pt, `cvar_ess` −41%. No sampler pathology
+(gradient norms flat, clamp and clip at zero), so this is a prior-strength
+effect, not a §4.3.15 artifact.
+
+**Both prior-strength levers plateau on the same floor.** Independently:
+
+| configuration | centred `ratio` |
+|---|---|
+| `map_amp2` 1.69e3, `n_meas` 35 | 1.2308 |
+| `map_amp2` 1.69e4, `n_meas` 256 | **1.2297** |
+| §4.3.17 projected plateau | ~1.19 |
+
+Two different knobs, pushed hard in opposite parameterisations, landing within
+0.1% of each other and just above the projected floor. Both are strengthening
+the same thing — the functional prior's grip on `f` — and they saturate
+together. **The residual below ~1.23 is a third mechanism that prior strength
+cannot reach.**
+
+**What that third mechanism is likely to be.** With the common drift gone
+(§4.3.18) and prior strength exhausted, what remains is per-chain,
+scale-free variance growth at α ≈ 0.24 — the signature of the sampler's own
+discretisation rather than of the target. §4.3.15 already demonstrated this
+sampler is acutely sensitive to effective step size: a ~50× step increase
+passed every stationarity gate while doubling CE. The untested geometry knobs
+are `sghmc_lr` and `mdecay` (friction), neither of which has been varied at the
+corrected amplitude, and both of which were selected by the same CE objective
+that mis-set `map_amp2` and, on this evidence, `n_meas`.
+
+**Do not read ALIGNMENT on these runs.** They are 8-chain, and §4.3.7 measured
+the 8-chain ALIGNMENT spread within a single run at 0.41. The values here
+(0.0864, 0.1581, 0.2538) are inside that noise and carry no information.
+
+**Implication for the sweep redesign.** `n_meas` now looks like a second
+instance of §4.3.14's pathology: the codebase default is 256, the sweep caps it
+at 64, round-1 winners were 10–35 and round 2 chose 35 — CE consistently
+prefers the weakest prior it is offered. If that reading holds, **both
+`map_amp2` and `n_meas` should be fixed on principled grounds and removed from
+the sweep**, which frees a substantial share of the 130-run budget. But settle
+the geometry first: `sghmc_lr` and `mdecay` are swept, and if either turns out
+to be mis-set by the same mechanism, the re-sweep would need doing a third time.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -2980,7 +3060,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared, so shared-cause levers cannot fix it |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). Residual is sampler geometry — `sghmc_lr` / `mdecay`, untested at the corrected amplitude |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
