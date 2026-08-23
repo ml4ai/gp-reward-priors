@@ -2308,6 +2308,80 @@ the sweep**, which frees a substantial share of the 130-run budget. But settle
 the geometry first: `sghmc_lr` and `mdecay` are swept, and if either turns out
 to be mis-set by the same mechanism, the re-sweep would need doing a third time.
 
+### 4.3.20 Friction goes the wrong way — and that identifies the mechanism
+
+`mdecay` 0.1946 → 0.6 at the principled amplitude, 8 chains:
+
+| metric | `amp1e4` | `mdecay06` | |
+|---|---|---|---|
+| **centred `ratio`** | **1.3200** | **1.5150** | **worse** — excess +61% |
+| centred `scale_z` | 1.1812 | 1.6293 | worse |
+| centred `loc_sd` | 0.3173 | 0.4063 | worse |
+| CE | 0.2232 | 0.2710 | 21% worse |
+| accuracy | 0.9107 | 0.8880 | −2.3 pt |
+| unresolved | 1.44% | **0.84%** | **better** |
+| relMCSE median | 0.3064 | **0.2451** | **better** |
+| `cvar_ess` | 46.78 | **53.54** | **better** |
+| `ess_bulk` median | — | 14.43 | unchanged vs `c8` 14.57 |
+
+**Raising friction was the wrong direction, and the sampler code says why.**
+`adaptive_sghmc.py:147` sets
+
+    epsilon_var = 2 * lr² * mdecay * minv_t - lr⁴
+
+so **the injected noise variance is proportional to `mdecay`**. Tripling the
+friction tripled the thermal noise (3.08×). The `-lr⁴` term is the
+gradient-noise correction; `v_hat` enters only through the preconditioner
+`minv_t`, not as a subtraction from the injected noise. More friction here does
+not mean more damping — it means a hotter chain.
+
+**This makes every result in §4.3.16–19 one mechanism.** Rank the
+configurations by how much noise reaches the chain:
+
+| configuration | noise | centred `ratio` | α |
+|---|---|---|---|
+| `n_meas` 256 — least prior-gradient noise | low | 1.2297 | 0.188 |
+| `map_amp2` 1.69e3 — tightest prior | low | 1.2308 | 0.189 |
+| baseline (`amp1e4`) | mid | 1.3200 | 0.253 |
+| `mdecay` 0.6 — 3.1× injected noise | high | 1.5150 | 0.378 |
+| `map_amp2` 1.69e5 — loosest prior | high | 1.5913 | 0.423 |
+
+Monotone in noise, across three unrelated knobs. **The proposed mechanism: the
+chain's stationary variance is inflated by noise the `-lr⁴` correction does not
+fully absorb, and mixing is far too slow (`ess_bulk` ~14 of 600 draws, 2.4%) for
+the chain to reach that inflated target inside 75 draws. The observed widening
+is the climb toward it.** That explains why the growth is scale-free and does
+not saturate (§4.3.19) — the chain is nowhere near its stationary variance at
+any point in the run — and why every noise-reducing knob helps while the one
+noise-raising knob hurts.
+
+**Sharp prediction, and it is cheap to test: LOWER `mdecay` should reduce the
+widening.** If the mechanism is right, halving the injected noise should move
+centred `ratio` below 1.3200, and possibly below the ~1.23 floor that prior
+strength alone could not pass — because friction reduces noise by a route
+independent of the prior:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --mdecay 0.08 --OUT_DIR ./exp/stage3_medium_play_mdecay008 > ../exp/stage3_medium_play_mdecay008.log 2>&1 &
+```
+
+`epsilon_var` stays positive with enormous margin (`lr²` ≈ 6.2e-8, so the
+`-lr⁴` term is ~1e-15), so 0.08 is numerically safe. Watch `ess_bulk` and
+`gradnorm`: less friction is more underdamped, so mixing could degrade even as
+stationarity improves.
+
+**A useful dissociation, worth keeping whatever the mechanism turns out to be.**
+Friction *improved* every tail metric — unresolved 1.44% → 0.84%, relMCSE
+median 0.3064 → 0.2451, `cvar_ess` 46.78 → 53.54 — while making stationarity
+worse. Higher friction damps per-draw jitter (lower MCSE) while raising the
+target variance (worse widening). **Tail precision and stationarity are
+therefore separately controllable**, which means the final configuration need
+not trade them off against each other the way §4.3.17 assumed. If low `mdecay`
+fixes the widening, the tail cost might be recoverable elsewhere.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3060,7 +3134,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). Residual is sampler geometry — `sghmc_lr` / `mdecay`, untested at the corrected amplitude |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). **§4.3.20:** `mdecay` 0.6 made it *worse* (1.5150) because injected noise ∝ `mdecay` (`adaptive_sghmc.py:147`). Centred `ratio` is monotone in chain noise across all three knobs — the widening is the climb toward a noise-inflated stationary variance the chain is too slow to reach. Next: **lower** `mdecay` |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
