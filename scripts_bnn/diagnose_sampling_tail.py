@@ -467,6 +467,148 @@ def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
         print("     variation to work with and the test is uninformative.")
 
 
+def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
+            bt_pool="mean", alpha=0.05, max_pairs=None, max_draws=None,
+            chunk_pairs=64):
+    """Validation CE computed from the CVaR reward -- a selection objective.
+
+    Section 4.3.14 showed that selecting on the posterior-MEAN predictive CE
+    drives the prior to improperness: mean CE averages over the posterior, so it
+    is robust to sampler defects by construction and cannot see a badly sampled
+    tail.  That is how a runaway `map_amp2` scored well while sampling badly.
+
+    This computes the same *form* of metric -- validation cross-entropy, so the
+    MR/PT comparison stays like-for-like -- from the quantity the BNN actually
+    DEPLOYS.  CVaR is taken per state-action, because that is the conservative
+    reward IQL consumes:
+
+        r_cvar(s,a) = CVaR_alpha[f(s,a)]  = mean of the lowest alpha fraction
+        Phi_i       = masked pool of r_cvar over the segment's timesteps
+        CE          = BCE on sigma(Phi_1 - Phi_2)
+
+    Taking CVaR per (s,a) and pooling afterwards is deliberate: CVaR of the
+    pooled logit is a different (and undeployed) quantity, and the difference
+    matters because segments visit different states and so carry different
+    posterior widths.
+
+    Reports the mean-based metrics alongside so the two objectives can be
+    ranked against each other, and a JACKKNIFE-OVER-CHAINS standard error on
+    the CVaR CE.  That SE is the point of the exercise as much as the value: a
+    selection objective is only usable if its run-to-run error is smaller than
+    the differences it must resolve, and at alpha=0.05 the tail holds only
+    `alpha * n_draws` draws (30 at 8x75, 15 at 4x75).
+    """
+    from optbnn.utils.util import bt_pool_logit_np
+
+    X, y = util.load_pref_data(dataset, training_ratio=1.0)
+    if max_pairs is not None and X.shape[0] > max_pairs:
+        X, y = X[:max_pairs], y[:max_pairs]
+        print(f"[cvar-ce] subsampled to the first {max_pairs} pairs -- CE will "
+              f"NOT match the logged value")
+    B, _, T, d_dim = X.shape
+    obs_dim = d_dim - 1
+    am1 = X[:, 0, :, obs_dim].astype(np.float32)
+    am2 = X[:, 1, :, obs_dim].astype(np.float32)
+    x1 = X[:, 0, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
+    x2 = X[:, 1, :, :obs_dim].reshape(-1, obs_dim).astype(np.float32)
+
+    net = MLP(input_dim=obs_dim, output_dim=1,
+              hidden_dims=[width] * depth, activation_fn="relu").to(device)
+    net.eval()
+    x1_t, x2_t = torch.from_numpy(x1).to(device), torch.from_numpy(x2).to(device)
+
+    C = len(chain_ids)
+    n_draws = min(len(_load_chain_weights(run_dir, i, device)) for i in chain_ids)
+    if max_draws is not None:
+        n_draws = min(n_draws, max_draws)
+
+    # Per-TIMESTEP predictions are required (CVaR is per state-action), so this
+    # holds [chain, draw, pair, step] rather than ce_ladder's pooled logits.
+    P1 = np.empty((C, n_draws, B, T), dtype=np.float32)
+    P2 = np.empty((C, n_draws, B, T), dtype=np.float32)
+    print(f"[cvar-ce] {B} pairs x {T} steps, {_chain_label(chain_ids)} x "
+          f"{n_draws} draws -> {2 * B * T * n_draws * C:,} forward rows "
+          f"({2 * P1.nbytes / 1e6:.0f} MB held; device={device})")
+    for c, cid in enumerate(chain_ids):
+        weights = _load_chain_weights(run_dir, cid, device)[:n_draws]
+        for d, w in enumerate(weights):
+            with torch.no_grad():
+                for p, a in zip(net.parameters(), w):
+                    p.copy_(torch.from_numpy(a).to(device))
+                for s in range(0, B, chunk_pairs):
+                    e = min(s + chunk_pairs, B)
+                    P1[c, d, s:e] = net(x1_t[s * T:e * T]).cpu().numpy().reshape(e - s, T)
+                    P2[c, d, s:e] = net(x2_t[s * T:e * T]).cpu().numpy().reshape(e - s, T)
+        print(f"[cvar-ce] chain {cid} done")
+
+    yv = np.asarray(y, dtype=np.float64)
+    eps = 1e-12
+
+    def _ce_acc(p1):
+        ce = -(yv[:, 0] * np.log(p1 + eps)
+               + yv[:, 1] * np.log(1.0 - p1 + eps)).mean()
+        return float(ce), float(((p1 > 0.5) == (yv[:, 0] > 0.5)).mean())
+
+    def _cvar_over(idx):
+        """CVaR CE using only the chains in `idx`.  Pools their draws."""
+        a1 = P1[idx].reshape(-1, B, T).astype(np.float64)
+        a2 = P2[idx].reshape(-1, B, T).astype(np.float64)
+        S = a1.shape[0]
+        k = max(1, int(math.floor(alpha * S)))
+        # mean of the k lowest draws, per (pair, step)
+        r1 = np.sort(a1, axis=0)[:k].mean(axis=0)
+        r2 = np.sort(a2, axis=0)[:k].mean(axis=0)
+        f1 = bt_pool_logit_np(r1 * am1, am1, bt_pool)
+        f2 = bt_pool_logit_np(r2 * am2, am2, bt_pool)
+        p1 = 1.0 / (1.0 + np.exp(-(f1 - f2)))
+        return _ce_acc(p1) + (S, k)
+
+    allc = np.arange(C)
+    cvar_ce_v, cvar_acc, S_tot, k_tail = _cvar_over(allc)
+
+    # Mean-based comparators on the same draws.
+    m1 = P1.reshape(-1, B, T).astype(np.float64)
+    m2 = P2.reshape(-1, B, T).astype(np.float64)
+    g1 = bt_pool_logit_np(m1.mean(axis=0) * am1, am1, bt_pool)
+    g2 = bt_pool_logit_np(m2.mean(axis=0) * am2, am2, bt_pool)
+    plug_ce, plug_acc = _ce_acc(1.0 / (1.0 + np.exp(-(g1 - g2))))
+    l1 = np.stack([bt_pool_logit_np(m1[s] * am1, am1, bt_pool) for s in range(m1.shape[0])])
+    l2 = np.stack([bt_pool_logit_np(m2[s] * am2, am2, bt_pool) for s in range(m2.shape[0])])
+    pred_ce, pred_acc = _ce_acc((1.0 / (1.0 + np.exp(-(l1 - l2)))).mean(axis=0))
+
+    # Jackknife over chains: leave one chain out, C refits.
+    jk = [_cvar_over(np.delete(allc, i))[0] for i in range(C)] if C > 1 else []
+    if jk:
+        jb = float(np.mean(jk))
+        se = float(math.sqrt((C - 1) / C * np.sum((np.asarray(jk) - jb) ** 2)))
+    else:
+        se = float("nan")
+
+    print(f"\n=== CVaR CROSS-ENTROPY (alpha={alpha}) ===")
+    print("  A selection objective computed from the DEPLOYED quantity.")
+    print("  Mean CE averages over the posterior and so cannot see a badly")
+    print("  sampled tail (4.3.14); this can.  Same FORM as the MR/PT metric,")
+    print("  so the cross-family comparison stays like-for-like (4.3.14).")
+    print(f"  {'metric':<28}{'CE':>10}{'acc':>10}")
+    print("  " + "-" * 48)
+    print(f"  {'plug-in  sigma(E[f])':<28}{plug_ce:>10.4f}{plug_acc:>10.4f}")
+    print(f"  {'predictive E[sigma(f)]':<28}{pred_ce:>10.4f}{pred_acc:>10.4f}")
+    print(f"  {'CVaR      sigma(Phi_cvar)':<28}{cvar_ce_v:>10.4f}{cvar_acc:>10.4f}")
+    print(f"\n  jackknife-over-chains SE on the CVaR CE: {se:.4f}")
+    print(f"  tail depth: {k_tail} of {S_tot} draws at alpha={alpha}")
+    if not math.isnan(se):
+        print(f"  -> this objective can only resolve differences >~ {2 * se:.4f}"
+              f" in CVaR CE.")
+        if k_tail < 30:
+            print(f"  !! only {k_tail} draws in the tail.  The CVaR estimate is")
+            print("     dominated by a handful of draws, and the SE above is")
+            print("     the honest cost of that.  Raise num_chains or")
+            print("     num_samples before selecting on this.")
+    return {"cvar_ce": cvar_ce_v, "cvar_acc": cvar_acc, "cvar_ce_se": se,
+            "plug_ce": plug_ce, "pred_ce": pred_ce, "tail_draws": k_tail,
+            "total_draws": S_tot}
+
+
 def ce_ladder(run_dir, dataset, width, depth, chain_ids, levels,
               device="cpu", bt_pool="mean", max_pairs=None, max_draws=None,
               chunk_pairs=64):
@@ -1121,6 +1263,17 @@ def main():
     # integrator check it was re-scoped to is already covered directly by
     # param_clamp_sampling_pct, which section 4.2 gates on.  Section 4.5 has the
     # full argument; section 3.6.2 keeps the one measurement it produced.
+    ap.add_argument("--cvar-ce", action="store_true",
+                    help="Validation CE computed from the CVaR reward -- the "
+                         "quantity the BNN deploys -- alongside the mean-based "
+                         "CE, plus a jackknife-over-chains SE. A candidate "
+                         "SELECTION objective: mean CE averages over the "
+                         "posterior and cannot see a badly sampled tail "
+                         "(section 4.3.14), while keeping the same FORM as the "
+                         "MR/PT metric so the comparison stays like-for-like.")
+    ap.add_argument("--cvar-ce-alpha", type=float, default=0.05, metavar="A",
+                    help="Tail fraction for --cvar-ce (default 0.05, matching "
+                         "every CVaR diagnostic in section 4).")
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "
@@ -1188,6 +1341,12 @@ def main():
             sys.exit(f"--draw-ladder must be comma-separated integers, got "
                      f"{args.draw_ladder!r}")
         draw_ladder(pred_chains, levels, alpha=args.alpha)
+
+    if args.cvar_ce:
+        cvar_ce(args.run_dir, dataset, width, depth, chain_ids,
+                device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
+                alpha=args.cvar_ce_alpha, max_pairs=args.ce_pairs,
+                max_draws=args.max_draws)
 
     if args.ce_ladder:
         levels = []
