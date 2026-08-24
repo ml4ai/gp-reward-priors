@@ -2600,6 +2600,82 @@ reachable by prior strength alone.
 > costs nothing beyond re-running this four-point curve afterwards. Do not fix
 > `map_amp2` in the sweep at either value until it is settled.
 
+### 4.3.24 The fixed measurement set fails — and the reason kills the route
+
+`--fix_meas_set True` at the principled amplitude, 8 chains, every other field
+identical to `amp1e4` (verified against the logged config, so this is a clean
+single-variable comparison):
+
+| metric | `amp1e4` (resampled) | `fixmeas` (fixed) | |
+|---|---|---|---|
+| centred `ratio` | 1.3200 | **1.5977** | much worse |
+| centred `scale_z` | 1.1812 | 1.8867 | worse |
+| **CVaR CE** | 0.3931 | **0.5906** | much worse |
+| CVaR accuracy | 0.8701 | 0.8442 | worse |
+| unresolved | 1.44% | 3.28% | worse |
+| plug-in CE | 0.2021 | **0.1777** | **better** |
+| predictive CE | 0.2167 | **0.1951** | **better** |
+| `ess_bulk` median | ~14.5 | 14.66 | unchanged |
+
+**Mean CE improved while everything that matters degraded** — §4.3.22's
+signature of a wider, more weakly constrained posterior.
+
+**The premise was wrong, and the pool size shows why.** The measurement pool is
+**999,000 observations**. Resampling 35 of them per step over ~240 000 steps is
+**8.4 million point-visits**, and its time-average is the *full-pool* prior
+gradient: the resampling is a **stochastic approximation of a prior over the
+whole pool**, not merely noise added to a fixed one. Freezing the set replaces
+that with a prior supported on **35 points — 0.0035% of the pool** — for the
+entire run. That is not a variance reduction, it is **a different and far weaker
+prior**, so `fix_meas_set` changes the target distribution rather than the
+sampler's noise.
+
+The magnitude confirms it. Freezing 35 points at `map_amp2` 1.69e4 reproduces
+the loose-prior regime almost exactly:
+
+| configuration | centred `ratio` |
+|---|---|
+| `fixmeas` — amp 1.69e4, **fixed** | 1.5977 |
+| `c8` — amp 1.69e5, resampled | 1.5913 |
+
+**Freezing the measurement set is worth roughly a 10× looser prior.**
+
+> **This retires route (a) of §10.2 step 1, and the correction runs deeper.**
+> The functional-prior gradient's stochasticity **cannot be removed without
+> changing the prior**: an exact full-pool gradient needs a 999 000² kernel and
+> a 999 000³ Cholesky, which is not merely expensive but impossible. **At this
+> pool size the prior-gradient noise is intrinsic to the method.** It therefore
+> has to be *corrected for*, not eliminated — which makes a real `B̂`
+> subtraction (route (c)) the only route that addresses the dominant noise
+> source, and demotes full batch (route (b)) to removing the *minibatch*
+> component only.
+>
+> It also revises §4.3.19 and §4.3.21. `n_meas` 35 → 256 was read there as
+> reducing gradient noise; it does that, but it **also quadruples prior
+> coverage**, and this run shows coverage is the dominant term — freezing at 35
+> costs far more than the noise it removes. The `n_meas` result stands; the
+> attributed mechanism was incomplete.
+
+**One run would settle how much of §4.3.19's gain was coverage versus noise**,
+and it is worth having before the sweep fixes `n_meas`:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 8 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --n_meas 256 --fix_meas_set True \
+    --OUT_DIR ./exp/stage3_medium_play_fixmeas256 > ../exp/stage3_medium_play_fixmeas256.log 2>&1 &
+```
+
+Against `nmeas256` resampled (centred `ratio` 1.2297, CVaR CE 0.3127). Landing
+near 1.23 would mean coverage at 256 points is already sufficient and the
+remaining noise is what `n_meas` was buying — which would revive fixed sets at
+larger `n`. Landing near 1.6 again means coverage dominates at any feasible
+`n_meas` and **fixed sets are dead**, leaving `B̂` as the only route.
+
+`--fix_meas_set` stays in the code at **default False** — every prior run is
+bit-identical — as the instrument for that question, not as a fix.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3445,7 +3521,19 @@ thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
 1. **Fix the gradient noise. This blocks everything else.** Three routes, not
    mutually exclusive:
 
-   - **Fixed measurement set — start here.** The prior-gradient noise comes from
+   > **Route (a) is RETIRED — see §4.3.24.** The measurement pool is 999 000
+   > points, so per-step resampling is a stochastic approximation of the
+   > *full-pool* prior, not noise around a fixed one. Freezing 35 points
+   > replaces it with a prior supported on 0.0035% of the pool: centred `ratio`
+   > 1.3200 → 1.5977 and CVaR CE 0.3931 → 0.5906, i.e. worth a ~10× looser
+   > prior. The stochasticity cannot be removed without changing the target
+   > (an exact gradient needs a 999 000³ Cholesky), so **at this pool size the
+   > prior-gradient noise is intrinsic and must be CORRECTED FOR, not
+   > eliminated.** Route (c) is now the only one that addresses the dominant
+   > source; route (b) removes the minibatch component only. The struck-through
+   > reasoning is kept because the refutation is the useful part.
+
+   - **~~Fixed measurement set — start here.~~** The prior-gradient noise comes from
      *resampling* `n_meas` points every step (`f_pref_net.py`,
      `np.random.choice`), not from the subset size, so fixing the set once makes
      that gradient deterministic at any `n_meas`. BNN-only, no cross-family
