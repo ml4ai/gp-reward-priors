@@ -2543,6 +2543,63 @@ safe to adopt. Still falling means it is tracking posterior width rather than
 sampling quality, and the objective needs a calibration term before it can be
 used for selection.
 
+### 4.3.23 The bracket closes — CVaR CE has an interior optimum
+
+`map_amp2` 168.9, 8 chains, completing the amplitude curve:
+
+| `map_amp2` | CVaR CE | mean CE | centred `ratio` | |
+|---|---|---|---|---|
+| 1.69e5 | 0.7463 | 0.1919 | 1.5913 | worse than `log 2` |
+| 1.69e4 (**principled**) | 0.3931 | 0.2167 | 1.3200 | |
+| 1.69e3 | **0.3093** | 0.2758 | 1.2308 | **CVaR CE minimum** |
+| 1.69e2 | 0.4102 | 0.4021 | 1.1770 | turns back up |
+
+**The objective is bounded on both sides and safe to adopt.** Too wide and the
+posterior is badly sampled — CVaR CE 0.7463, worse than chance. Too narrow and
+it degenerates. The minimum sits at 1.69e3.
+
+**The turn happens for exactly the predicted reason.** At 1.69e2 the three
+metrics collapse onto each other — plug-in 0.4021, predictive 0.4066, CVaR
+0.4102, a spread of **0.008** — against a spread of **0.191** at 1.69e4. The
+posterior has narrowed until CVaR ≈ mean, so CVaR CE inherits mean CE's
+degradation as `f → 0`. **That is the mechanism that bounds the objective**, and
+it is now observed rather than argued: the failure mode §4.3.22 worried about
+(driving the posterior to a point mass) is self-limiting, because the objective
+stops rewarding narrowing at precisely the point where conservatism disappears.
+
+**Stationarity and CVaR CE do *not* share an optimum, and that is correct
+behaviour.** Centred `ratio` keeps falling past the CVaR minimum (1.2308 →
+1.1770 at 1.69e2), so a pure stationarity objective would keep tightening the
+prior while CVaR CE turns back. **The objective balances conservatism quality
+against sampling quality rather than maximising either** — the property
+§4.3.22 wanted and could not yet demonstrate.
+
+Incidentally the extra point revises §4.3.17's plateau estimate: excess widening
+0.5913 → 0.3200 → 0.2308 → 0.1770, with decay ratios 0.329 then 0.603, so the
+gains shrink more slowly than the two-point geometric fit assumed. Updated
+floor ≈ **1.10**, against the 1.19 projected. Still not 1.0, and still not
+reachable by prior strength alone.
+
+> **An unresolved tension worth carrying forward.** The *derived* amplitude is
+> ~1.69e4 (logit-matching, §4.3.16) but CVaR CE prefers **1.69e3** — one decade
+> tighter, by 0.0838 against a 2·SE of 0.0548, so the preference is
+> **resolvable, not noise**. Two readings, and they are distinguishable:
+>
+> 1. The derivation is right and the empirical optimum is compensating: an
+>    over-tight prior is absorbing the sampler's uncorrected excess heat
+>    (§4.3.21 — the `−lr⁴` correction is numerically inert), buying back what
+>    the thermostat is adding.
+> 2. The derivation's logit-scale argument is approximate and the true prior
+>    scale really is a decade lower.
+>
+> **These make opposite predictions under a sampler fix.** If (1), then
+> correcting the gradient noise — full batch, or a fixed measurement set, or a
+> real `B̂` subtraction — should move the CVaR-optimal amplitude *up* toward the
+> derived 1.69e4 and close the gap. If (2), the gap persists. **That is the
+> cleanest available test of whether the sampler fix actually worked**, and it
+> costs nothing beyond re-running this four-point curve afterwards. Do not fix
+> `map_amp2` in the sweep at either value until it is settled.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3295,7 +3352,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). **§4.3.20:** `mdecay` 0.6 made it *worse* (1.5150) because injected noise ∝ `mdecay` (`adaptive_sghmc.py:147`). Centred `ratio` is monotone in chain noise across all three knobs — the widening is the climb toward a noise-inflated stationary variance the chain is too slow to reach. **§4.3.21:** lower `mdecay` does *nothing* (1.3230) — the response is flat below baseline and steep above, so the binding source is **gradient** noise, not the thermostat. **§4.3.22:** CVaR CE validated offline — it ranks configurations *opposite* to mean CE (corr with centred `ratio` +0.833 vs −0.607), and at the mean-CE-selected amplitude the CVaR reward is **worse than chance** (0.7463 vs `log 2` = 0.6931). Adequate for coarse selection at 8×75. Next: bracket its interior optimum (`map_amp2` 1.69e2), and settle the uncorrected-gradient-noise finding before any re-sweep |
+| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). **§4.3.20:** `mdecay` 0.6 made it *worse* (1.5150) because injected noise ∝ `mdecay` (`adaptive_sghmc.py:147`). Centred `ratio` is monotone in chain noise across all three knobs — the widening is the climb toward a noise-inflated stationary variance the chain is too slow to reach. **§4.3.21:** lower `mdecay` does *nothing* (1.3230) — the response is flat below baseline and steep above, so the binding source is **gradient** noise, not the thermostat. **§4.3.22:** CVaR CE validated offline — it ranks configurations *opposite* to mean CE (corr with centred `ratio` +0.833 vs −0.607), and at the mean-CE-selected amplitude the CVaR reward is **worse than chance** (0.7463 vs `log 2` = 0.6931). Adequate for coarse selection at 8×75. **§4.3.23:** bracket closed — CVaR CE has a genuine interior optimum at `map_amp2` 1.69e3 (1.69e2 turns back up to 0.4102 as CVaR collapses onto the mean), so the objective is bounded on both sides and safe to adopt. Open tension: derived amplitude 1.69e4 vs CVaR-optimal 1.69e3, resolvably one decade apart — whether a sampler fix closes that gap is the cleanest test of the fix |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
