@@ -595,6 +595,7 @@ class FPrefNet:
         fraction_cool=0.25,
         samples_per_cycle=1,
         resample_momentum=True,
+        fix_meas_set=False,
         max_param_step=None,
         log_every=0,
         eval_data=None,
@@ -691,6 +692,37 @@ class FPrefNet:
             self.print_info(
                 f"[fSGHMC] Measurement pool ({len(self._x_meas)}) smaller than "
                 f"n_meas ({self._n_meas}); using all pool points every step."
+            )
+
+        # ---- Measurement set: resampled per step, or drawn once ---------
+        # Resampling every step makes the functional-prior gradient STOCHASTIC,
+        # and section 4.3.21 identified gradient noise -- not the thermostat --
+        # as the uncorrected heat source inflating the sampled variance
+        # (adaptive_sghmc.py:147's -lr^4 correction is ~1e-15 against a main
+        # term of ~1e-8..1e-6, i.e. numerically inert).  The noise comes from
+        # RESAMPLING, not from the subset size, so drawing the set once makes
+        # this gradient exact at any n_meas -- far cheaper than enlarging it,
+        # and standard for a GP functional prior, where the fixed set plays the
+        # role of inducing points.  It also drops a per-step choice and a
+        # host-to-device copy.
+        #
+        # The draw is seeded per chain by set_seed(seed + chain_idx) upstream,
+        # so chains still get DIFFERENT fixed sets: the pooled prior is not
+        # collapsed onto a single subset, only each chain's own gradient is
+        # made deterministic.
+        _fixed_meas = None
+        if fix_meas_set and n_meas_actual > 0:
+            _fi = np.random.choice(len(self._x_meas), n_meas_actual,
+                                   replace=False)
+            _fixed_meas = (
+                torch.from_numpy(self._x_meas[_fi]).float().to(self.device),
+                (torch.from_numpy(self._aux_meas[_fi]).to(self.device)
+                 if self._aux_meas is not None else None),
+            )
+            self.print_info(
+                f"[fSGHMC] Measurement set FIXED: {n_meas_actual} of "
+                f"{len(self._x_meas)} pool points drawn once (chain-seeded); "
+                f"the functional-prior gradient is deterministic."
             )
 
         # ---- Main loop --------------------------------------------------
@@ -799,16 +831,19 @@ class FPrefNet:
             # SGHMC.  Skip the solve (an empty measurement set has no prior
             # gradient, and the Woodbury nugget is undefined for n_M = 0).
             if n_meas_actual > 0:
-                # Sample n_meas points from the measurement pool
-                meas_idx = np.random.choice(
-                    len(self._x_meas), n_meas_actual, replace=False
-                )
-                x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
-                aux_meas_t = (
-                    torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
-                    if self._aux_meas is not None
-                    else None
-                )
+                if _fixed_meas is not None:
+                    x_meas_t, aux_meas_t = _fixed_meas
+                else:
+                    # Sample n_meas points from the measurement pool
+                    meas_idx = np.random.choice(
+                        len(self._x_meas), n_meas_actual, replace=False
+                    )
+                    x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
+                    aux_meas_t = (
+                        torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
+                        if self._aux_meas is not None
+                        else None
+                    )
 
                 # functional_prior_grad returns ∇_w log p_GP = -J_w^T K^{-1}(f-m).
                 # This uses torch.autograd.grad (not .backward()), so it does NOT
@@ -931,6 +966,7 @@ class FPrefNet:
         fraction_cool=0.25,
         samples_per_cycle=1,
         resample_momentum=True,
+        fix_meas_set=False,
         max_param_step=None,
         chains_per_gpu=1,
         bt_pool="mean",
@@ -998,6 +1034,7 @@ class FPrefNet:
             fraction_cool=fraction_cool,
             samples_per_cycle=samples_per_cycle,
             resample_momentum=resample_momentum,
+            fix_meas_set=fix_meas_set,
             max_param_step=max_param_step,
         )
 

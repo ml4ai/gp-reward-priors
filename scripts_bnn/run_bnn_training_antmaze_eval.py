@@ -197,6 +197,16 @@ class TrainConfig:
     measurement_dataset: str = "data/meas.hdf5"
     # Number of measurement points sampled per training step from the pool.
     # Wu et al. (2025) use M = 100.
+    # Draw the n_meas measurement subset ONCE per chain instead of resampling
+    # it every step.  Resampling makes the functional-prior gradient stochastic,
+    # and section 4.3.21 found gradient noise -- not the thermostat -- to be the
+    # uncorrected heat source inflating the sampled variance: adaptive_sghmc's
+    # -lr^4 gradient-noise correction is ~1e-15 against a ~1e-8..1e-6 main term,
+    # so it corrects nothing.  The noise comes from RESAMPLING rather than from
+    # the subset size, so fixing the set makes the gradient exact at any n_meas.
+    # Each chain draws its own set (seeded by seed + chain_idx), so the pooled
+    # prior still covers the pool.  False = legacy per-step resampling.
+    fix_meas_set: bool = False
     n_meas: int = 256
     # Diagonal jitter added to K_{X_M} before the Cholesky solve.
     meas_jitter: float = 1e-6
@@ -635,6 +645,7 @@ def train(config: TrainConfig):
         fraction_cool=config.fraction_cool,
         samples_per_cycle=config.samples_per_cycle,
         resample_momentum=config.resample_momentum,
+        fix_meas_set=config.fix_meas_set,
         max_param_step=config.max_param_step,
         chains_per_gpu=config.chains_per_gpu,
         bt_pool=config.bt_pool,
