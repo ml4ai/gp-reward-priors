@@ -2803,6 +2803,72 @@ chains expanding from a common point. Judge on centred `ratio` against 1.3200
 and CVaR CE against 0.3931. If a posterior-scale start removes the widening, the
 sampler needs no correction at all and the whole §4.3.21 line closes.
 
+### 4.3.27 A posterior-scale start reduces the widening — and costs the tail
+
+`chain_init_jitter 1.0`, 16 chains, principled amplitude, against
+`amp1e4_c16` (identical but jitter 0):
+
+| metric | jitter 0 | **jitter 1.0** | |
+|---|---|---|---|
+| **centred `ratio`** | 1.3490 | **1.2494** | **resolvably better** |
+| centred `scale_z` | 1.7532 | 1.2228 | much better |
+| centred `loc_sd` | 0.2499 | 0.1986 | better |
+| CVaR CE | 0.4081 | 0.2417 | **not resolvable — see below** |
+| CVaR CE jackknife SE | 0.0279 | **0.1911** | **6.8× worse** |
+| unresolved | 0.17% | **1.41%** | 8× worse |
+| `ess_bulk` median | 28.41 | 23.91 | worse |
+| mean CE | 0.2232 | 0.2388 | worse |
+| ALIGNMENT | 0.4593 | 0.4075 | — |
+
+**The expansion account is supported.** Centred `ratio` falls 1.3490 → 1.2494,
+a gap of 0.0996 against a run-to-run stability of 0.01–0.03 (§4.3.16, §4.3.18),
+so it is resolvable several times over. **Starting chains at posterior scale
+removes part of the widening**, which is what §4.3.26 predicted and is the first
+lever outside prior strength to move it.
+
+**But the apparent CVaR CE win must not be claimed.** 0.4081 → 0.2417 is a gap
+of 0.1664 against a combined 2·SE of **0.3863**. The jackknife SE explodes from
+0.0279 to **0.1911** — 6.8× — because overdispersed chains genuinely disagree
+about the tail, so the pooled CVaR becomes chain-dependent. The point estimate
+is the best in the investigation and it is **statistically indistinguishable
+from the baseline**.
+
+> **That SE explosion is itself a finding, and an awkward one.** Overdispersion
+> is standard practice precisely so that `R̂` is a valid convergence check
+> (§2.6 of the spec, and `f_pref_net.py:130`). But it degrades the *estimator*
+> of the quantity this paper depends on: with 16 chains, a tail averaged over
+> chains that disagree has 6.8× the error. **CVaR CE becomes much harder to
+> select on exactly where overdispersion is used**, which is a direct problem
+> for the sweep redesign — and it is a property of the deployed CVaR, not only
+> of the diagnostic.
+
+**Jitter reaches the same floor as prior strength, by an independent route.**
+Correcting for the ~2.2% 8→16-chain offset (§4.3.18), `jit10` sits at ≈1.22 in
+8-chain terms, against the prior-strength floor of 1.2297 (`nmeas256`) and
+1.2308 (`amp1e3`). Two mechanically unrelated levers — initial dispersion and
+prior strength — land within ~1% of each other. **Whether they compose or share
+a common limit is the open question**, and it decides whether §4.3.23's ~1.10
+projection is reachable at all:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 \
+    --OUT_DIR ./exp/stage3_medium_play_jit10n256 > ../exp/stage3_medium_play_jit10n256.log 2>&1 &
+```
+
+Landing near ~1.15 means the two compose and the floor is not hard. Landing at
+~1.22 again means both are hitting the same limit from different directions,
+which would make that limit the real object of study rather than either lever.
+
+**A tension worth exploiting rather than lamenting.** `mdecay` ↑ gave a better
+tail and a worse widening (§4.3.20); jitter ↑ gives a better widening and a
+worse tail. **Opposite trades acting through different mechanisms** —
+discretisation error versus initial dispersion — so a combination is a genuine
+candidate rather than a compromise, and worth a run once the composition
+question above is settled.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3655,6 +3721,15 @@ thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
    start from a shared near-point warm-up (`chain_init_jitter = 0`), and the
    widening is those chains expanding toward posterior width. Next test is
    a posterior-scale start (§4.3.26), not a sampler correction.
+
+   **Tested (§4.3.27): `chain_init_jitter 1.0` works, partially.** Centred
+   `ratio` 1.3490 → 1.2494, resolvably, so the expansion account holds and
+   initialisation is a real lever. It costs the tail (unresolved 0.17% →
+   1.41%, `ess_bulk` 28.41 → 23.91) and inflates the CVaR CE jackknife SE
+   6.8× to 0.1911, which makes CVaR CE much harder to select on under
+   overdispersion — a direct constraint on the sweep redesign. Jitter lands
+   on the same ~1.22 floor prior strength reaches; whether they compose is
+   the open question.
 
    ~~Three routes, not mutually exclusive:~~
 
