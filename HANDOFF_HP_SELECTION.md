@@ -2384,6 +2384,15 @@ fixes the widening, the tail cost might be recoverable elsewhere.
 
 ### 4.3.21 Low friction does nothing — the asymmetry localises the noise source
 
+> **MECHANISM RETRACTED — see §4.3.26.** The `-lr⁴` term is not inert: it is
+> O(ε⁴) because the gradient-noise contribution it cancels is also O(ε⁴),
+> against an O(ε²) thermostat. Gradient noise is ~1e-7 of the thermostat and
+> is correctly cancelled. The asymmetry below has a simpler explanation:
+> in exact SGHMC the stationary distribution is **independent of C**, so
+> `mdecay`↓ producing no change is correct behaviour, and `mdecay`↑ acts
+> only through discretisation error. **The measurements stand; the
+> attributed mechanism does not.**
+
 `mdecay` 0.08 at the principled amplitude, 8 chains:
 
 | `mdecay` | injected noise | centred `ratio` | α | CE | unresolved | relMCSE med | `cvar_ess` |
@@ -2720,6 +2729,79 @@ feasible `n_meas`.
 > insensitive to `n_meas`, `batch_size` and pool size alike — which also means
 > it does **not** touch `bt_pool` or `batch_size`, so the cross-family
 > comparability constraints (§3.6.2, §4.3.15) never bind.
+
+### 4.3.26 The `B̂` correction already exists — §4.3.21's mechanism was wrong
+
+**Checked before implementing anything, and the check was necessary.** The
+codebase's own spec (`docs/fsghmc_algorithm.pdf`, §2.1 Eq. 7) states:
+
+> σ² = max(2ε²ca − ε⁴, 10⁻¹⁶) … "The −ε⁴ term in (7) is the correction for the
+> minibatch-noise estimate `B̂ = ½ε V̂`, which cancels against the squared
+> preconditioner exactly as in [Springenberg et al.]."
+
+`adaptive_sghmc.py:147` implements exactly that. **The `B̂` correction is
+present, documented, and matches the reference.** There is nothing missing to
+add, and the "critical path" §4.3.25 named does not exist.
+
+**The algebra shows why it is small — by design, not by omission.** Per step the
+gradient noise enters `v` through the drift term:
+
+    Var(ε² a ∇Ũ_noise) = ε⁴ a² Σ
+
+and the injected noise is `2ε²ca − ε⁴`. With `Σ ≈ V̂` (the spec's `B̂`
+assumption) and `a = V̂^{-1/2}`, so `a²Σ ≈ 1`:
+
+    ε⁴·a²Σ  +  (2ε²ca − ε⁴)  =  2ε²ca        ← exact cancellation
+
+The gradient-noise term is **O(ε⁴)** while the thermostat is **O(ε²)**. At this
+step size their ratio is **1.6e-7 to 1.6e-9**. Gradient noise is not a dominant
+uncorrected heat source; it is correctly cancelled *and* negligible.
+
+> **§4.3.21's mechanism is retracted.** It claimed the `-lr⁴` term was
+> "numerically inert" and therefore that gradient noise was the uncorrected
+> dominant source. The term is small for the same reason the thing it corrects
+> is small — both are O(ε⁴) — and reading its magnitude without comparing it to
+> the quantity it cancels was the error. **Every measurement in §4.3.16–25
+> stands; only the mechanism attributed to them changes.**
+
+**What actually explains the observations, without any uncorrected noise:**
+
+| observation | corrected mechanism |
+|---|---|
+| `map_amp2` ↓ → less widening | **prior strength** — a tighter prior narrows the posterior |
+| `n_meas` ↑ → less widening | **prior coverage** — §4.3.24 already showed coverage dominates |
+| `fix_meas_set` → more widening | **coverage loss** (§4.3.24, §4.3.25) |
+| `mdecay` ↑ → more widening | **discretisation error** — σ ∝ √mdecay, so larger per-step displacement, larger O(ε) bias |
+| `mdecay` ↓ → *no change* | **exactly what theory predicts**: in exact SGHMC the stationary distribution is **independent of C** (fluctuation–dissipation). The null result is correct behaviour, not a saturating noise sum. |
+
+The asymmetry that drove §4.3.21 is therefore explained by theory rather than by
+a binding-source argument: lowering friction *cannot* change the target, and
+raising it only does so through discretisation error.
+
+**The residual is a mixing problem, and the shared start is the likely source.**
+`ess_bulk` is ~14 of 600 draws — **2.4% efficiency**. Chains start from a shared
+warm-up point with `chain_init_jitter = 0`, i.e. from a near-*point* mass, and
+must expand to the posterior width. That expansion **is** the measured widening,
+and it is per-chain, which is precisely the ALIGNMENT 0.4593 signature of
+§4.3.18. At 2.4% efficiency 75 draws is nowhere near enough to finish.
+
+This reframes §4.3.8's inconclusive jitter test: `chain_init_jitter = 0.1` is
+10% of each tensor's own sd, which is not remotely posterior scale. **The test
+was of the right lever at the wrong magnitude.**
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 \
+    --OUT_DIR ./exp/stage3_medium_play_jit10 > ../exp/stage3_medium_play_jit10.log 2>&1 &
+```
+
+16 chains, so ALIGNMENT is readable (§4.3.7) — and under this account ALIGNMENT
+and centred `ratio` should fall *together*, since both are consequences of
+chains expanding from a common point. Judge on centred `ratio` against 1.3200
+and CVaR CE against 0.3931. If a posterior-scale start removes the widening, the
+sampler needs no correction at all and the whole §4.3.21 line closes.
 
 ### 4.4 Procedure
 
@@ -3563,8 +3645,18 @@ actual gradient noise adds on top, uncorrected. Everything in §4.3.16–21 foll
 from this: cutting gradient noise (`n_meas`↑, tighter prior) helps, cutting
 thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
 
-1. **Fix the gradient noise. This blocks everything else.** Three routes, not
-   mutually exclusive:
+1. **~~Fix the gradient noise.~~ VOID — see §4.3.26.** The `B̂` correction
+   already exists (`adaptive_sghmc.py:147`), is documented in the codebase's
+   own spec (`docs/fsghmc_algorithm.pdf` §2.1 Eq. 7), and matches
+   Springenberg et al. Gradient noise enters at O(ε⁴) against an O(ε²)
+   thermostat — a ratio of ~1e-7 — and is exactly cancelled. **There is
+   nothing to implement, and none of the three routes below is needed.**
+   The residual widening is a **mixing** problem: `ess_bulk` ~2.4%, chains
+   start from a shared near-point warm-up (`chain_init_jitter = 0`), and the
+   widening is those chains expanding toward posterior width. Next test is
+   a posterior-scale start (§4.3.26), not a sampler correction.
+
+   ~~Three routes, not mutually exclusive:~~
 
    > **Route (a) is RETIRED — see §4.3.24.** The measurement pool is 999 000
    > points, so per-step resampling is a stochastic approximation of the
