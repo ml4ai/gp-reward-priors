@@ -2676,6 +2676,51 @@ larger `n`. Landing near 1.6 again means coverage dominates at any feasible
 `--fix_meas_set` stays in the code at **default False** — every prior run is
 bit-identical — as the instrument for that question, not as a fix.
 
+### 4.3.25 The 2×2 completes — fixed sets are dead, with a bound
+
+`--fix_meas_set True --n_meas 256`, principled amplitude, 8 chains. Centred
+`ratio`, all four cells:
+
+| | resampled | fixed | freezing penalty |
+|---|---|---|---|
+| `n_meas` 35 | 1.3200 | 1.5977 | **+0.2777** |
+| `n_meas` 256 | **1.2297** | 1.3230 | **+0.0933** |
+
+**The interaction predicted by §4.3.24 is real — and insufficient.** The
+freezing penalty falls **3×** between `n_meas` 35 and 256, exactly as the
+coverage account requires. It does not vanish. Freezing at 256 is still worse
+than resampling at 256 on centred `ratio` (1.3230 vs 1.2297), and that gap is
+**resolvable**: the ratio's run-to-run stability is 0.7–2.2% (§4.3.16, §4.3.18),
+so 0.0933 is several times the noise floor.
+
+**The penalty scales as `n^-0.548`** — essentially `n^-0.5`, the Monte-Carlo
+rate, which is what a coverage deficit should obey. Extrapolating: driving the
+penalty under 0.01 needs **`n_meas` ≈ 15 000**, whose Cholesky alone is
+`3.4e12` flops/step, about **23 GPU-hours per chain** on top of everything else.
+**Fixed measurement sets are not merely unhelpful here, they are unreachable**:
+the `n` at which freezing becomes free is computationally out of range by orders
+of magnitude. Route (a) is closed with a bound, not just a failed experiment.
+
+**One honest qualification.** On the *deployed* objective the difference is a
+tie, not a loss: CVaR CE 0.3568 (fixed) vs 0.3127 (resampled), a gap of 0.0441
+against a resolvable threshold of **0.0695** (jackknife SE 0.0347, 30 tail
+draws). The kill comes from centred `ratio`, where the gap *is* resolvable.
+And freezing does deliver real noise reduction — `cvar_ess` 27.39 → 36.14, up
+32% — it simply costs more in coverage than it returns in noise, at every
+feasible `n_meas`.
+
+> **Consequence for §10.2 step 1.** Route (a) is dead and route (b) (full batch)
+> only ever addressed the *minibatch* component, which §4.3.24 showed is not the
+> dominant source. **Route (c) — a real `B̂` subtraction in
+> `adaptive_sghmc.py` — is the only remaining route to the dominant noise, and
+> it is now the critical path.** That is also the more principled fix: §4.3.21
+> established the existing `-lr⁴` correction is numerically inert (3.8e-15
+> against 2.4e-8…2.4e-6), so the sampler has never corrected for gradient noise
+> at all. Correcting it properly fixes the defect at its source and is
+> insensitive to `n_meas`, `batch_size` and pool size alike — which also means
+> it does **not** touch `bt_pool` or `batch_size`, so the cross-family
+> comparability constraints (§3.6.2, §4.3.15) never bind.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3532,6 +3577,13 @@ thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
    > eliminated.** Route (c) is now the only one that addresses the dominant
    > source; route (b) removes the minibatch component only. The struck-through
    > reasoning is kept because the refutation is the useful part.
+   >
+   > **CLOSED WITH A BOUND (§4.3.25).** Freezing was re-tested at `n_meas` 256,
+   > where coverage is 7.3× better. The penalty shrinks 3× (+0.2777 → +0.0933)
+   > but does not vanish, and it scales as `n^-0.548` — the Monte-Carlo rate.
+   > Driving it under 0.01 needs `n_meas` ≈ 15 000, i.e. ~23 GPU-hours per
+   > chain in Cholesky alone. **Route (a) is not merely unhelpful, it is
+   > computationally unreachable.** Do not revisit it.
 
    - **~~Fixed measurement set — start here.~~** The prior-gradient noise comes from
      *resampling* `n_meas` points every step (`f_pref_net.py`,
@@ -3550,8 +3602,14 @@ thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
      HMC** — the friction/noise pair remains, so no Metropolis correction is
      needed — but `B̂ = 0` must actually hold, which needs the fixed measurement
      set as well.
-   - **A real `B̂` subtraction.** Most principled and the only route that stays
-     correct at any batch size; most implementation work.
+   - **A real `B̂` subtraction. THIS IS NOW THE CRITICAL PATH (§4.3.25).** With
+     (a) closed by a bound and (b) addressing only the non-dominant minibatch
+     component, this is the only route left to the dominant noise source. It is
+     also the most principled: §4.3.21 showed the existing `-lr⁴` correction is
+     numerically inert, so the sampler has never corrected for gradient noise
+     at all. Correcting it at source is insensitive to `n_meas`, `batch_size`
+     and pool size, and touches neither `bt_pool` nor `batch_size` — so the
+     cross-family comparability constraints (§3.6.2, §4.3.15) never bind.
 
 2. **Re-run the four-point `map_amp2` curve (1.69e5 / e4 / e3 / e2) with
    `--cvar-ce`.** §4.3.23's open tension is the verification: the derived
