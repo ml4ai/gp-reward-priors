@@ -3047,6 +3047,86 @@ eliminated.
 sweep and carry the same signature (§4.3.2). With the centred metrics now logged
 automatically, each is one run and the verdict reads straight from wandb.
 
+### 4.3.30 The recipe does NOT generalise — two of four fail, by contraction
+
+Same recipe on the remaining two variants. Both fail, and neither fails the way
+§4.3.28 was fixing:
+
+| variant | `mdecay` | centred `ratio` | centred `scale_z` | gate | CVaR CE |
+|---|---|---|---|---|---|
+| large_diverse | 0.3761 | 1.1278 | 0.8091 | PASS | 0.3417 |
+| medium_play | 0.1946 | 1.0871 | 0.6469 | PASS | 0.2648 |
+| **large_play** | **0.0312** | **0.8578** | 1.0365 | PASS | **3.0359** |
+| **medium_diverse** | **0.0072** | **0.5299** | **13.1542** | **FAIL** | 0.6705 |
+
+**Both failures are CONTRACTION, not expansion.** Centred `ratio` < 1 means the
+identified component's spread *shrank* between halves — 0.86 for large_play and
+**0.53** for medium_diverse, whose posterior width nearly halved. That is the
+opposite of the widening every section from §4.3.2 onward chased, so the recipe
+has not merely failed to help here: **it has overshot in the other direction.**
+
+**large_play passes both gates while being broken.** CVaR CE **3.0359** against
+`log 2` = 0.6931, with CVaR accuracy **0.5741** — barely above chance, and the
+worst number in the investigation by a wide margin (SE 0.4702). Raw and centred
+`scale_z` are 0.7649 and 1.0365, both comfortably inside the criterion.
+**§4.3.15's rule holds and is now demonstrated twice: stationarity is necessary,
+not sufficient.** A chain that has collapsed is stationary in the trivial sense,
+and no drift diagnostic can tell that apart from a chain sampling correctly.
+Only CVaR CE catches it.
+
+**medium_diverse is the amendment working in the protective direction.** Raw
+`scale_z` is **0.8187 — a comfortable PASS** — while centred is **13.1542**, a
+catastrophic fail. §4.3.29 showed the amendment stopping raw from rejecting a
+good configuration; this is the converse, and the more important one: **raw
+would have accepted a run whose identified component collapsed by half.** The
+two cases together establish that centring is not a loosening or a tightening of
+the criterion but a correction of what it measures.
+
+> **Mechanism: friction separates the four exactly.** The two failures carry the
+> two lowest `mdecay` (0.0072, 0.0312); the two successes the two highest
+> (0.1946, 0.3761). `chain_init_jitter 1.0` displaces each chain by 100% of each
+> tensor's own sd, and friction is what dissipates that displacement. **Below
+> some `mdecay`, burn-in cannot absorb an overdispersed start**, so chains enter
+> the sampling phase still falling inward — which registers as contraction, and
+> at low enough friction (medium_diverse, 27× below medium_play) as collapse.
+>
+> **This is n = 4 with perfect separation, which is suggestive and not
+> established.** It is also confounded: `map_amp2` was moved to 16894 from
+> per-variant values spanning ÷5.6 to ÷54.8, and large_play's ÷54.8 is by far
+> the largest. The warm-up point that the jitter scales off was produced under
+> the variant's *original* amplitude, so a large amplitude change means the
+> jitter is calibrated to weights of the wrong scale. Friction and amplitude
+> ratio are not independent across these four, and one run cannot separate them.
+
+**What this does and does not overturn.** §4.3.28 and §4.3.29 stand as measured:
+medium_play and large_diverse do reach centred stationarity under this recipe.
+What fails is the claim that **one fixed recipe** transfers to all four.
+`chain_init_jitter` is not a variant-independent constant — it must be scaled to
+what the chain can dissipate, which depends on `mdecay`, and possibly to the
+amplitude change as well.
+
+**The discriminating run.** Re-run the two failures with jitter scaled down
+rather than the recipe abandoned. If friction is the mechanism, a jitter small
+enough for the available damping should restore expansion-then-stationarity:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_diverse_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 0.05 --n_meas 256 \
+    --OUT_DIR ./exp/stage3_medium_diverse_jit005 > ../exp/stage3_medium_diverse_jit005.log 2>&1 &
+```
+
+medium_diverse first: it is the cleaner test, since its amplitude change (÷7.1)
+sits inside the range where the recipe already works, leaving `mdecay` as the
+distinguishing variable. Centred `ratio` returning to ≥1 with `scale_z` near the
+0.6745 null confirms friction; still contracting means the amplitude change is
+the culprit and the principled value needs deriving per variant after all.
+
+**Do not run the sweep redesign on the current recipe.** Two of four variants
+produce either a collapsed posterior or a worse-than-chance CVaR reward, and
+`large_play` shows the gate cannot detect it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3563,6 +3643,16 @@ generalise beyond this project:
   redesigned sweep rather than a re-scoring of round 2. The generalisable point:
   a stationarity diagnostic must be computed on the identified component, or it
   measures partly a direction the likelihood cannot see.
+- **A stationarity gate cannot detect a collapsed posterior.** `large_play`
+  under the §4.3.28 recipe passes both the raw and centred criteria
+  (`scale_z` 0.7649 / 1.0365) while its CVaR reward predicts preferences at
+  **0.5741 accuracy and CVaR CE 3.0359** — worse than chance, `log 2` = 0.6931.
+  A chain that has contracted onto too small a region is stationary in the
+  trivial sense, and no drift statistic distinguishes that from correct
+  sampling. Report that stationarity was verified **jointly** with a predictive
+  check on the deployed quantity (CVaR CE), never on drift diagnostics alone —
+  and that in this project the drift gate alone would have certified a
+  configuration whose reward model is uninformative.
 - **A gate PASS at the chain count you happened to run is not stationarity.**
   The converse of the bullet below, and it bit in the other direction: the
   final medium_play configuration passes every §4.2 gate at 16 chains while
@@ -3813,7 +3903,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. Next: large_play and medium_diverse (one run each, verdict from wandb), then the sweep redesign |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: jitter 1.0 is not variant-independent, and burn-in cannot dissipate it at low friction. **Sweep redesign blocked** until jitter is scaled per variant |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
