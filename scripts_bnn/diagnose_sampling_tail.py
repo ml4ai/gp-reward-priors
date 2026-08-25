@@ -1022,11 +1022,18 @@ def drift_blocks(pred_chains, n_blocks=5):
     w = D // n_blocks
     eps = 1e-12
     sd = a.reshape(-1, P).std(axis=0) + eps
-    means, sds = [], []
+    # Section 3.6.3 gates on the CENTRED component, and section 4.3.30's
+    # contraction is a centred phenomenon that raw f can hide entirely -- on
+    # medium_diverse raw f WIDENS (sd/first 1.41) while the centred shape
+    # CONTRACTS (scale_ratio 0.456).  Reporting raw alone answers the wrong
+    # question, so both trajectories are tracked and the verdict reads centred.
+    cen = a - a.mean(axis=2, keepdims=True)
+    means, sds, sds_c = [], [], []
     for b in range(n_blocks):
         blk = a[:, b * w:(b + 1) * w, :]
         means.append(blk.reshape(-1, P).mean(axis=0))
         sds.append(blk.reshape(-1, P).std(axis=0) + eps)
+        sds_c.append(cen[:, b * w:(b + 1) * w, :].reshape(-1, P).std(axis=0) + eps)
 
     # Noise floor.  Without it a STATIONARY chain reads as a constant drive:
     # its block-to-block shifts are pure Monte Carlo scatter, which is flat by
@@ -1039,21 +1046,22 @@ def drift_blocks(pred_chains, n_blocks=5):
     floor = 0.6745 * math.sqrt(2.0 / ess_blk)
 
     print(f"  {'block':>6} {'draws':>9} {'shift/prev':>11} {'x floor':>8} "
-          f"{'cum/first':>10} {'sd/first':>9}")
-    print("  " + "-" * 59)
+          f"{'cum/first':>10} {'sd/first':>9} {'sd/first(cen)':>14}")
+    print("  " + "-" * 74)
     steps = []
     for b in range(n_blocks):
         lo, hi = b * w, (b + 1) * w
         cum = float(np.median(np.abs(means[b] - means[0]) / sd))
         sdr = float(np.median(sds[b] / sds[0]))
+        sdc = float(np.median(sds_c[b] / sds_c[0]))
         if b == 0:
             print(f"  {b:>6} {f'{lo}-{hi - 1}':>9} {'--':>11} {'--':>8} "
-                  f"{cum:>10.4f} {sdr:>9.4f}")
+                  f"{cum:>10.4f} {sdr:>9.4f} {sdc:>14.4f}")
         else:
             stp = float(np.median(np.abs(means[b] - means[b - 1]) / sd))
             steps.append(stp)
             print(f"  {b:>6} {f'{lo}-{hi - 1}':>9} {stp:>11.4f} "
-                  f"{stp / floor:>8.2f} {cum:>10.4f} {sdr:>9.4f}")
+                  f"{stp / floor:>8.2f} {cum:>10.4f} {sdr:>9.4f} {sdc:>14.4f}")
 
     print(f"\n  noise floor {floor:.4f} per block step "
           f"(ESS {ess_full:.1f} over {D} draws -> {ess_blk:.1f} per block).")
@@ -1061,6 +1069,31 @@ def drift_blocks(pred_chains, n_blocks=5):
     print("  'ongoing drive' when the shifts CLEAR it.")
 
     sd_last = float(np.median(sds[-1] / sds[0]))
+    sdc_last = float(np.median(sds_c[-1] / sds_c[0]))
+    sdc_traj = [float(np.median(sds_c[b] / sds_c[0])) for b in range(n_blocks)]
+    _dirn = "CONTRACTING" if sdc_last < 0.95 else (
+        "WIDENING" if sdc_last > 1.05 else "flat")
+    print(f"\n  CENTRED spread trajectory (section 3.6.3 gates on this): "
+          f"{' -> '.join(f'{v:.3f}' for v in sdc_traj)}")
+    print(f"  -> the identified component is {_dirn} ({sdc_last:.4f} by the "
+          f"last block).")
+    if _dirn != "flat":
+        _mono = all((sdc_traj[i + 1] - sdc_traj[i]) * (sdc_last - 1.0) >= -0.02
+                    for i in range(n_blocks - 1))
+        _step = [abs(sdc_traj[i + 1] - sdc_traj[i]) for i in range(n_blocks - 1)]
+        if _step[0] > 2.5 * _step[-1]:
+            print("     The per-block change is DECAYING (first step "
+                  f"{_step[0]:.3f} vs last {_step[-1]:.3f}), i.e. a TRANSIENT")
+            print("     from an atypical start -- initialisation explanations")
+            print("     survive, and a longer burn-in is the lever.")
+        elif _mono:
+            print("     The per-block change is roughly CONSTANT (first step "
+                  f"{_step[0]:.3f} vs last {_step[-1]:.3f}), i.e. an ONGOING")
+            print("     DRIVE throughout sampling.  Initialisation is NOT the")
+            print("     cause and burn-in cannot fix it (section 4.3.21).")
+        else:
+            print("     The per-block changes are non-monotone; neither a clean")
+            print("     transient nor a constant drive.  Do not force a verdict.")
     if max(steps) < 2.0 * floor:
         print(f"  -> SHAPE NOT RESOLVED.  No block step reaches 2x the floor "
               f"(max {max(steps) / floor:.2f}x),")
@@ -1069,11 +1102,12 @@ def drift_blocks(pred_chains, n_blocks=5):
         print("     count.  Re-run with fewer blocks, and read the two columns")
         print("     that are better determined: cum/first, and sd/first -- a")
         print("     variance ratio converges faster than a difference of means.")
-        if sd_last > 1.2:
-            print(f"     sd/first reaches {sd_last:.4f}: the chain IS widening")
-            print("     even though the location shape is unresolved, which")
-            print("     points at energy injected per cycle (heating) rather")
-            print("     than a start transient.")
+        if abs(sdc_last - 1.0) > 0.2:
+            print(f"     But the CENTRED spread reaches {sdc_last:.4f}, so the")
+            print("     identified component IS moving even though the location")
+            print("     shape is unresolved -- read the centred verdict above,")
+            print(f"     not raw sd/first ({sd_last:.4f}), which mixes in the")
+            print("     unidentified offset and can move the opposite way.")
         return
 
     if len(steps) < 2:
