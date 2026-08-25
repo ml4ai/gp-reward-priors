@@ -3127,6 +3127,74 @@ the culprit and the principled value needs deriving per variant after all.
 produce either a collapsed posterior or a worse-than-chance CVaR reward, and
 `large_play` shows the gate cannot detect it.
 
+### 4.3.31 The friction hypothesis is refuted — and a confound replaces it
+
+`chain_init_jitter` 1.0 → **0.05** on medium_diverse, everything else as
+§4.3.30:
+
+| | jitter | centred `ratio` | centred `scale_z` | centred `loc_z` | raw `scale_z` |
+|---|---|---|---|---|---|
+| `recipe` | 1.0 | 0.5299 | 13.1542 | 2.5544 | 0.8187 PASS |
+| `jit005` | **0.05** | **0.4556** | 10.7043 | 2.0173 | 0.7841 PASS |
+
+**A 20× reduction in jitter did not fix the contraction — it deepened it.**
+§4.3.30's mechanism was that burn-in cannot dissipate an overdispersed start at
+low friction; under that account, near-eliminating the dispersion should have
+restored expansion. It did the opposite. **Refuted.**
+
+**A second hypothesis is out as well.** The warm-up that produces
+`initial_weights` runs **in the same script under the same config**
+(`run_bnn_training_antmaze_eval.py:619`), so it already uses the recipe's
+`map_amp2` and `n_meas`. The start is not a point fitted under the variant's
+original prior.
+
+**What survives is a clean but confounded signal.** Centred `ratio` is
+**monotone-inverse in warm-up accuracy** across all four variants:
+
+| variant | `mdecay` | warm-up acc | centred `ratio` |
+|---|---|---|---|
+| large_diverse | 0.3761 | 0.5182 | 1.1278 |
+| medium_play | 0.1946 | 0.7273 | 1.0871 |
+| large_play | 0.0312 | 0.7593 | 0.8578 |
+| medium_diverse | 0.0072 | **0.8411** | **0.5299** |
+
+The better the warm-up fits, the harder the chain contracts — perfectly ordered,
+no exceptions. **But `mdecay` is monotone in the same order.** The two are
+*perfectly confounded* at n = 4 and cannot be separated from these runs. The
+jitter test refutes one specific friction mechanism, not friction as such.
+
+> **Do not add a third n = 4 story on top of two refuted ones.** §4.3.30's
+> friction account and the warm-up-prior account both looked clean on four
+> points and both are now dead. Any explanation resting on ordering four
+> variants is worth roughly nothing until a *within-variant* measurement
+> distinguishes the candidates.
+
+**The discriminating measurement needs no new sampling.** `--drift-blocks`
+(§4.3.21) splits the draws into consecutive blocks and reports the block-to-block
+scale change against a noise floor, which separates a **decaying transient** —
+a chain relaxing from an atypical start, which is what both refuted hypotheses
+predicted — from a **constant per-cycle drive**, which implicates the sampler or
+the target rather than the initialisation:
+
+```
+python scripts_bnn/diagnose_sampling_tail.py \
+    --run-dir exp/stage3_medium_diverse_jit005_0 --drift-blocks 5 \
+    --offset-shape-split --device cuda \
+    2>&1 | tee exp/stage3_medium_diverse_jit005_0_blocks.txt
+```
+
+The `sd/first` column is the one to read: falling monotonically toward a plateau
+means a transient and the initialisation family of explanations survives in some
+form; falling at a constant rate across all five blocks means the chain is being
+driven inward throughout sampling, and initialisation is irrelevant. §4.3.19
+warned this test is underpowered at 75 draws for *location*, but the scale
+column is far better determined and the effect here is large (a 2× spread change),
+so it should resolve.
+
+**Status: the sweep redesign remains blocked**, and the recipe is confirmed for
+two variants only (§4.3.28, §4.3.29). Two of four produce a collapsed identified
+component, and `large_play` shows the gate cannot detect it (§4.3.30).
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3903,7 +3971,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: jitter 1.0 is not variant-independent, and burn-in cannot dissipate it at low friction. **Sweep redesign blocked** until jitter is scaled per variant |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. Next is `--drift-blocks` (no new sampling) to separate a transient from an ongoing drive. **Sweep redesign blocked** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
