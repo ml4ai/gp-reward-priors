@@ -547,12 +547,55 @@ its score, so selection is a *constrained* minimisation: the winner is the
 **lowest `val_predictive_cross_entropy` among ELIGIBLE trials up to the stopping
 trigger**.
 
+> ### AMENDMENT 2026-08-24 — the drift criteria move to the centred component
+>
+> **What changes.** The two `fn_drift_*` criteria below are evaluated on
+> `val_fn_drift_centred_*` instead of the raw metrics. Thresholds, null and
+> reasoning are unchanged — the `|N(0,1)|` calibration applies identically to
+> the centred statistic. The **offset** metrics are logged and reported but
+> **never gate**.
+>
+> **Why.** The BT/CE likelihood is exactly invariant to `f → f + c` (§4.3.10):
+> `Φ` pools by masked mean and cross-entropy on `[Φ₁, Φ₂]` depends only on
+> `Φ₁ − Φ₂`, so the offset is unidentified by the data and drift along it
+> cancels in every preference prediction — and a constant reward offset leaves
+> the IQL greedy policy unchanged. **The raw statistic mixes that unidentified
+> direction into the criterion.** §4.3.28 makes the consequence concrete: the
+> best-sampling configuration produced in this project is stationary in the
+> identified component (centred `loc_z` 0.6144, `scale_z` 0.6469, both at the
+> 0.6745 null median) yet **fails the raw gate** at `scale_z` 2.2827, because
+> all its residual drift sits in the offset. Under the criteria as written it
+> would be rejected as ineligible, while trials that pass are disproportionately
+> those whose offset is pinned by an over-tight prior — which §4.3.14 identified
+> as the pathology that drove `map_amp2` to improperness in the first place.
+> **The unamended criterion selects against the thing it exists to detect.**
+>
+> **This is a post-hoc change to a pre-registered criterion, and it is
+> disclosed as one.** Under §0's standing rule the round is restarted rather
+> than patched, and that is what happens here: the amendment governs the
+> **redesigned stage-1 BNN sweep** (§10.2 step 3), not a re-adjudication of
+> round 2. Round-2 winners were selected on the raw criterion and **cannot** be
+> re-scored against the new one — the centred statistic needs the saved chains,
+> and no sweep trial's chains survive (§4.3). Their provenance headers stand as
+> a record of what was done, and §7.1 carries the disclosure.
+>
+> **Scope limits.** `param_clamp_sampling_pct` is unaffected: the momentum
+> clamp is a hard nonlinearity in weight space with no offset interpretation.
+> The divergence rule is unaffected. Nothing about the CE ranking changes here;
+> that is §10.2 step 3's separate move to CVaR CE.
+>
+> **Implementation.** `util.function_space_drift` now returns
+> `fn_drift_centred_*` and `fn_drift_offset_*` alongside the raw keys (24
+> metrics, raw key names byte-identical), so every future trial logs all three
+> and this criterion is evaluable from wandb without saved chains — the gap that
+> made round 2 un-re-adjudicable.
+
 **Eligibility.** All three must hold:
 
 | criterion | threshold | why this number |
 |---|---|---|
-| `val_fn_drift_loc_z_median` | ≤ 2.0 | The per-point stationary null is \|N(0,1)\|: median ~0.67, 95th ~2. A median at 2.0 means the *typical* point has shifted 3× the null median, so this is deliberately lenient — set to avoid rejecting on noise, not to be strict. |
-| `val_fn_drift_scale_z_median` | ≤ 2.0 | Same null, same reasoning. |
+| `val_fn_drift_centred_loc_z_median` | ≤ 2.0 | The per-point stationary null is \|N(0,1)\|: median ~0.67, 95th ~2. A median at 2.0 means the *typical* point has shifted 3× the null median, so this is deliberately lenient — set to avoid rejecting on noise, not to be strict. **Centred** per the 2026-08-24 amendment. |
+| `val_fn_drift_centred_scale_z_median` | ≤ 2.0 | Same null, same reasoning. |
 | `param_clamp_sampling_pct` | ≤ 0.01% | `max_param_step` is not measure-preserving when it binds. 0 is the exact null; observed values are 0.0000–0.0030%, so this is "inert" with margin. |
 
 **Divergence.** A trial with NaN/Inf convergence diagnostics is ineligible — it
@@ -776,6 +819,14 @@ Before reading any tail number, confirm the run is still sampling the target:
     val_fn_drift_loc_z_median    <= 2.0
     val_fn_drift_scale_z_median  <= 2.0     (stationary null: median ~0.67, 95th ~2)
     param_clamp_sampling_pct     <= 0.01%
+
+> **Read these on the CENTRED metrics (amendment 2026-08-24, §3.6.3).**
+> `fn_drift_centred_*` gates; `fn_drift_offset_*` is reported, never gated. Raw
+> `f` mixes the identified shape with the likelihood-invariant offset, so a raw
+> FAIL may be entirely in a direction that cancels in every preference
+> prediction — §4.3.28 is exactly that case. Every raw figure quoted in §4.3
+> predates the amendment; where a section quotes raw and centred side by side,
+> the centred column is the one the criterion now reads.
 
 These are the §3.6.3 criteria the winners already satisfy at 4 chains × 75
 draws. **Changing the chain count does not automatically preserve them** — more
@@ -3439,6 +3490,20 @@ generalise beyond this project:
   biases toward instability**, rather than merely failing to detect it: at a
   short horizon a larger step size buys a better score and its cost has not yet
   appeared. Round 1 selected at 35 draws and deployed at 310.
+- **The pre-registered stationarity criterion was computed on a quantity
+  containing an unidentified direction, and was amended mid-project.** §3.6.3
+  gated on raw `fn_drift_*`, but the BT/CE likelihood is exactly invariant to
+  `f → f + c`, so raw drift mixes the identified shape with an offset that
+  cancels in every preference prediction (§4.3.10). The criterion therefore
+  rejected samplers stationary in the part that matters and admitted ones whose
+  offset was merely pinned by an over-tight prior — the same pathology that
+  drove `map_amp2` to improperness (§4.3.14). Amended 2026-08-24 to gate on the
+  centred component (§3.6.3). **Report that round-2's BNN winners were selected
+  under the unamended criterion**, that they cannot be re-adjudicated because no
+  sweep trial's chains survive (§4.3), and that the amendment governs the
+  redesigned sweep rather than a re-scoring of round 2. The generalisable point:
+  a stationarity diagnostic must be computed on the identified component, or it
+  measures partly a direction the likelihood cannot see.
 - **A gate PASS at the chain count you happened to run is not stationarity.**
   The converse of the bullet below, and it bit in the other direction: the
   final medium_play configuration passes every §4.2 gate at 16 chains while
@@ -3689,7 +3754,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. **Blocked on moving §4.2/§3.6.3's gate from raw to centred** — as written they reject this configuration. Then confirm on a second variant |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. Next: confirm on a second variant, then the sweep redesign |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,

@@ -413,6 +413,29 @@ def function_space_drift(pred_chains, eps=1e-12):
     h = D // 2
     if h < 4:
         return {}
+
+    # Section 4.3.28: the BT/CE likelihood is exactly invariant to f -> f + c,
+    # so raw f mixes the identified SHAPE with an unidentified OFFSET that
+    # cancels in every preference prediction.  Gating on raw therefore rejects
+    # samplers that are stationary in the part that matters, and admits ones
+    # whose offset happens to be pinned by an over-tight prior -- the 4.3.14
+    # pathology.  The centred metrics below are the ones section 3.6.3 gates on
+    # (amended 2026-08-24); the offset metrics are REPORTED, never gated.
+    _off = a.mean(axis=2)                       # [chain, draw]
+    out = {}
+    for _pfx, _arr in (("", a),
+                       ("centred_", a - _off[:, :, None]),
+                       ("offset_", np.broadcast_to(_off[:, :, None], a.shape))):
+        out.update(_function_space_drift_core(_arr, eps, _pfx))
+    return _function_space_drift_report(out)
+
+
+def _function_space_drift_core(a, eps, prefix):
+    """The section 4.2 drift statistics for one array.  See function_space_drift."""
+    import arviz_stats as azs
+
+    C, D, P = a.shape
+    h = D // 2
     first, second = a[:, :h, :], a[:, h:2 * h, :]
 
     sd = a.reshape(-1, P).std(axis=0) + eps
@@ -450,8 +473,13 @@ def function_space_drift(pred_chains, eps=1e-12):
                       ("loc_sd", raw_loc), ("scale_ratio", ratio)):
         v = fin(arr)
         if v.size:
-            out[f"fn_drift_{name}_median"] = float(np.median(v))
-            out[f"fn_drift_{name}_95th"] = float(np.percentile(v, 95))
+            out[f"fn_drift_{prefix}{name}_median"] = float(np.median(v))
+            out[f"fn_drift_{prefix}{name}_95th"] = float(np.percentile(v, 95))
+    return out
+
+
+def _function_space_drift_report(out):
+    """One log line covering raw and centred.  See function_space_drift."""
     if "fn_drift_loc_z_median" in out:
         print(
             f"[diag] function-space drift (first vs second half): "
@@ -461,5 +489,14 @@ def function_space_drift(pred_chains, eps=1e-12):
             f"[stationary ~0.67 / 95th ~2]; raw shift "
             f"{out.get('fn_drift_loc_sd_median', float('nan')):.3f} sd, "
             f"scale {out.get('fn_drift_scale_ratio_median', float('nan')):.3f}x"
+        )
+        print(
+            f"[diag]   CENTRED (gated, section 3.6.3): "
+            f"z_loc {out.get('fn_drift_centred_loc_z_median', float('nan')):.2f}, "
+            f"z_scale {out.get('fn_drift_centred_scale_z_median', float('nan')):.2f}; "
+            f"raw shift {out.get('fn_drift_centred_loc_sd_median', float('nan')):.3f} sd, "
+            f"scale {out.get('fn_drift_centred_scale_ratio_median', float('nan')):.3f}x"
+            f"  |  OFFSET (reported only): z_scale "
+            f"{out.get('fn_drift_offset_scale_z_median', float('nan')):.2f}"
         )
     return out
