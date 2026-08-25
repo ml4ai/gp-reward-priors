@@ -2869,6 +2869,74 @@ discretisation error versus initial dispersion — so a combination is a genuine
 candidate rather than a compromise, and worth a run once the composition
 question above is settled.
 
+### 4.3.28 The identified component reaches stationarity
+
+`chain_init_jitter 1.0` **and** `n_meas 256`, 16 chains, principled amplitude:
+
+| | `loc_sd` | `ratio` | `loc_z` | `scale_z` | |
+|---|---|---|---|---|---|
+| raw `f` | 0.0931 | 1.5831 | 0.3241 | 2.2827 | FAIL |
+| **centred (shape)** | 0.1539 | **1.0871** | **0.6144** | **0.6469** | **PASS** |
+| offset only | 0.1038 | 1.6454 | 0.3567 | 2.4542 | FAIL |
+
+**The identified component is stationary.** A stationary chain's `|N(0,1)|`
+median reference is **0.6745**; the centred scores are **0.6144** (0.91×) and
+**0.6469** (0.96×) — indistinguishable from a chain that is sampling its target.
+Centred `ratio` **1.0871** beats §4.3.23's projected ~1.10 floor, which was
+never reachable by prior strength alone.
+
+**And every remaining bit of drift sits in the direction that provably does not
+matter.** §4.3.10 established that the BT/CE likelihood is exactly invariant to
+`f → f + c`: the offset is unidentified by the data, cancels in every preference
+prediction, and a constant reward offset leaves the IQL greedy policy unchanged.
+The residual is `ratio` 1.6454 / `scale_z` 2.4542 **on the offset alone**.
+
+**The levers compose superadditively.** Jitter alone removed 0.0996 of the
+excess; `n_meas` 256 alone removed 0.0903 (8-chain); together they removed
+**0.2619**, against a sum of separate effects of 0.1899. Neither §4.3.19's nor
+§4.3.27's floor was a hard limit — each lever was bounded by the other's
+mechanism.
+
+**The §4.3.27 estimator problem is cured.** Overdispersed starts inflated the
+CVaR CE jackknife SE 6.8× to 0.1911 because chains disagreed about the tail.
+With the stronger prior the SE falls to **0.0575** — 3.3× smaller — and the
+comparison becomes decisive:
+
+| | CVaR CE | SE |
+|---|---|---|
+| `amp1e4_c16` | 0.4081 | 0.0279 |
+| **`jit10n256`** | **0.2648** | 0.0575 |
+
+Gap **0.1433** against a combined 2·SE of **0.1278** — **the first resolvable
+CVaR CE improvement in the investigation.**
+
+**Costs, stated plainly.** `cvar_ess` 76.33 → 25.19, relMCSE median 0.4560,
+unresolved 0.17% → 0.81%, mean CE 0.2232 → 0.2912. Tail *efficiency* is worse
+even as tail *correctness* improves — the same dissociation §4.3.20 found, and
+the reason §4.3.15's rule to judge on CVaR CE rather than on any single
+diagnostic matters here.
+
+> **Procedural consequence, and it is not optional. §4.2's gate and §3.6.3's
+> eligibility criterion are computed on RAW `fn_drift_*`.** This configuration
+> **fails the raw gate** (`scale_z` 2.2827) while being stationary in the
+> identified component. Under the criteria as written, **the best-sampling
+> configuration produced in this investigation would be rejected as
+> ineligible** — and the runs that pass are the ones whose offset happens to be
+> pinned by an over-tight prior, which is what §4.3.14 diagnosed as the original
+> pathology.
+>
+> **The gate must move to the centred component**, with the offset reported
+> separately rather than gated on. Until that change lands, do not run the sweep
+> redesign: it would select against the thing it is meant to find. §7.1 should
+> also record that the published stationarity criterion was computed on a
+> quantity containing an unidentified direction.
+
+**Next.** Confirm on a second variant before generalising — every result since
+§4.3.1 is medium_play alone, and §4.3.2 flagged that all four winners carry the
+same signature without any having been tested. `large_diverse` is the natural
+check: §4.3.2 recorded it with the thinnest eligible field and a `c4` profile
+closest to medium_play's.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3621,7 +3689,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair, in progress** — `bt_pool` cleared as a lever (§4.3.15). `map_amp2` **confirmed** as a real lever (§4.3.16): dropping it to the principled ~1e4 removes 46% of the excess widening for +10% CE, without the §4.3.15 step-size pathology. **Ladder complete (§4.3.17):** amplitude plateaus at centred `ratio` ~1.19, so it cannot reach stationarity alone and a second mechanism holds the floor. Returns collapse 8.4× past the principled value, which fixes ~1e4 as the stopping point. Tail *improves* (unresolved 2.25% → 1.44%). **16-chain confirmation done (§4.3.18):** both predictions held, every §4.2 gate passes raw and centred, unresolved falls to 0.17%, and ALIGNMENT collapses 0.7564 → 0.4593 — the common drift was largely an amplitude artifact. Residual widening 1.3490 is per-chain and NOT shared. **§4.3.19:** `n_meas` is a second lever (1.3200 → 1.2297) but both prior-strength knobs plateau together at ~1.23; longer chains do not equilibrate (scale-free α≈0.24) and *destroy* the tail (unresolved 1.44% → 42.09% at 150 draws). **§4.3.20:** `mdecay` 0.6 made it *worse* (1.5150) because injected noise ∝ `mdecay` (`adaptive_sghmc.py:147`). Centred `ratio` is monotone in chain noise across all three knobs — the widening is the climb toward a noise-inflated stationary variance the chain is too slow to reach. **§4.3.21:** lower `mdecay` does *nothing* (1.3230) — the response is flat below baseline and steep above, so the binding source is **gradient** noise, not the thermostat. **§4.3.22:** CVaR CE validated offline — it ranks configurations *opposite* to mean CE (corr with centred `ratio` +0.833 vs −0.607), and at the mean-CE-selected amplitude the CVaR reward is **worse than chance** (0.7463 vs `log 2` = 0.6931). Adequate for coarse selection at 8×75. **§4.3.23:** bracket closed — CVaR CE has a genuine interior optimum at `map_amp2` 1.69e3 (1.69e2 turns back up to 0.4102 as CVaR collapses onto the mean), so the objective is bounded on both sides and safe to adopt. Open tension: derived amplitude 1.69e4 vs CVaR-optimal 1.69e3, resolvably one decade apart — whether a sampler fix closes that gap is the cleanest test of the fix |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. **Blocked on moving §4.2/§3.6.3's gate from raw to centred** — as written they reject this configuration. Then confirm on a second variant |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -3730,6 +3798,17 @@ thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
    overdispersion — a direct constraint on the sweep redesign. Jitter lands
    on the same ~1.22 floor prior strength reaches; whether they compose is
    the open question.
+
+   **RESOLVED (§4.3.28): they compose, superadditively, and the identified
+   component reaches stationarity.** `chain_init_jitter 1.0` + `n_meas 256`
+   gives centred `ratio` **1.0871** with centred `loc_z` 0.6144 and
+   `scale_z` 0.6469 — both at the `|N(0,1)|` reference of 0.6745. All
+   residual drift is in the unidentified offset, which cancels in every
+   preference prediction (§4.3.10). First resolvable CVaR CE improvement
+   (0.4081 → 0.2648), and the jitter-induced SE explosion is cured
+   (0.1911 → 0.0575). **Blocking issue: §4.2/§3.6.3 gate on RAW drift, and
+   this configuration fails raw while passing centred — the criteria would
+   reject it. Move the gate to centred before running any sweep.**
 
    ~~Three routes, not mutually exclusive:~~
 
