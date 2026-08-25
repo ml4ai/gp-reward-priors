@@ -2982,11 +2982,70 @@ diagnostic matters here.
 > also record that the published stationarity criterion was computed on a
 > quantity containing an unidentified direction.
 
-**Next.** Confirm on a second variant before generalising — every result since
-§4.3.1 is medium_play alone, and §4.3.2 flagged that all four winners carry the
-same signature without any having been tested. `large_diverse` is the natural
-check: §4.3.2 recorded it with the thinnest eligible field and a `c4` profile
-closest to medium_play's.
+**Next.** Confirmed on large_diverse (§4.3.29) — the hardest variant, and it
+reaches centred stationarity too. large_play and medium_diverse remain.
+
+### 4.3.29 The recipe generalises — confirmed on large_diverse
+
+Same recipe (`map_amp2` 16894, `chain_init_jitter 1.0`, `n_meas 256`), 16
+chains, on the variant §4.3.2 recorded as the **hardest** — 22 of 40 trials
+rejected, the thinnest eligible field of the four. Its `n_meas` went **7 → 256**,
+a 37× change against medium_play's 7.3×:
+
+| | `loc_sd` | `ratio` | `loc_z` | `scale_z` | |
+|---|---|---|---|---|---|
+| raw `f` | 0.0595 | 1.0476 | 0.2015 | 0.2502 | PASS |
+| **centred (shape)** | 0.1642 | **1.1278** | **0.7154** | **0.8091** | **PASS** |
+| offset only | 0.0561 | 1.0421 | 0.1866 | 0.1934 | PASS |
+
+**The identified component is stationary here too.** Centred `loc_z` 0.7154 is
+1.06× the `|N(0,1)|` null median of 0.6745 and `scale_z` 0.8091 is 1.20× —
+indistinguishable from a chain sampling its target, as on medium_play (0.6144,
+0.6469). **Two of four variants now confirmed**, including the hardest.
+
+**The amendment's logging is live and correct.** wandb's summary carries
+`val_fn_drift_centred_loc_z_median` 0.715435 and `centred_scale_z_median`
+0.809066, matching the offline decomposition to five digits. **§3.6.3's
+criterion is now evaluable directly from wandb**, without saved chains — the gap
+that made round 2 un-re-adjudicable is closed for every future trial.
+
+> **And the amendment is independently vindicated by a variant difference.**
+> The two variants disagree entirely about the *offset* while agreeing about the
+> identified component:
+>
+> | | medium_play | large_diverse |
+> |---|---|---|
+> | centred `ratio` | 1.0871 | 1.1278 |
+> | **offset `ratio`** | **1.6454** | **1.0421** |
+> | **raw `scale_z`** | **2.2827 FAIL** | **0.2502 PASS** |
+>
+> Raw would **reject medium_play and accept large_diverse** on the strength of a
+> direction that cancels in every preference prediction. The centred criterion
+> accepts both, correctly, because both are stationary in the part that
+> matters. **The amendment makes the criterion consistent across variants**,
+> which is a stronger argument for it than the single-run case in §3.6.3.
+>
+> It also does **not** loosen the gate: large_diverse passes raw as well, so
+> centring only changes a verdict when the offset actually drifts. It is not a
+> route for admitting badly-sampled runs.
+
+**Tail: the best unresolved fraction in the investigation** — **2 of 6400
+(0.03%)**, against the previous best of 0.17%. But the same compression as
+§4.3.17: relMCSE median 0.5411 and `cvar_ess` 28.65 are mediocre while the
+extremes are excellent. Typical points noisier, unusable points essentially
+eliminated.
+
+> **One claim that cannot be made.** CVaR CE is 0.3417 (SE 0.0280), but there is
+> **no matched large_diverse baseline** — its `c4` figures come from a sweep
+> trial whose chains no longer exist (§4.3), and no unmodified 16-chain run was
+> made. So this number cannot be called an improvement. The **stationarity**
+> claim stands unaided because it is absolute — measured against the `|N(0,1)|`
+> null, not against a baseline — but the CVaR claim is not transferable from
+> medium_play and would need a control run to establish here.
+
+**Remaining: large_play and medium_diverse.** Both were selected under the same
+sweep and carry the same signature (§4.3.2). With the centred metrics now logged
+automatically, each is one run and the verdict reads straight from wandb.
 
 ### 4.4 Procedure
 
@@ -3754,7 +3813,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. Next: confirm on a second variant, then the sweep redesign |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. Next: large_play and medium_diverse (one run each, verdict from wandb), then the sweep redesign |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
