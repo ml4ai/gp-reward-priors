@@ -3195,6 +3195,81 @@ so it should resolve.
 two variants only (§4.3.28, §4.3.29). Two of four produce a collapsed identified
 component, and `large_play` shows the gate cannot detect it (§4.3.30).
 
+### 4.3.32 The contraction is a decaying transient — and a third confound appears
+
+`--drift-blocks 5` on medium_diverse `jit005`, reading the centred column added
+for this purpose:
+
+| block | draws | raw `sd/first` | **centred `sd/first`** |
+|---|---|---|---|
+| 0 | 0–14 | 1.0000 | 1.0000 |
+| 1 | 15–29 | 1.3022 | **0.4068** |
+| 2 | 30–44 | 1.4508 | 0.3108 |
+| 3 | 45–59 | 1.4246 | 0.3421 |
+| 4 | 60–74 | 1.4092 | 0.2894 |
+
+**Verdict: a decaying transient.** First per-block change 0.593, last 0.053 —
+the collapse is essentially complete within the first block and the trajectory
+is flat thereafter. Note raw `sd/first` *widens* to 1.41 across the same blocks:
+without the centred column this run reads as the opposite phenomenon.
+
+**This is the first mechanism in §4.3.30–32 resting on a within-variant
+measurement rather than an ordering of four points**, which matters given
+§4.3.30's friction account and §4.3.31's warm-up-prior account both looked clean
+on four points and both are dead.
+
+> **A third confound, and it separates the four exactly like the other two.**
+> `cycle_length` is 500/750 for the two failures and 2750 for the two successes,
+> so total sampling is **40–60k steps versus 220k**. `mdecay`, warm-up accuracy
+> and sampling-window length are now **all three** monotone in the same order
+> across n = 4. **These runs cannot distinguish them, and no further
+> cross-variant ordering will.** Stop proposing them.
+
+**A simple account that needs none of the three.** Every variant runs the same
+**20,000-step burn-in**, and if the absolute relaxation time is similar across
+variants, the same transient occupies:
+
+| variant | transient ÷ sampling window |
+|---|---|
+| medium_play / large_diverse | ~20k / 220k ≈ **9%** |
+| large_play | ~20k / 40k ≈ **50%** |
+| medium_diverse | ~20k / 60k ≈ **33%** |
+
+A transient covering 9% of the draws barely moves a first-half/second-half
+ratio; one covering a third of them **dominates the first half**. On this
+account the four variants may share one transient of similar absolute size, and
+differ only in how much of it lands inside the sampling window — no appeal to
+friction, warm-up quality or prior scale required. It also explains why cutting
+jitter 20× did nothing (§4.3.31): the jitter was never the displacement being
+relaxed.
+
+**The fix follows from the transient alone, without resolving the confound.**
+Lengthening burn-in absorbs it before sampling begins, whichever variant
+property amplifies it:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_diverse_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --num_burn_in_steps 100000 \
+    --OUT_DIR ./exp/stage3_medium_diverse_burn100k > ../exp/stage3_medium_diverse_burn100k.log 2>&1 &
+```
+
+5× the burn-in against a 60,000-step sampling window; the run grows from 80k to
+160k total steps, which is still a third of medium_play's. Jitter is back at 1.0
+because §4.3.31 established it is not the driver, and holding it at 0.05 would
+confound this test with the §4.3.29 recipe.
+
+> **The caveat that could sink this.** Burn-in runs at `lr_min` with the
+> cyclical schedule **off**, and cycling begins only afterwards (§4.3.5,
+> `f_pref_net.py:724–745`). A longer burn-in therefore equilibrates under
+> *different dynamics* than sampling uses. If the transient is specifically the
+> chain's response to the first hot phase — `lr_max` steps it never saw during
+> burn-in — then **more burn-in at `lr_min` cannot absorb it at all**, and the
+> lever is `n_discarded` (discard more post-burn-in draws) or a warm-up that
+> runs the schedule. If 100k burn-in leaves centred `ratio` near 0.5, that is
+> the answer, and it is worth knowing before spending more runs on burn-in.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -3971,7 +4046,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. Next is `--drift-blocks` (no new sampling) to separate a transient from an ongoing drive. **Sweep redesign blocked** |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — but the fix follows from the transient alone: `num_burn_in_steps` 100k. **Sweep redesign blocked** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
