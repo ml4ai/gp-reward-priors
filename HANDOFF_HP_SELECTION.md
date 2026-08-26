@@ -4423,148 +4423,85 @@ effective steps equilibrate fast onto the wrong measure. Stationarity is
 necessary, not sufficient, and centred `ratio` on its own can be bought by
 breaking the sampler.
 
-**Do this next, in order.** Rewritten 2026-08-20 against §4.3.15–23; the
-earlier list predated the amplitude ladder and the CVaR CE work and had gone
-stale.
+**Do this next, in order.** Rewritten 2026-08-24 against §4.3.26–36; the
+previous list was reorganised around a gradient-noise fix that §4.3.26 voided,
+and its step 1 had accumulated four layers of correction.
 
-**Root cause, established (§4.3.21).** `adaptive_sghmc.py:147` sets
-`epsilon_var = 2*lr²*mdecay*minv_t - lr⁴`. The `-lr⁴` gradient-noise correction
-is **3.8e-15 against a main term of 2.4e-8…2.4e-6** — numerically inert. The
-sampler injects full thermostat noise as though the gradient were exact, and the
-actual gradient noise adds on top, uncorrected. Everything in §4.3.16–21 follows
-from this: cutting gradient noise (`n_meas`↑, tighter prior) helps, cutting
-thermostat noise (`mdecay`↓) does nothing, adding to it (`mdecay`↑) hurts.
+**Where the sampler stands.** The recipe — `map_amp2` **16893.98**,
+`chain_init_jitter` **1.0**, `n_meas` **256**, at 16 chains — reaches centred
+stationarity on three of four variants:
 
-1. **~~Fix the gradient noise.~~ VOID — see §4.3.26.** The `B̂` correction
-   already exists (`adaptive_sghmc.py:147`), is documented in the codebase's
-   own spec (`docs/fsghmc_algorithm.pdf` §2.1 Eq. 7), and matches
-   Springenberg et al. Gradient noise enters at O(ε⁴) against an O(ε²)
-   thermostat — a ratio of ~1e-7 — and is exactly cancelled. **There is
-   nothing to implement, and none of the three routes below is needed.**
-   The residual widening is a **mixing** problem: `ess_bulk` ~2.4%, chains
-   start from a shared near-point warm-up (`chain_init_jitter = 0`), and the
-   widening is those chains expanding toward posterior width. Next test is
-   a posterior-scale start (§4.3.26), not a sampler correction.
+| variant | burn-in | centred `ratio` | centred `scale_z` | status |
+|---|---|---|---|---|
+| medium_play | 20,000 | 1.0871 / 1.1198 | 0.6469 / 0.6999 | PASS, **replicated** (§4.3.35) |
+| large_diverse | 20,000 | 1.1278 | 0.8091 | PASS, unreplicated |
+| medium_diverse | 100,000 | 0.9087 | 1.7976 | PASS, marginal (§4.3.33) |
+| **large_play** | — | 0.8578 @20k, 0.6194 @100k | — | **FAILS both ways** (§4.3.30, §4.3.34) |
 
-   **Tested (§4.3.27): `chain_init_jitter 1.0` works, partially.** Centred
-   `ratio` 1.3490 → 1.2494, resolvably, so the expansion account holds and
-   initialisation is a real lever. It costs the tail (unresolved 0.17% →
-   1.41%, `ess_bulk` 28.41 → 23.91) and inflates the CVaR CE jackknife SE
-   6.8× to 0.1911, which makes CVaR CE much harder to select on under
-   overdispersion — a direct constraint on the sweep redesign. Jitter lands
-   on the same ~1.22 floor prior strength reaches; whether they compose is
-   the open question.
+Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
+~0.05 are not readable from single runs.
 
-   **RESOLVED (§4.3.28): they compose, superadditively, and the identified
-   component reaches stationarity.** `chain_init_jitter 1.0` + `n_meas 256`
-   gives centred `ratio` **1.0871** with centred `loc_z` 0.6144 and
-   `scale_z` 0.6469 — both at the `|N(0,1)|` reference of 0.6745. All
-   residual drift is in the unidentified offset, which cancels in every
-   preference prediction (§4.3.10). First resolvable CVaR CE improvement
-   (0.4081 → 0.2648), and the jitter-induced SE explosion is cured
-   (0.1911 → 0.0575). **Blocking issue: §4.2/§3.6.3 gate on RAW drift, and
-   this configuration fails raw while passing centred — the criteria would
-   reject it. Move the gate to centred before running any sweep.**
+1. **Re-run large_play with `warmup_use_best`.** §4.3.36 showed the warm-up does
+   not converge monotonically and the final-state hand-off discards the best
+   state visited — worst on large_play, which reached NLL **0.172** and handed
+   off **0.426** (2.48× worse). `warmup_use_best: true` (added 2026-08-24, needs
+   `warmup_log_every > 0`) hands over the best-by-NLL burn-in state instead.
+   **This removes a knob rather than tuning one**: keeping the best state makes
+   burn-in length largely irrelevant, where §4.3.36's early-stopping rule still
+   requires picking a criterion. Judge on centred `ratio`/`scale_z` **and CVaR
+   CE against 3.0359** — §4.3.30 showed large_play passing both gates with a
+   worse-than-chance CVaR reward, so the gate alone cannot clear it.
 
-   ~~Three routes, not mutually exclusive:~~
+2. **Replicate the unreplicated load-bearing runs** with `sampling_seed`
+   (§4.3.35's standing practice): large_diverse `recipe` and medium_diverse
+   `burn100k` are each a single run. This also settles §4.3.28's CVaR CE gain,
+   currently unconfirmed at 1.12× its 2·SE, and §4.3.27's jitter-alone effect at
+   3.0× the floor.
 
-   > **Route (a) is RETIRED — see §4.3.24.** The measurement pool is 999 000
-   > points, so per-step resampling is a stochastic approximation of the
-   > *full-pool* prior, not noise around a fixed one. Freezing 35 points
-   > replaces it with a prior supported on 0.0035% of the pool: centred `ratio`
-   > 1.3200 → 1.5977 and CVaR CE 0.3931 → 0.5906, i.e. worth a ~10× looser
-   > prior. The stochasticity cannot be removed without changing the target
-   > (an exact gradient needs a 999 000³ Cholesky), so **at this pool size the
-   > prior-gradient noise is intrinsic and must be CORRECTED FOR, not
-   > eliminated.** Route (c) is now the only one that addresses the dominant
-   > source; route (b) removes the minibatch component only. The struck-through
-   > reasoning is kept because the refutation is the useful part.
-   >
-   > **CLOSED WITH A BOUND (§4.3.25).** Freezing was re-tested at `n_meas` 256,
-   > where coverage is 7.3× better. The penalty shrinks 3× (+0.2777 → +0.0933)
-   > but does not vanish, and it scales as `n^-0.548` — the Monte-Carlo rate.
-   > Driving it under 0.01 needs `n_meas` ≈ 15 000, i.e. ~23 GPU-hours per
-   > chain in Cholesky alone. **Route (a) is not merely unhelpful, it is
-   > computationally unreachable.** Do not revisit it.
-
-   - **~~Fixed measurement set — start here.~~** The prior-gradient noise comes from
-     *resampling* `n_meas` points every step (`f_pref_net.py`,
-     `np.random.choice`), not from the subset size, so fixing the set once makes
-     that gradient deterministic at any `n_meas`. BNN-only, no cross-family
-     impact, and defensible on inducing-point grounds. **Implemented
-     2026-08-24 as `--fix_meas_set` (default False, so every existing run is
-     bit-identical).** Each chain draws its OWN fixed set, seeded by
-     `seed + chain_idx`, so the pooled prior still covers the measurement pool
-     and only each chain's own gradient becomes deterministic. Verified:
-     the set is drawn once before the loop, reused every step, and four chains
-     produce four distinct sets.
-   - **Full batch.** Free at n=358 train pairs, but `batch_size` is shared with
-     MR and PT (§3.6.2's comparability basis), so changing it means re-running
-     their sweeps too. Note this makes the sampler **underdamped Langevin, not
-     HMC** — the friction/noise pair remains, so no Metropolis correction is
-     needed — but `B̂ = 0` must actually hold, which needs the fixed measurement
-     set as well.
-   - **A real `B̂` subtraction. THIS IS NOW THE CRITICAL PATH (§4.3.25).** With
-     (a) closed by a bound and (b) addressing only the non-dominant minibatch
-     component, this is the only route left to the dominant noise source. It is
-     also the most principled: §4.3.21 showed the existing `-lr⁴` correction is
-     numerically inert, so the sampler has never corrected for gradient noise
-     at all. Correcting it at source is insensitive to `n_meas`, `batch_size`
-     and pool size, and touches neither `bt_pool` nor `batch_size` — so the
-     cross-family comparability constraints (§3.6.2, §4.3.15) never bind.
-
-2. **Re-run the four-point `map_amp2` curve (1.69e5 / e4 / e3 / e2) with
-   `--cvar-ce`.** §4.3.23's open tension is the verification: the derived
-   amplitude is 1.69e4 but CVaR CE prefers 1.69e3, resolvably (0.0838 against
-   2·SE 0.0548). If an over-tight prior was absorbing the sampler's excess heat,
-   the fix should move the CVaR-optimal amplitude **up** toward 1.69e4 and close
-   the gap. If the gap persists, the logit-scale derivation is what is
-   approximate. **This is the cleanest available test that the fix worked**, and
-   `map_amp2` must not be fixed in the sweep at either value until it resolves.
-
-3. **Redesign the sweep, then re-run stage 1 for the BNN.**
+3. **Redesign the sweep, then re-run stage 1 for the BNN.** Blocked on step 1.
    - **Objective: CVaR CE** (`--cvar-ce`, α = 0.05), validated in §4.3.22–23 —
-     it ranks configurations *opposite* to mean CE, has a genuine interior
-     optimum, and is adequate for coarse selection at 8×75. Mean CE cannot be
-     used: §4.3.22 shows it actively rewards worse stationarity (corr −0.607),
-     and at the amplitude it selected the CVaR reward is **worse than chance**.
-   - **Fix `map_amp2`** at the value step 2 settles. It has no interior optimum
-     under mean CE (§4.3.16's cap history) and is derivable from the pooling
-     convention and segment length.
-   - **`n_meas`** — its role changes entirely if the measurement set is fixed,
-     so decide it after step 1. Under resampling it is a second instance of the
-     §4.3.14 pathology (default 256, sweep capped at 64, winners 10–35).
-   - **Check every parameter against its codebase default** (§4.3.21): `n_meas`
-     35 vs 256, `batch_size` 64 vs 256, `map_amp2` 17× above principled — three
-     parameters sitting where chain noise is high. Treat "is this below its
-     default, and does raising it cut chain noise?" as a first-class check.
-   - Sweep the rest jointly. Re-run MR and PT sweeps **only** if `batch_size` or
-     `bt_pool` changes (§3.6.2).
+     it ranks configurations opposite to mean CE, has a genuine interior
+     optimum, and resolves the differences that matter at 8×75. Mean CE cannot
+     be used: §4.3.22 shows it rewards worse stationarity, and at the amplitude
+     it selected the CVaR reward is worse than chance.
+   - **Fix `map_amp2`** at the value §4.3.23's post-fix curve settles. It has no
+     interior optimum under mean CE (§4.3.16's cap history) and is derivable
+     from the pooling convention and segment length.
+   - **Fix `n_meas` high.** §4.3.24 showed it buys prior *coverage*, not just
+     noise reduction, and §4.3.25 closed the fixed-set alternative with a bound.
+   - **Gate on `fn_drift_centred_*`** per §3.6.3's 2026-08-24 amendment, now
+     logged automatically (§4.3.29). Do **not** gate on raw: it is not even
+     reproducible across replicates (§4.3.35).
+   - **Do not reinstate `early_stop_acc_threshold`** — §3.5 removed it in round
+     1 and §4.3.36 confirms warm-up quality does not predict final quality.
+   - Sweep the rest jointly. Re-run MR and PT **only** if `batch_size` or
+     `bt_pool` changes (§3.6.2, §4.3.15).
 
-4. **Repeat for the other three variants.** All four were selected under the
-   same runaway-amplitude sweep, so the artifact is presumably in all of them;
-   only medium_play has been investigated.
+4. **Repeat for the other three variants**, then **transcribe** `num_chains` /
+   `chains_per_gpu` into `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` and
+   re-run the field-by-field verification (§10.3).
 
-5. **Transcribe** the resulting `num_chains` / `chains_per_gpu` into
-   `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` and re-run the field-by-field
-   verification (§10.3).
-
-6. **Then stage 4** (§5) — the 8-way normalization grid, which runs outside this
+5. **Then stage 4** (§5) — the 8-way normalization grid, which runs outside this
    repo in the surrounding `iqlpref` pipeline.
 
-**Standing rules for every run above.** Judge candidates on **centred `ratio`
-AND CVaR CE together**, never on drift numbers alone — §4.3.15's `bt_pool=sum`
-run passed every §4.2 gate while doubling CE, because ~50× larger effective
-steps equilibrate fast onto the wrong measure. Read `ratio` from
-`--offset-shape-split`, never from raw `ratio`, which is a mixture that
-cancelled a real effect twice (§4.3.16, §4.3.19). Do not read ALIGNMENT at 8
-chains (§4.3.7). And a §4.2 gate PASS is chain-count dependent, so it is not
-evidence of stationarity (§4.3.18, §7.1).
+**Standing rules for every run above.**
+- Judge on **centred `ratio` AND CVaR CE together**. §4.3.15's `bt_pool=sum` run
+  and §4.3.30's large_play both passed every gate while the model was broken:
+  **stationarity is necessary, not sufficient.**
+- Read `ratio` from `--offset-shape-split`, never raw — raw is a mixture that
+  cancelled a real effect twice (§4.3.16, §4.3.19) and is not reproducible
+  (§4.3.35).
+- **Replicate anything load-bearing** with `sampling_seed` (§4.3.35).
+- Do not read ALIGNMENT at 8 chains (§4.3.7), and do not build arguments on
+  orderings of the four variants — three mutually confounded orderings have
+  already been refuted (§4.3.30, §4.3.31, §4.3.32).
+- A §4.2 gate PASS is chain-count dependent and is not evidence of stationarity
+  (§4.3.18, §7.1).
 
-**Not reachable by prior strength (§4.3.23).** The residual widening plateaus
-near centred `ratio` ≈ 1.10. Neither amplitude nor `n_meas` passes it, and both
-saturate together. The step-1 fix is the only remaining route; if it does not
-reach 1.0, the residual is disclosed under §7.1 rather than chased further.
+**What is not reachable, and what is disclosed.** Prior strength alone plateaus
+near centred `ratio` ≈ 1.10 (§4.3.23); jitter and `n_meas` compose past it
+(§4.3.28). The residual, and the fact that the shipped sampler is not stationary
+in the raw sense, are §7.1 disclosures rather than open work.
 
 The §4.1 write-up conclusion stands and is strengthened: the tail is not
 reachable by adding chains at a 75-draw horizon. The reason is now identified —

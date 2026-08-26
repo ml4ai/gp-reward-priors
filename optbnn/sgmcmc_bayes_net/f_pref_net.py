@@ -729,6 +729,10 @@ class FPrefNet:
         batch_generator = islice(enumerate(train_loader), num_steps)
         self.net.train()
         n_samples = 0
+        # Best-by-NLL burn-in state, populated only when warm-up monitoring is
+        # on (log_every > 0).  None means "no evaluation ran", and callers fall
+        # back to the final state -- reproducing the pre-2026-08-24 behaviour.
+        self._best_warmup = None
 
         # Grad-norm instrumentation (Issue 3, Step 1): accumulate the PRE-clip
         # total gradient norm, split by phase, so we can tell whether the clip
@@ -897,6 +901,17 @@ class FPrefNet:
             # ---- Periodic evaluation (warm-up monitoring) ---------------
             if log_every > 0 and eval_data is not None and (step + 1) % log_every == 0:
                 _nll, _acc = self._eval_current_weights(eval_data[0], eval_data[1])
+                # Section 4.3.36: the warm-up does not converge monotonically --
+                # large_play VISITED NLL 0.172 and handed off 0.426, 2.5x worse.
+                # Handing chains the LAST state throws that away for no reason
+                # the spec gives.  Keep the best-by-NLL state instead; the
+                # evaluation already runs, so this costs one state copy.
+                # NLL, not accuracy: accuracy is quantized on 54-107 pairs
+                # (section 4.3.34) and section 3.5 already rejected gating on it.
+                if step < num_burn_in_steps and (
+                    self._best_warmup is None or _nll < self._best_warmup[0]):
+                    self._best_warmup = (float(_nll), float(_acc), step + 1,
+                                         self.network_weights)
                 self.print_info(
                     f"[{self.name}] step {step + 1:5d}  "
                     f"warmup/nll={_nll:.4f}  warmup/acc={_acc:.4f}"

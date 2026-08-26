@@ -186,6 +186,13 @@ class TrainConfig:
     # read whole — no splitting is done in this script.  Warm-up monitoring runs
     # on the validation set only; the end-of-training metrics are computed on
     # both the validation and the test sets (val_* / test_*).
+    # Hand the chains the BEST-by-NLL burn-in state rather than the final one.
+    # Section 4.3.36 measured the cost of the final-state convention: large_play
+    # visited warm-up NLL 0.172 and handed off 0.426, and it is the variant whose
+    # chains then fail.  Requires warmup_log_every > 0 (that evaluation is what
+    # supplies the NLL); with monitoring off this silently falls back to the
+    # final state.  False reproduces every run before 2026-08-24.
+    warmup_use_best: bool = False
     sampling_seed: Optional[int] = None
     antmaze_variant: str = "antmaze-medium-play-v2"
     data_root: str = "data/antmaze"
@@ -630,6 +637,25 @@ def train(config: TrainConfig):
     wandb.log({"early_stopped": 0})
 
     initial_weights = bayes_net_f.network_weights
+    _best = getattr(bayes_net_f, "_best_warmup", None)
+    if config.warmup_use_best:
+        if _best is None:
+            print("[warm-up] warmup_use_best=True but no warm-up evaluation ran "
+                  "(warmup_log_every=0); falling back to the FINAL state.")
+        else:
+            _bn, _ba, _bs, _bw = _best
+            initial_weights = _bw
+            print(f"[warm-up] handing chains the BEST state: NLL {_bn:.4f} / "
+                  f"acc {_ba:.4f} at step {_bs:,}, instead of the final "
+                  f"NLL {warmup_final_nll:.4f} / acc {warmup_final_acc:.4f} "
+                  f"({warmup_final_nll / _bn:.2f}x worse).")
+            wandb.log({"warmup_best_nll": _bn, "warmup_best_acc": _ba,
+                       "warmup_best_step": _bs})
+    elif _best is not None:
+        # Record the gap even when not acting on it, so the cost of the
+        # final-state convention is visible on every monitored run.
+        wandb.log({"warmup_best_nll": _best[0], "warmup_best_acc": _best[1],
+                   "warmup_best_step": _best[2]})
 
     # ------------------------------------------------------------------ #
     # Parallel chain sampling (fSGHMC)
