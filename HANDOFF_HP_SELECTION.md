@@ -3419,6 +3419,69 @@ concluded from it. Either answer is worth more than another knob.
 > is a design choice nothing in §3.6.2's provenance or the spec justifies, and
 > it injects an uncontrolled random component into every run in this project.
 
+### 4.3.35 The replicate holds — and kills the warm-up-lottery worry
+
+§4.3.28's flagship configuration re-run with the same data (`seed 0`) and an
+independent sampling RNG (`sampling_seed 100`):
+
+| metric | original | replicate | |
+|---|---|---|---|
+| **centred `ratio`** | 1.0871 | **1.1198** | 1.03× |
+| **centred `scale_z`** | 0.6469 | **0.6999** | 1.08× |
+| centred `loc_z` | 0.6144 | 0.6617 | 1.08× |
+| mean CE | 0.2912 | 0.2932 | 1.01× |
+| accuracy | 0.8799 | 0.8782 | 1.00× |
+| **raw `scale_z`** | **2.2827** | **1.1916** | **0.52×** |
+| `cvar_ess` | 25.19 | 47.77 | 1.90× |
+| **warm-up acc** | **0.7273** | **0.5195** | **0.71×** |
+
+**§4.3.28 replicates**, and §4.3.34's worry is answered decisively — in the
+opposite direction to the one feared. **Warm-up accuracy differed by 21
+points** between the two runs, the exact lottery §4.3.34 identified, **and the
+centred metrics barely moved** (3–8%). The warm-up endpoint is a lottery, but
+it is **not what drives the centred drift statistics**. §4.3.28–33's
+single-run comparisons are not undermined by it.
+
+> **§4.3.31's warm-up-accuracy correlation is now definitively dead.** Within a
+> single configuration, warm-up accuracy moved 0.7273 → 0.5195 while centred
+> `ratio` moved 1.0871 → 1.1198. The n = 4 cross-variant correlation was
+> coincidence, and this is a within-configuration refutation rather than
+> another ordering argument.
+
+**A third vindication of the amendment, and the sharpest.** Raw `scale_z`
+varied **2.2827 → 1.1916 (1.9×)** between replicates of the *same
+configuration*, flipping from a clear FAIL to a comfortable PASS, while centred
+`scale_z` moved 8%. **The raw criterion is not reproducible; the centred one
+is.** §3.6.3's amendment is not only measuring the right quantity — it is
+measuring the only one of the two that a run can be held to.
+
+**A resolution floor for everything in §4.3.26–34.** The replicate range on
+centred `ratio` is **0.0327**, so:
+
+| comparison | gap | vs replicate range |
+|---|---|---|
+| §4.3.33 medium_diverse burn-in | 0.3788 | 11.6× — solid |
+| §4.3.28 composition | 0.2619 | 8.0× — solid |
+| §4.3.34 large_play burn-in | 0.2384 | 7.3× — solid |
+| §4.3.27 jitter alone | 0.0996 | 3.0× — probably real |
+| §4.3.29 large_diverse vs medium_play | 0.0407 | **1.2× — NOT resolvable** |
+
+The load-bearing conclusions survive at 7–12× the noise floor. **Two do not:**
+any *ordering* between medium_play and large_diverse (§4.3.29) is noise — they
+both reach stationarity, but neither is better than the other — and §4.3.27's
+jitter-alone effect at 3× is suggestive rather than established.
+
+**`cvar_ess` varied 1.9× between replicates**, so CVaR CE differences near
+their jackknife SE (§4.3.22's resolution rule) need replication on top of that
+SE, not instead of it. The §4.3.28 CVaR CE gap of 0.1433 against a 2·SE of
+0.1278 was already marginal; it should be treated as unconfirmed until
+replicated.
+
+**Adopt `sampling_seed` replication as standing practice.** One replicate per
+load-bearing configuration, at ~2× the compute, is what separates a real effect
+from the two independent lotteries now measured — the warm-up endpoint and the
+tail estimator. Nothing in §4.3.26–34 had that before this run.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4195,7 +4258,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). **§4.3.34: burn-in is NOT a general fix** — 100k on large_play made it worse (`ratio` 0.6194, `scale_z` 2.2707 FAIL, mean CE 0.7236 = worse than chance). The warm-up trajectories show it **oscillates and never converges**: large_play hit 0.9815 at step 41,500 and was handed off at 0.8148. **Every run in §4.3.28–34 starts from a lottery draw**, so the next run is a seed replicate of the flagship config, not another knob. **Sweep redesign blocked** |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). **§4.3.34: burn-in is NOT a general fix** — 100k on large_play made it worse (`ratio` 0.6194, `scale_z` 2.2707 FAIL, mean CE 0.7236 = worse than chance). The warm-up trajectories show it **oscillates and never converges**: large_play hit 0.9815 at step 41,500 and was handed off at 0.8148. **§4.3.35: the replicate HOLDS** — centred `ratio` 1.0871 → 1.1198 while warm-up accuracy moved 21 points, so the lottery does *not* drive the centred metrics and §4.3.28–33 stand. Raw `scale_z` varied 1.9× between replicates (2.2827 → 1.1916), a third vindication of the amendment. Resolution floor 0.0327: §4.3.29's variant *ordering* is noise. **Sweep redesign blocked** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
