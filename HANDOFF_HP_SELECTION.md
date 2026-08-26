@@ -3538,11 +3538,36 @@ already records the curve, so nothing new needs building.
 > Across variants the relationship is if anything inverted: medium_play has the
 > **worst** warm-up NLL of the three (0.596/0.828 against medium_diverse's 0.352)
 > and the **best** final CE (0.2912). Warm-up NLL is a *burn-in-length*
-> diagnostic, not a quality signal, and `early_stop_acc_threshold` — which gates
-> a run on warm-up accuracy (`run_bnn_training_antmaze_eval.py`) — is therefore
-> gating on a quantity shown here to be uninformative about the result. **That
-> gate should be re-examined before the sweep redesign**: on this evidence it
-> can discard configurations that would have sampled well.
+> diagnostic, not a quality signal.
+>
+> **`early_stop_acc_threshold` is not implicated, and §3.5 got there first.**
+> It is **0.0 in every `_antmaze_eval` config and in all 62 round-2 runs**, with
+> `early_stopped = 0` on every one — it never fired, and no round-2 trial was
+> discarded by it. The 0.98 value survives only in the round-1 configs
+> (`scripts_bnn/antmaze_<v>_bnn.yaml`). **§3.5 already removed the gate in round
+> 1 on the same grounds this section reaches independently** — "it rejected on
+> the wrong quantity… warm-up accuracy, which is not the selection metric" —
+> and identified a second failure mode this section did not: it became a hard
+> wall in `mdecay`. Nothing needs re-examining; the sweep yaml pins it at 0.0
+> with that reasoning recorded inline.
+
+> **One refinement §4.3.35 does add to §3.5.** That section argues warm-up
+> outcome "is a deterministic function of `mdecay` alone", explicitly premised
+> on `seed` being fixed. The replicate breaks that premise and measures what it
+> was holding constant: at **identical `mdecay` and identical data**, changing
+> only `sampling_seed` moved warm-up accuracy **0.7273 → 0.5195** and warm-up
+> NLL **0.596 → 0.828**. So the determinism is conditional on the seed, and the
+> seed-to-seed spread is large — which means §3.5's pass/fail-by-`mdecay`
+> thresholds are **not sharp boundaries**, and the perfect separation it
+> reports would blur under replication. That does not weaken §3.5's conclusion
+> (the gate is still gating on the wrong quantity), but the threshold table
+> should not be read as locating a hard `mdecay` boundary.
+>
+> It also explains §4.3.31's confound rather than leaving it unresolved: warm-up
+> accuracy and `mdecay` were never independent variables that happened to align
+> across four points — §3.5 establishes warm-up outcome is *downstream* of
+> `mdecay`. The n = 4 correlation was structural, not coincidental, and still
+> carries no information about centred drift (§4.3.35).
 
 ### 4.4 Procedure
 
