@@ -733,6 +733,9 @@ class FPrefNet:
         # on (log_every > 0).  None means "no evaluation ran", and callers fall
         # back to the final state -- reproducing the pre-2026-08-24 behaviour.
         self._best_warmup = None
+        # Preconditioner state captured at the burn-in/sampling boundary, where
+        # adaptive_sghmc freezes tau/g/v_hat for the rest of the run.
+        self._precond_at_freeze = None
 
         # Grad-norm instrumentation (Issue 3, Step 1): accumulate the PRE-clip
         # total gradient norm, split by phase, so we can tell whether the clip
@@ -897,6 +900,29 @@ class FPrefNet:
             _st["clamp_hits"] += int(getattr(self.sampler, "_clamp_hits", 0))
             _st["clamp_elems"] += int(getattr(self.sampler, "_clamp_elems", 0))
             self.step += 1
+
+            # ---- Preconditioner freeze point (section 4.3.37) ------------
+            # adaptive_sghmc adapts tau/g/v_hat only while
+            # iteration <= num_burn_in_steps, so this is the last step on which
+            # they change.  Capture what gets frozen for the whole sampling
+            # phase; the caller logs it.
+            if (self._precond_at_freeze is None
+                    and num_burn_in_steps > 0
+                    and step + 1 >= num_burn_in_steps
+                    and hasattr(self.sampler, "preconditioner_snapshot")):
+                self._precond_at_freeze = self.sampler.preconditioner_snapshot()
+                _p = self._precond_at_freeze
+                if _p:
+                    self.print_info(
+                        f"[precond] FROZEN at step {step + 1:,}: "
+                        f"tau median {_p['precond_tau_median']:,.0f} "
+                        f"({_p['precond_tau_over_burnin']:.3f} x burn-in -- "
+                        f"{'DEGENERATE, window never saturated' if _p['precond_tau_over_burnin'] > 0.5 else 'saturated'}), "
+                        f"v_hat median {_p['precond_v_hat_median']:.3e}, "
+                        f"{_p['precond_v_hat_at_floor'] * 100:.1f}% at floor, "
+                        f"minv median {_p['precond_minv_median']:.2f} "
+                        f"(max {_p['precond_minv_max']:.1f})"
+                    )
 
             # ---- Periodic evaluation (warm-up monitoring) ---------------
             if log_every > 0 and eval_data is not None and (step + 1) % log_every == 0:

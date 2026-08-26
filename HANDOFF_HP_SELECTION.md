@@ -3627,6 +3627,30 @@ differs materially between the two, it explains §4.3.33 and §4.3.34 and the
 lever is the adaptation window, not the burn-in length. If it does not, the
 channel is something else again and burn-in should be left alone.
 
+**Instrumentation added 2026-08-24.** `AdaptiveSGHMC.preconditioner_snapshot()`
+summarises `tau`, `v_hat` and `minv_t`, and `FPrefNet.train` captures it at the
+freeze boundary — the last step on which they change. It prints one line per
+chain to the run log (`[precond] FROZEN at step …`) and the warm-up's copy is
+logged to wandb as `precond_*`. No extra compute; it reads state the sampler
+already holds.
+
+The load-bearing number is **`precond_tau_over_burnin`**. `tau` saturates at
+`v_hat/ĝ²` when the mean gradient is an appreciable fraction of the second
+moment, and grows **linearly** when it is not — the regime near a mode.
+Verified on the real optimiser with synthetic gradients:
+
+| gradient | burn-in 20k | burn-in 100k | |
+|---|---|---|---|
+| zero-mean (at a mode) | `tau` 12,536, ratio **0.627** | `tau` 63,226, ratio **0.632** | never saturates |
+| persistent mean | `tau` 1, ratio 0.000 | `tau` 1, ratio 0.000 | saturates immediately |
+
+**A ratio that stays constant as `num_burn_in_steps` grows is the degenerate
+case** — `tau` scaling with the burn-in means `v_hat` averages over all of it.
+A ratio that falls means the window saturated and burn-in length should not
+matter. One run gives the ratio; **two at different burn-in lengths give the
+scaling, which is the actual discriminator** — so read this on the existing
+large_play 20k and 100k configurations.
+
 > **A note for §7.1.** Freezing the preconditioner after burn-in is Springenberg
 > et al.'s design and §3.6.2 records it as faithful. But the consequence — that
 > `num_burn_in_steps` silently sets a sampling-phase hyperparameter, and that
@@ -4512,9 +4536,14 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    fails. **The remaining candidate is the frozen preconditioner**: `tau`, `g`
    and `v_hat` adapt only during burn-in and are frozen for all of sampling
    (`adaptive_sghmc.py:107`), so `num_burn_in_steps` silently sets a
-   sampling-phase hyperparameter. Instrument `tau`/`v_hat`/`minv_t` at the
-   freeze point and compare 20k against 100k — **this needs no new run** — before
-   spending anything further on burn-in.
+   sampling-phase hyperparameter. **Instrumentation is in place**
+   (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
+   chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
+   and 100k — a ratio that stays constant means the adaptation window never
+   saturated and a longer burn-in freezes a staler preconditioner; a falling
+   ratio exonerates burn-in length. **Two runs, no new sampling** — but note the
+   existing runs predate the instrumentation, so this needs the two
+   configurations re-run, or the snapshot recomputed from saved chains.
 
    *Superseded rationale, kept for the record:* §4.3.36 showed the warm-up does
    not converge monotonically and the final-state hand-off discards the best

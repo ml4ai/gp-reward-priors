@@ -54,6 +54,69 @@ class AdaptiveSGHMC(Optimizer):
         super().__init__(params, defaults)
 
     @torch.no_grad()
+    def preconditioner_snapshot(self):
+        """Summary of the adaptive state, for the freeze-point instrumentation.
+
+        Section 4.3.37: `tau`, `g` and `v_hat` adapt only while
+        `iteration <= num_burn_in_steps` and are then FROZEN for the whole
+        sampling phase, so `num_burn_in_steps` silently fixes a sampling-phase
+        hyperparameter.  This reports what is actually frozen.
+
+        The load-bearing number is `tau_over_burnin`.  The update
+        `tau <- (1 - g^2/(v_hat+eps))*tau + 1` saturates at `v_hat/g^2` when the
+        mean gradient is an appreciable fraction of the second moment, but grows
+        LINEARLY when it is not -- the regime near a mode.  So:
+
+          ratio O(0.1-1), and roughly CONSTANT as `num_burn_in_steps` grows:
+              the window never saturated.  `tau` scales with the burn-in, so
+              `v_hat` is an average over the whole of it and stopped responding
+              long before it ended -- a longer burn-in freezes a proportionally
+              staler preconditioner.  Measured on synthetic zero-mean gradients:
+              0.627 at a 20k burn-in and 0.632 at 100k.
+          ratio -> 0 as the burn-in grows:
+              the window saturated at a finite length; the preconditioner
+              reflects recent gradients and burn-in length should barely
+              matter.  Measured with a persistent mean gradient: `tau` pins at
+              1 for both lengths.
+
+        One run gives the ratio; two runs at different `num_burn_in_steps` give
+        the scaling, which is the actual discriminator.
+
+        `v_hat_at_floor` is the fraction of elements pinned at `v_hat_min`,
+        where the preconditioner gain is capped at `1/sqrt(v_hat_min)` rather
+        than set by the data.
+        """
+        import numpy as _np
+        tau, vh, minv, it = [], [], [], 0
+        for group in self.param_groups:
+            eps = group["epsilon"]
+            floor = group["v_hat_min"]
+            for parameter in group["params"]:
+                st = self.state.get(parameter)
+                if not st or "tau" not in st:
+                    continue
+                it = max(it, int(st.get("iteration", 0)))
+                t = st["tau"].detach().float().cpu().numpy().ravel()
+                v = st["v_hat"].detach().float().cpu().numpy().ravel()
+                tau.append(t)
+                vh.append(v)
+                minv.append(1.0 / (_np.sqrt(v) + eps))
+        if not tau:
+            return {}
+        tau = _np.concatenate(tau); vh = _np.concatenate(vh)
+        minv = _np.concatenate(minv)
+        floor = self.param_groups[0]["v_hat_min"]
+        return {
+            "precond_iteration": it,
+            "precond_tau_median": float(_np.median(tau)),
+            "precond_tau_max": float(tau.max()),
+            "precond_tau_over_burnin": float(_np.median(tau) / max(it, 1)),
+            "precond_v_hat_median": float(_np.median(vh)),
+            "precond_v_hat_at_floor": float((vh <= floor * 1.000001).mean()),
+            "precond_minv_median": float(_np.median(minv)),
+            "precond_minv_max": float(minv.max()),
+        }
+
     def step(self, closure=None):
         loss = None
         if closure is not None:

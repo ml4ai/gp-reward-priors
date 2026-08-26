@@ -636,6 +636,13 @@ def train(config: TrainConfig):
         return
     wandb.log({"early_stopped": 0})
 
+    # Section 4.3.37: what num_burn_in_steps froze into the sampling phase.
+    # Logged from the warm-up (main process); each chain prints its own to the
+    # run log, since workers run with wandb disabled.
+    _pre = getattr(bayes_net_f, "_precond_at_freeze", None)
+    if _pre:
+        wandb.log(_pre)
+
     initial_weights = bayes_net_f.network_weights
     _best = getattr(bayes_net_f, "_best_warmup", None)
     if config.warmup_use_best:
