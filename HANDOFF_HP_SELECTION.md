@@ -3739,6 +3739,91 @@ clip start to bind, and §3.6.3 rejects any run whose clamp fires. If they fire,
 that is informative rather than fatal — it locates the actual ceiling on ε for
 this model, which the sweep never explored because CE was pulling the other way.
 
+### 4.3.39 Audited against Tran et al. — every sampler default is theirs, and the sweep walked away from all of them
+
+`tran.pdf` §A.3 (p. 34–35) is the immediate parent: this repo is a fork of that
+codebase.
+
+**The code implements Tran et al.'s Eq. (27), not Springenberg's Eq. (10)
+directly.** Tran substitutes `εCV̂^{-1/2} = αI` into Springenberg's Eq. (25) to
+get
+
+    Δv = −ε²V̂^{-1/2}∇Ũ − αv + N(0, 2ε²α V̂^{-1/2} − ε⁴I)
+
+which is `adaptive_sghmc.py:147` *verbatim*: `2·lr²·mdecay·minv_t − lr⁴`. So
+**`mdecay` is Tran's momentum coefficient α**, and §4.3.38's reconciliation
+via Springenberg was the long way round to the same place.
+
+**Every sampler default in the codebase is Tran et al.'s configuration:**
+
+| codebase default | value | Tran et al. §A.3 |
+|---|---|---|
+| `sghmc_lr` | 0.008 | ε = 0.01 |
+| `mdecay` | **0.01** | α = **0.01** (exact) |
+| `num_chains` | **4** | **4** (exact) |
+| `num_burn_in_steps` | 3000 | 2000–5000 |
+| `keep_every` | **2000** | thinning **2000**–10,000 |
+| `num_samples` | 50 | 30–200 |
+
+**And the sweep moved `sghmc_lr` 32–106× below it:**
+
+| winner | `sghmc_lr` | × below the 0.008 default | `mdecay` | thinning | vs Tran's 2000 floor |
+|---|---|---|---|---|---|
+| medium_play | 2.49e-4 | **32×** | 0.1946 | 2750 | 1.38× |
+| large_diverse | 7.57e-5 | **106×** | 0.3761 | 2750 | 1.38× |
+| large_play | 1.42e-4 | **56×** | 0.0312 | **500** | **0.25×** |
+| medium_diverse | 1.25e-4 | **64×** | 0.0072 | **750** | **0.38×** |
+
+> **This is the sharpest form of §4.3.14 yet: the inherited default was already
+> the published value, and CE selection walked 32–106× away from it.** Not a
+> parameter nobody had calibrated — a parameter calibrated twice, by two papers,
+> agreeing with each other, sitting in the config as the default. On `map_amp2`
+> and `n_meas` CE chased a boundary; here it walked away from a known-good
+> point.
+
+**Two more alignments, both external.** The two variants that fail under the
+§4.3.28 recipe are the two that thin **below Tran's 2000 floor** (500 and 750),
+which gives §4.3.32's `cycle_length` observation a published reference rather
+than an internal four-point ordering. And `mdecay` moved the *other* way in the
+variants that pass — 0.195 and 0.376 against the 0.01 default, 20–38× above.
+
+**That opposite movement is mechanically coherent, and it identifies α as a
+compensator.** In Eq. (27) the injected noise is `2ε²α V̂^{-1/2}`, so its
+standard deviation scales as `ε√α`. An ε that is ~100× too small costs 100× in
+noise; raising α by 20–38× recovers only `√20`–`√38` ≈ **4.5–6×** of it.
+**CE selected α upward to partially offset an ε it had itself driven down** —
+and the two variants where that compensation is largest are the two that pass.
+
+**Temperature is not a confound.** `temperature` defaults to 1.0 and no
+production config sets it, so these are untempered posteriors. Tran et al. grid-
+searched cold posteriors down to T = 1e-4 (§A.4); this project does not temper
+at all, which is a deviation in the opposite direction and a deliberate one.
+
+**Revised next run — restore the inherited defaults rather than mixing papers.**
+§4.3.38 proposed Springenberg's α = 0.05; Tran's α = 0.01 is both the codebase
+default and the value matching the implemented equation, so it is the more
+defensible restoration:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True \
+    --sghmc_lr 0.008 --mdecay 0.01 --cycle_length 2000 \
+    --OUT_DIR ./exp/stage3_large_play_trandefaults > ../exp/stage3_large_play_trandefaults.log 2>&1 &
+```
+
+Three changes, but one hypothesis: **the sampler settings the fork inherited
+were right, and CE selection is what broke them.** `cycle_length` 2000 makes
+the run 4× longer than large_play's current 500 (160k vs 40k sampling steps),
+which is itself part of the restoration.
+
+**Watch `param_clamp_sampling_pct` and `gradnorm_sampling_pct_over_clip`.** A
+56× larger step is exactly where `max_param_step` binds, and §3.6.3 rejects any
+run whose clamp fires during sampling. If it fires, that locates the real
+ceiling on ε for this model — which the sweep never probed, because CE was
+pulling the other way the whole time.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4515,7 +4600,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — 3 of 4 pass; audited against Springenberg et al. (§4.3.38).** The adaptation, noise term and freeze are all faithful to the reference, but **`sghmc_lr` is 40–130× below the paper's ε = 1e-2** (1,600–17,000× less diffusion per step) and `mdecay` straddles its recommended 0.05. That is §4.3.14's CE pathology on a third parameter: CE rewards a chain that barely moves. Next: large_play at the paper's calibration |
+| 3b | BNN | **sampler repair — audited against BOTH papers (§4.3.38, §4.3.39).** The implementation is faithful — it is Tran et al.'s Eq. (27) verbatim — but **every sampler default in this fork is Tran's published configuration and the sweep moved `sghmc_lr` 32–106× below it** (0.008 default vs 7.6e-5–2.5e-4 selected). §4.3.14's CE pathology, now on a parameter two papers had already calibrated. Next: large_play at the inherited defaults |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -4622,7 +4707,10 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    less diffusion per step, which is a direct candidate for the slow relaxation
    the preconditioner hypothesis was invented to explain. It also found `τ`'s
    unbounded growth is the *published* algorithm's behaviour, not a defect. Run
-   large_play at the paper's calibration first (§4.3.38). The preconditioner
+   large_play at the **inherited Tran defaults** first (§4.3.39: `sghmc_lr`
+   0.008, `mdecay` 0.01, `cycle_length` 2000) — every sampler default in this
+   fork is Tran et al.'s published configuration, and CE selection moved
+   `sghmc_lr` 32–106× away from it. The preconditioner
    instrumentation is in place (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
    chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
    and 100k — a ratio that stays constant means the adaptation window never
