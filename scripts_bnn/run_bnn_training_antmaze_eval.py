@@ -175,11 +175,18 @@ class TrainConfig:
     # Antmaze evaluation data.  Train / validation / test sets are loaded from
     # the per-seed eval directory:
     #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val,test}_{seed}.hdf5
-    # The seed that drives sampling (config.seed) also selects the data files,
-    # so the model seed and the loaded data splits always match.  All files are
+    # config.seed selects the data files AND, by default, drives sampling, so
+    # the model seed and the loaded data splits always match.  `sampling_seed`
+    # breaks that tie for REPLICATES only: it re-seeds the warm-up, the chain
+    # RNG streams and the jitter draws while leaving the data split fixed, which
+    # is what section 4.3.34 needs to measure run-to-run variance at a fixed
+    # configuration.  Changing config.seed alone cannot do this -- it would load
+    # a different dataset (and seeds 1-10 are reserved by section 1 anyway).
+    # None = use config.seed, reproducing every existing run bit-identically.  All files are
     # read whole — no splitting is done in this script.  Warm-up monitoring runs
     # on the validation set only; the end-of-training metrics are computed on
     # both the validation and the test sets (val_* / test_*).
+    sampling_seed: Optional[int] = None
     antmaze_variant: str = "antmaze-medium-play-v2"
     data_root: str = "data/antmaze"
     # train_dataset / val_dataset / test_dataset are derived from antmaze_variant
@@ -328,7 +335,13 @@ def train(config: TrainConfig):
         with open(os.path.join(config.OUT_DIR, "config.yaml"), "w") as f:
             pyrallis.dump(config, f)
 
-    util.set_seed(config.seed)
+    # Everything stochastic below keys off _samp_seed; only the data paths use
+    # config.seed.  See the sampling_seed comment above.
+    _samp_seed = config.seed if config.sampling_seed is None else config.sampling_seed
+    if _samp_seed != config.seed:
+        print(f"[seed] data split = seed {config.seed}; sampling RNG = "
+              f"{_samp_seed} (REPLICATE -- same data, independent chains)")
+    util.set_seed(_samp_seed)
 
     width = config.width
     depth = config.depth
@@ -503,7 +516,7 @@ def train(config: TrainConfig):
     # ------------------------------------------------------------------ #
     # Build BNN and FPrefNet (no OptimGaussianPrior needed)
     # ------------------------------------------------------------------ #
-    util.set_seed(config.seed)
+    util.set_seed(_samp_seed)
     net_args = dict(
         input_dim=input_dim,
         output_dim=1,
@@ -539,7 +552,7 @@ def train(config: TrainConfig):
     # When warmup_log_every > 0, NLL and accuracy are evaluated every
     # warmup_log_every steps on a 512-pair subsample of the validation set and
     # logged to stdout + wandb under the "warmup/" prefix.
-    util.set_seed(config.seed)
+    util.set_seed(_samp_seed)
     bayes_net_f.train(
         X_train,
         y_train,
@@ -628,7 +641,7 @@ def train(config: TrainConfig):
         gp_prior_args=gp_prior_args,
         meas_kwargs=meas_kwargs,
         num_chains=config.num_chains,
-        seed=config.seed,
+        seed=_samp_seed,
         batch_size=config.batch_size,
         num_samples=config.num_samples,
         n_discarded=config.n_discarded,

@@ -3387,14 +3387,24 @@ and 0.93% respectively. Swings of 10–17 points are 5–9 pairs.
 ```
 cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
     --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
-    --seed 100 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
-    --chain_init_jitter 1.0 --n_meas 256 \
+    --seed 0 --sampling_seed 100 --num_chains 16 --chains_per_gpu 4 \
+    --map_amp2 16893.982289052463 --chain_init_jitter 1.0 --n_meas 256 \
     --OUT_DIR ./exp/stage3_medium_play_jit10n256_s100 > ../exp/stage3_medium_play_jit10n256_s100.log 2>&1 &
 ```
 
-Identical to §4.3.28's flagship configuration, **seed 100 only** — outside §1's
-reserved 1–10, so the selection lineage is untouched. Compare centred `ratio`
-against **1.0871** and centred `scale_z` against **0.6469**.
+Identical to §4.3.28's flagship configuration, with only the sampling RNG
+changed. Compare centred `ratio` against **1.0871** and centred `scale_z`
+against **0.6469**.
+
+> **`--seed` alone cannot do this.** `config.seed` selects the *data files*
+> (`{data_root}/{variant}/eval/seed_{seed}/…`) as well as driving sampling —
+> deliberately, so the model seed and the data split always match. `--seed 100`
+> therefore looks for a seed-100 dataset that does not exist, and would change
+> the data rather than replicate the run. **`sampling_seed`** (added 2026-08-24)
+> re-seeds the warm-up, the per-chain RNG streams and the jitter draws while
+> holding the data split at `seed`. It defaults to `None` = `config.seed`, so
+> every existing run reproduces bit-identically, and it leaves §1's reserved
+> seeds 1–10 untouched because the data seed never moves.
 
 **This is the measurement that decides how much of §4.3.28–34 survives.** If the
 replicate lands near 1.09, run-to-run variance is small and the sequence stands.
