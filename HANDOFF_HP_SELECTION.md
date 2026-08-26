@@ -3658,6 +3658,87 @@ large_play 20k and 100k configurations.
 > burn-in — is not something the reference discusses at this scale, and it makes
 > burn-in length a **sampler** parameter rather than a warm-up convenience.
 
+### 4.3.38 Audited against Springenberg et al. — the implementation is faithful; the step size is not
+
+Read against the source paper (`NIPS-2016-…-robust-bayesian-neural-networks-Paper.pdf`,
+§4.2 and Eqs. 8–10).
+
+**The adaptation is implemented exactly as specified.** Paper Eq. (9)
+`Δτ = −g²V̂⁻¹τ + 1` and `Δg = −τ⁻¹g + τ⁻¹∇Ũ`, Eq. (8)
+`ΔV̂ = −τ⁻¹V̂ + τ⁻¹(∇Ũ)²` — all three match `adaptive_sghmc.py:114–129`
+line for line. The freeze is the paper's own design: *"our estimation/adaptation
+of the parameters only changes the HMC procedure during the burn-in phase. After
+it, when actual samples are recorded, all parameters stay fixed."*
+
+**And `mdecay` is the right object.** Paper Eq. (10)'s noise is
+`2ε³V̂^{-1/2}CV̂^{-1/2} − ε⁴`; the code computes `2ε²·mdecay·minv_t − ε⁴`. These
+agree exactly when `mdecay = εV̂^{-1/2}C`, which is precisely what the paper
+holds constant: *"we chose C such that we have `εV̂^{-1/2}C = 0.05I`
+(intuitively this corresponds to a constant decay in momentum of 0.05 per time
+step)"*. **So `mdecay` is the paper's momentum-decay-per-step, and its
+recommended value is 0.05.**
+
+> **§4.3.37's framing needs softening.** `τ`'s unbounded growth near a mode is
+> inherent to the *published* scheme — Eq. (9) has no upper bound either — so
+> burn-in length setting the frozen preconditioner is a property of the
+> reference algorithm, not a codebase defect. The instrumentation is still
+> worth reading, but it is measuring an intended behaviour, and §7.1 should not
+> describe it as a deviation.
+
+**The correctness constraint is satisfied with enormous margin.** The paper
+requires `min(V̂⁻¹)C ≥ ε` for unbiased sampling — equivalently, the Eq. (10)
+noise variance staying non-negative. Measured across the four variants the
+margin is **10⁵–10⁸×**, so the `clamp_(min=1e-16)` never binds and this is not
+the problem.
+
+> **What the audit does find: `sghmc_lr` is 40–130× below the paper's value.**
+> Springenberg fixes **ε = 10⁻²** as *"a robust choice in our experience"*.
+>
+> | variant | `sghmc_lr` | × below 1e-2 | rel. diffusion/step | `mdecay` | vs 0.05 |
+> |---|---|---|---|---|---|
+> | medium_play | 2.49e-4 | 40× | 6.2e-4 | 0.1946 | 3.9× |
+> | large_diverse | 7.57e-5 | 132× | 5.7e-5 | 0.3761 | 7.5× |
+> | large_play | 1.42e-4 | 70× | 2.0e-4 | 0.0312 | 0.62× |
+> | medium_diverse | 1.25e-4 | 80× | 1.6e-4 | 0.0072 | 0.14× |
+>
+> Per-step diffusion scales as ε², so **these chains explore 1,600–17,000×
+> more slowly per step than the reference calibration.** That is a direct,
+> quantitative candidate for `ess_bulk` ≈ 2.4% (§4.3.26), for transients that
+> outlast a 20,000-step burn-in (§4.3.32), and for chains that never finish
+> relaxing inside a 40–220k sampling window.
+
+**And this is §4.3.14's pathology again, on a third parameter.** `sghmc_lr` is
+swept and selected on validation CE. A chain that barely moves stays near the
+well-fit warm-up point, which *scores well on CE* — so CE drives the step size
+**down**, exactly as it drove `map_amp2` **up** (§4.3.16's cap history) and
+`n_meas` down (§4.3.24). Three parameters, one mechanism: **mean CE rewards a
+sampler that does not sample.**
+
+**`mdecay` straddles the paper's 0.05, and the split is suggestive.** The two
+variants that pass under the §4.3.28 recipe sit *above* it (3.9×, 7.5×); the
+one that fails at every burn-in tried sits *below* (0.62×). Given §4.3.30–37's
+record with four-point orderings this is not evidence — but it is the first such
+ordering with an *external* reference point rather than an internal one.
+
+**Next, and it supersedes §10.2 step 1's preconditioner check.** Run large_play
+at the paper's calibration — `sghmc_lr` 1e-2, `mdecay` 0.05 — with the §4.3.28
+recipe otherwise unchanged:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --sghmc_lr 0.01 --mdecay 0.05 \
+    --warmup_use_best True \
+    --OUT_DIR ./exp/stage3_large_play_paper > ../exp/stage3_large_play_paper.log 2>&1 &
+```
+
+Watch `param_clamp_sampling_pct` and `gradnorm_sampling_pct_over_clip`: a 40×
+larger step size is exactly the regime where `max_param_step` and the gradient
+clip start to bind, and §3.6.3 rejects any run whose clamp fires. If they fire,
+that is informative rather than fatal — it locates the actual ceiling on ε for
+this model, which the sweep never explored because CE was pulling the other way.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4434,7 +4515,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — 3 of 4 variants pass (§10.2).** medium_play (replicated), large_diverse and medium_diverse reach centred stationarity; **large_play fails at every burn-in tried**. Five mechanisms refuted (§4.3.30–37); the warm-up state is excluded by measurement, leaving the **frozen preconditioner** (`v_hat`/`tau` freeze at `num_burn_in_steps`) as the only channel left. Checkable without a run |
+| 3b | BNN | **sampler repair — 3 of 4 pass; audited against Springenberg et al. (§4.3.38).** The adaptation, noise term and freeze are all faithful to the reference, but **`sghmc_lr` is 40–130× below the paper's ε = 1e-2** (1,600–17,000× less diffusion per step) and `mdecay` straddles its recommended 0.05. That is §4.3.14's CE pathology on a third parameter: CE rewards a chain that barely moves. Next: large_play at the paper's calibration |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -4536,8 +4617,13 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    fails. **The remaining candidate is the frozen preconditioner**: `tau`, `g`
    and `v_hat` adapt only during burn-in and are frozen for all of sampling
    (`adaptive_sghmc.py:107`), so `num_burn_in_steps` silently sets a
-   sampling-phase hyperparameter. **Instrumentation is in place**
-   (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
+   sampling-phase hyperparameter. **Superseded by §4.3.38** — the audit against Springenberg et al. found
+   `sghmc_lr` is **40–130× below the paper's ε = 1e-2**, giving 1,600–17,000×
+   less diffusion per step, which is a direct candidate for the slow relaxation
+   the preconditioner hypothesis was invented to explain. It also found `τ`'s
+   unbounded growth is the *published* algorithm's behaviour, not a defect. Run
+   large_play at the paper's calibration first (§4.3.38). The preconditioner
+   instrumentation is in place (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
    chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
    and 100k — a ratio that stays constant means the adaptation window never
    saturated and a longer burn-in freezes a staler preconditioner; a falling
