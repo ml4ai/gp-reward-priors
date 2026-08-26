@@ -3270,6 +3270,69 @@ confound this test with the §4.3.29 recipe.
 > runs the schedule. If 100k burn-in leaves centred `ratio` near 0.5, that is
 > the answer, and it is worth knowing before spending more runs on burn-in.
 
+### 4.3.33 Burn-in absorbs the transient — medium_diverse passes
+
+`num_burn_in_steps` 20,000 → **100,000** on medium_diverse, jitter back at 1.0:
+
+| | burn-in | centred `ratio` | centred `scale_z` | centred `loc_z` | verdict |
+|---|---|---|---|---|---|
+| `recipe` | 20,000 | 0.5299 | 13.1542 | 2.5544 | FAIL |
+| `jit005` | 20,000 | 0.4556 | 10.7043 | 2.0173 | FAIL |
+| **`burn100k`** | **100,000** | **0.9087** | **1.7976** | **0.9787** | **PASS** |
+
+**§4.3.32's transient account is confirmed.** Five times the burn-in moves
+centred `scale_z` from 13.15 to 1.80 and `ratio` from 0.53 to 0.91. medium_diverse
+now passes the amended §3.6.3 gate, so **three of four variants work**.
+
+**And the caveat that could have sunk it is refuted.** §4.3.32 warned that
+burn-in runs at `lr_min` with cycling off, so a longer burn-in might not absorb
+a transient that is really the chain's response to the first `lr_max` hot phase.
+It absorbed it. **The transient is a relaxation toward the typical set, not a
+schedule artifact** — which also retires the `n_discarded` / schedule-aware
+warm-up alternatives that caveat proposed.
+
+**It is a marginal pass, not a comfortable one.** `scale_z` 1.7976 sits close to
+the 2.0 threshold and is **2.66× the 0.6745 null**, against medium_play's 0.6469
+under the same recipe. `ratio` 0.9087 is still contracting slightly. The
+transient is largely absorbed, not eliminated — more burn-in may be needed, and
+the tail cost is real: `cvar_ess` 97.12 → 51.23, accuracy 0.8744 → 0.8505.
+
+**large_play is the remaining failure** and has the shortest sampling window of
+all four (40,000 steps, `cycle_length` 500), so on §4.3.32's account it should
+need at least as much burn-in:
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --num_burn_in_steps 100000 \
+    --OUT_DIR ./exp/stage3_large_play_burn100k > ../exp/stage3_large_play_burn100k.log 2>&1 &
+```
+
+Judge it on centred `ratio`/`scale_z` **and CVaR CE against 3.0359** — §4.3.30
+showed large_play passing both gates while its CVaR reward was worse than
+chance, so the gate alone cannot clear it.
+
+> **A unification worth testing, and a risk worth stating.**
+>
+> The two working variants sit slightly **above** 1 (medium_play 1.0871,
+> large_diverse 1.1278) while the failures sit **below**. If the transient is a
+> contraction that long sampling windows dilute to invisibility, then a uniform
+> 100k burn-in might bring all four to ~1.0 — making the recipe genuinely
+> variant-independent, which §4.3.30 showed the current one is not. Worth one
+> re-run of medium_play at 100k burn-in to check, since a recipe that needs
+> per-variant burn-in is much weaker than one that does not.
+>
+> **The risk:** the recipe is now **four hand-tuned knobs** — `map_amp2`,
+> `chain_init_jitter`, `n_meas`, `num_burn_in_steps` — three of which were
+> derived from medium_play's diagnostics and then patched when they failed
+> elsewhere. That is a lot of post-hoc fitting to four variants. `map_amp2` and
+> `n_meas` have principled justifications (§4.3.16, §4.3.24); jitter and burn-in
+> do not, and are currently set by what worked. **State them as sampler-hygiene
+> settings chosen on diagnostics, not as tuned hyperparameters**, and do not
+> present the four-variant agreement as independent confirmation — the knobs
+> were adjusted using those same four variants.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4046,7 +4109,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — but the fix follows from the transient alone: `num_burn_in_steps` 100k. **Sweep redesign blocked** |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). Marginal though — `scale_z` is 2.66× the null. large_play remains. **Sweep redesign blocked** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
