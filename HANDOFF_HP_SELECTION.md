@@ -3333,6 +3333,82 @@ chance, so the gate alone cannot clear it.
 > present the four-variant agreement as independent confirmation — the knobs
 > were adjusted using those same four variants.
 
+### 4.3.34 Burn-in is not a general fix — and the warm-up never converges
+
+`num_burn_in_steps` 100,000 on **large_play**, everything else as §4.3.33:
+
+| | burn-in | centred `ratio` | centred `scale_z` | mean CE | acc |
+|---|---|---|---|---|---|
+| `recipe` | 20,000 | 0.8578 | 1.0365 | 0.2545 | 0.9005 |
+| `burn100k` | 100,000 | **0.6194** | **2.2707 FAIL** | **0.7236** | 0.7755 |
+
+**Five times the burn-in produced a worse model.** Mean CE 0.7236 is above
+`log 2` = 0.6931 — worse than an uninformative predictor, on the *mean*, not
+just the tail. §4.3.33's fix helped medium_diverse and broke large_play, so
+burn-in length is not a general lever. That is the fourth mechanism in
+§4.3.30–34 to work on some variants and fail on others.
+
+**The burn-in trajectories say why, and the reason is worse than a failed fix.**
+`warmup_log_every` was on, so the whole curve is recorded:
+
+| run | burn-in | peak acc | at step | handed off | after the peak |
+|---|---|---|---|---|---|
+| large_play `recipe` | 20,000 | 0.8333 | 14,000 | 0.7593 | 30% |
+| large_play `burn100k` | 100,000 | **0.9815** | 41,500 | **0.8148** | **58%** |
+| medium_div `recipe` | 20,000 | 0.8785 | 19,000 | 0.8411 | 5% |
+| medium_div `burn100k` | 100,000 | 0.9159 | 71,750 | 0.8224 | 28% |
+
+**The warm-up does not converge — it oscillates, and the point handed to all 16
+chains is wherever the oscillation happened to be at the final step.**
+large_play's `burn100k` reached 0.9815 at step 41,500 and was handed off at
+0.8148 after 58,500 further steps: **16.7 accuracy points worse than a point it
+had already visited.** Longer burn-in did not refine the start, it gave the
+walk more room to wander away from a good one.
+
+**The measurement is also very noisy.** Warm-up accuracy is quantized in units
+of 1/54 for large_play and 1/107 for medium_diverse (every logged value is an
+exact multiple), so the eval sets are **54 and 107 pairs** — one pair is 1.85%
+and 0.93% respectively. Swings of 10–17 points are 5–9 pairs.
+
+> **This undercuts §4.3.31's warm-up-accuracy correlation.** That was four
+> points of a statistic measured on ≤107 pairs and sampled at one arbitrary
+> moment of an oscillating trajectory. It should not be carried forward as
+> evidence of anything.
+>
+> **And it raises a harder problem for §4.3.28–33 as a whole.** Every
+> configuration in that sequence is a **single run**, and each begins from a
+> warm-up endpoint drawn from this oscillation. If the endpoint lottery moves
+> centred `ratio` as much as the knobs do, most of those comparisons are
+> underdetermined — including §4.3.28's flagship 1.0871 and §4.3.32's transient
+> account, which rests on a single medium_diverse run.
+
+**The next run is not another knob. It is a replicate.**
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 100 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 \
+    --OUT_DIR ./exp/stage3_medium_play_jit10n256_s100 > ../exp/stage3_medium_play_jit10n256_s100.log 2>&1 &
+```
+
+Identical to §4.3.28's flagship configuration, **seed 100 only** — outside §1's
+reserved 1–10, so the selection lineage is untouched. Compare centred `ratio`
+against **1.0871** and centred `scale_z` against **0.6469**.
+
+**This is the measurement that decides how much of §4.3.28–34 survives.** If the
+replicate lands near 1.09, run-to-run variance is small and the sequence stands.
+If it lands anywhere near medium_diverse's 0.53 or large_play's 0.62, then the
+knob effects and the warm-up lottery are the same size, and **every single-run
+comparison in this thread needs redoing with replicates** before anything is
+concluded from it. Either answer is worth more than another knob.
+
+> **Regardless of the replicate, the warm-up hand-off is a defect to fix.**
+> Handing chains the *last* burn-in state rather than the best — or better, a
+> state selected by a running average rather than a single noisy evaluation —
+> is a design choice nothing in §3.6.2's provenance or the spec justifies, and
+> it injects an uncontrolled random component into every run in this project.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4109,7 +4185,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). Marginal though — `scale_z` is 2.66× the null. large_play remains. **Sweep redesign blocked** |
+| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). **§4.3.34: burn-in is NOT a general fix** — 100k on large_play made it worse (`ratio` 0.6194, `scale_z` 2.2707 FAIL, mean CE 0.7236 = worse than chance). The warm-up trajectories show it **oscillates and never converges**: large_play hit 0.9815 at step 41,500 and was handed off at 0.8148. **Every run in §4.3.28–34 starts from a lottery draw**, so the next run is a seed replicate of the flagship config, not another knob. **Sweep redesign blocked** |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
