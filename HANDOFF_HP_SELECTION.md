@@ -3569,6 +3569,71 @@ already records the curve, so nothing new needs building.
 > `mdecay`. The n = 4 correlation was structural, not coincidental, and still
 > carries no information about centred drift (§4.3.35).
 
+### 4.3.37 The warm-up state is not the channel — the frozen preconditioner is
+
+`warmup_use_best` on large_play, 20,000 burn-in, everything else as §4.3.30:
+
+| | useBest | centred `ratio` | centred `scale_z` | mean CE | acc | warm-up NLL |
+|---|---|---|---|---|---|---|
+| `recipe` | — | 0.8578 | 1.0365 | 0.2545 | 0.9005 | 0.4701 (final) |
+| `bestwu` | **True** | **0.8609** | 1.1368 | 0.2603 | 0.9005 | **0.3852** (best, step 17k) |
+
+**A clean negative.** The flag engaged and handed the chains a state **22%
+better in NLL** (0.3852 vs 0.4701). Centred `ratio` moved **0.003**, against a
+resolution floor of **0.0327** (§4.3.35). Accuracy is identical to four decimal
+places. **The warm-up state is not what makes large_play fail**, and the
+best-vs-final gap I proposed as the mechanism explains nothing.
+
+That is the **fifth** refuted mechanism in §4.3.30–37, and it confirms §4.3.36
+from the opposite direction: that section showed a *worse* warm-up (the `s100`
+replicate, at chance) costs nothing; this shows a *better* one buys nothing.
+
+> **But it forces a reinterpretation of §4.3.33 and §4.3.34.** Burn-in length
+> demonstrably matters — medium_diverse 0.5299 → 0.9087 and large_play 0.8578 →
+> 0.6194, both ~7–12× the floor. If the **starting point** is not the channel,
+> those effects must run through something else that burn-in length changes.
+>
+> **It does change something else, permanently.** `adaptive_sghmc.py:107` gates
+> the preconditioner adaptation on `iteration <= num_burn_in_steps`: `tau`, `g`
+> and `v_hat` adapt during burn-in and are **frozen for the entire sampling
+> phase**. Burn-in length therefore fixes the preconditioner the sampler uses
+> forever, independently of where the chain ends up.
+>
+> And the averaging window degenerates. `tau ← (1 − ĝ²/(v̂+λ))·tau + 1` grows
+> **linearly** when the mean gradient is small relative to the second moment —
+> which is exactly the regime near a mode:
+>
+> | `ĝ²/v̂` | `tau` at 20k | `tau` at 100k | `tau_inv` |
+> |---|---|---|---|
+> | 0 (at a mode) | 20,001 | 100,001 | 5.0e-5 → 1.0e-5 |
+> | 0.01 | 100 | 100 | 1.0e-2 (saturates) |
+> | 0.10 | 10 | 10 | 1.0e-1 (saturates) |
+>
+> So near a mode `v_hat` stops updating long before burn-in ends, and a 100k
+> burn-in freezes a preconditioner averaged over a 5× longer and staler window
+> than a 20k one. **That is a real, permanent difference between the two runs
+> that has nothing to do with the starting point** — and it is the only channel
+> left standing.
+
+**This is a hypothesis, not a result**, and §4.3.30–37 is a graveyard of clean
+four-point stories. What distinguishes it: it is a *mechanism in the code* with
+a documented freeze point, it predicts burn-in effects without reference to the
+start (which is now excluded by measurement), and it is checkable **without a
+run** — instrument `tau`, `v_hat` and `minv_t` at the freeze point and compare
+20k against 100k on the same variant.
+
+**Do that before spending another run on burn-in.** If the frozen preconditioner
+differs materially between the two, it explains §4.3.33 and §4.3.34 and the
+lever is the adaptation window, not the burn-in length. If it does not, the
+channel is something else again and burn-in should be left alone.
+
+> **A note for §7.1.** Freezing the preconditioner after burn-in is Springenberg
+> et al.'s design and §3.6.2 records it as faithful. But the consequence — that
+> `num_burn_in_steps` silently sets a sampling-phase hyperparameter, and that
+> `tau` grows without bound near a mode so the window is effectively the whole
+> burn-in — is not something the reference discusses at this scale, and it makes
+> burn-in length a **sampler** parameter rather than a warm-up convenience.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4345,7 +4410,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — identified component now stationary (§4.3.28).** `chain_init_jitter 1.0` + `n_meas 256` at the principled amplitude gives centred `ratio` 1.0871 with both centred z-scores at the stationary reference; all residual drift is in the likelihood-invariant offset. First resolvable CVaR CE gain. Gate **amended 2026-08-24** to read `fn_drift_centred_*` (§3.6.3), with `function_space_drift` now logging centred and offset metrics so future trials are gateable from wandb. **Confirmed on large_diverse, the hardest variant (§4.3.29)** — centred `loc_z` 0.7154 / `scale_z` 0.8091, and the centred metrics now log to wandb automatically. **large_play and medium_diverse FAIL the recipe (§4.3.30)** — both by *contraction*, with centred `ratio` 0.8578 and 0.5299. Failures carry the two lowest `mdecay`: **§4.3.31: the friction account is REFUTED** — jitter 1.0 → 0.05 deepened the contraction (0.5299 → 0.4556) instead of fixing it, and the warm-up already runs under the recipe's own prior. Centred `ratio` is monotone-inverse in warm-up accuracy but perfectly confounded with `mdecay` at n=4. **§4.3.32: the contraction is a DECAYING TRANSIENT** (centred `sd/first` 1.000 → 0.407 → 0.311 → 0.342 → 0.289, first step 0.593 vs last 0.053) — the first within-variant evidence in this thread. A *third* confound (`cycle_length` 500/750 vs 2750, so 40–60k vs 220k sampling steps) also separates the four exactly, so n=4 cannot identify the cause — **§4.3.33: the fix works** — `num_burn_in_steps` 100k takes medium_diverse to centred `ratio` 0.9087 / `scale_z` 1.7976, a PASS, so **3 of 4 variants** now clear the amended gate and the transient account is confirmed (burn-in at `lr_min` *did* absorb it, refuting the hot-phase caveat). **§4.3.34: burn-in is NOT a general fix** — 100k on large_play made it worse (`ratio` 0.6194, `scale_z` 2.2707 FAIL, mean CE 0.7236 = worse than chance). The warm-up trajectories show it **oscillates and never converges**: large_play hit 0.9815 at step 41,500 and was handed off at 0.8148. **§4.3.35: the replicate HOLDS** — centred `ratio` 1.0871 → 1.1198 while warm-up accuracy moved 21 points, so the lottery does *not* drive the centred metrics and §4.3.28–33 stand. Raw `scale_z` varied 1.9× between replicates (2.2827 → 1.1916), a third vindication of the amendment. Resolution floor 0.0327: §4.3.29's variant *ordering* is noise. **§4.3.36:** warm-up **NLL** (not accuracy) predicts the sign of the burn-in effect in all three variants, replacing §4.3.33's hand-tuned count with early stopping — and warm-up quality does not predict final quality at all, so `early_stop_acc_threshold` needs re-examining. **Sweep redesign blocked** |
+| 3b | BNN | **sampler repair — 3 of 4 variants pass (§10.2).** medium_play (replicated), large_diverse and medium_diverse reach centred stationarity; **large_play fails at every burn-in tried**. Five mechanisms refuted (§4.3.30–37); the warm-up state is excluded by measurement, leaving the **frozen preconditioner** (`v_hat`/`tau` freeze at `num_burn_in_steps`) as the only channel left. Checkable without a run |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -4441,7 +4506,17 @@ stationarity on three of four variants:
 Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
 ~0.05 are not readable from single runs.
 
-1. **Re-run large_play with `warmup_use_best`.** §4.3.36 showed the warm-up does
+1. **~~Re-run large_play with `warmup_use_best`.~~ DONE — negative (§4.3.37).**
+   Handing over a 22% better warm-up moved centred `ratio` by 0.003 against a
+   0.0327 floor. The warm-up state is not the channel, and large_play still
+   fails. **The remaining candidate is the frozen preconditioner**: `tau`, `g`
+   and `v_hat` adapt only during burn-in and are frozen for all of sampling
+   (`adaptive_sghmc.py:107`), so `num_burn_in_steps` silently sets a
+   sampling-phase hyperparameter. Instrument `tau`/`v_hat`/`minv_t` at the
+   freeze point and compare 20k against 100k — **this needs no new run** — before
+   spending anything further on burn-in.
+
+   *Superseded rationale, kept for the record:* §4.3.36 showed the warm-up does
    not converge monotonically and the final-state hand-off discards the best
    state visited — worst on large_play, which reached NLL **0.172** and handed
    off **0.426** (2.48× worse). `warmup_use_best: true` (added 2026-08-24, needs
