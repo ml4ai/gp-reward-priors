@@ -3949,6 +3949,90 @@ guard before any tail metric.
 the best available under any ε tried, and it still contracts. §10.2's step 1
 should stop treating that as a tuning problem.
 
+### 4.3.42 The stiffness is the prior's Gram conditioning — and two scalars set it
+
+§4.3.41 left "better preconditioning" as a lever. Before building one, the
+prior gradient is worth looking at, because it is `K⁻¹(f − m)` and **cond(K) is
+the dynamic range that gradient spans**.
+
+`map_informed_prior.py:163` gives the structure:
+
+    K / amp2 = sig_c2·J + sig_g2·K_geo + sig_n2·I
+
+with `sig_c2 = 1.0`, `sig_n2 = 0.001` in every variant. `J` is rank-1 with
+eigenvalue exactly `n`, and the nugget floors the spectrum at `sig_n2`, so
+
+    cond(K) ≥ n · sig_c2 / sig_n2
+
+| `n_meas` | cond(K) ≥ |
+|---|---|
+| 7 (large_diverse selected) | 7.0e3 |
+| 29 (large_play selected) | 2.9e4 |
+| 256 (§4.3.28 recipe) | **2.6e5** |
+
+**Two consequences, both new.**
+
+**The condition number grows linearly in `n_meas`.** The §4.3.28 recipe makes
+the Gram **8.8× more ill-conditioned** on large_play (29 → 256) and **36.6×**
+on large_diverse (7 → 256). §4.3.24 attributed `n_meas`'s effect to prior
+*coverage*; that stands, but `n_meas` also trades conditioning against
+coverage, and only the coverage half was measured.
+
+**`amp2` is irrelevant to it.** The amplitude multiplies the whole matrix,
+nugget included, so cond is amplitude-invariant — this is orthogonal to
+everything in §4.3.16–23 and could not have been found by any amplitude ladder.
+
+> **The dominant term is the one direction the likelihood cannot see.**
+> `sig_c2·J` is the constant-offset component — precisely the offset §4.3.10
+> proved is unidentified, cancels in every preference prediction, and leaves the
+> IQL greedy policy unchanged. It contributes an eigenvalue of `n·sig_c2`,
+> which at `n_meas` 256 is **256 against `K_geo`'s O(1)**. So the single largest
+> contributor to the stiffness that pins ε is prior mass on a direction that
+> does not affect any prediction.
+
+**Two scalars control it, and neither has ever been varied.** Both are
+design-fixed (§3.6.2 lists `map_sig_*` as "design-fixed from geometry"), not
+swept:
+
+| lever | effect on cond | modelling cost |
+|---|---|---|
+| **`map_sig_c2` ↓** (1.0 → 0.01) | **÷72** at n=256 (2.28e5 → 3.16e3) | frees the *unidentified* offset — nothing the likelihood sees |
+| `map_sig_n2` ↑ (0.001 → 0.05) | ÷45 at n=256 (2.28e5 → 5.12e3) | weakens the fine-scale prior — a real cost |
+
+Verified numerically against a PSD stand-in for `K_geo`; the structural bound
+holds within a factor of ~3.
+
+**`map_sig_c2` is the better lever**, and the argument is the same one that
+justified §3.6.3's amendment: the offset is unidentified, so prior mass on it
+buys nothing and costs conditioning. The risk is the mirror image — with the
+offset less constrained it can wander further (§4.3.28 already measured offset
+`ratio` 1.6454 on medium_play), and an unbounded offset could saturate the
+network numerically. **That is what the run has to check**, and the centred
+gate plus `fn_drift_shape_var_frac` are exactly the instruments for it.
+
+**Instrumentation added.** `_gram_from_idx` now logs `cond(K)` once per process
+with λ_min/λ_max — one eigendecomposition, not one per step, since the spectrum
+depends on the kernel and the draw rather than on `w`. It turns the bound above
+into a measurement.
+
+**The run**, on large_play, which fails at every ε (§4.3.41):
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True --map_sig_c2 0.01 \
+    --OUT_DIR ./exp/stage3_large_play_sigc2 > ../exp/stage3_large_play_sigc2.log 2>&1 &
+```
+
+Read `[prior] Gram cond(K)` in the log first to confirm the drop, then
+`fn_drift_shape_var_frac` (degeneracy), then centred `ratio` against **0.8578**
+and CVaR CE against **3.0359**. If a better-conditioned prior lets large_play
+mix at the ε it already tolerates, the stiffness diagnosis is right and
+**preconditioning does not need rebuilding** — the conditioning was fixable at
+source, which §4.3.41 listed as the third lever and which is far cheaper than
+the first.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4735,7 +4819,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler-scalar tuning is EXHAUSTED (§4.3.41).** The ε ladder shows the selected `sghmc_lr` sits at a hard stability ceiling — 3.5× up already gives worse-than-chance CE — so slow mixing (`ess_bulk` ≈ 2.4%) is stiffness, not a mis-set knob. 3 of 4 variants pass the amended gate; large_play does not, at any ε. Next levers: preconditioning, a different sampler, or reducing stiffness |
+| 3b | BNN | **stiffness localised to the prior's Gram conditioning (§4.3.42).** `cond(K) ≥ n_meas·sig_c2/sig_n2` — 2.6e5 at the recipe's `n_meas` 256, and the dominant term `sig_c2·J` is prior mass on the **unidentified offset**. Two never-swept scalars control it; `map_sig_c2` 1.0→0.01 cuts cond 72× at no modelling cost. Next: that run on large_play, which fails at every ε |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,

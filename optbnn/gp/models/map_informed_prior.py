@@ -173,7 +173,30 @@ class MapInformedGPPrior(torch.nn.Module):
         if n > 0:
             diag = self.sig_n2 + float(extra_jitter)
             K = K + diag * torch.eye(n, dtype=K.dtype, device=K.device)
-        return self.amp2 * K
+        K = self.amp2 * K
+        # Section 4.3.42: the prior gradient is K^-1 (f - m), so cond(K) is the
+        # dynamic range that gradient spans -- and a stiff prior gradient is
+        # what pins the sampler's step size.  Structurally
+        # K/amp2 = sig_c2*J + sig_g2*K_geo + sig_n2*I, where the rank-1
+        # constant term contributes an eigenvalue of exactly n*sig_c2 and the
+        # nugget floors the spectrum at sig_n2, so cond >= n*sig_c2/sig_n2 and
+        # grows LINEARLY in n_meas.  Measured once per process (the spectrum is
+        # a property of the kernel and the draw, not of w) so it costs one
+        # eigendecomposition, not one per step.  amp2 cancels: it multiplies
+        # the whole matrix, nugget included.
+        if not getattr(self, "_cond_logged", False):
+            self._cond_logged = True
+            try:
+                _ev = torch.linalg.eigvalsh(K.double())
+                _lo = float(_ev[0]); _hi = float(_ev[-1])
+                self.gram_cond = _hi / max(_lo, 1e-300)
+                print(f"[prior] Gram cond(K) = {self.gram_cond:.3e}  "
+                      f"(n={K.shape[0]}, lambda_min {_lo:.3e}, max {_hi:.3e}; "
+                      f"floor sig_n2*amp2 = {self.sig_n2 * self.amp2:.3e}) -- "
+                      f"the prior gradient K^-1(f-m) spans this range")
+            except Exception as _e:              # never kill a run for a diagnostic
+                self.gram_cond = float("nan")
+        return K
 
     def gram(self, X_M, aux_X=None, extra_jitter=0.0):
         """Full Gram matrix K(X_M, X_M) for arbitrary (s, a) inputs (§5).
