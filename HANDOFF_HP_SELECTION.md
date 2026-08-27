@@ -4102,6 +4102,73 @@ remaining levers reduce to rebuilding the preconditioner or changing sampler —
 both large. Two negative conditioning results in a row would be reason to stop
 and disclose large_play's contraction under §7.1 rather than keep spending.
 
+### 4.3.44 The nugget works — all four variants now pass
+
+`map_sig_n2` 0.001 → 0.05 on large_play, everything else as §4.3.28:
+
+| metric | `recipe` | **`nugget`** | |
+|---|---|---|---|
+| centred `ratio` | 0.8578 | **0.9231** | +0.0653 = **2.0× the floor** |
+| centred `scale_z` | 1.0365 | 1.0870 | |
+| `shape_var_frac` | — | **0.9015** | healthiest of any large_play run |
+| mean CE | 0.2545 | **0.2130** | best of any large_play run |
+| accuracy | 0.9005 | 0.9028 | |
+| `cvar_ess` | 58.04 | **583.3** | 10× |
+
+**The first change to improve large_play on every axis at once**, and the
+`ratio` gain is resolvable at 2× the §4.3.35 replicate floor.
+
+> **The conditioning hypothesis is confirmed — but only at λ_min.** §4.3.42's
+> `sig_c2` targeted λ_max, **one** eigendirection, and did nothing (§4.3.43).
+> `sig_n2` targets λ_min, where **231 of 256** directions sit, and works. That
+> distinction is the whole content of the result: the stiffness is the prior's
+> within-cell equality constraint, enforced at weight `1/sig_n2`, and softening
+> it is what let the chain mix. Two attempts at "better conditioning" that
+> differ only in *which end of the spectrum* they move, with opposite outcomes.
+
+**`cvar_ess` 583 is genuine, not degeneracy** — `shape_var_frac` 0.9015, against
+the collapsed `lr 1.5e-3` run's 858 at 0.0972. The guard separates them, as it
+was built to.
+
+**All four variants now clear the amended §3.6.3 gate:**
+
+| variant | centred `ratio` | centred `scale_z` | configuration |
+|---|---|---|---|
+| medium_play | 1.0871 | 0.6469 | recipe |
+| large_diverse | 1.1278 | 0.8091 | recipe |
+| medium_diverse | 0.9087 | 1.7976 | recipe + burn-in 100k |
+| large_play | 0.9231 | 1.0870 | recipe + `sig_n2` 0.05 |
+
+> **But they pass under four *different* configurations**, which is §4.3.33's
+> concern grown from four hand-tuned knobs to five. **Test `sig_n2` 0.05
+> uniformly before adopting any of this.** The argument for it is not merely
+> that it worked here: **0.001 was never a modelling choice.** The config
+> documents it as "nugget / diagonal jitter (mandatory for invertibility)" —
+> chosen to make the Cholesky succeed, not to express a belief about
+> within-cell reward variation. A value chosen for numerical convenience has
+> been setting the sampler's stiffness, and 0.05 is at least as defensible on
+> modelling grounds.
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True --map_sig_n2 0.05 \
+    --OUT_DIR ./exp/stage3_medium_play_nugget > ../exp/stage3_medium_play_nugget.log 2>&1 &
+```
+
+Against medium_play's flagship **1.0871 / 0.6469 / CE 0.2912**, replicated at
+1.1198 / 0.6999 (§4.3.35). Neutral-or-better makes `sig_n2` 0.05 a uniform
+setting and collapses two of the five per-variant knobs; materially worse means
+it is a large_play-specific fix and the per-variant tuning stands as a
+disclosure.
+
+**Also worth re-testing once `sig_n2` settles: `n_meas`.** §4.3.43 measured
+coverage saturating at 33 cells with `n_meas` 256 reaching only 25, at 7.2×
+worse conditioning than `n_meas` 35. If a larger nugget removes the conditioning
+penalty, `n_meas` could come back down toward the cell count with no loss —
+which would collapse a third knob.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4888,7 +4955,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **conditioning localised, `sig_c2` refuted (§4.3.42–43).** The maze has **33 free cells** and the kernel is cell-based, so `n_meas` 256 reaches only 25 cells while pinning **231 of 256 eigenvalues at the nugget** — the stiffness is λ_min (within-cell equality at weight 1000), not λ_max. `sig_c2` moved nothing. Next: `map_sig_n2` 0.05. If that also fails, stop and disclose |
+| 3b | BNN | **ALL FOUR VARIANTS PASS the amended gate (§4.3.44).** `map_sig_n2` 0.001 → 0.05 fixed large_play on every axis (centred `ratio` 0.8578 → 0.9231, CE 0.2545 → 0.2130). Conditioning confirmed at λ_min — `sig_c2` (λ_max, 1 direction) did nothing, `sig_n2` (λ_min, 231 directions) worked. **But the four pass under four different configurations**; next is `sig_n2` 0.05 on medium_play to test uniform adoption |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
