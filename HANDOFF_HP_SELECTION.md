@@ -3894,6 +3894,61 @@ CVaR CE against large_play's 0.8578 and 3.0359. The ceiling is the largest ε
 that keeps `shape_var_frac` healthy and the clamp at zero; whether anything
 below that ceiling also fixes the contraction is the actual open question.
 
+### 4.3.41 The ε ladder — the selected step size is already at the ceiling
+
+large_play, §4.3.28 recipe, `sghmc_lr` varied alone:
+
+| `sghmc_lr` | × selected | `shape_var_frac` | `clip%` | centred `ratio` | centred `scale_z` | mean CE | acc |
+|---|---|---|---|---|---|---|---|
+| **1.42e-4** (selected) | 1.0× | — | 0.00 | **0.8578** | **1.0365** | **0.2545** | **0.9005** |
+| 5.0e-4 | 3.5× | 0.6997 | 60.39 | 0.5542 | 2.8312 | **0.7535** | 0.7512 |
+| 1.5e-3 | 10.6× | 0.0972 | 100.00 | 0.3920 | 16.6166 | 0.5351 | 0.7176 |
+| 4.0e-3 | 28.2× | 0.0805 | 13.65 | 0.1609 | 35.3081 | 0.5788 | 0.7106 |
+| 8.0e-3 | 56.3× | — | 1.99 | 1.0000 | 0.0000 | **0.6932** | 0.4606 |
+
+**The ceiling is below 5e-4 — only 3.5× above the CE-selected value — and mean
+CE is already worse than `log 2` there.** Every rung is worse than the selected
+step size on every axis. The ladder found no better setting; it found that
+there is no headroom.
+
+> **§4.3.38 and §4.3.39 are now fully refuted, and §4.3.40's revision is
+> confirmed with a ladder rather than a single point.** `sghmc_lr` was **not**
+> driven down by CE pathology away from a known-good value. It is pinned near a
+> hard stability ceiling, and CE selection was tracking a real constraint. The
+> provenance findings survive as provenance — the defaults are Tran's, and the
+> selected values are 32–106× below them — but the *interpretation* that the
+> inherited settings were right for this model is dead. **The reference
+> calibration does not transfer, and this model tolerates roughly 1/50th of
+> their step size.**
+
+**The posterior is stiff, and that is the actual finding.** `clip%` — the
+fraction of sampling steps whose gradient norm exceeds 100 — goes
+**0.0003 → 60.4 → 100.0** over a 10× rise in ε. Gradient norms grow
+super-linearly with the step size, which is the signature of a chain leaving a
+well-conditioned basin as soon as it takes larger steps. `shape_var_frac` tracks
+the resulting collapse of `f` toward a constant: **0.6997 → 0.0972 → 0.0805**.
+
+> **Consequence, and it redirects the whole sampler-repair effort.** `ess_bulk`
+> ≈ 2.4% (§4.3.26) **cannot be fixed by raising ε** — ε is at its ceiling. The
+> slow mixing is a consequence of a stiff, ill-conditioned posterior, not of a
+> mis-set hyperparameter. The remaining levers are of a different kind:
+> **better preconditioning** (the diagonal `V̂^{-1/2}` may simply be inadequate
+> here, where Springenberg's own §4.2 notes the full Fisher is what you would
+> want), **a different sampler**, or **reducing the stiffness** at its source in
+> the model or prior. Tuning the existing sampler's scalars is exhausted.
+
+**The degeneracy guard works and earns its place.** `fn_drift_shape_var_frac`
+flags every collapsed rung (0.097, 0.081) while the drift statistics on those
+same runs look progressively *better* as the model degrades — `cvar_ess` reads
+**858 and 1255** at 1.5e-3 and 4e-3, against 58 on the healthy run. **High
+`cvar_ess` with low `shape_var_frac` is a degeneracy signature, not a good
+tail**: a near-constant `f` has trivially high effective sample size. Read the
+guard before any tail metric.
+
+**large_play is unresolved and stays that way.** Its centred `ratio` 0.8578 is
+the best available under any ε tried, and it still contracts. §10.2's step 1
+should stop treating that as a tuning problem.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4680,7 +4735,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **sampler repair — audited against BOTH papers (§4.3.38, §4.3.39).** The implementation is faithful — it is Tran et al.'s Eq. (27) verbatim — but **every sampler default in this fork is Tran's published configuration and the sweep moved `sghmc_lr` 32–106× below it** (0.008 default vs 7.6e-5–2.5e-4 selected). §4.3.14's CE pathology, now on a parameter two papers had already calibrated. Next: large_play at the inherited defaults |
+| 3b | BNN | **sampler-scalar tuning is EXHAUSTED (§4.3.41).** The ε ladder shows the selected `sghmc_lr` sits at a hard stability ceiling — 3.5× up already gives worse-than-chance CE — so slow mixing (`ess_bulk` ≈ 2.4%) is stiffness, not a mis-set knob. 3 of 4 variants pass the amended gate; large_play does not, at any ε. Next levers: preconditioning, a different sampler, or reducing stiffness |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -4790,9 +4845,14 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    `sghmc_lr` 0.008 drove `f` to a CONSTANT: mean CE 0.6932 = `log 2`,
    accuracy 0.4606, and a *perfect* stationarity gate (centred `scale_z`
    0.0000) because a constant function cannot drift. The reference ε does not
-   transfer to this model. **Ladder ε alone** to find the real ceiling
-   (§4.3.40), and gate on the new `fn_drift_shape_var_frac` so a collapsed run
-   cannot be selected. The preconditioner
+   transfer to this model. **Ladder done (§4.3.41): the selected ε is
+   already at the ceiling.** 5e-4 — only 3.5× up — already gives mean CE worse
+   than `log 2`, and every rung is worse than the selected value on every
+   axis. `sghmc_lr` was pinned by stability, not by CE pathology. **The
+   posterior is stiff and `ess_bulk` ≈ 2.4% cannot be fixed by tuning ε.**
+   Remaining levers are of a different kind — better preconditioning, a
+   different sampler, or reducing stiffness at source — so **stop tuning the
+   existing sampler's scalars**. Gate on `fn_drift_shape_var_frac` regardless. The preconditioner
    instrumentation is in place (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
    chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
    and 100k — a ratio that stays constant means the adaptation window never
