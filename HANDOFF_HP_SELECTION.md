@@ -3824,6 +3824,76 @@ run whose clamp fires during sampling. If it fires, that locates the real
 ceiling on ε for this model — which the sweep never probed, because CE was
 pulling the other way the whole time.
 
+### 4.3.40 The reference step size does not transfer — and a constant `f` passes the gate
+
+large_play at the inherited Tran defaults (`sghmc_lr` 0.008, `mdecay` 0.01,
+`cycle_length` 2000):
+
+| | `sghmc_lr` | centred `ratio` | centred `scale_z` | mean CE | acc | `clamp%` | `clip%` |
+|---|---|---|---|---|---|---|---|
+| `recipe` | 1.42e-4 | 0.8578 | 1.0365 | 0.2545 | 0.9005 | 0.0000 | 0.0003 |
+| **`trandefaults`** | **8.0e-3** | **1.0000** | **0.0000** | **0.6932** | **0.4606** | **0.0076** | **1.9933** |
+
+**The chain collapsed to a constant function.** Centred `ratio` is *exactly*
+1.0000 and both centred z-scores are *exactly* 0.0000 — the signature of an
+identically-zero centred component. Mean CE is **0.6932** against `log 2` =
+0.6931, and accuracy 0.4606 is below chance: `Φ₁ = Φ₂` for every pair, so every
+prediction is 0.5.
+
+> **And it passed the §3.6.3 gate perfectly.** `scale_z` 0.0000 ≤ 2.0 and
+> `loc_z` 0.0000 ≤ 2.0, with `param_clamp_sampling_pct` 0.0076 ≤ 0.01. **The
+> most useless run in this entire investigation satisfies every eligibility
+> criterion.** This is the third and most extreme instance of §4.3.15's rule —
+> a constant `f` is not merely stationary, it is *perfectly* stationary, because
+> there is nothing left to drift.
+>
+> **Guard added 2026-08-24.** `function_space_drift` now returns
+> `fn_drift_shape_var_frac` — the fraction of `f`'s variance in the identified
+> component — and prints a `*** DEGENERATE ***` banner below 1e-4. Verified:
+> a healthy chain gives 0.9963, a constant `f` gives 2.5e-32 while its centred
+> `scale_z` reads 0.0001. **This must gate alongside the drift criteria in the
+> sweep redesign**, or a collapsed run will be selected.
+
+**Why it collapsed.** The preconditioner caps `minv_t` at `1/√v_hat_min` = 100,
+so the per-step displacement is bounded by `ε²·minv_t`: **6.4e-3 at
+ε = 0.008 against 2.0e-6 at the selected 1.42e-4 — 3,174× larger.** The
+instability markers fire for the first time in the investigation:
+`param_clamp_sampling_pct` 0.0076 where every previous run was *exactly* 0.0000,
+and `gradnorm_pct_over_clip` 1.9933 against 0.0003–0.0025.
+
+> **This revises §4.3.38 and §4.3.39.** I claimed CE selection "walked away from
+> a known-good value". The reference ε **does not transfer to this model**, so
+> CE's small step size was at least partly tracking a real stability ceiling,
+> not purely pathology. The provenance findings stand — the defaults *are*
+> Tran's, and `sghmc_lr` *was* moved 32–106× — but "the inherited settings were
+> right and CE broke them" is refuted as stated.
+
+> **My run design was poor and I could not attribute the failure.** I changed
+> three parameters at once and called it "one hypothesis". `mdecay` went *down*
+> (0.0312 → 0.01, reducing noise) and `cycle_length` only thins further, so ε is
+> the prime suspect by elimination — but this run cannot prove it. **Ladder ε
+> alone.**
+
+**Next: find the actual ceiling on ε**, holding everything else at the §4.3.28
+recipe:
+
+```
+for LR in 5e-4 1.5e-3 4e-3; do
+  cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+      --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+      --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+      --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True --sghmc_lr $LR \
+      --OUT_DIR ./exp/stage3_large_play_lr$LR > ../exp/stage3_large_play_lr$LR.log 2>&1
+done
+```
+
+Sequential, since each needs 4 GPUs. Read **`fn_drift_shape_var_frac` first** —
+below 1e-4 the run is degenerate and nothing else in it means anything — then
+`param_clamp_sampling_pct` (§3.6.3 rejects above 0.01), then centred `ratio` and
+CVaR CE against large_play's 0.8578 and 3.0359. The ceiling is the largest ε
+that keeps `shape_var_frac` healthy and the clamp at zero; whether anything
+below that ceiling also fixes the contraction is the actual open question.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4340,6 +4410,16 @@ generalise beyond this project:
   redesigned sweep rather than a re-scoring of round 2. The generalisable point:
   a stationarity diagnostic must be computed on the identified component, or it
   measures partly a direction the likelihood cannot see.
+- **A degenerate reward model scores a PERFECT stationarity gate.** A run at
+  the reference step size collapsed `f` to a constant: predictive CE 0.6932
+  against `log 2` = 0.6931, accuracy below chance — and centred `loc_z` and
+  `scale_z` both *exactly* 0.0000, because a constant function has nothing to
+  drift (§4.3.40). It satisfied every §3.6.3 criterion. Report that eligibility
+  was therefore made conditional on a **degeneracy check**
+  (`fn_drift_shape_var_frac`, the fraction of `f`'s variance in the identified
+  component) in addition to the drift criteria. The generalisable point: a
+  convergence diagnostic is a ratio, and ratios are undefined-in-the-limit
+  rather than merely noisy when the quantity being diagnosed vanishes.
 - **A stationarity gate cannot detect a collapsed posterior.** `large_play`
   under the §4.3.28 recipe passes both the raw and centred criteria
   (`scale_z` 0.7649 / 1.0365) while its CVaR reward predicts preferences at
@@ -4706,11 +4786,13 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    `sghmc_lr` is **40–130× below the paper's ε = 1e-2**, giving 1,600–17,000×
    less diffusion per step, which is a direct candidate for the slow relaxation
    the preconditioner hypothesis was invented to explain. It also found `τ`'s
-   unbounded growth is the *published* algorithm's behaviour, not a defect. Run
-   large_play at the **inherited Tran defaults** first (§4.3.39: `sghmc_lr`
-   0.008, `mdecay` 0.01, `cycle_length` 2000) — every sampler default in this
-   fork is Tran et al.'s published configuration, and CE selection moved
-   `sghmc_lr` 32–106× away from it. The preconditioner
+   unbounded growth is the *published* algorithm's behaviour, not a defect. **Done, and it collapsed (§4.3.40).**
+   `sghmc_lr` 0.008 drove `f` to a CONSTANT: mean CE 0.6932 = `log 2`,
+   accuracy 0.4606, and a *perfect* stationarity gate (centred `scale_z`
+   0.0000) because a constant function cannot drift. The reference ε does not
+   transfer to this model. **Ladder ε alone** to find the real ceiling
+   (§4.3.40), and gate on the new `fn_drift_shape_var_frac` so a collapsed run
+   cannot be selected. The preconditioner
    instrumentation is in place (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
    chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
    and 100k — a ratio that stays constant means the adaptation window never

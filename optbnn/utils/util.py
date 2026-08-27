@@ -423,8 +423,19 @@ def function_space_drift(pred_chains, eps=1e-12):
     # (amended 2026-08-24); the offset metrics are REPORTED, never gated.
     _off = a.mean(axis=2)                       # [chain, draw]
     out = {}
+    # Degeneracy guard (section 4.3.40).  A CONSTANT f passes every stationarity
+    # criterion perfectly -- its centred component is identically zero, so
+    # ratio = 1 and both z-scores are 0 -- while being maximally useless
+    # (Phi1 = Phi2, so CE = log 2 exactly).  That is not a hypothetical: an
+    # eps = 0.008 run collapsed this way and scored a flawless gate.  The
+    # fraction of f's variance living in the IDENTIFIED component detects it,
+    # is scale-free, and is near 0 only when f is essentially constant.
+    _shape = a - _off[:, :, None]
+    _vr = float(np.var(a))
+    out["fn_drift_shape_var_frac"] = (
+        float(np.var(_shape)) / _vr if _vr > 0.0 else 0.0)
     for _pfx, _arr in (("", a),
-                       ("centred_", a - _off[:, :, None]),
+                       ("centred_", _shape),
                        ("offset_", np.broadcast_to(_off[:, :, None], a.shape))):
         out.update(_function_space_drift_core(_arr, eps, _pfx))
     return _function_space_drift_report(out)
@@ -480,6 +491,15 @@ def _function_space_drift_core(a, eps, prefix):
 
 def _function_space_drift_report(out):
     """One log line covering raw and centred.  See function_space_drift."""
+    _svf = out.get("fn_drift_shape_var_frac")
+    if _svf is not None and _svf < 1e-4:
+        print(
+            f"[diag] *** DEGENERATE: only {_svf:.2e} of f's variance is in the "
+            f"identified component -- f is essentially CONSTANT across inputs. "
+            f"Every drift statistic below will look perfect (ratio 1, z 0) "
+            f"because there is nothing left to drift.  Check predictive CE "
+            f"against log 2 = 0.6931 before reading any of it. ***"
+        )
     if "fn_drift_loc_z_median" in out:
         print(
             f"[diag] function-space drift (first vs second half): "
