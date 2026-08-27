@@ -4033,6 +4033,75 @@ mix at the ε it already tolerates, the stiffness diagnosis is right and
 source, which §4.3.41 listed as the third lever and which is far cheaper than
 the first.
 
+### 4.3.43 `sig_c2` does nothing — the stiffness is at the *bottom* of the spectrum
+
+`map_sig_c2` 1.0 → 0.01 on large_play, everything else as §4.3.28:
+
+| | `sig_c2` | `shape_var_frac` | centred `ratio` | centred `scale_z` | offset `scale_z` | mean CE | acc |
+|---|---|---|---|---|---|---|---|
+| `recipe` | 1.0 | — | 0.8578 | 1.0365 | 0.6885 | 0.2545 | 0.9005 |
+| `bestwu` | 1.0 | — | 0.8609 | 1.1368 | 0.4772 | 0.2603 | 0.9005 |
+| `sigc2` | **0.01** | 0.5573 | **0.8539** | 1.2240 | **0.1805** | 0.2578 | 0.8981 |
+
+Centred `ratio` moved **0.004** against a 0.0327 floor. No effect. (The offset
+became *more* stationary, 0.6885 → 0.1805, the opposite of the risk I flagged —
+but offset metrics vary ~2× between replicates, so that is not readable either.)
+
+**Computing the actual spectrum shows why, and my §4.3.42 analysis was wrong in
+its target.** The large maze has **33 free cells**, and the kernel is
+*cell-based* — two measurement points in the same cell get identical rows.
+Measured on the real prior and pool:
+
+| `n_meas` | distinct cells | λ_max | λ_min | cond(K) | eigenvalues at the nugget |
+|---|---|---|---|---|---|
+| 7 | 6 | 7.72 | 1e-3 | 7.7e3 | 1 |
+| 29 (large_play selected) | 14 | 30.79 | 1e-3 | 3.1e4 | 15 |
+| 35 | 16 | 37.42 | 1e-3 | 3.7e4 | 19 |
+| **256** (recipe) | **25** | 269.15 | 1e-3 | **2.7e5** | **231** |
+
+**231 of 256 eigenvalues sit exactly at the nugget.** Those are the *within-cell
+difference* directions: the prior asserting that `f` is equal at all points
+sharing a maze cell, enforced with weight `1/sig_n2 = 1000`. **That** is the
+stiffness.
+
+> **`sig_c2` only moves λ_max.** Measured, it cuts cond 14.7× (2.69e5 → 1.84e4
+> at n=256) — real, and less than the 72× I projected from a synthetic
+> `K_geo` — but it does nothing to the 231 directions at the floor. I aimed at
+> the top of the spectrum when the stiffness is at the bottom. The offset
+> argument that motivated it was sound and irrelevant.
+
+**Two corrected levers, both measured:**
+
+| lever | effect | cost |
+|---|---|---|
+| **`map_sig_n2` 0.001 → 0.05** | raises λ_min 50×, cond → ~5.4e3, and directly softens the within-cell constraint | weakens the cell-equality prior — a real modelling choice |
+| **`n_meas` ≈ 33** | 35 points already reach 16 cells at cond 3.7e4 vs 256's 25 cells at 2.7e5 — **7.2× better conditioning for 1.6× less coverage** | mild coverage loss |
+
+> **And §4.3.24's coverage account needs a ceiling.** Coverage cannot exceed
+> **33 cells**, and `n_meas` 256 reaches only **25** — so the recipe's 7.3×
+> increase in measurement points buys 1.6× more cells while making the Gram
+> 7.2× more ill-conditioned. `n_meas` is not a free "more is better" knob; it
+> should be set relative to the free-cell count, which is a property of the maze
+> and computable without any run (`maze_layouts.get_antmaze_layout`).
+
+**Next: the nugget, which is the direction the spectrum actually points.**
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 16893.982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True --map_sig_n2 0.05 \
+    --OUT_DIR ./exp/stage3_large_play_nugget > ../exp/stage3_large_play_nugget.log 2>&1 &
+```
+
+`[prior] Gram cond(K)` should read ~5e3 against the current 2.7e5. Then
+`fn_drift_shape_var_frac`, then centred `ratio` against **0.8578**.
+
+**If this also does nothing, stiffness is not the mechanism** and §4.3.41's
+remaining levers reduce to rebuilding the preconditioner or changing sampler —
+both large. Two negative conditioning results in a row would be reason to stop
+and disclose large_play's contraction under §7.1 rather than keep spending.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4819,7 +4888,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **stiffness localised to the prior's Gram conditioning (§4.3.42).** `cond(K) ≥ n_meas·sig_c2/sig_n2` — 2.6e5 at the recipe's `n_meas` 256, and the dominant term `sig_c2·J` is prior mass on the **unidentified offset**. Two never-swept scalars control it; `map_sig_c2` 1.0→0.01 cuts cond 72× at no modelling cost. Next: that run on large_play, which fails at every ε |
+| 3b | BNN | **conditioning localised, `sig_c2` refuted (§4.3.42–43).** The maze has **33 free cells** and the kernel is cell-based, so `n_meas` 256 reaches only 25 cells while pinning **231 of 256 eigenvalues at the nugget** — the stiffness is λ_min (within-cell equality at weight 1000), not λ_max. `sig_c2` moved nothing. Next: `map_sig_n2` 0.05. If that also fails, stop and disclose |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
