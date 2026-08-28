@@ -560,11 +560,12 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
         r2 = np.sort(a2, axis=0)[:k].mean(axis=0)
         f1 = bt_pool_logit_np(r1 * am1, am1, bt_pool)
         f2 = bt_pool_logit_np(r2 * am2, am2, bt_pool)
-        p1 = 1.0 / (1.0 + np.exp(-(f1 - f2)))
-        return _ce_acc(p1) + (S, k)
+        d = f1 - f2                       # the CVaR logit difference
+        p1 = 1.0 / (1.0 + np.exp(-d))
+        return _ce_acc(p1) + (S, k, d)
 
     allc = np.arange(C)
-    cvar_ce_v, cvar_acc, S_tot, k_tail = _cvar_over(allc)
+    cvar_ce_v, cvar_acc, S_tot, k_tail, d_cvar = _cvar_over(allc)
 
     # Mean-based comparators on the same draws.
     m1 = P1.reshape(-1, B, T).astype(np.float64)
@@ -606,7 +607,6 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     # These call for different fixes, so the diagnostic should not leave the
     # reader to guess.  The mean-based logit is the reference: it is computed on
     # the same draws and is known to predict well whenever mean CE is good.
-    d_cvar = f1 - f2
     d_mean = g1 - g2
     yv0 = yv[:, 0] > 0.5
     flip = float((np.sign(d_cvar) != np.sign(d_mean)).mean())
