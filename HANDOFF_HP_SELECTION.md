@@ -4392,6 +4392,87 @@ re-applied against CVaR CE, not against the gate.**
   also unusable, but 3× less so. **Neither of its two configurations works**,
   which is a stronger statement than §4.3.46 recorded.
 
+### 4.3.48 Replicates hold; `warmup_use_best` confirmed droppable
+
+| run | seed | centred `ratio` | centred `scale_z` | `shape_var_frac` | mean CE |
+|---|---|---|---|---|---|
+| large_diverse | 0 | 1.1280 | 0.8091 | — | 0.3155 |
+| large_diverse | **100** | **1.1200** | 0.7653 | 0.1782 | 0.3148 |
+| medium_diverse | 0 | 0.9087 | 1.7980 | — | 0.3502 |
+| medium_diverse | **100** | **0.8932** | 1.9150 | 0.0492 | 0.3466 |
+| medium_play | 0 / 100 | 1.0871 / 1.1198 | 0.6469 / 0.6999 | — | 0.2912 / 0.2932 |
+
+**All three replicate.** Centred `ratio` gaps are 0.008, 0.0155 and 0.0327 —
+at or inside §4.3.35's floor. The stationarity results are reproducible; the
+§4.3.47 problem is the objective, not the measurement.
+
+**Dropping `warmup_use_best` is confirmed safe, and marginally better:**
+
+| large_play `nugget` | `warmup_use_best` | centred `ratio` | centred `scale_z` | mean CE | acc |
+|---|---|---|---|---|---|
+| original | True | 0.9231 | 1.0870 | 0.2130 | 0.9028 |
+| **`nowub`** | **False** | **0.9622** | **0.7420** | **0.2080** | **0.9178** |
+
+Better on every axis, by amounts at or just above the floor — consistent with
+§4.3.37's no-effect measurement. **Adopt the `nowub` configuration**, which
+removes the validation-set dependency §7.1 flagged at no cost.
+
+> **`shape_var_frac` varies 18× across variants and does NOT track quality.**
+> large_play 0.90, large_diverse 0.178, medium_diverse 0.049 — and large_play,
+> with the *highest* identified-variance fraction, has the *worst* CVaR CE
+> (10.02) while large_diverse at 0.178 has a good one (0.3417). That is correct
+> behaviour, not a defect: the offset **cancels** in `Φ₁ − Φ₂` (§4.3.10), so a
+> mostly-offset `f` can still predict well. **Read `shape_var_frac` strictly as
+> a degeneracy guard — is there any identified signal at all — never as a
+> measure of how much.** medium_diverse's 0.049 is the one to watch: an order of
+> magnitude above the 1e-4 banner but an order below every other variant.
+
+### 4.3.49 The CVaR logit sanity check
+
+`--cvar-ce` now decomposes a large CVaR CE into its two possible causes, because
+they need different fixes:
+
+- **SCALE** — `|Φ₁ − Φ₂|` inflates while the ordering matches the mean logit.
+  The reward is over-confident, not mis-ranked; the thing to investigate is
+  whatever widened the posterior.
+- **REORDERING** — magnitudes are normal but CVaR ranks pairs differently from
+  the mean, because `CVaR = mean − k·sd` and `sd` varies across states, so
+  segments through wide-posterior regions are penalised more. That is CVaR
+  behaving as defined, on a posterior whose widths are not trustworthy.
+
+It reports median/95th/max `|Δ|` for both logits, the CVaR/mean magnitude ratio,
+the sign-disagreement rate, and the wrong-signed subset. Verified on synthetic
+cases with known structure: a pure 8× scaling classifies SCALE (ratio 8.00×,
+flip 0.0%), a pure sign-flip classifies REORDERING (ratio 1.00×, flip 37.0%),
+and a faithful CVaR classifies as neither (ratio 0.95×, flip 3.7%).
+
+**Run it on large_play first** — that is the 10.0166 case:
+
+```
+python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/stage3_large_play_nugget_nowub_0 \
+    --cvar-ce --offset-shape-split --device cuda \
+    2>&1 | tee exp/stage3_large_play_nugget_nowub_0_cvarce.txt
+```
+
+Then the three replicates, to establish whether CVaR CE is as reproducible as
+the drift metrics — §4.3.35 measured `cvar_ess` varying 1.9× between replicates,
+so this is not a foregone conclusion:
+
+```
+for R in large_diverse_recipe_s100 medium_diverse_burn100k_s100 medium_play_jit10n256_s100; do
+  python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/stage3_${R}_0 \
+      --cvar-ce --offset-shape-split --device cuda \
+      2>&1 | tee exp/stage3_${R}_0_cvarce.txt
+done
+```
+
+**If large_play's 10.02 reproduces and classifies as REORDERING**, the finding
+is that its posterior widths are unreliable even where its means are good — and
+CVaR, which is a statement about widths, is the only metric that sees it. **If
+it classifies as SCALE**, the fault is whatever inflated the posterior and the
+CVaR estimator is fine. Those lead to different work, which is why the check
+was worth building before acting on the number.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -5241,7 +5322,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **two of four usable (§4.3.47).** All four pass the §3.6.3 gate, but CVaR CE — the objective — is 0.2648 / 0.3417 (medium_play, large_diverse: usable) against 0.6659 (medium_diverse, at `log 2`) and **10.0166** (large_play). §4.3.46's stop was called on stationarity before the objective was measured. Sampler work continues for two variants |
+| 3b | BNN | **two of four usable (§4.3.47).** All four pass the §3.6.3 gate but CVaR CE — the objective — is 0.2648 / 0.3417 (usable) against 0.6659 (medium_diverse, at `log 2`) and **10.0166** (large_play). Replicates all hold (§4.3.48) and `warmup_use_best` is confirmed droppable. Next: the §4.3.49 logit sanity check on large_play, which decides whether that 10.02 is a scale blow-up or a reordering |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,

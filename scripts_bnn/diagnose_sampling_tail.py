@@ -594,6 +594,48 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     print(f"  {'plug-in  sigma(E[f])':<28}{plug_ce:>10.4f}{plug_acc:>10.4f}")
     print(f"  {'predictive E[sigma(f)]':<28}{pred_ce:>10.4f}{pred_acc:>10.4f}")
     print(f"  {'CVaR      sigma(Phi_cvar)':<28}{cvar_ce_v:>10.4f}{cvar_acc:>10.4f}")
+    # ---- Is a large CVaR CE a SCALE blow-up or a REORDERING? ------------
+    # Section 4.3.47: large_play scored CVaR CE 10.02 against log 2 = 0.6931.
+    # CE is unbounded above, and two very different failures produce a big one:
+    #   * SCALE   -- |Phi1 - Phi2| inflates, so even correct signs become
+    #                over-confident and the wrong ones are punished enormously.
+    #   * REORDER -- |Phi1 - Phi2| is normal but CVaR ranks segments differently
+    #                from the mean, because CVaR = mean - k*sd and sd varies
+    #                across states, so segments through wide-posterior regions
+    #                are penalised more.
+    # These call for different fixes, so the diagnostic should not leave the
+    # reader to guess.  The mean-based logit is the reference: it is computed on
+    # the same draws and is known to predict well whenever mean CE is good.
+    d_cvar = f1 - f2
+    d_mean = g1 - g2
+    yv0 = yv[:, 0] > 0.5
+    flip = float((np.sign(d_cvar) != np.sign(d_mean)).mean())
+    wrong = np.sign(d_cvar) != np.where(yv0, 1.0, -1.0)
+    print(f"\n  --- CVaR logit sanity check (section 4.3.47) ---")
+    print(f"  {'':22}{'median |d|':>12}{'95th |d|':>11}{'max |d|':>10}")
+    for lab, d in (("CVaR  Phi1-Phi2", d_cvar), ("mean  Phi1-Phi2", d_mean)):
+        ad = np.abs(d)
+        print(f"  {lab:<22}{np.median(ad):>12.4f}{np.percentile(ad, 95):>11.4f}"
+              f"{ad.max():>10.4f}")
+    _sc = float(np.median(np.abs(d_cvar)) / max(np.median(np.abs(d_mean)), 1e-12))
+    print(f"  CVaR/mean magnitude ratio {_sc:.2f}x")
+    print(f"  sign disagreement with the mean logit: {flip * 100:.1f}% of pairs")
+    if wrong.any():
+        print(f"  wrong-signed CVaR pairs: {wrong.mean() * 100:.1f}%, "
+              f"median |d| there {np.median(np.abs(d_cvar[wrong])):.4f}")
+    if _sc > 3.0 and flip < 0.2:
+        print("  -> SCALE blow-up: the CVaR logit is inflated but ordered like")
+        print("     the mean.  The reward is over-confident, not mis-ranked;")
+        print("     look at what widened the posterior, not at CVaR itself.")
+    elif flip >= 0.2:
+        print("  -> REORDERING: CVaR ranks a large share of pairs differently")
+        print("     from the mean, i.e. per-state posterior WIDTH is driving the")
+        print("     comparison.  That is CVaR doing what it is defined to do, on")
+        print("     a posterior whose widths are not trustworthy.")
+    else:
+        print("  -> Neither pathology is pronounced; a large CE here is ordinary")
+        print("     mis-prediction rather than a structural artefact.")
+
     print(f"\n  jackknife-over-chains SE on the CVaR CE: {se:.4f}")
     print(f"  tail depth: {k_tail} of {S_tot} draws at alpha={alpha}")
     if not math.isnan(se):
