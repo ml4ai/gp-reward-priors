@@ -4275,7 +4275,10 @@ independently of the shape/offset split.**
 All pass the amended §3.6.3 gate (centred `loc_z` and `scale_z` ≤ 2.0, clamp
 ≤ 0.01%, non-degenerate). Common to all: `map_amp2` 16893.98,
 `chain_init_jitter` 1.0, `n_meas` 256, `num_chains` 16, `chains_per_gpu` 4,
-`num_samples` 75, `warmup_use_best` true, seed 0.
+`num_samples` 75, seed 0. **`warmup_use_best` is NOT common** — it was used on
+large_play only, since it postdates the other three runs (§4.3.37 measured its
+effect at 0.003 on centred `ratio`, so this is a provenance detail rather than a
+performance one, but replicates must reproduce it exactly).
 
 | variant | deviation from the common recipe | centred `ratio` | centred `scale_z` | mean CE |
 |---|---|---|---|---|
@@ -4297,11 +4300,11 @@ a free parameter chosen to make a number look better.
 2. **Replicates.** Only medium_play's flagship is replicated (§4.3.35). The
    other three finals are single runs, and §4.3.35 made replication standing
    practice — `--sampling_seed 100`.
-3. **§7.1 disclosure.** That the sampler settings were tuned on stationarity
-   diagnostics across ~25 runs, that two variants carry per-variant deviations,
-   and that this tuning is **not** what the pre-registered §3.6.3 procedure
-   selected. Per-problem MCMC tuning is standard; presenting it as an outcome of
-   the selection procedure would not be.
+3. **§7.1 disclosure — WRITTEN 2026-08-24.** Covers the 36 diagnostic runs, the
+   two per-variant deviations, the distinction between selection-for-performance
+   (governed by `run_cap`) and engineering-a-sampler-to-sample (no baseline
+   analogue), the limit of that distinction, and the eight refuted mechanisms.
+   Nothing further owed here.
 
 Then §10.2 step 3, the sweep redesign, which was blocked on the sampler and no
 longer is.
@@ -4868,6 +4871,56 @@ is one-sided — the fairness claim requires the BNN to get *no more* tuning tha
 the baselines — so a BNN sweep that stops earlier strengthens it. Report also
 that the BNN searches 9 dimensions against MR's 3 and PT's 4 at the same cap,
 i.e. thinner coverage per dimension for the proposed method.
+
+**The BNN's sampler was tuned outside the pre-registered procedure, and this
+qualifies the budget invariant above.** Stage 3 ran **36 diagnostic training
+runs** (medium_play 23, large_play 9, medium_diverse 3, large_diverse 1) to
+reach a sampler whose identified component is stationary. The resulting settings
+— `map_amp2` 16893.98, `chain_init_jitter` 1.0, `n_meas` 256, 16 chains, plus
+`num_burn_in_steps` 100000 on medium_diverse and `map_sig_n2` 0.05 on large_play
+— were **chosen on stationarity diagnostics, not produced by §3.6.3's
+selection**. Report all of this, including the run count.
+
+**The distinction that makes it defensible, and its limit.** There are two kinds
+of tuning here and only one is governed by the budget invariant:
+
+- **Selection for predictive performance** — what `run_cap: 130` equalises
+  across families. The BNN received no more of this than MR or PT.
+- **Engineering a sampler to sample its target** — which has **no baseline
+  analogue at all**, because MR and PT are point estimates with no sampler to
+  make valid. A drifting or collapsed chain is not a worse model, it is a model
+  that is not being computed.
+
+Stage 3 was the second kind. The evidence is that it was judged on
+`fn_drift_centred_*` and CVaR CE throughout, and that **mean validation CE was
+explicitly rejected as an objective** (§4.3.22: it ranks configurations
+*opposite* to stationarity, and at the amplitude it selected the CVaR reward
+predicts worse than chance).
+
+**But the boundary is not perfectly clean and should not be presented as
+though it were.** Several settings that improve stationarity also improve
+predictive CE — large_play's nugget moved CE 0.2545 → 0.2130 — so the two
+cannot be fully separated after the fact. The honest claim is that the
+*objective* was stationarity and the CE gains were incidental, not that no
+CE-relevant information reached the choice.
+
+**Report the per-variant deviations as such.** Two of four variants carry
+settings the other two do not. Both have a measured justification given *before*
+the run that used them — §4.3.36's warm-up-NLL rule predicted medium_diverse
+would need a longer burn-in, and §4.3.42–44's Gram-conditioning analysis
+predicted large_play's nugget — rather than being fitted to make a number look
+better. **Per-problem MCMC tuning is standard practice**; what would not be
+defensible is presenting these as an outcome of the selection procedure.
+
+**Also report what was tried and failed**, since the surviving settings are only
+interpretable against it: eight mechanisms were proposed and refuted across
+§4.3.30–46 (friction, warm-up-prior mismatch, warm-up-accuracy correlation,
+burn-in as a general fix, best-state hand-off, `map_sig_c2`, uniform
+`map_sig_n2`, and conditioning/strength decoupling). The mechanisms that
+survived were grounded in the offset/shape decomposition, the two source papers,
+or the Gram spectrum; **every explanation resting on an ordering of the four
+variants was eventually refuted.** That is a methodological result worth stating
+in its own right.
 
 **Rule-vs-best disagreement (MR/large_diverse).** The stopping-rule winner is
 not the best trial observed: t5, 0.210400 against t27's 0.203892 — the rule
