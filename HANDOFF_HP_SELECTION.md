@@ -4104,6 +4104,12 @@ and disclose large_play's contraction under §7.1 rather than keep spending.
 
 ### 4.3.44 The nugget works — all four variants now pass
 
+> **CORRECTED by §4.3.47.** "All four pass" is true of the §3.6.3 *gate* and
+> false of the *objective*. large_play's CVaR CE under this very change is
+> **10.0166** against `log 2` = 0.6931 — every diagnostic below improved while
+> the deployed quantity collapsed. Read this section as a stationarity result
+> only.
+
 `map_sig_n2` 0.001 → 0.05 on large_play, everything else as §4.3.28:
 
 | metric | `recipe` | **`nugget`** | |
@@ -4245,6 +4251,12 @@ run tests the decoupling and that tension together.
 
 ### 4.3.46 Decoupling fails — stop optimising. The four configurations, settled.
 
+> **The stopping rule here was invoked prematurely — see §4.3.47.** CVaR CE,
+> the selection objective, had been measured on only one of the four finals
+> when this was written. Measured on all four, **medium_diverse is at chance
+> and large_play is catastrophic**. The four configurations below are settled
+> on stationarity; two of them are not usable.
+
 `sig_n2` 0.05 + `amp2` 1.69e3 on medium_play:
 
 | | `amp2` | `sig_n2` | `shape_var_frac` | centred `ratio` | centred `scale_z` | mean CE |
@@ -4318,6 +4330,67 @@ a free parameter chosen to make a number look better.
 
 Then §10.2 step 3, the sweep redesign, which was blocked on the sampler and no
 longer is.
+
+### 4.3.47 CVaR CE on the four finals — two of them fail the objective
+
+The selection objective (§4.3.22–23), measured on all four settled
+configurations:
+
+| variant | centred `ratio` | gate | mean CE | **CVaR CE** | SE | resolvable Δ |
+|---|---|---|---|---|---|---|
+| medium_play | 1.0871 | PASS | 0.2912 | **0.2648** | 0.0575 | 0.115 |
+| large_diverse | 1.1278 | PASS | — | **0.3417** | 0.0280 | 0.056 |
+| medium_diverse | 0.9087 | PASS | 0.3502 | **0.6659** | 0.0870 | 0.174 |
+| large_play | 0.9231 | PASS | 0.2130 | **10.0166** | 0.1157 | 0.231 |
+
+`log 2` = 0.6931.
+
+> **`§4.3.44`'s and `§4.3.46`'s "all four variants pass" is wrong as a summary,
+> and I wrote it.** All four pass the **§3.6.3 gate** — drift, clamp,
+> degeneracy — which is what those sections measured. But **two fail the
+> objective**: medium_diverse's CVaR reward is at chance (0.6659 against `log 2`
+> = 0.6931, inside its own 0.174 resolution), and large_play's is
+> **catastrophic at 10.0166**, fourteen times `log 2` and resolvable many times
+> over. Only medium_play and large_diverse are usable.
+
+**§4.3.44's "improved on every axis" was measured on the wrong axes.**
+large_play's `sig_n2` 0.05 gave the best mean CE of any large_play run (0.2545 →
+0.2130), the best `shape_var_frac` (0.9015), a 10× `cvar_ess` (58 → 583) — and a
+CVaR CE of 10.0166. **Every diagnostic improved while the deployed quantity
+collapsed.** That is §4.3.22's mean-CE/CVaR anti-correlation at its most
+extreme, and the third time in this investigation that stationarity plus good
+mean CE has certified an unusable reward model (§4.3.15, §4.3.30, now this).
+
+> **Neither existing guard catches it.** `cvar_ess` 583 says the tail is
+> *efficiently estimated*; `shape_var_frac` 0.9015 says `f` is *not degenerate*.
+> Both are true. The tail is efficiently estimated **and wrong**. There is no
+> substitute for computing the objective itself — and it is cheap, since
+> `--cvar-ce` runs on saved chains.
+
+**One sanity check is owed before acting on the magnitude.** CVaR CE 10.02
+implies `σ(Φ₁ − Φ₂)` ≈ 4.5e-5 for the true class on average — confidently and
+consistently wrong, not merely uninformative. The mechanism is plausible: a
+weaker prior widens the posterior heterogeneously across states, and
+`CVaR = mean − k·sd` then reorders segments whose widths differ. But the
+magnitude should be confirmed against the distribution of `Φ₁_cvar − Φ₂_cvar`
+before it is reported, in case it reflects a scale blow-up rather than a
+reordering.
+
+**Consequence: the sampler work is not finished.** Two variants have settled
+configurations that cannot support the paper's mechanism. §4.3.46's stopping
+rule was invoked on stationarity evidence alone, before the objective had been
+measured on three of the four — **that was premature, and the rule should be
+re-applied against CVaR CE, not against the gate.**
+
+**Where each stands:**
+- **medium_play, large_diverse** — settled and usable. Replicate and proceed.
+- **medium_diverse** — passes the gate, CVaR at chance. Its `sig_n2` is 0.001;
+  §4.3.45 showed the nugget trades stationarity for prediction differently per
+  variant, and this variant has not been tried on that axis.
+- **large_play** — the `sig_n2` 0.05 that fixed its stationarity is what broke
+  its CVaR. Its pre-nugget configuration had CVaR CE **3.0359** (§4.3.30) —
+  also unusable, but 3× less so. **Neither of its two configurations works**,
+  which is a stronger statement than §4.3.46 recorded.
 
 ### 4.4 Procedure
 
@@ -5168,7 +5241,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **SETTLED (§4.3.46).** All four variants pass the amended gate; decoupling failed, so optimisation stopped per §4.3.45's rule. Common recipe (`map_amp2` 16894, jitter 1.0, `n_meas` 256, 16 chains, `warmup_use_best`) with two justified per-variant deviations: medium_diverse burn-in 100k (§4.3.36), large_play `sig_n2` 0.05 (§4.3.44). **Owed: CVaR CE on all four, replicates, and the §7.1 tuning disclosure** — then the sweep redesign |
+| 3b | BNN | **two of four usable (§4.3.47).** All four pass the §3.6.3 gate, but CVaR CE — the objective — is 0.2648 / 0.3417 (medium_play, large_diverse: usable) against 0.6659 (medium_diverse, at `log 2`) and **10.0166** (large_play). §4.3.46's stop was called on stationarity before the objective was measured. Sampler work continues for two variants |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,

@@ -375,7 +375,7 @@ def bt_pool_logit_np(pred_masked, mask, mode="mean"):
     return s / n
 
 
-def function_space_drift(pred_chains, eps=1e-12):
+def function_space_drift(pred_chains, eps=1e-12, quiet=False):
     """Is the induced function-space measure stationary across draw index?
 
     `pred_chains` is [chain, draw, point] — the predictive f at the diagnostic
@@ -438,7 +438,11 @@ def function_space_drift(pred_chains, eps=1e-12):
                        ("centred_", _shape),
                        ("offset_", np.broadcast_to(_off[:, :, None], a.shape))):
         out.update(_function_space_drift_core(_arr, eps, _pfx))
-    return _function_space_drift_report(out)
+    # quiet=True is for callers that decompose f themselves and invoke this
+    # on the parts: the offset component is constant across points BY
+    # CONSTRUCTION, so the degeneracy guard would fire on every such call
+    # and cry wolf.  They print their own tables.
+    return out if quiet else _function_space_drift_report(out)
 
 
 def _function_space_drift_core(a, eps, prefix):

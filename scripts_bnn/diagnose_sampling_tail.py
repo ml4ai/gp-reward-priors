@@ -273,7 +273,7 @@ def offset_shape_split(pred_chains):
     for label, arr in (("raw f", a),
                        ("centred (shape)", shape),
                        ("offset only", off[:, :, None])):
-        d = util.function_space_drift(arr)
+        d = util.function_space_drift(arr, quiet=True)
         rows.append((label,
                      d.get("fn_drift_loc_sd_median", float("nan")),
                      d.get("fn_drift_scale_ratio_median", float("nan")),
