@@ -4275,10 +4275,20 @@ independently of the shape/offset split.**
 All pass the amended §3.6.3 gate (centred `loc_z` and `scale_z` ≤ 2.0, clamp
 ≤ 0.01%, non-degenerate). Common to all: `map_amp2` 16893.98,
 `chain_init_jitter` 1.0, `n_meas` 256, `num_chains` 16, `chains_per_gpu` 4,
-`num_samples` 75, seed 0. **`warmup_use_best` is NOT common** — it was used on
-large_play only, since it postdates the other three runs (§4.3.37 measured its
-effect at 0.003 on centred `ratio`, so this is a provenance detail rather than a
-performance one, but replicates must reproduce it exactly).
+`num_samples` 75, seed 0. **`warmup_use_best` is NOT common** — of the four
+settled runs only large_play's used it (it postdates the other three). Across
+all 36 stage-3 runs, 9 used it, including two medium_play runs that are not
+finals. Replicates must reproduce it exactly.
+
+> **Recommendation: drop `warmup_use_best` and re-run large_play's final without
+> it (§7.1).** The warm-up evaluation is on the **validation set**, so selecting
+> the best-by-NLL state chooses the initialisation using the same data the run is
+> scored on — while buying nothing measurable (§4.3.37: 0.003 on centred `ratio`,
+> CE slightly worse). Dropping it removes a validation dependency, removes a
+> deviation from both reference implementations, and makes all four finals
+> identical in this respect. If it is kept instead, evaluate the warm-up on
+> **training** data, which removes the leakage while preserving the argument that
+> handing off an arbitrary point of a wandering trajectory is indefensible.
 
 | variant | deviation from the common recipe | centred `ratio` | centred `scale_z` | mean CE |
 |---|---|---|---|---|
@@ -4903,6 +4913,19 @@ predictive CE — large_play's nugget moved CE 0.2545 → 0.2130 — so the two
 cannot be fully separated after the fact. The honest claim is that the
 *objective* was stationarity and the CE gains were incidental, not that no
 CE-relevant information reached the choice.
+
+**`warmup_use_best` selects the initialisation on validation data, and should
+be dropped.** It hands the chains the best-by-NLL burn-in state, but that NLL is
+computed on the **validation set** — the same data the run is then scored on. It
+was used on 9 of the 36 stage-3 runs and on one of the four finals (large_play).
+**Its measured effect is nil**: §4.3.37 found 0.003 on centred `ratio` with CE
+slightly worse, §4.3.36 found warm-up quality does not predict final quality at
+all, and on the `trandefaults` run it handed over a state **194× better in NLL**
+(18.13 vs a final 3513.54) while the chain still collapsed to a constant. Report
+either that it was dropped and large_play's final re-run without it — the
+recommended course, leaving nothing to disclose — or, if kept, that the
+initialisation was selected on validation data and that its effect was measured
+at 0.003.
 
 **Report the per-variant deviations as such.** Two of four variants carry
 settings the other two do not. Both have a measured justification given *before*
