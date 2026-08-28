@@ -4371,7 +4371,7 @@ mean CE has certified an unusable reward model (§4.3.15, §4.3.30, now this).
 implies `σ(Φ₁ − Φ₂)` ≈ 4.5e-5 for the true class on average — confidently and
 consistently wrong, not merely uninformative. The mechanism is plausible: a
 weaker prior widens the posterior heterogeneously across states, and
-`CVaR = mean − k·sd` then reorders segments whose widths differ. But the
+CVaR then reorders segments whose lower tails differ. But the
 magnitude should be confirmed against the distribution of `Φ₁_cvar − Φ₂_cvar`
 before it is reported, in case it reflects a scale blow-up rather than a
 reordering.
@@ -4436,8 +4436,9 @@ they need different fixes:
   The reward is over-confident, not mis-ranked; the thing to investigate is
   whatever widened the posterior.
 - **REORDERING** — magnitudes are normal but CVaR ranks pairs differently from
-  the mean, because `CVaR = mean − k·sd` and `sd` varies across states, so
-  segments through wide-posterior regions are penalised more. That is CVaR
+  the mean, because CVaR is a functional of each point's lower tail, and those tails
+  differ across states, so segments through poorly-determined regions are
+  penalised more. That is CVaR
   behaving as defined, on a posterior whose widths are not trustworthy.
 
 It reports median/95th/max `|Δ|` for both logits, the CVaR/mean magnitude ratio,
@@ -4505,13 +4506,25 @@ rest on solid measurements. large_play's 10.02 reproduced at **10.2417**.
 > **Guard added**: an absolute-scale banner when median |Δ_mean| > 6
 > (σ = 0.9975). Fires on large_play (18.70), silent on the other three.
 
+> **CVaR is computed empirically everywhere — verified 2026-08-26.** No
+> Gaussian assumption enters: `--cvar-ce` takes the mean of the `⌊αS⌋` lowest
+> draws per state-action (`diagnose_sampling_tail.py:559`), and the tail
+> diagnostics and training-time metrics use `np.quantile` with the
+> Rockafellar–Uryasev identity `CVaR_α = VaR_α + (1/α)·E[min(X − VaR_α, 0)]`,
+> which is **exact for any distribution**. Earlier prose in this document wrote
+> "CVaR = mean − k·sd" as shorthand; that is the Gaussian special case, it was
+> never what the code did, and it has been corrected throughout. The
+> function-space posterior here is **not** assumed Gaussian, and the reason
+> saturation breaks CVaR is that it leaves each point's lower *tail*
+> unconstrained — a statement about tail shape, not about a standard deviation.
+
 **This is not the nugget's doing.** large_play's pre-nugget CVaR CE was 3.0359
 (§4.3.30) — also unusable. The saturation predates every §4.3.42–44 change, so
 it is a property of large_play's selected configuration, not of the conditioning
 work.
 
 > **What it means for the paper.** A reward model at σ = 0.99999999 has no
-> usable uncertainty: CVaR is `mean − k·sd` and its ordering is decided by
+> usable uncertainty: CVaR is a functional of each point's lower TAIL, decided by
 > per-state `sd` that the saturated fit does not constrain. **large_play cannot
 > support a conservatism claim in this state**, whatever the drift diagnostics
 > say. The other three are at σ = 0.87–0.99 with CVaR CE 0.33–0.65, and only
