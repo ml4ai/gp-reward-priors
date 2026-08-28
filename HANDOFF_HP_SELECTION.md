@@ -4243,6 +4243,69 @@ run tests the decoupling and that tension together.
 > normal practice; what would not be defensible is presenting it as though the
 > selection procedure produced it.
 
+### 4.3.46 Decoupling fails — stop optimising. The four configurations, settled.
+
+`sig_n2` 0.05 + `amp2` 1.69e3 on medium_play:
+
+| | `amp2` | `sig_n2` | `shape_var_frac` | centred `ratio` | centred `scale_z` | mean CE |
+|---|---|---|---|---|---|---|
+| flagship | 16894 | 0.001 | — | **1.0871** / 1.1198 | **0.6469** / 0.6999 | 0.2912 |
+| `nugget` | 16894 | 0.05 | 0.4510 | 1.3260 | 1.4930 | 0.2205 |
+| `decouple` | **1689** | 0.05 | **0.2797** | 1.2090 | 1.0870 | 0.2426 |
+
+Decoupling recovered part of what the nugget cost (`ratio` 1.3260 → 1.2090) but
+**did not reach the flagship**, and 1.2090 vs 1.0871 is 3.7× the replicate
+floor — resolvably worse. `shape_var_frac` fell further, 0.4510 → **0.2797**.
+
+**And that fall is mechanically consistent, which is the useful part.** The
+prior's *weakest*-constrained direction is the offset — `sig_c2·J` carries
+λ_max, so `K⁻¹` penalises it least (§4.3.43). Strengthening the prior uniformly
+therefore shrinks the identified **shape** more than the offset, raising the
+offset's share. Lowering `amp2` does not selectively restore the shape; **no
+single scalar in this kernel moves conditioning and prior strength
+independently of the shape/offset split.**
+
+> **Stopping rule invoked (§4.3.45).** The decoupling did not produce a setting
+> that works on both medium_play and large_play. **Optimisation stops here.**
+> Per-variant sampler settings are accepted and disclosed as tuned on
+> diagnostics, not produced by the pre-registered procedure.
+
+### The four settled configurations
+
+All pass the amended §3.6.3 gate (centred `loc_z` and `scale_z` ≤ 2.0, clamp
+≤ 0.01%, non-degenerate). Common to all: `map_amp2` 16893.98,
+`chain_init_jitter` 1.0, `n_meas` 256, `num_chains` 16, `chains_per_gpu` 4,
+`num_samples` 75, `warmup_use_best` true, seed 0.
+
+| variant | deviation from the common recipe | centred `ratio` | centred `scale_z` | mean CE |
+|---|---|---|---|---|
+| medium_play | — | 1.0871 (repl. 1.1198) | 0.6469 (repl. 0.6999) | 0.2912 |
+| large_diverse | — | 1.1278 | 0.8091 | — |
+| medium_diverse | `num_burn_in_steps` 100000 | 0.9087 | 1.7976 | 0.3502 |
+| large_play | `map_sig_n2` 0.05 | 0.9231 | 1.0870 | 0.2130 |
+
+**Two per-variant deviations, both with a measured justification**: §4.3.36's
+warm-up-NLL rule explains medium_diverse's burn-in (its NLL was still falling at
+20k), and §4.3.44's conditioning result explains large_play's nugget. Neither is
+a free parameter chosen to make a number look better.
+
+### What is owed before this is usable
+
+1. **CVaR CE on all four finals.** It is the selection objective (§4.3.22–23)
+   and it exists only for medium_play's flagship. `--cvar-ce` on the saved
+   chains; no new sampling.
+2. **Replicates.** Only medium_play's flagship is replicated (§4.3.35). The
+   other three finals are single runs, and §4.3.35 made replication standing
+   practice — `--sampling_seed 100`.
+3. **§7.1 disclosure.** That the sampler settings were tuned on stationarity
+   diagnostics across ~25 runs, that two variants carry per-variant deviations,
+   and that this tuning is **not** what the pre-registered §3.6.3 procedure
+   selected. Per-problem MCMC tuning is standard; presenting it as an outcome of
+   the selection procedure would not be.
+
+Then §10.2 step 3, the sweep redesign, which was blocked on the sampler and no
+longer is.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -5029,7 +5092,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **all four pass (§4.3.44), but under four different configurations.** Uniform `sig_n2` is refuted (§4.3.45): it improves large_play on every axis and *worsens* medium_play's stationarity, because it does two things — better conditioning **and** a uniformly weaker prior. One decoupling run left (`sig_n2` 0.05 + `amp2` 1.69e3); **if it fails, stop optimising** and move to replication + the sweep redesign |
+| 3b | BNN | **SETTLED (§4.3.46).** All four variants pass the amended gate; decoupling failed, so optimisation stopped per §4.3.45's rule. Common recipe (`map_amp2` 16894, jitter 1.0, `n_meas` 256, 16 chains, `warmup_use_best`) with two justified per-variant deviations: medium_diverse burn-in 100k (§4.3.36), large_play `sig_n2` 0.05 (§4.3.44). **Owed: CVaR CE on all four, replicates, and the §7.1 tuning disclosure** — then the sweep redesign |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -5166,9 +5229,12 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    CE against 3.0359** — §4.3.30 showed large_play passing both gates with a
    worse-than-chance CVaR reward, so the gate alone cannot clear it.
 
-2. **Replicate the unreplicated load-bearing runs** with `sampling_seed`
-   (§4.3.35's standing practice): large_diverse `recipe` and medium_diverse
-   `burn100k` are each a single run. This also settles §4.3.28's CVaR CE gain,
+2. **Close out the four settled configurations (§4.3.46).** CVaR CE on all
+   four (it is the selection objective and exists only for medium_play's
+   flagship — `--cvar-ce` on saved chains, no new sampling); replicates via
+   `--sampling_seed 100` for the three unreplicated finals; and the §7.1
+   disclosure that these settings were tuned on diagnostics rather than
+   produced by the pre-registered procedure. This also settles §4.3.28's CVaR CE gain,
    currently unconfirmed at 1.12× its 2·SE, and §4.3.27's jitter-alone effect at
    3.0× the floor.
 
