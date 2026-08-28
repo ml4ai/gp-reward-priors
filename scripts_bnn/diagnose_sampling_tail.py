@@ -623,6 +623,20 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     if wrong.any():
         print(f"  wrong-signed CVaR pairs: {wrong.mean() * 100:.1f}%, "
               f"median |d| there {np.median(np.abs(d_cvar[wrong])):.4f}")
+    # ABSOLUTE scale, checked before the ratio.  Section 4.3.50: on large_play
+    # both logits are saturated (median |d| 31 for CVaR, 18.7 for the mean), so
+    # the RATIO reads a harmless 1.66x while every prediction is pinned at 0 or
+    # 1.  A ratio is blind to a scale problem the two logits share, and mean CE
+    # hides it too -- it looks good precisely because it is confidently RIGHT.
+    # A calibrated preference logit is O(1-5); sigma(6) = 0.9975 already.
+    _dm = float(np.median(np.abs(d_mean)))
+    if _dm > 6.0:
+        print(f"  !! SATURATED: the MEAN logit has median |d| {_dm:.2f} "
+              f"(sigma = {1.0 / (1.0 + math.exp(-min(_dm, 700))):.8f}).")
+        print("     The model is maximally confident on essentially every pair,")
+        print("     so ANY reordering by CVaR is catastrophically penalised and")
+        print("     mean CE looks good only by being confidently right.  Fix the")
+        print("     reward scale before reading the classification below.")
     if _sc > 3.0 and flip < 0.2:
         print("  -> SCALE blow-up: the CVaR logit is inflated but ordered like")
         print("     the mean.  The reward is over-confident, not mis-ranked;")

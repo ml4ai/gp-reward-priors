@@ -4473,6 +4473,60 @@ it classifies as SCALE**, the fault is whatever inflated the posterior and the
 CVaR estimator is fine. Those lead to different work, which is why the check
 was worth building before acting on the number.
 
+### 4.3.50 large_play's reward model is saturated — and CVaR CE is reproducible
+
+| run | CVaR CE | CVaR acc | median \|Δ\| CVaR | median \|Δ\| mean | σ(\|Δ\|mean) | flip |
+|---|---|---|---|---|---|---|
+| **large_play** `nowub` | **10.2417** | **0.5556** | **31.04** | **18.70** | **0.99999999** | 38.9% |
+| large_diverse s100 | 0.3320 | 0.8455 | 1.70 | 1.91 | 0.8708 | 7.3% |
+| medium_diverse s100 | 0.6477 | 0.8224 | 3.03 | 5.13 | 0.9941 | 14.0% |
+| medium_play s100 | 0.3337 | 0.8312 | 2.08 | 1.97 | 0.8772 | 10.4% |
+
+**CVaR CE is reproducible.** Across all three replicates the gaps are 0.0689,
+0.0097 and 0.0182 against combined 2·SE of 0.12–0.26 — every one reproduces.
+That answers §4.3.48's open question: unlike `cvar_ess`, which varies 1.9×
+between replicates, **the objective itself is stable**, so §4.3.47's verdicts
+rest on solid measurements. large_play's 10.02 reproduced at **10.2417**.
+
+> **The real anomaly is the reward scale, and my classifier hid it.**
+> large_play's *mean* logit has median |Δ| = **18.70**, i.e. σ = 0.99999999 —
+> **the model is maximally confident on essentially every pair.** The other
+> three sit at 1.9–5.1. Mean CE 0.2017 looks good only because it is
+> confidently *right* 90.7% of the time; CVaR reorders 44.4% of pairs and is
+> then confidently *wrong*, with median |Δ| = 45 on exactly those, which
+> integrates to CE ≈ 10.
+>
+> **The CVaR/mean ratio reads a harmless 1.66× because BOTH logits are
+> saturated.** A ratio cannot see a scale problem the two share, and mean CE
+> cannot either. §4.3.49's classifier called this REORDERING, which is true and
+> incomplete: the reordering is only catastrophic *because* the scale is
+> saturated. Both are needed, exactly as flagged when the check was built.
+>
+> **Guard added**: an absolute-scale banner when median |Δ_mean| > 6
+> (σ = 0.9975). Fires on large_play (18.70), silent on the other three.
+
+**This is not the nugget's doing.** large_play's pre-nugget CVaR CE was 3.0359
+(§4.3.30) — also unusable. The saturation predates every §4.3.42–44 change, so
+it is a property of large_play's selected configuration, not of the conditioning
+work.
+
+> **What it means for the paper.** A reward model at σ = 0.99999999 has no
+> usable uncertainty: CVaR is `mean − k·sd` and its ordering is decided by
+> per-state `sd` that the saturated fit does not constrain. **large_play cannot
+> support a conservatism claim in this state**, whatever the drift diagnostics
+> say. The other three are at σ = 0.87–0.99 with CVaR CE 0.33–0.65, and only
+> medium_play and large_diverse are comfortably usable.
+
+**Next, and it is a different question from anything in §4.3.28–46.** The
+saturation is a *scale* pathology in `f`, and the two levers that set reward
+scale are `map_amp2` (prior amplitude) and the `bt_pool="mean"` convention that
+divides the BT logit by T=100 (§3.6.2). Neither has been examined for
+large_play specifically, and §4.3.23's amplitude curve was measured on
+medium_play only — whose logits are *not* saturated, so that curve may not
+transfer. **Measure large_play's own CVaR CE amplitude curve before changing
+anything**: it is four `--cvar-ce` runs on chains that already exist for
+`map_amp2` 1.69e5/1.69e4, plus two new runs at 1.69e3/1.69e2.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -5322,7 +5376,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **two of four usable (§4.3.47).** All four pass the §3.6.3 gate but CVaR CE — the objective — is 0.2648 / 0.3417 (usable) against 0.6659 (medium_diverse, at `log 2`) and **10.0166** (large_play). Replicates all hold (§4.3.48) and `warmup_use_best` is confirmed droppable. Next: the §4.3.49 logit sanity check on large_play, which decides whether that 10.02 is a scale blow-up or a reordering |
+| 3b | BNN | **two of four usable; large_play's reward model is SATURATED (§4.3.50).** Its mean logit has median |Δ| = 18.70 (σ = 0.99999999), so CVaR reorders 44% of pairs and is confidently wrong — CVaR CE 10.24, reproduced. The other three sit at 1.9–5.1. CVaR CE itself is reproducible across replicates. Next: large_play's own amplitude curve, since §4.3.23's was medium_play-only |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
