@@ -4169,6 +4169,80 @@ worse conditioning than `n_meas` 35. If a larger nugget removes the conditioning
 penalty, `n_meas` could come back down toward the cell count with no loss —
 which would collapse a third knob.
 
+### 4.3.45 Uniform `sig_n2` is refuted — it does two things, not one
+
+`map_sig_n2` 0.05 on medium_play, against its flagship:
+
+| metric | `jit10n256` | `nugget` | |
+|---|---|---|---|
+| centred `ratio` | 1.0871 | **1.3260** | **worse**, 7× the floor |
+| centred `scale_z` | 0.6469 | 1.4930 | worse |
+| `shape_var_frac` | — | **0.4510** | vs large_play's 0.9015 |
+| mean CE | 0.2912 | **0.2205** | better |
+| accuracy | 0.8799 | **0.9115** | better |
+| `cvar_ess` | 25.19 | 47.36 | better |
+
+**Opposite to large_play, where it improved every axis.** Uniform adoption is
+refuted; `sig_n2` 0.05 is not a global setting.
+
+**And conditioning cannot explain the difference.** The two mazes are
+structurally near-identical:
+
+| maze | free cells | `n_meas` 256 → cells | pts/cell | cond(K) | at nugget |
+|---|---|---|---|---|---|
+| medium | 26 | 21 | 12.2 | **2.69e5** | 235 |
+| large | 33 | 26 | 9.8 | **2.69e5** | 230 |
+
+Same condition number to three figures. A conditioning-only account predicts the
+same response and we measured opposite ones.
+
+> **The resolution: `sig_n2` changes two things at once.** Raising it adds
+> `0.049·I` to `K`, which (a) lifts λ_min 50× — better conditioning — and (b)
+> shrinks `K⁻¹` in *every* direction, i.e. **uniformly weakens the prior**.
+> Effect (b) is the same trade §4.3.16 measured on `map_amp2`: a weaker prior
+> gives worse stationarity and better CE. **medium_play's response is exactly
+> that trade** (`ratio` 1.0871 → 1.3260, CE 0.2912 → 0.2205), with
+> `shape_var_frac` 0.4510 confirming the mechanism — more than half of `f`'s
+> variance has moved into the offset, which is what a weaker prior permits.
+>
+> On large_play, conditioning dominated; on medium_play, prior strength does.
+> **This is mechanistic rather than another four-point ordering** — the two
+> effects are separable in the algebra, and each has an independent precedent
+> (§4.3.42–44 for conditioning, §4.3.16 for prior strength).
+
+**Which suggests decoupling them, and the levers are already characterised.**
+`amp2` multiplies the entire matrix including the nugget, so it changes prior
+strength **without touching conditioning** (§4.3.42). So:
+
+    sig_n2 ↑  (better conditioning, weaker prior)
+    amp2   ↓  (stronger prior, conditioning unchanged)
+
+gives better conditioning at constant prior strength — the thing neither knob
+delivers alone.
+
+```
+cd scripts_bnn && CUDA_VISIBLE_DEVICES=0,1,2,3 nohup python run_bnn_training_antmaze_eval.py \
+    --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+    --seed 0 --num_chains 16 --chains_per_gpu 4 --map_amp2 1689.3982289052463 \
+    --chain_init_jitter 1.0 --n_meas 256 --warmup_use_best True --map_sig_n2 0.05 \
+    --OUT_DIR ./exp/stage3_medium_play_decouple > ../exp/stage3_medium_play_decouple.log 2>&1 &
+```
+
+`map_amp2` 1.69e3 is not arbitrary — §4.3.23 measured it as the **CVaR CE
+optimum** on this variant, one decade below the derived value, and §4.3.23's
+open tension was whether a sampler fix would move that optimum back up. This
+run tests the decoupling and that tension together.
+
+> **Stopping rule, and I would hold to it.** All four variants already pass the
+> amended gate (§4.3.44). This is a run to *collapse knobs*, not to reach a
+> passing configuration. **If it does not produce a setting that works on both
+> medium_play and large_play, stop optimising**: accept per-variant sampler
+> settings, record them as tuned-on-diagnostics rather than selected by the
+> pre-registered procedure, and move to §10.2 step 2 (replicate the four final
+> configurations) and step 3 (the sweep redesign). Per-problem MCMC tuning is
+> normal practice; what would not be defensible is presenting it as though the
+> selection procedure produced it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -4955,7 +5029,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | PT | 4/4 fired; winners in `scripts_pt/antmaze_<v>_pt_antmaze_eval.yaml` |
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
-| 3b | BNN | **ALL FOUR VARIANTS PASS the amended gate (§4.3.44).** `map_sig_n2` 0.001 → 0.05 fixed large_play on every axis (centred `ratio` 0.8578 → 0.9231, CE 0.2545 → 0.2130). Conditioning confirmed at λ_min — `sig_c2` (λ_max, 1 direction) did nothing, `sig_n2` (λ_min, 231 directions) worked. **But the four pass under four different configurations**; next is `sig_n2` 0.05 on medium_play to test uniform adoption |
+| 3b | BNN | **all four pass (§4.3.44), but under four different configurations.** Uniform `sig_n2` is refuted (§4.3.45): it improves large_play on every axis and *worsens* medium_play's stationarity, because it does two things — better conditioning **and** a uniformly weaker prior. One decoupling run left (`sig_n2` 0.05 + `amp2` 1.69e3); **if it fails, stop optimising** and move to replication + the sweep redesign |
 | 4 | all | not started |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
