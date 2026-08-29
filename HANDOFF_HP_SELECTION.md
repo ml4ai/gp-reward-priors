@@ -4723,14 +4723,30 @@ pooled (−0.007 to −0.041), the expected finite-sample penalty of 75 draws
 against 1200. large_play shows **no deficit at all**, because its ordering is
 already saturated at what a single chain can tell you.
 
-> ⚠️ **This refutes the working hypothesis that has driven §4.3.28–46 and
-> §10.2.** large_play's width is not chain scatter, not non-convergence, and
-> not something a better sampler will remove. Combined with §4.3.51
-> (amplitude-invariant across 2.5 decades) and §4.3.52 (no α rescues it), the
-> posterior is genuinely, per-chain, this wide relative to its signal.
-> **Fixing the sampler will not give large_play usable CVaR.** The sampler's
-> other documented problems (the §4.2 gate FAIL at `map_amp2` 1.69e5, the
-> §4.3.28 cyclical-schedule caveat) are real but are not upstream of this.
+> **This narrows the sampler hypothesis but does not kill it.** large_play's
+> width is not chain scatter and not non-convergence in the
+> chains-disagree sense. Combined with §4.3.51 (amplitude-invariant across 2.5
+> decades) and §4.3.52 (no α rescues it), the width is a within-chain property.
+>
+> ⚠️ **Correction, 2026-08-29 — this section first claimed more than that.** It
+> read the within-chain verdict as "the posterior is genuinely this wide" and
+> concluded "fixing the sampler will not give large_play usable CVaR." **That
+> does not follow.** The per-chain test separates *between-chain scatter* from
+> *within-chain width*; it does **not** separate a genuinely wide posterior
+> from **a uniformly mis-tempered sampler that inflates every chain
+> identically**. An unsubtracted gradient-noise term — precisely the `−ε⁴`
+> correction §4.3.21 found numerically inert — would over-disperse all 16
+> chains equally and produce exactly the per-chain ≈ pooled signature reported
+> here. Amplitude-invariance does not rescue the stronger reading either: fixed
+> excess heat should worsen the ratio as `map_amp2` shrinks, but the observed
+> ratios ascending the ladder are 2.79 / 4.26 / 3.92 / 3.10, with no monotone
+> signature in either direction. **Inconclusive.** The two live hypotheses are
+> now (a) genuine coverage-driven width and (b) a uniformly over-heated
+> sampler, and §4.3.56 gives the test that separates them.
+>
+> The sampler's other documented problems (the §4.2 gate FAIL at `map_amp2`
+> 1.69e5, the §4.3.28 cyclical-schedule caveat) are real but are not upstream
+> of this.
 
 `map_amp2` cannot move the width/signal ratio, and §4.3.51 confirms it
 empirically: dropping it 1000× scaled signal and width *proportionally*, ratio
@@ -4847,12 +4863,80 @@ coverage mechanism of §4.3.53 was right*; if it does not, large_play is
 coverage-limited and must be disclosed as such. Neither outcome licenses
 tuning η further.
 
+**The derived amplitude moves — by 21%, which settles nothing.** The §4.3.16
+derivation is untouched by η: its premises are T=100, mean pooling, and
+sd ∝ √`map_amp2`, none of which η touches. But the step "sd = √`map_amp2`"
+tacitly assumes a unit-variance prior, and the true marginal variance is
+`sig_c2 + sig_g2·diag(K_geo) + sig_n2`:
+
+| maze | η | multiplier | derived `map_amp2` = T²/multiplier |
+|---|---|---|---|
+| large | 1.0 | 1.5126 | 6611 |
+| large | **4.0** | **1.2464** | **8023** |
+| medium | 1.0 | 1.5092 | 6626 |
+| medium | **4.0** | **1.2480** | **8013** |
+
+> **Arithmetic correction to §4.3.16.** That section gives the derived amplitude
+> as "~100² = 1e4", dropping the multiplier entirely. Carrying it through, the
+> η=1.0 derived value was **6.6e3**, not 1e4 — an overstatement of 1.51× in
+> variance, 1.23× in sd. It never mattered, because §4.3.17's ladder is spaced
+> in decades, but the corrected figure is what the sweep redesign should fix on.
+
+Both corrections are small against what actually matters: §4.3.23's unresolved
+tension is a **full decade** (derived ~1.69e4 vs CVaR-optimal 1.69e3 on
+medium_play). A 21% shift is noise against 10×, so **this neither resolves nor
+moves that tension**, and §4.3.23's instruction not to fix `map_amp2` at either
+value until it is settled remains in force.
+
+> **The η re-runs deliberately carry the SWEPT `map_amp2`, not the derived
+> one** (large_play 9.259e5 ≈ 115× the derived 8023). A controlled test of η
+> must hold everything else fixed; moving amplitude at the same time would
+> confound the comparison. These runs therefore do **not** stand at the
+> principled amplitude, and the derived-amplitude run is still owed.
+
 **Prediction, recorded before the runs so it cannot be fitted afterwards.** A
 longer correlation length helps only where there is signal within 2–4 cells to
 borrow. large_play's deficit is thin coverage across a 33-cell maze of diameter
 14, so η=4 should *reduce* its ratio (3.92) but is unlikely to reach the 0.27–
 0.71 of the other three. The three usable variants should move little — their
 ratios are already below 1 and their posteriors are not prior-dominated.
+
+### 4.3.56 The test that separates a wide posterior from an over-heated sampler
+
+§4.3.53's corrected verdict leaves two live hypotheses for large_play's width:
+
+- **(a) genuine** — coverage-driven posterior width, the conservatism the
+  method exists to express;
+- **(b) over-heated** — a uniformly mis-tempered sampler inflating every chain
+  identically, via the unsubtracted gradient-noise term `B̂` that §4.3.21 found
+  the `−ε⁴` correction does not actually remove.
+
+They are distinguishable, because **the excess heat in (b) scales with the
+gradient noise and the genuine width in (a) does not.**
+
+**Primary test — a batch-size ladder.** `B̂ ∝ 1/batch_size`, so raising
+`batch_size` attacks the excess directly while barely touching the integrator's
+step or the mixing rate. Current value is 64 (§3.3, deliberately not swept —
+this is a *diagnostic*, reported not selected). Run 64 → 256 → 1024 and read
+the `ratio width / preference` line:
+
+- ratio **falls** with batch size → the width is sampler heat, hypothesis (b),
+  and the §10.2 sampler work is the right target after all;
+- ratio **flat** → the width is genuine, hypothesis (a), and large_play is
+  coverage-limited and must be disclosed as such.
+
+**Secondary confirmation — an ε ladder.** The excess also scales with step
+size, so halving `sghmc_lr` should move the ratio under (b) and not under (a).
+Weaker than the batch ladder because lowering ε slows mixing, so ESS falls at
+fixed draw count and within-chain width can be *under*-estimated for reasons
+unrelated to either hypothesis — the same confound that muddied §4.3.51's
+amplitude ladder, where rhat_bulk degraded 1.09 → 1.92 as amplitude fell. Read
+it only alongside the ESS/R-hat columns, and only as corroboration.
+
+**Ordering.** This test is independent of η and does not need the §4.3.55
+re-runs to finish. It should be run at whatever η is current, on large_play
+first, since that is the variant where the two hypotheses predict most
+differently.
 
 ### 4.4 Procedure
 
