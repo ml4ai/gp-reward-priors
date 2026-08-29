@@ -4702,6 +4702,104 @@ two sources that demand opposite responses:
 to the pool. Reports at α and at 0.5, since 75 draws leave only k=3 at
 α = 0.05; the k<10 guard says which block to read.
 
+### 4.3.53 The width is WITHIN-chain — the sampler is not large_play's defect
+
+At α = 0.5 (k = 37 draws per chain, 600 pooled):
+
+| variant | per-chain acc median | [min, max] | pooled acc | deficit | per-chain CE | pooled CE |
+|---|---|---|---|---|---|---|
+| medium_play | 0.8636 | [0.805, 0.909] | 0.8701 | −0.007 | 0.3069 | 0.2852 |
+| large_diverse | 0.8409 | [0.791, 0.891] | 0.8818 | −0.041 | 0.3353 | 0.3176 |
+| medium_diverse | 0.8411 | [0.813, 0.869] | 0.8598 | −0.019 | 0.4578 | 0.4015 |
+| **large_play** | **0.6667** | **[0.630, 0.704]** | **0.6667** | **0.000** | **4.4928** | **4.5418** |
+
+**Every one of large_play's 16 chains is equally broken on its own.** Per-chain
+CE 4.4928 against pooled 4.5418 — agreement to 1%. The across-chain range
+[0.630, 0.704] rules out one bad chain dragging a median. Pooling 16 chains
+contributes essentially nothing to the width.
+
+The three controls validate the instrument: per-chain sits slightly *below*
+pooled (−0.007 to −0.041), the expected finite-sample penalty of 75 draws
+against 1200. large_play shows **no deficit at all**, because its ordering is
+already saturated at what a single chain can tell you.
+
+> ⚠️ **This refutes the working hypothesis that has driven §4.3.28–46 and
+> §10.2.** large_play's width is not chain scatter, not non-convergence, and
+> not something a better sampler will remove. Combined with §4.3.51
+> (amplitude-invariant across 2.5 decades) and §4.3.52 (no α rescues it), the
+> posterior is genuinely, per-chain, this wide relative to its signal.
+> **Fixing the sampler will not give large_play usable CVaR.** The sampler's
+> other documented problems (the §4.2 gate FAIL at `map_amp2` 1.69e5, the
+> §4.3.28 cyclical-schedule caveat) are real but are not upstream of this.
+
+`map_amp2` cannot move the width/signal ratio, and §4.3.51 confirms it
+empirically: dropping it 1000× scaled signal and width *proportionally*, ratio
+fixed at 2.8–4.3. `map_amp2` multiplies the entire Gram matrix, so it is
+scale-free with respect to a ratio by construction. The ratio is set by how
+tightly the likelihood pins `f` **relative to** the prior, per state — i.e. by
+coverage.
+
+The variant pattern says the same: same maze, ratio 0.34 (large_diverse) vs
+3.92 (large_play), so it is not maze size; same data type, 0.27 (medium_play)
+vs 3.92, so it is not "play". It is large-maze-plus-play jointly — 33 free
+cells with trajectories concentrated in a few corridors.
+
+**All four configs are identical on kernel shape** (`sig_c2` 1.0, `sig_g2` 1.0,
+`sig_n2` 0.001 → 0.05 in runs, `map_eta` 1.0); only `map_amp2` differs. So the
+ratio gap is entirely data-driven, not a configuration difference we
+introduced. `sig_g2` is also the wrong knob: at 1 : 0.05 the geodesic term
+already carries 95% of the non-offset variance.
+
+### 4.3.54 The prior's correlation length is ~1 cell, not the documented 2–4
+
+Computed from the maze layout alone — **no data, no downstream metric**, so
+this is the prior-side diagnostic §3.3 explicitly sanctions, not tuning.
+
+Median heat-kernel correlation by graph distance:
+
+| η | 1 hop | 2 hops | 3 hops | r<0.5 at | r<0.1 at |
+|---|---|---|---|---|---|
+| **1.0** (current) | **0.44** | **0.088** | **0.010** | **1 hop** | **2 hops** |
+| 2.0 | 0.70 | 0.25 | 0.06 | 2 | 3 |
+| 4.0 | 0.87 | 0.49 | 0.20 | 2 | 4 |
+| 8.0 | 0.94 | 0.69 | 0.43 | 3 | 6 |
+
+(medium, 26 cells, diameter 11; large, 33 cells, diameter 14 — profiles agree
+to within 0.003 at every hop.)
+
+**The config comment is wrong.** `map_eta: 1.0 # correlation length ~2-4
+cells` actually delivers ~**1** cell. Reaching the documented intent needs
+η ≈ 4–8.
+
+**It is not the large_play differentiator** — both mazes are identical here, so
+prior geometry cannot explain large_play vs large_diverse. But it is a
+**co-factor**: at a 1-hop correlation length, any cell ≥2 hops from data is
+effectively prior-only, which makes the posterior maximally sensitive to
+coverage gaps. That is the mechanism by which a coverage deficit becomes a
+width blow-up.
+
+**Conditioning cost of raising η is bounded and saturates:**
+
+| η | large λ_min | large cond | | η | large λ_min | large cond |
+|---|---|---|---|---|---|---|
+| 1.0 | 0.1857 | 183 | | 4.0 | 0.0504 | 676 |
+| 2.0 | 0.0686 | 496 | | 8.0 | 0.0500 | 681 |
+
+λ_max never moves (the rank-1 constant term dominates it). λ_min falls to the
+`sig_n2` floor and pins there at η≈4, so **cond saturates at the
+`n·sig_c2/sig_n2` bound the §4.3.42–44 nugget work was designed to hold** —
+676 against a bound of 660, and nothing further is lost past η=4.
+
+> **The methodological line, stated explicitly.** Tuning `map_eta` on CVaR CE
+> or any downstream signal remains forbidden (§3.3, §9) — it would smuggle the
+> inferential target into the prior and void the prior's status as a design
+> choice. **Correcting `map_eta` so that it delivers its own documented
+> correlation length is a different act**: the target (2–4 cells) was fixed
+> from the maze layout before any of this, and η=4 is read off the layout and
+> the conditioning bound, never off a metric. If η is changed on those grounds,
+> its effect on CVaR must be **reported, not selected on**, and all four
+> variants must move together.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -5531,7 +5629,11 @@ slot is wasted. Ground truth from the box is `wandb sync --sync-all --dry-run`.
 - Do not stop a sweep before its rule fires; do not read a winner from a sweep
   that has not fired.
 - Do not select on accuracy anywhere in stages 1–3.
-- Do not tune `map_eta` or `map_sig_*` on anything downstream.
+- Do not tune `map_eta` or `map_sig_*` on anything downstream. **This still
+  holds after §4.3.54.** That section corrects `map_eta` against its own
+  documented correlation length, read off the maze layout and the conditioning
+  bound — never off a metric. Reporting the effect on CVaR is required;
+  *selecting* on it is not permitted, and all four variants must move together.
 - Do not judge stage 3 by `param_*` or bulk predictive diagnostics.
 - Do not compare post-`bt_pool="mean"` reward magnitudes or CVaR values to
   pre-fix runs; only the scale-free convergence diagnostics carry over.
