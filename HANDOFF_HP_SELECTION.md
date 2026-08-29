@@ -4635,7 +4635,72 @@ it is a re-reduction of draws already on disk. If large_play's accuracy climbs
 back toward 0.907 as α relaxes, α = 0.05 is simply too aggressive for its width
 and **the sampler is not the defect**; if accuracy stays near 0.55 even at
 α = 0.5, the tail is genuinely broken and §10.2's sampler work is the right
-target. Until that is known, do not select on CVaR CE at α = 0.05.
+target. Until that is known, do not select on CVaR CE at α = 0.05. *(Measured
+in §4.3.52 — neither branch holds cleanly.)*
+
+### 4.3.52 The α sweep: no α rescues large_play, and the width/signal ratio separates all four
+
+CVaR accuracy against α, on existing chains (16 × 75 draws, seed 0):
+
+| α | k_tail | medium_play | large_diverse | medium_diverse | **large_play** `nowub` |
+|---|---|---|---|---|---|
+| 1.000 | 1200 | 0.9091 | 0.9000 | 0.8505 | **0.9074** |
+| 0.500 | 600 | 0.8701 | 0.8818 | 0.8598 | **0.6667** |
+| 0.250 | 300 | 0.8701 | 0.8727 | 0.8598 | **0.6111** |
+| 0.100 | 120 | 0.8701 | 0.8455 | 0.8692 | **0.5556** |
+| 0.050 | 60 | 0.8701 | 0.8182 | 0.8598 | **0.5556** |
+
+**Tail sparsity is ruled out.** large_play has already surrendered two thirds of
+its distance to chance at α = 0.5, which pools **600 of 1200 draws** — an order
+of magnitude past any sparsity concern. More draws will not fix this. The same
+shape holds at every amplitude (α = 0.5 accuracy 0.759 / 0.704 / 0.685 / 0.667
+ascending the §4.3.51 ladder), confirming amplitude-invariance quantitatively.
+
+**But neither branch of §4.3.51's test holds cleanly.** Recovery is smooth and
+monotone in α and complete only at α = 1 *exactly* — the single point where the
+depth term vanishes identically. So it is not "too aggressive an α" (no α buys
+usable CVaR) and not "a flat broken tail" (0.667 at α = 0.5 is well above
+chance). The honest statement is that large_play's depth term is large at every
+α, and α only scales it.
+
+**The width/signal ratio is the discriminator, and it separates the four:**
+
+| variant | sd(d_mean) | sd(depth diff) | **ratio** | corr | acc at α=0.05 | Δacc over α |
+|---|---|---|---|---|---|---|
+| medium_play | 2.58 | 0.69 | **0.27** | −0.26 | 0.870 | flat |
+| large_diverse | 2.07 | 0.71 | **0.34** | +0.37 | 0.818 | −0.08 |
+| medium_diverse | 6.23 | 4.41 | **0.71** | +0.41 | 0.860 | flat |
+| large_play `nowub` | 21.2 | 83.2 | **3.92** | +0.25 | 0.556 | **−0.35** |
+| large_play 1.69e5 | 59.9 | 185.8 | 3.10 | +0.23 | 0.556 | −0.33 |
+| large_play 1.69e3 | 7.91 | 33.7 | 4.26 | +0.27 | 0.537 | −0.39 |
+| large_play 1.69e2 | 3.50 | 9.76 | 2.79 | +0.25 | 0.556 | −0.37 |
+
+The break sits at ratio ≈ 1, and large_play holds 2.8–4.3 across two and a half
+decades of amplitude with no trend. **`corr` is small everywhere** (−0.26 to
++0.41): the width term is close to orthogonal to preference in *every* variant.
+It is label-noise regardless of dataset; the variants differ only in how loud it
+is relative to signal.
+
+> **Correction to §4.3.47/50 on medium_diverse.** Its CE climbs 0.355 → 0.666
+> across the sweep while accuracy *holds* at 0.85–0.87 and wrong% actually
+> falls. Its CVaR failure is **pure calibration** — overconfidence on a fixed
+> minority — not misordering. It is in materially better shape than its CE
+> alone suggested, and it does not belong in the same category as large_play.
+
+**What the sweep cannot answer**, and the test that can. A large depth term has
+two sources that demand opposite responses:
+
+- **WITHIN-chain** — each chain already spans this much `f`. The posterior
+  genuinely is that wide (poor coverage in the large maze under play data), and
+  CVaR is expressing the conservatism the method exists for. Not a sampler bug.
+- **BETWEEN-chain** — each chain is individually tight but they disagree, so
+  pooling *manufactures* the spread. That is non-convergence — and both R-hats
+  can miss it, since `rhat_bulk` reads the bulk and the CVaR R-hat reads the
+  tail's *location*, neither being the pooled spread that sets the depth.
+
+`--cvar-ce-per-chain` runs the entire reduction inside each chain and compares
+to the pool. Reports at α and at 0.5, since 75 draws leave only k=3 at
+α = 0.05; the k<10 guard says which block to read.
 
 ### 4.4 Procedure
 

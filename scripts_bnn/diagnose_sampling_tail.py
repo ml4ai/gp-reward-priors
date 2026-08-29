@@ -468,7 +468,7 @@ def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
 
 
 def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
-            bt_pool="mean", alpha=0.05, alpha_sweep=None,
+            bt_pool="mean", alpha=0.05, alpha_sweep=None, per_chain=False,
             max_pairs=None, max_draws=None,
             chunk_pairs=64):
     """Validation CE computed from the CVaR reward -- a selection objective.
@@ -712,6 +712,58 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
                   f"{np.median(np.abs(d_a)):>9.4f}{fl:>8.1f}{wr:>8.1f}")
         print(f"  reference: plug-in sigma(E[f]) CE {plug_ce:.4f} "
               f"acc {plug_acc:.4f}  (the alpha=1 limit)")
+
+    # ---- Within-chain vs pooled: is the width REAL or CHAIN SCATTER? -----
+    # Section 4.3.52.  The decomposition above says the depth term dominates on
+    # large_play, but not WHERE that width comes from.  Two sources produce an
+    # identical depth term and call for opposite responses:
+    #   * WITHIN  -- each chain already spans this much f.  The posterior really
+    #                is that wide (poor coverage), and CVaR is expressing the
+    #                conservatism it is meant to express.  Not a sampler bug.
+    #   * BETWEEN -- each chain is individually tight but they disagree, so
+    #                pooling manufactures the spread.  That is non-convergence,
+    #                and R-hat can miss it: rhat_bulk reads the BULK, and the
+    #                CVaR R-hat reads the tail's LOCATION, neither of which is
+    #                the pooled spread that sets the depth.
+    # Running the whole reduction inside one chain separates them directly.  Use
+    # an alpha with enough draws per chain to be meaningful -- at 75 draws,
+    # alpha=0.05 leaves k=3, so this reports at alpha and at 0.5.
+    if per_chain and C > 1:
+        print("\n  --- WITHIN-CHAIN vs POOLED (section 4.3.52) ---")
+        print("  Each row runs the ENTIRE CVaR reduction inside one chain.")
+        print("  If single chains order pairs well and pooling them does not,")
+        print("  the width is chain SCATTER (non-convergence).  If single")
+        print("  chains are equally broken, the width is WITHIN-chain and the")
+        print("  posterior genuinely is this wide.")
+        for a in sorted({alpha, 0.5}, reverse=True):
+            rows = [_cvar_over([c], a) for c in range(C)]
+            accs = np.array([r[1] for r in rows])
+            ces = np.array([r[0] for r in rows])
+            kper = rows[0][3]
+            pce, pacc, _, pk, _ = _from_sorted(srt1, srt2, a)
+            print(f"\n  alpha={a:g}   ({kper} draws in tail per chain, "
+                  f"{pk} pooled)")
+            print(f"    {'per-chain acc  median':<32}{np.median(accs):>10.4f}"
+                  f"   (min {accs.min():.4f}, max {accs.max():.4f})")
+            print(f"    {'per-chain CE   median':<32}{np.median(ces):>10.4f}"
+                  f"   (min {ces.min():.4f}, max {ces.max():.4f})")
+            print(f"    {'POOLED acc':<32}{pacc:>10.4f}")
+            print(f"    {'POOLED CE':<32}{pce:>10.4f}")
+            if kper < 10:
+                print(f"    !! only {kper} draws per chain here -- read the "
+                      f"alpha=0.5 block instead")
+            elif np.median(accs) - pacc > 0.05:
+                print("    -> BETWEEN-chain: single chains order pairs better")
+                print("       than the pool.  Pooling manufactures the width;")
+                print("       this is non-convergence, not conservatism.")
+            elif pacc - np.median(accs) > 0.05:
+                print("    -> single chains are WORSE than the pool, i.e. each")
+                print("       chain is individually under-dispersed and pooling")
+                print("       is doing the averaging.  Expected when chains are")
+                print("       fine but short.")
+            else:
+                print("    -> WITHIN-chain: single chains are no better than")
+                print("       the pool, so the width is not chain scatter.")
 
     print(f"\n  jackknife-over-chains SE on the CVaR CE: {se:.4f}")
     print(f"  tail depth: {k_tail} of {S_tot} draws at alpha={alpha}")
@@ -1435,6 +1487,14 @@ def main():
                          "(stays broken as alpha relaxes) from a merely wide "
                          "posterior (recovers smoothly to the plug-in row, "
                          "which alpha=1 reproduces exactly). Section 4.3.51.")
+    ap.add_argument("--cvar-ce-per-chain", action="store_true",
+                    help="Also run the whole CVaR reduction inside each chain "
+                         "separately. Separates a posterior that is genuinely "
+                         "wide (single chains equally broken) from one whose "
+                         "width is chain SCATTER (single chains order pairs "
+                         "well, pooling destroys it) -- a non-convergence that "
+                         "bulk R-hat and the tail R-hat can both miss. "
+                         "Section 4.3.52.")
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "
@@ -1517,6 +1577,7 @@ def main():
         cvar_ce(args.run_dir, dataset, width, depth, chain_ids,
                 device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
                 alpha=args.cvar_ce_alpha, alpha_sweep=sweep,
+                per_chain=args.cvar_ce_per_chain,
                 max_pairs=args.ce_pairs, max_draws=args.max_draws)
 
     if args.ce_ladder:
