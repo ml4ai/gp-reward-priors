@@ -468,7 +468,8 @@ def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
 
 
 def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
-            bt_pool="mean", alpha=0.05, max_pairs=None, max_draws=None,
+            bt_pool="mean", alpha=0.05, alpha_sweep=None,
+            max_pairs=None, max_draws=None,
             chunk_pairs=64):
     """Validation CE computed from the CVaR reward -- a selection objective.
 
@@ -549,23 +550,35 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
                + yv[:, 1] * np.log(1.0 - p1 + eps)).mean()
         return float(ce), float(((p1 > 0.5) == (yv[:, 0] > 0.5)).mean())
 
-    def _cvar_over(idx):
-        """CVaR CE using only the chains in `idx`.  Pools their draws."""
-        a1 = P1[idx].reshape(-1, B, T).astype(np.float64)
-        a2 = P2[idx].reshape(-1, B, T).astype(np.float64)
-        S = a1.shape[0]
-        k = max(1, int(math.floor(alpha * S)))
-        # mean of the k lowest draws, per (pair, step)
-        r1 = np.sort(a1, axis=0)[:k].mean(axis=0)
-        r2 = np.sort(a2, axis=0)[:k].mean(axis=0)
+    def _from_sorted(s1, s2, a):
+        """CE/acc/logit at tail fraction `a` from PRE-SORTED draw stacks.
+
+        Sorting is the whole cost of a CVaR reduction, and it does not depend
+        on alpha -- the alpha=a estimate is just the mean of the first
+        k = floor(a*S) rows.  So an entire alpha sweep costs one sort.
+        """
+        S = s1.shape[0]
+        k = max(1, int(math.floor(a * S)))
+        r1 = s1[:k].mean(axis=0)
+        r2 = s2[:k].mean(axis=0)
         f1 = bt_pool_logit_np(r1 * am1, am1, bt_pool)
         f2 = bt_pool_logit_np(r2 * am2, am2, bt_pool)
         d = f1 - f2                       # the CVaR logit difference
         p1 = 1.0 / (1.0 + np.exp(-d))
         return _ce_acc(p1) + (S, k, d)
 
+    def _sorted_over(idx):
+        return (np.sort(P1[idx].reshape(-1, B, T).astype(np.float64), axis=0),
+                np.sort(P2[idx].reshape(-1, B, T).astype(np.float64), axis=0))
+
+    def _cvar_over(idx, a=alpha):
+        """CVaR CE using only the chains in `idx`.  Pools their draws."""
+        s1, s2 = _sorted_over(idx)
+        return _from_sorted(s1, s2, a)
+
     allc = np.arange(C)
-    cvar_ce_v, cvar_acc, S_tot, k_tail, d_cvar = _cvar_over(allc)
+    srt1, srt2 = _sorted_over(allc)
+    cvar_ce_v, cvar_acc, S_tot, k_tail, d_cvar = _from_sorted(srt1, srt2, alpha)
 
     # Mean-based comparators on the same draws.
     m1 = P1.reshape(-1, B, T).astype(np.float64)
@@ -601,9 +614,11 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     #   * SCALE   -- |Phi1 - Phi2| inflates, so even correct signs become
     #                over-confident and the wrong ones are punished enormously.
     #   * REORDER -- |Phi1 - Phi2| is normal but CVaR ranks segments differently
-    #                from the mean, because CVaR = mean - k*sd and sd varies
-    #                across states, so segments through wide-posterior regions
-    #                are penalised more.
+    #                from the mean, because each state's LOWER TAIL sits at a
+    #                different depth below its mean, so segments through
+    #                wide-posterior regions are penalised more.  (The depth is
+    #                empirical, not mean - k*sd: nothing here assumes the
+    #                per-point posterior is Gaussian.  Section 4.3.50.)
     # These call for different fixes, so the diagnostic should not leave the
     # reader to guess.  The mean-based logit is the reference: it is computed on
     # the same draws and is known to predict well whenever mean CE is good.
@@ -649,6 +664,54 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     else:
         print("  -> Neither pathology is pronounced; a large CE here is ordinary")
         print("     mis-prediction rather than a structural artefact.")
+
+    # ---- Exact decomposition of the CVaR logit ---------------------------
+    # Section 4.3.51.  With a linear pooling rule (mean or sum), Phi is linear
+    # in the per-step reward, so
+    #       d_cvar = d_mean - (depth_1 - depth_2)
+    # EXACTLY, where depth_j >= 0 is segment j's pooled tail depth.  The mean
+    # term enjoys heavy cancellation -- the two segments visit similar states --
+    # while the depth term cancels only if the two segments have equal average
+    # posterior width.  So a depth difference that is large relative to d_mean,
+    # and uncorrelated with it, means the CVaR comparison is decided by WHICH
+    # SEGMENT PASSES THROUGH WIDER-POSTERIOR STATES.  That is a coverage
+    # statement, not a preference statement.  The subtraction below is computed,
+    # not assumed, so it holds whatever shape the per-point posterior has.
+    depth_d = d_mean - d_cvar
+    _sd_m = float(np.std(d_mean))
+    _sd_p = float(np.std(depth_d))
+    _cc = (float(np.corrcoef(d_mean, depth_d)[0, 1])
+           if _sd_m > 0 and _sd_p > 0 else float("nan"))
+    print("\n  --- LOGIT DECOMPOSITION  d_cvar = d_mean - (depth1 - depth2) ---")
+    print(f"  {'sd(d_mean)  [preference signal]':<38}{_sd_m:>10.4f}")
+    print(f"  {'sd(depth1-depth2)  [width signal]':<38}{_sd_p:>10.4f}")
+    print(f"  {'ratio  width / preference':<38}{_sd_p / max(_sd_m, 1e-12):>10.4f}")
+    print(f"  {'corr(d_mean, depth diff)':<38}{_cc:>10.4f}")
+    if _sd_p > _sd_m:
+        print("  -> the WIDTH term dominates: the CVaR ranking is mostly a")
+        print("     statement about posterior coverage, not about preference.")
+
+    # ---- Alpha sweep -----------------------------------------------------
+    # A bad CVaR CE has two innocent-vs-guilty readings that alpha separates:
+    # a genuinely broken tail stays broken as the tail is relaxed, whereas a
+    # merely WIDE posterior recovers smoothly, because at alpha=1 the CVaR IS
+    # the posterior mean and the plug-in row is reproduced exactly.  Note the
+    # corollary for selection (4.3.51): CVaR CE is minimised as widths -> 0, so
+    # it rewards a collapsed posterior and cannot by itself distinguish a badly
+    # sampled tail from a legitimately conservative one.
+    if alpha_sweep:
+        print("\n  --- ALPHA SWEEP (same draws; alpha=1 is exactly the mean) ---")
+        print(f"  {'alpha':>7}{'k_tail':>8}{'CE':>10}{'acc':>9}"
+              f"{'med|d|':>9}{'flip%':>8}{'wrong%':>8}")
+        print("  " + "-" * 57)
+        for a in alpha_sweep:
+            ce_a, acc_a, _, k_a, d_a = _from_sorted(srt1, srt2, a)
+            fl = float((np.sign(d_a) != np.sign(d_mean)).mean()) * 100.0
+            wr = float((np.sign(d_a) != np.where(yv0, 1.0, -1.0)).mean()) * 100.0
+            print(f"  {a:>7.3f}{k_a:>8d}{ce_a:>10.4f}{acc_a:>9.4f}"
+                  f"{np.median(np.abs(d_a)):>9.4f}{fl:>8.1f}{wr:>8.1f}")
+        print(f"  reference: plug-in sigma(E[f]) CE {plug_ce:.4f} "
+              f"acc {plug_acc:.4f}  (the alpha=1 limit)")
 
     print(f"\n  jackknife-over-chains SE on the CVaR CE: {se:.4f}")
     print(f"  tail depth: {k_tail} of {S_tot} draws at alpha={alpha}")
@@ -1364,6 +1427,14 @@ def main():
     ap.add_argument("--cvar-ce-alpha", type=float, default=0.05, metavar="A",
                     help="Tail fraction for --cvar-ce (default 0.05, matching "
                          "every CVaR diagnostic in section 4).")
+    ap.add_argument("--cvar-ce-alpha-sweep", type=str, default=None,
+                    metavar="A1,A2,...",
+                    help="Also report the CVaR CE at these tail fractions, e.g. "
+                         "'1.0,0.5,0.25,0.1,0.05'. Free -- every alpha reuses "
+                         "one sort of the same draws. Separates a broken tail "
+                         "(stays broken as alpha relaxes) from a merely wide "
+                         "posterior (recovers smoothly to the plug-in row, "
+                         "which alpha=1 reproduces exactly). Section 4.3.51.")
     ap.add_argument("--ce-ladder", action="store_true",
                     help="Also compute posterior-predictive CE and accuracy at "
                          "each --draw-ladder level. Catches a sampler that "
@@ -1433,10 +1504,20 @@ def main():
         draw_ladder(pred_chains, levels, alpha=args.alpha)
 
     if args.cvar_ce:
+        sweep = None
+        if args.cvar_ce_alpha_sweep:
+            try:
+                sweep = [float(t) for t in args.cvar_ce_alpha_sweep.split(",")
+                         if t.strip()]
+            except ValueError:
+                sys.exit(f"--cvar-ce-alpha-sweep must be comma-separated "
+                         f"floats, got {args.cvar_ce_alpha_sweep!r}")
+            if any(not (0.0 < a <= 1.0) for a in sweep):
+                sys.exit("--cvar-ce-alpha-sweep values must lie in (0, 1]")
         cvar_ce(args.run_dir, dataset, width, depth, chain_ids,
                 device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
-                alpha=args.cvar_ce_alpha, max_pairs=args.ce_pairs,
-                max_draws=args.max_draws)
+                alpha=args.cvar_ce_alpha, alpha_sweep=sweep,
+                max_pairs=args.ce_pairs, max_draws=args.max_draws)
 
     if args.ce_ladder:
         levels = []

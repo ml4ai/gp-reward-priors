@@ -4537,8 +4537,105 @@ divides the BT logit by T=100 (§3.6.2). Neither has been examined for
 large_play specifically, and §4.3.23's amplitude curve was measured on
 medium_play only — whose logits are *not* saturated, so that curve may not
 transfer. **Measure large_play's own CVaR CE amplitude curve before changing
-anything**: it is four `--cvar-ce` runs on chains that already exist for
-`map_amp2` 1.69e5/1.69e4, plus two new runs at 1.69e3/1.69e2.
+anything.** *(Correction: only the `1.69e4` rung had existing chains —
+large_play's selected `map_amp2` was 925894.92, not 1.69e5 — so this took three
+new training runs, not two. Measured in §4.3.51.)*
+
+> ⚠️ **§4.3.51 refutes the diagnosis in this section.** Saturation is real and
+> reproducible, but it is *not* what breaks large_play's CVaR: de-saturating it
+> via `map_amp2` leaves the misordering exactly where it was. Read §4.3.51
+> before acting on the paragraphs above.
+
+### 4.3.51 The amplitude curve refutes saturation as the cause — and indicts the objective
+
+Four rungs, everything else held at large_play's `nowub` config (`map_sig_n2`
+0.05, jitter 1.0, `n_meas` 256, 16 chains, seed 0):
+
+| `map_amp2` | CVaR CE | ±SE | CVaR acc | mean acc | med \|Δ\|mean | saturated? | wrong-signed | §4.2 gate | rhat_bulk med |
+|---|---|---|---|---|---|---|---|---|---|
+| 1.69e5 | 11.5899 | 0.200 | 0.5556 | 0.9074 | 53.44 | yes (σ=1.0000) | 44.4% | **FAIL** (cen `scale_z` 2.48) | 1.09 |
+| 1.69e4 | 10.2417 | 0.123 | 0.5556 | 0.9074 | 18.68 | yes | 44.4% | PASS | 1.13 |
+| 1.69e3 | 6.1682 | 0.302 | 0.5370 | 0.9259 | 6.74 | yes (σ=0.9988) | 46.3% | PASS | 1.39 |
+| 1.69e2 | 2.6625 | 0.548 | 0.5556 | 0.9259 | 2.71 | **no** | 44.4% | PASS | 1.92 |
+
+Monotone, no interior optimum — unlike medium_play, which bottomed out at
+1.69e3 (§4.3.23). **`map_amp2` does exactly what it should**: median |Δ_mean|
+tracks `sqrt(map_amp2)` to within measurement error (per-decade ratios 2.86,
+2.77, 2.49 against √10 = 3.16), confirming the prior amplitude is the reward
+scale.
+
+> **Saturation was not the cause.** At `map_amp2` 1.69e2 the §4.3.50 banner is
+> **silent** — median |Δ_mean| = 2.71, σ = 0.94, a perfectly calibrated
+> confidence — and *nothing about the ordering improved*. CVaR accuracy across
+> the four rungs is 0.556 / 0.556 / 0.537 / 0.556, flat and at chance (30 of 54
+> pairs). Wrong-signed fraction is 44.4% at three rungs and 46.3% at the
+> fourth. **De-saturating changed the cost of the misordering, not the
+> misordering.** CVaR CE fell only because the logits shrank: CE ≈ (fraction
+> wrong) × (typical |Δ| on those pairs), and the second factor dropped 32×
+> across the sweep while the first never moved. §4.3.50's banner reads a real
+> condition but points at the wrong culprit.
+
+**And the sweep is confounded in the wrong direction.** Mixing degrades
+monotonically as amplitude falls: rhat_bulk median 1.09 → 1.92 (max 2.96), CVaR
+MCSE/pred_sd median 0.12 → 0.36, unresolved points 0 → 116 of 5400. The
+lowest-CE rung is the worst-sampled one. **There is no amplitude to adopt.**
+
+**Where the four variants actually stand** (this corrects a loose claim of mine:
+medium_diverse is *not* at chance — its CVaR accuracy is 0.860, as good as its
+mean accuracy; only its CE sits near log 2, which is a calibration failure on a
+minority of pairs):
+
+| variant | mean CE / acc | CVaR CE / acc |
+|---|---|---|
+| medium_play | 0.268 / 0.909 | 0.265 / 0.870 |
+| large_diverse | 0.290 / 0.900 | 0.342 / 0.818 |
+| medium_diverse | 0.355 / 0.851 | 0.666 / **0.860** |
+| large_play | 0.332 / 0.907 | 10.24 / **0.556** |
+
+large_play is the only variant whose *ordering* collapses, 0.907 → 0.556.
+
+#### The mechanism, and why it makes CVaR CE a poor selection objective
+
+With `bt_pool` linear (mean or sum), Φ is linear in the per-step reward, so the
+pair logit decomposes **exactly**:
+
+    d_cvar = d_mean − (depth₁ − depth₂),    depth_j ≥ 0
+
+The mean term enjoys heavy cancellation — paired segments visit similar states —
+while the depth term cancels only if the two segments have equal *average
+posterior width*. That is why |Δ_cvar|/|Δ_mean| is 1.40–1.66 at **every** rung
+and sign disagreement holds at 37–43% regardless of scale: **the CVaR logit is
+decided by which segment passes through wider-posterior states.** That is a
+coverage statement, not a preference statement — and it is arguably the
+conservatism the method is *for*.
+
+> ⚠️ **This undercuts §4.3.14's case for CVaR CE as the selection objective.**
+> Widths → 0 drives CVaR → mean, so **CVaR CE is minimised by a collapsed
+> posterior**. medium_play scores 0.265 partly because its posterior is narrow
+> relative to its signal; large_play scores 10.24 partly because its posterior
+> is wide. The objective conflates *a badly sampled tail* with *a legitimately
+> wide one*, and selecting on it rewards throwing the uncertainty away — the
+> opposite of what the paper needs. The interior optimum on medium_play
+> (§4.3.23) did not expose this because that variant never reaches the wide
+> regime.
+
+**Two instruments added to `--cvar-ce`** to separate the two readings:
+
+- `--cvar-ce-alpha-sweep A1,A2,...` — CE/acc/med|Δ|/flip%/wrong% at each tail
+  fraction. Free: every α is a prefix mean of one sort of the same draws. At
+  α = 1 the CVaR *is* the posterior mean, so the row must reproduce the plug-in
+  row exactly (verified to 5.6e-17). A **broken tail stays broken as α relaxes**;
+  a **merely wide posterior recovers smoothly**. That is the discriminator.
+- **Logit decomposition** — `sd(d_mean)`, `sd(depth₁−depth₂)`, their ratio and
+  correlation, printed unconditionally. Computed by subtraction, so it assumes
+  nothing about posterior shape (§4.3.50).
+
+**Next**: run the α sweep on all four finals' existing chains. No retraining —
+it is a re-reduction of draws already on disk. If large_play's accuracy climbs
+back toward 0.907 as α relaxes, α = 0.05 is simply too aggressive for its width
+and **the sampler is not the defect**; if accuracy stays near 0.55 even at
+α = 0.5, the tail is genuinely broken and §10.2's sampler work is the right
+target. Until that is known, do not select on CVaR CE at α = 0.05.
 
 ### 4.4 Procedure
 
