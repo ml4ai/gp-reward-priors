@@ -4800,6 +4800,60 @@ width blow-up.
 > its effect on CVaR must be **reported, not selected on**, and all four
 > variants must move together.
 
+### 4.3.55 `map_eta` corrected to 4.0 — implemented 2026-08-29
+
+Applied on the §4.3.54 grounds: η=1.0 does not deliver the 2–4 cell correlation
+length it has always been documented as delivering, and η=4.0 does, at the
+conditioning bound the nugget already holds.
+
+**Changed** — `map_eta: 1.0 → 4.0` in the four stage-3 `*_bnn_antmaze_eval.yaml`
+and the four sweep `*_bnn.yaml`, plus the dataclass defaults in
+`run_bnn_training_antmaze_eval.py:267` and `run_bnn_training.py:188`. Every
+comment restating the false "~2-4 cells" claim is corrected in place with the
+measured profile.
+
+**Not changed** — `scripts_bnn/gradnorm_readout/*.yaml` keep η=1.0. Those are
+frozen inputs to a completed diagnostic; rewriting them would falsify that
+record rather than correct it.
+
+**Verified before launch**: all four priors construct, Cholesky succeeds, and
+cond(K) lands on the bound.
+
+| variant | n | λ_min | cond | `n·sig_c2/sig_n2` |
+|---|---|---|---|---|
+| large_play / large_diverse | 33 | 0.0504 | 675.9 | 660 |
+| medium_play / medium_diverse | 26 | 0.0503 | 537.2 | 520 |
+
+> **η is not a pure shape parameter — checked, and the leak is small.**
+> `diag(K_geo)` falls 0.463 → 0.196 going 1.0 → 4.0, so the geodesic term's
+> marginal variance drops 2.4× and becomes more cell-dependent (graph degree
+> varies). But `sig_c2 = 1` dominates the total, so in **total marginal prior
+> sd** — the quantity that matters — η=4 costs **9%** of amplitude (1.230 →
+> 1.116) and raises across-cell spread from **2% to 5%**. Both are small, so
+> η=4 is close to a pure correlation-length change in practice. The 9%
+> amplitude shift is negligible against the 1000× `map_amp2` sweep of §4.3.51
+> that left the width/signal ratio unmoved, so the `map_amp2` values selected
+> under η=1.0 are carried over unchanged rather than re-selected.
+>
+> A cleaner construction would normalise `K_geo` to unit diagonal, making η a
+> pure correlation length and `sig_g2` a uniform marginal variance. Not done —
+> it changes the kernel's mathematical form, and the measured leak does not
+> justify it. Recorded as a known wart.
+
+**Reporting rule for the re-runs (§9).** The CVaR effect is **reported, not
+selected on**. All four variants move together. If large_play's width/signal
+ratio drops toward 1 and its CVaR accuracy recovers, that is *evidence the
+coverage mechanism of §4.3.53 was right*; if it does not, large_play is
+coverage-limited and must be disclosed as such. Neither outcome licenses
+tuning η further.
+
+**Prediction, recorded before the runs so it cannot be fitted afterwards.** A
+longer correlation length helps only where there is signal within 2–4 cells to
+borrow. large_play's deficit is thin coverage across a 33-cell maze of diameter
+14, so η=4 should *reduce* its ratio (3.92) but is unlikely to reach the 0.27–
+0.71 of the other three. The three usable variants should move little — their
+ratios are already below 1 and their posteriors are not prior-dominated.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

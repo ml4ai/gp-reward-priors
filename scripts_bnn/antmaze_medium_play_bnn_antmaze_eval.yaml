@@ -75,7 +75,13 @@ gp_prior_type: map_informed
 map_size: medium                          # "medium" or "large" (hardcoded fallback layout)
 map_env_name: antmaze-medium-play-v2      # extract exact layout from this live D4RL env
                                           # (set null to use the hardcoded map_size layout)
-map_eta: 1.0             # heat-kernel diffusion time (correlation length ~2-4 cells)
+map_eta: 4.0             # heat-kernel diffusion time.  CORRECTED 2026-08-29 (handoff
+                         # 4.3.54): eta=1.0 gives a correlation of 0.44 at one hop and
+                         # 0.088 at two -- a ~1-cell length, NOT the 2-4 cells this
+                         # comment used to claim.  eta=4.0 delivers r=0.87/0.49/0.20 at
+                         # 1/2/3 hops, and is where lam_min meets the sig_n2 floor, so
+                         # cond(K) saturates at the n*sig_c2/sig_n2 bound the nugget
+                         # already holds.  Read off the maze layout, never off a metric.
 map_sig_c2: 1.0          # constant-offset variance (Bradley-Terry additive constant)
 map_sig_g2: 1.0          # map-informed signal variance (prior reward scale)
 map_sig_n2: 0.001        # nugget / diagonal jitter (mandatory for invertibility)
