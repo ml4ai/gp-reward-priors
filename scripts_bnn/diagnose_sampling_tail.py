@@ -1446,6 +1446,73 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     print(f"  {'points MCSE>sd (unresolved)':26s} {n_unresolved} of {P} "
           f"({100 * n_unresolved / P:.2f}%)")
 
+    # ---- CENTRED per-point tail statistics (section 4.3.62) --------------
+    # Every number in the two blocks above is computed on RAW f, so an offset
+    # random walk inflates all of them: it widens pred_sd, it widens the VaR/
+    # CVaR sampling spread, and it drags the folded R-hats.  Unlike the width/
+    # signal ratio of 4.3.61 -- where offset contamination only ever SUPPRESSES
+    # -- the bias here runs the unfavourable way: offset drift makes the tail
+    # look WORSE-resolved than it is, so a configuration rejected on `cvar_ess`
+    # or on the unresolved-point count may have been rejected on offset noise.
+    # 4.3.42-46's nugget and sig_c2 conclusions rest partly on these numbers.
+    #
+    # The offset is unidentified by the BT/CE likelihood and cancels in every
+    # preference prediction (3.6.3), so the CENTRED column is the one that
+    # bears on anything downstream.  Raw is kept above, unchanged, so archived
+    # diagnostic files stay directly comparable.
+    def _tail_stats(a):
+        f = a.reshape(-1, P)
+        sd = f.std(axis=0)
+        v = np.quantile(f, alpha, axis=0)
+        uu = np.minimum(a - v[None, None, :], 0.0) / alpha
+        m_v = np.asarray(azs.mcse(a, method="quantile", prob=alpha))
+        m_c = np.asarray(azs.mcse(uu, method="mean"))
+        return {
+            "var_ess": np.asarray(azs.ess(a, method="quantile", prob=alpha)),
+            "var_rhat": np.asarray(azs.rhat(a, method="folded")),
+            "var_rel": m_v / (sd + eps),
+            "cvar_ess": np.asarray(azs.ess(uu, method="mean")),
+            "cvar_rhat": np.asarray(azs.rhat(uu, method="folded")),
+            "cvar_rel": m_c / (sd + eps),
+            "unres": int(np.sum(m_c / (sd + eps) > 1.0)),
+        }
+
+    _cs = _tail_stats(_cen)
+    _rs = {"var_ess": ess_var, "var_rhat": np.asarray(azs.rhat(pred_chains, method="folded")),
+           "var_rel": mcse_var / (pred_sd + eps), "cvar_ess": ess_cvar,
+           "cvar_rhat": rhat_cvar, "cvar_rel": mcse_cvar / (pred_sd + eps),
+           "unres": n_unresolved}
+    print(f"\n=== CENTRED per-point tail statistics (GOVERNS -- section 4.3.62) ===")
+    print("  Same statistics on f with each draw's offset removed.  The offset")
+    print("  is unidentified and cancels in every preference prediction, so")
+    print("  these are the numbers that bear on anything downstream.")
+    print(f"  {'':30}{'raw':>12}{'CENTRED':>12}")
+    for lab, k, agg in (
+        ("VaR ESS (median)", "var_ess", np.median),
+        ("VaR R-hat (median)", "var_rhat", np.median),
+        ("VaR MCSE/sd (median)", "var_rel", np.median),
+        ("CVaR eff draws (median)", "cvar_ess", np.median),
+        ("CVaR R-hat (median)", "cvar_rhat", np.median),
+        ("CVaR MCSE/sd (median)", "cvar_rel", np.median),
+    ):
+        print(f"  {lab:<30}{float(agg(_rs[k])):>12.4f}{float(agg(_cs[k])):>12.4f}")
+    print(f"  {'points MCSE>sd (unresolved)':<30}{_rs['unres']:>12d}{_cs['unres']:>12d}")
+    _e_raw = float(np.median(_rs["cvar_ess"]))
+    _e_cen = float(np.median(_cs["cvar_ess"]))
+    _gain = _e_cen / max(_e_raw, 1e-12)
+    if _gain >= 1.25 or _rs["unres"] > 2 * max(_cs["unres"], 1):
+        print(f"  -> the RAW tail statistics were OFFSET-INFLATED: centring")
+        print(f"     multiplies the CVaR effective draws by {_gain:.2f}x and takes")
+        print(f"     the unresolved count {_rs['unres']} -> {_cs['unres']}.  Any verdict")
+        print("     read off the raw numbers understated the tail's resolution.")
+    elif _gain <= 0.8:
+        print(f"  -> centring REDUCES the CVaR effective draws ({_gain:.2f}x).  The")
+        print("     offset was carrying resolution the shape does not have;")
+        print("     the centred column is the honest one.")
+    else:
+        print(f"  -> raw and centred agree ({_gain:.2f}x on CVaR effective draws),")
+        print("     so the offset is not materially involved here.")
+
     if worst_k and x_rhat is not None:
         rel_cvar = mcse_cvar / (pred_sd + eps)
         rel_var = mcse_var / (pred_sd + eps)

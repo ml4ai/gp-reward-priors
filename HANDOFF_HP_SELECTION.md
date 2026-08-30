@@ -5194,6 +5194,55 @@ partly on these.
 > read off a raw drift gate, `rhat_bulk`, or a per-point tail statistic.
 > This is a documentation audit, not a re-run: the chains still exist.
 
+### 4.3.62 Per-point tail statistics centred — Class C closed in the tool
+
+`tail_diagnostics` now prints a **`CENTRED per-point tail statistics
+(GOVERNS)`** block: VaR ESS / R-hat / MCSE-per-sd, CVaR effective draws /
+R-hat / MCSE-per-sd, and the unresolved-point count, computed on `f` with each
+draw's offset removed, beside the raw values. The raw blocks are unchanged, so
+archived diagnostic files remain directly comparable.
+
+Validated on two controls:
+
+| control | raw CVaR eff draws | centred | raw CVaR R-hat | centred |
+|---|---|---|---|---|
+| stationary shape + offset random walk | 16.88 | **989.82** (58.7×) | 1.7390 | **0.9994** |
+| no offset at all | 1004.36 | 1003.26 (1.00×) | 0.9996 | 0.9998 |
+
+**Offset drift can understate tail resolution by ~50×**, and the null case is
+clean to three decimals. This is the unfavourable-direction bias §4.3.61 named:
+raw makes the tail look *worse*-resolved than it is, so anything **rejected**
+on `cvar_ess` or on the unresolved count may have been rejected on offset noise.
+
+#### What actually needs re-checking, narrowed
+
+Re-reading §4.3.42–46 against the audit, the exposure is **smaller than
+§4.3.61 implied**. Those sections' load-bearing metrics are already centred —
+centred `ratio`, centred `scale_z`, `shape_var_frac`, mean CE, accuracy. Only
+two claims rest on a raw per-point statistic:
+
+| claim | section | raw values | status |
+|---|---|---|---|
+| the nugget's `cvar_ess` gain | §4.3.44 | 58.04 → **583.3** ("10×") | supporting, not load-bearing; **needs the centred diff** |
+| uniform `sig_n2`'s `cvar_ess` | §4.3.45 | 25.19 → 47.36 | same |
+
+Both are the exact shape a *reduced offset drift* would produce with no
+improvement in the shape tail at all, so both must be re-read on the centred
+column before being quoted again. **§4.3.44's conclusion that the nugget works
+does not depend on them** — it rests on the centred `ratio` gain at 2× the
+§4.3.35 replicate floor — so the likely outcome is a footnote, not a reversal.
+
+The degeneracy cross-check in §4.3.44 (`cvar_ess` 583 at `shape_var_frac`
+0.9015, against the collapsed `lr 1.5e-3` run's 858 at 0.0972) is **unaffected**:
+`shape_var_frac` is computed on the offset/shape decomposition already.
+
+> **Audit status after §4.3.61–62.**
+> **Class A** (exactly invariant): no action, ever.
+> **Class B** (CVaR ratios): proven to be lower bounds; §4.3.51–53 stand.
+> **Class C**: the tool now reports centred for *every* statistic in it. Two
+> archived `cvar_ess` claims remain to be re-read; both are supporting numbers.
+> Nothing else in §4.3.17–46 was found to rest on an uncentred per-point value.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
