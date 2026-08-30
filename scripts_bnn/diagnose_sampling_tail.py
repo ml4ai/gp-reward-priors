@@ -1347,6 +1347,30 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     _summ("ess_bulk", azs.ess(pred_chains))
     _summ("rhat_bulk (rank)", azs.rhat(pred_chains))
 
+    # CENTRED bulk (section 4.3.59).  rhat_bulk above is computed on RAW f, so
+    # it carries the same unidentified offset that made the raw 4.2 gate
+    # misleading: a chain whose SHAPE is stationary but whose offset random-
+    # walks reads as a mixing failure it does not have.  large_diverse at eta=1
+    # pairs rhat_bulk 2.28 with a centred drift of 0.81, which is what prompted
+    # this.  The likelihood is exactly invariant to f -> f + c, so the centred
+    # row is the one that bears on any prediction; the offset row is reported
+    # to show where a raw/centred gap comes from.
+    _cen = pred_chains - pred_chains.mean(axis=2, keepdims=True)
+    _off = pred_chains.mean(axis=2)          # (chain, draw) scalar per draw
+    _r_raw = float(np.median(np.asarray(azs.rhat(pred_chains), dtype=np.float64)))
+    _r_cen = float(np.median(np.asarray(azs.rhat(_cen), dtype=np.float64)))
+    _summ("ess_bulk  (centred)", azs.ess(_cen))
+    _summ("rhat_bulk (centred)", azs.rhat(_cen))
+    print(f"  {'rhat offset (1 scalar/draw)':26s} {float(azs.rhat(_off)):.4f}"
+          f"   ess {float(azs.ess(_off)):.1f}")
+    if _r_raw > 1.1 and _r_cen <= 1.1:
+        print("  -> the raw rhat is OFFSET drift, not a mixing failure: the")
+        print("     centred shape mixes fine and the offset cancels in every")
+        print("     preference prediction.  Judge mixing on the centred row.")
+    elif _r_cen > 1.1:
+        print("  -> the centred shape itself is not mixing; this is a real")
+        print("     mixing failure and it does bear on predictions.")
+
     print(f"\n=== VaR (lower {alpha:.0%} quantile = 95% lower bound) ===")
     ess_var = np.asarray(azs.ess(pred_chains, method="quantile", prob=alpha))
     mcse_var = np.asarray(azs.mcse(pred_chains, method="quantile", prob=alpha))

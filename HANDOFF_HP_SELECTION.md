@@ -4816,7 +4816,12 @@ width blow-up.
 > its effect on CVaR must be **reported, not selected on**, and all four
 > variants must move together.
 
-### 4.3.55 `map_eta` corrected to 4.0 — implemented 2026-08-29
+> ⚠️ **REVERTED 2026-08-30.** η=4.0 fails the *centred* §4.2 gate on three of
+> four variants (§4.3.59). `map_eta` is back to 1.0 everywhere; see §4.3.60.
+> The correlation-length measurement in §4.3.54 stands and is unaffected — what
+> did not survive is the conclusion that η=4 was safe to adopt.
+
+### 4.3.55 `map_eta` corrected to 4.0 — implemented 2026-08-29 (SUPERSEDED)
 
 Applied on the §4.3.54 grounds: η=1.0 does not deliver the 2–4 cell correlation
 length it has always been documented as delivering, and η=4.0 does, at the
@@ -5078,6 +5083,45 @@ correction and is strengthened: **gradient noise drives drift, not width.**
 > have FAILED), centred 0.62 → PASS, banner fires. **Every drift verdict
 > recorded before this date was read off the raw block** and should be
 > re-checked against the centred columns before being relied on.
+
+### 4.3.60 `map_eta` reverted to 1.0, and a centred `rhat_bulk` added
+
+**Revert.** η=1.0 restored in the four stage-3 `*_bnn_antmaze_eval.yaml`, the
+four sweep `*_bnn.yaml`, and both dataclass defaults
+(`run_bnn_training_antmaze_eval.py:269`, `run_bnn_training.py:190`).
+`gradnorm_readout/*.yaml` were never changed.
+
+**Reverted on stationarity, not on a metric.** η=4 fails the centred §4.2 gate
+on three of four variants (`scale_z` 2.64 / 2.39 / 4.79 against ≤ 2.0). §3.3
+and §9 are intact: the gate is a sampling-validity criterion, and no CVaR
+number entered the decision. A prior whose correlation length is right but
+which the sampler cannot hold stationary is not a better prior in practice.
+
+**What survives from §4.3.54, and what does not.** The measurement stands:
+η=1.0's correlation length is ~1 cell (r = 0.44 / 0.088 / 0.010 at 1/2/3 hops,
+both mazes), *not* the "~2-4 cells" every config comment claimed. Those comments
+now record the measured profile and the reason 1.0 is retained, so the false
+claim is not restored along with the value. **This is a known limitation, not a
+validated choice**: any cell ≥2 hops from data is effectively prior-only, which
+is the co-factor that turns a coverage gap into a width blow-up (§4.3.54).
+Revisit only with a sampler that stays stationary under the stiffer prior.
+
+**Centred `rhat_bulk` added**, settling the §4.3.59 retraction #3. `rhat_bulk`
+is computed on raw `f` and carries the same unidentified offset that made the
+raw gate misleading. `tail_diagnostics` now also reports `ess_bulk (centred)`,
+`rhat_bulk (centred)`, and the offset's own R-hat/ESS (one scalar per draw),
+with a verdict line separating the two cases. Validated on two synthetic
+controls:
+
+| control | rhat raw | rhat centred | verdict |
+|---|---|---|---|
+| stationary shape + per-chain offset random walk | 1.948 | **1.002** | offset drift, not a mixing failure |
+| per-chain shape disagreement (real) | 3.158 | **3.180** | real mixing failure |
+
+**Do not judge mixing on raw `rhat_bulk`.** The open question from §4.3.59 —
+whether the four variants' rhat_bulk 1.13–2.28 at η=1 is offset random walk or
+genuine — is now answerable by re-running the diagnostic on the existing η=1
+chains. No training needed.
 
 ### 4.4 Procedure
 

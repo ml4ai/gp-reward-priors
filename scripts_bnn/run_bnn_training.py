@@ -179,13 +179,15 @@ class TrainConfig:
     map_env_name: Optional[str] = None
     # Heat-kernel diffusion time: sets the spatial correlation length (~2-4
     # cells).  Fixed per map size; verify via prior-sample heatmaps, NOT reward.
-    # CORRECTED 2026-08-29 (handoff 4.3.54): 1.0 did NOT deliver the 2-4 cells
-    # this comment has always claimed -- measured on both maze layouts, its
-    # correlation is 0.44 at one hop and 0.088 at two, i.e. ~1 cell.  4.0 gives
-    # 0.87/0.49/0.20 at 1/2/3 hops and saturates cond(K) at the existing
-    # n*sig_c2/sig_n2 bound.  Read off the layout and the bound, never off a
-    # downstream metric -- section 3.3 and section 9 still forbid the latter.
-    map_eta: float = 4.0
+    # NOTE (handoff 4.3.54): 1.0 does NOT deliver the "~2-4 cells" the line
+    # above claims -- measured on both maze layouts its correlation is 0.44 at
+    # one hop, 0.088 at two, i.e. ~1 cell.  4.0 does deliver 2-4 cells and was
+    # tried, but FAILS the centred 4.2 drift gate on three of four variants
+    # (4.3.59), so 1.0 is retained -- reverted on stationarity, never on a
+    # downstream metric, so section 3.3 and section 9 remain intact.  The short
+    # correlation length is a known limitation, not a validated choice: any
+    # cell >=2 hops from data is effectively prior-only (4.3.60).
+    map_eta: float = 1.0
     # Constant-offset variance (Bradley-Terry additive constant freedom).
     map_sig_c2: float = 1.0
     # Map-informed signal variance (prior reward scale).
