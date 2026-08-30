@@ -5323,6 +5323,15 @@ The degeneracy cross-check in §4.3.44 (`cvar_ess` 583 at `shape_var_frac`
 0.9015, against the collapsed `lr 1.5e-3` run's 858 at 0.0972) is **unaffected**:
 `shape_var_frac` is computed on the offset/shape decomposition already.
 
+> ⚠️ **Correction, same day: "COMPLETE" below overstates it.** Class C has
+> **two** rows, and only one is closed. The **per-point tail statistics** row is
+> genuinely done (§4.3.62a–b). The **pre-2026-08-30 drift-verdict** row is
+> **not**: only the four finals' gates were re-read on centred. Every drift
+> verdict in §4.3.1–41 is still a raw reading, and at least one is
+> load-bearing — **§4.3.6 exonerated the cyclical schedule on `raw loc_sd`,
+> `raw scale_ratio` and `scale_z`** (§4.3.63). Read the status below as
+> "Class C, tail-statistics row: complete."
+
 > **Audit status after §4.3.61–62b — COMPLETE.**
 > **Class A** (exactly invariant): no action, ever.
 > **Class B** (CVaR ratios): proven to be lower bounds; §4.3.51–53 stand.
@@ -5331,6 +5340,55 @@ The degeneracy cross-check in §4.3.44 (`cvar_ess` 583 at `shape_var_frac`
 > §4.3.44 corrected 10× → 3.37× with its conclusion intact, §4.3.45 reversed
 > with its refutation strengthened. Nothing else in §4.3.17–46 rests on an
 > uncentred per-point value.
+
+### 4.3.63 The mixing failure tracks `cycle_length`, and §4.3.6 is a raw reading
+
+**The problem.** Two of the four finals disagree *between* chains in the
+identified component while each chain is internally stationary — they pass the
+centred §4.2 drift gate and fail centred `rhat_bulk`:
+
+| variant | centred rhat | ess_cen | gate (centred) | burn-in | **cycle_length** | `sig_n2` | sampling steps |
+|---|---|---|---|---|---|---|---|
+| medium_diverse | **1.023** | 560.1 | PASS 0.87/0.69 | 100000 | 750 | 0.001 | 56,250 |
+| large_play | **1.081** | 148.6 | PASS 0.64/0.74 | 20000 | 500 | 0.05 | 37,500 |
+| large_diverse | 1.316 | 42.9 | PASS 0.72/0.81 | 20000 | **2750** | 0.001 | 206,250 |
+| medium_play | **1.440** | 34.5 | PASS 0.61/0.65 | 20000 | **2750** | 0.001 | 206,250 |
+
+**`chain_init_jitter` is 1.0 on all four**, so chain-start overdispersion is
+excluded. The only field that separates 2-vs-2 is **`cycle_length`**, and the
+two failing runs have **5.5× MORE sampling steps** than the best-mixing one —
+so this is not a compute deficit, and more draws will not fix it.
+
+**Mechanism.** A longer cycle is a longer hot phase, so each chain wanders
+further before annealing into whichever basin it lands in. Short cycles do not
+let a chain commit. That predicts exactly the observed signature: internally
+stationary chains (drift gate passes) that disagree with each other (centred
+rhat fails). Burn-in is the confounded alternative — medium_diverse is the only
+100k run and also the best — but burn-in cannot explain large_play, which mixes
+well at 20k, whereas `cycle_length` orders all four.
+
+> ⚠️ **§4.3.6's exoneration of the cyclical schedule is a RAW reading.** Its
+> table is explicitly `raw loc_sd` 0.4222 → 0.5443, `raw scale_ratio` 1.4361 →
+> 2.1326, `scale_z` 1.3564 → 2.5834 — all pre-fix, i.e. offset-contaminated.
+> **Two caveats in its favour**, though: its predictive CE comparison (0.2029 vs
+> 0.3580) is Class A and stands, so "the schedule is doing real work" survives
+> intact; and it tested cycling **on versus off**, never cycle *length*, so it
+> never bore on 2750-vs-750 in the first place. The schedule is not re-opened
+> as a whole — only its **length** is now suspect, which §4.3.6 did not test.
+
+**The test, designed so the confound cannot save the hypothesis.** Re-run
+medium_play at `cycle_length` 750, everything else exactly as `jit10n256`
+(jitter 1.0, `n_meas` 256, `sig_n2` 0.001, 16 chains, 75 draws, burn-in 20k).
+That is **3.7× LESS sampling compute**. If centred rhat improves anyway, cycle
+length is the cause and the compute explanation is dead. If it does not move,
+the hypothesis is refuted and burn-in becomes the candidate — test it next at
+100k on medium_play, matching medium_diverse.
+
+**Also re-read §4.3.6 on centred**, from chains that already exist
+(`stage3_medium_play_nocyc_0`, `stage3_medium_play_c8_0`). No training. If the
+cyclical run's advantage survives centring, §4.3.6 stands as written on
+stationarity too; if it inverts, the schedule question is genuinely reopened and
+`use_cyclical_lr` returns to the sweep.
 
 ### 4.4 Procedure
 
