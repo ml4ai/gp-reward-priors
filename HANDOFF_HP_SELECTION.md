@@ -5123,6 +5123,77 @@ whether the four variants' rhat_bulk 1.13–2.28 at η=1 is offset random walk o
 genuine — is now answerable by re-running the diagnostic on the existing η=1
 chains. No training needed.
 
+### 4.3.61 Raw-vs-centred audit of every conclusion, and the centred rhat result
+
+**Centred `rhat_bulk` on the four η=1 finals** — the §4.3.59 question, settled:
+
+| variant | rhat raw | **rhat centred** | ess centred | rhat offset | verdict |
+|---|---|---|---|---|---|
+| medium_diverse | 1.828 | **1.023** | 560.1 | 1.900 | offset drift |
+| large_play | 1.132 | **1.081** | 148.6 | 1.446 | offset drift |
+| medium_play | 1.900 | **1.440** (max 2.06) | 34.5 | 1.938 | **real** |
+| large_diverse | 2.278 | **1.316** (max 1.82) | 42.9 | 2.493 | **real** |
+
+Half the alarm was the unidentified offset. medium_diverse and large_play are
+clean. medium_play and large_diverse retain a genuine but much smaller problem
+than raw showed.
+
+> **Those two pass the centred drift gate while failing centred rhat**
+> (0.6469 / 0.8091 on `scale_z`, against rhat 1.44 / 1.32). Each chain is
+> internally stationary but they settle in **different places** — chains in
+> distinct modes, not chains still moving. Drift and R-hat measure different
+> things and this is the case that separates them. It also predicts the small
+> pooled-vs-per-chain gaps §4.3.53 found on exactly these two (−0.007, −0.041).
+
+#### The audit
+
+**Class A — exactly offset-invariant, no re-check needed.** Any function of
+`Φ₁ − Φ₂` with a linear pool: the offset is common to all points in a draw and
+cancels in the difference. Covers mean CE, plug-in CE, predictive CE, accuracy,
+`flip%`, `wrong%`, and the α=1 rows.
+
+**Class B — CVaR quantities: not exactly invariant, but biased in a knowable
+direction.** `r_cvar` takes the lowest α draws *per point*, and which draws
+those are depends on the offset, so `Φ_cvar₁ − Φ_cvar₂` does not cancel in
+general. **The bias suppresses, never manufactures.** If offset variance
+dominates shape variance, every point selects the same lowest-offset draws,
+`depth_i` goes near-constant, and the width term collapses toward zero.
+Measured directly, shape held fixed while offset sd is swept:
+
+| offset sd | 0.0 | 0.5 | 1.0 | 2.0 | 5.0 | 20.0 |
+|---|---|---|---|---|---|---|
+| ratio width/pref | 14.55 | 13.88 | 12.36 | 9.15 | 5.02 | 1.29 |
+
+Monotone decreasing. **Therefore every width/signal ratio in §4.3.51–53 is a
+LOWER BOUND on the shape-driven width, and large_play's 2.8–4.3 cannot be an
+offset artefact.** Those conclusions stand, and are if anything understated.
+`--cvar-ce` now re-runs the whole reduction on offset-removed `f` and prints
+both columns with a ±15% robustness banner, so this is measured per run rather
+than argued.
+
+**Class C — raw-only, and genuinely contaminated. Re-check before relying on.**
+
+| quantity | where | status |
+|---|---|---|
+| §4.2 gate verdicts recorded before 2026-08-30 | throughout §4.3 | tool now gates on centred; **past verdicts are raw** |
+| `rhat_bulk`, `ess_bulk` | §4.3.29–46, §6 | now decomposed; four finals done above |
+| `cvar_ess`, VaR/CVaR R-hat, `MCSE/pred_sd`, "unresolved points" | §4.3.17–46 | **per-point on raw `f`; still uncentred** |
+| raw `loc_sd`, `scale_ratio` quoted as effect sizes | §4.3.2–46 | raw by design; fine as *effect sizes*, not as verdicts |
+
+The third row is the live gap. Those are per-point quantities on raw `f`, so an
+offset random walk inflates every one of them, and they were the selection
+signal for parts of rounds 1–2. Unlike the ratio, the bias direction here is
+**not** favourable: offset drift makes the tail look worse-resolved than it is,
+so any config *rejected* on `cvar_ess` or `unresolved points` may have been
+rejected on offset noise. §4.3.42–46's nugget and `sig_c2` conclusions rest
+partly on these.
+
+> **Known-good after this audit:** §4.3.51, §4.3.52, §4.3.53, §4.3.58, §4.3.59,
+> §4.3.60 — all Class A or Class B.
+> **Needs re-checking on centred metrics:** §4.3.17–46, wherever a verdict was
+> read off a raw drift gate, `rhat_bulk`, or a per-point tail statistic.
+> This is a documentation audit, not a re-run: the chains still exist.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -5958,6 +6029,13 @@ slot is wasted. Ground truth from the box is `wandb sync --sync-all --dry-run`.
   bound — never off a metric. Reporting the effect on CVaR is required;
   *selecting* on it is not permitted, and all four variants must move together.
 - Do not judge stage 3 by `param_*` or bulk predictive diagnostics.
+- **Do not read a drift verdict, `rhat_bulk`, or any per-point tail statistic
+  off RAW `f`** (§4.3.61). The offset is unidentified and cancels in every
+  preference prediction, so raw inflates all of them. The gate and `rhat_bulk`
+  now report centred; the per-point tail statistics (`cvar_ess`, VaR/CVaR
+  R-hat, `MCSE/pred_sd`, "unresolved points") do **not** yet, and their bias is
+  in the unfavourable direction — a config rejected on them may have been
+  rejected on offset noise.
 - Do not compare post-`bt_pool="mean"` reward magnitudes or CVaR values to
   pre-fix runs; only the scale-free convergence diagnostics carry over.
 

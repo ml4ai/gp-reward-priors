@@ -691,6 +691,50 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
         print("  -> the WIDTH term dominates: the CVaR ranking is mostly a")
         print("     statement about posterior coverage, not about preference.")
 
+    # ---- Offset-robustness of the CVaR reduction (section 4.3.61) --------
+    # Everything built from Phi1 - Phi2 with a LINEAR pool is exactly invariant
+    # to f -> f + c, so the mean-based rows above need no check.  The CVaR rows
+    # do: r_cvar takes the lowest alpha draws PER POINT, and which draws those
+    # are depends on the offset, so the offset does not cancel in general.
+    #
+    # The direction of the bias is knowable.  If offset variance dominates shape
+    # variance, every point selects the SAME lowest-offset draws, depth_i goes
+    # near-constant across points, and the width term COLLAPSES -- CVaR CE tends
+    # to mean CE.  So offset contamination SUPPRESSES the width term rather than
+    # manufacturing it, and a large ratio cannot be an offset artefact.  This
+    # block measures it instead of arguing it: re-run the whole reduction on f
+    # with each draw's offset removed, and compare.
+    _o1 = P1.reshape(-1, B, T).astype(np.float64)
+    _o2 = P2.reshape(-1, B, T).astype(np.float64)
+    _n1, _n2 = _o1[0].size, _o2[0].size
+    _off = (_o1.sum(axis=(1, 2)) + _o2.sum(axis=(1, 2))) / (_n1 + _n2)
+    _c1 = np.sort(_o1 - _off[:, None, None], axis=0)
+    _c2 = np.sort(_o2 - _off[:, None, None], axis=0)
+    ce_c, acc_c, _, _, d_c = _from_sorted(_c1, _c2, alpha)
+    g1c = bt_pool_logit_np((_o1 - _off[:, None, None]).mean(axis=0) * am1, am1, bt_pool)
+    g2c = bt_pool_logit_np((_o2 - _off[:, None, None]).mean(axis=0) * am2, am2, bt_pool)
+    dm_c = g1c - g2c
+    dp_c = dm_c - d_c
+    _sdm_c, _sdp_c = float(np.std(dm_c)), float(np.std(dp_c))
+    print("\n  --- OFFSET ROBUSTNESS of the CVaR rows (section 4.3.61) ---")
+    print("  Same reduction on f with each draw's offset removed.  The")
+    print("  mean-based rows are EXACTLY invariant and are not re-listed.")
+    print(f"  {'':26}{'raw f':>12}{'centred f':>12}")
+    print(f"  {'CVaR CE':<26}{cvar_ce_v:>12.4f}{ce_c:>12.4f}")
+    print(f"  {'CVaR acc':<26}{cvar_acc:>12.4f}{acc_c:>12.4f}")
+    print(f"  {'sd(d_mean)':<26}{_sd_m:>12.4f}{_sdm_c:>12.4f}")
+    print(f"  {'sd(depth diff)':<26}{_sd_p:>12.4f}{_sdp_c:>12.4f}")
+    print(f"  {'ratio width/preference':<26}"
+          f"{_sd_p / max(_sd_m, 1e-12):>12.4f}{_sdp_c / max(_sdm_c, 1e-12):>12.4f}")
+    _rr = (_sdp_c / max(_sdm_c, 1e-12)) / max(_sd_p / max(_sd_m, 1e-12), 1e-12)
+    if abs(_rr - 1.0) <= 0.15:
+        print(f"  -> ROBUST: the ratio moves {100 * (_rr - 1):+.1f}% under centring,")
+        print("     so the width term is shape-driven, not an offset artefact.")
+    else:
+        print(f"  -> the ratio moves {100 * (_rr - 1):+.1f}% under centring.  The")
+        print("     offset is materially involved in the tail selection; quote")
+        print("     the centred column.")
+
     # ---- Alpha sweep -----------------------------------------------------
     # A bad CVaR CE has two innocent-vs-guilty readings that alpha separates:
     # a genuinely broken tail stays broken as the tail is relaxed, whereas a
