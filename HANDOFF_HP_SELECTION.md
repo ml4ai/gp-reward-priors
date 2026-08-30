@@ -4192,10 +4192,22 @@ which would collapse a third knob.
 | `shape_var_frac` | — | **0.4510** | vs large_play's 0.9015 |
 | mean CE | 0.2912 | **0.2205** | better |
 | accuracy | 0.8799 | **0.9115** | better |
-| `cvar_ess` | 25.19 | 47.36 | better |
+| `cvar_ess` (raw) | 25.19 | 47.36 | ~~better~~ **see below** |
+| **`cvar_ess` (centred)** | **122.42** | **83.50** | **worse** — reverses |
+
+> **The `cvar_ess` row REVERSES on centred (§4.3.62b).** Raw made the nugget
+> look 1.88× better; centred makes it **0.68×, i.e. 32% worse**. `jit10n256`'s
+> raw value was offset-inflated 4.86× against the nugget's 1.76×, so the
+> apparent gain was the nugget suppressing offset drift, not resolving the
+> shape tail. **This was the only diagnostic row favouring uniform `sig_n2`
+> here, and it now opposes it.**
 
 **Opposite to large_play, where it improved every axis.** Uniform adoption is
-refuted; `sig_n2` 0.05 is not a global setting.
+refuted; `sig_n2` 0.05 is not a global setting. **The refutation is now
+unanimous across the diagnostics** — centred `ratio` worse, centred `scale_z`
+worse, `shape_var_frac` 0.4510, centred `cvar_ess` worse. Only mean CE and
+accuracy favour it, and §4.3.22 established that those rank configurations
+opposite to the deployed quantity.
 
 **And conditioning cannot explain the difference.** The two mazes are
 structurally near-identical:
@@ -5233,11 +5245,41 @@ The unresolved-point count moves in **both** directions (large_play `recipe`
 because centring shrinks `pred_sd` as well as the MCSE. Do not read it as a
 one-way correction.
 
-**Still outstanding**: medium_play `jit10n256`'s centred `cvar_ess`, the other
-arm of §4.3.45's 25.19 → 47.36. That refutation rests on centred `ratio` and
-`scale_z` *worsening*, with `cvar_ess` the lone row favouring the nugget, so
-discounting it **strengthens** the refutation — but the number should be
-completed for the record.
+### 4.3.62b The nugget's real effect is suppressing OFFSET drift
+
+Completing §4.3.45's table closed the last Class C gap, and the four arms
+together give the mechanism. Inflation = centred / raw `cvar_ess`:
+
+| arm | raw | centred | inflation |
+|---|---|---|---|
+| large_play `recipe` (no nugget) | 58.04 | 196.94 | **3.39×** |
+| medium_play `jit10n256` (no nugget) | 25.19 | 122.42 | **4.86×** |
+| large_play `nugget` | 583.30 | 663.72 | **1.14×** |
+| medium_play `nugget` | 47.36 | 83.50 | **1.76×** |
+
+**`map_sig_n2` 0.05 reliably suppresses offset drift** — both nugget arms sit
+at 1.1–1.8× against 3.4–4.9× without it. That is consistent across two
+variants and is the effect raw `cvar_ess` was actually measuring.
+
+**What differs underneath is the shape tail**, which is the part that bears on
+predictions:
+
+| variant | centred `cvar_ess`, no nugget → nugget | |
+|---|---|---|
+| large_play | 196.94 → 663.72 | **3.37× better** |
+| medium_play | 122.42 → 83.50 | **0.68×, 32% worse** |
+
+So the nugget does two separable things, and raw `cvar_ess` summed them into a
+single number that read as a win in both places. On large_play both go the same
+way; on medium_play the offset suppression masked a shape-tail *loss*. **This
+is the same "it does two things, not one" that §4.3.45 concluded from the
+`ratio`/`scale_z` split — now confirmed independently on the tail statistics,
+by a mechanism §4.3.45 could not see.**
+
+**Class C is now closed.** Every archived claim resting on an uncentred
+per-point statistic has been re-measured: §4.3.44's `cvar_ess` gain corrected
+10× → 3.37× (conclusion stands), §4.3.45's `cvar_ess` row reversed (refutation
+strengthened, now unanimous).
 
 ### 4.3.62 Per-point tail statistics centred — Class C closed in the tool
 
@@ -5281,12 +5323,14 @@ The degeneracy cross-check in §4.3.44 (`cvar_ess` 583 at `shape_var_frac`
 0.9015, against the collapsed `lr 1.5e-3` run's 858 at 0.0972) is **unaffected**:
 `shape_var_frac` is computed on the offset/shape decomposition already.
 
-> **Audit status after §4.3.61–62.**
+> **Audit status after §4.3.61–62b — COMPLETE.**
 > **Class A** (exactly invariant): no action, ever.
 > **Class B** (CVaR ratios): proven to be lower bounds; §4.3.51–53 stand.
-> **Class C**: the tool now reports centred for *every* statistic in it. Two
-> archived `cvar_ess` claims remain to be re-read; both are supporting numbers.
-> Nothing else in §4.3.17–46 was found to rest on an uncentred per-point value.
+> **Class C**: the tool reports centred for every statistic in it, and both
+> archived `cvar_ess` claims have been re-measured (§4.3.62a, §4.3.62b) —
+> §4.3.44 corrected 10× → 3.37× with its conclusion intact, §4.3.45 reversed
+> with its refutation strengthened. Nothing else in §4.3.17–46 rests on an
+> uncentred per-point value.
 
 ### 4.4 Procedure
 
