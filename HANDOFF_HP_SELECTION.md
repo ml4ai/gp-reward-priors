@@ -5656,6 +5656,62 @@ analogue of the task reward. Either is defensible; what is not defensible is
 leaving the level to an unidentified sampler artefact. **Decide it, document it,
 apply it everywhere.**
 
+### 5.2 Gauge implemented: `max0`, all three families — 2026-08-30
+
+**Decision: match the maximum to 0.** All rewards ≤ 0, best state-action at 0 —
+the closest analogue of the antmaze `−1/0` convention, where every step is a
+penalty.
+
+**Implementation.** New config field `gauge_reward: str = "max0"` (`"mean0"`,
+`"none"` also accepted; anything else raises) and a `gauge_reward(dataset,
+mode)` function, added **identically to both**
+`algorithms/offline/iql_eval.py` and `algorithms/offline/iql.py`. Verified by
+AST comparison that the two function definitions are byte-identical and that
+both files place the call correctly.
+
+Placement is the single seam where all four labelling branches converge —
+BNN, MR-ensemble, PT, MR — so the gauge covers the three families **by
+construction** rather than by three parallel edits:
+
+- **inside** the `if config.reward_model_path:` branch, so the D4RL **oracle
+  reward keeps its 0/1 level**. Gauging the oracle would silently reproduce
+  `normalize_reward=1` and double-apply with it;
+- **before** `modify_reward`, since indices 0–5 pass the offset through and
+  4/5 amplify it.
+
+It prints the subtracted constant and the resulting reward range each run.
+
+**Validated: the gauge makes all eight indices exactly offset-invariant.**
+Two reward fields differing only by an arbitrary constant (`c = 50`) now reach
+IQL identically under every index — `max|f(r+c) − f(r)|`:
+
+| idx | ungauged (equal lens) | ungauged (varying lens) | **gauged** |
+|---|---|---|---|
+| 0 | 50.0 | 50.0 | **0.000000** |
+| 1 | 50.0 | 50.0 | **0.000000** |
+| 2, 3 | 167.6 | 23.2 | **0.000000** |
+| 4, 5 | 33 355 | 335.2 | **0.000000** |
+| 6, 7 | 0.0 | 22.8 | **0.000000** |
+
+Note this also repairs 6/7, which were only *approximately* offset-invariant
+once trajectory lengths vary (22.8 → 0). Index 0 is tested through the real
+call-site guard (`if config.normalize_reward:`), which skips `modify_reward`
+entirely.
+
+> **A latent trap left in place, deliberately.** `modify_reward`'s final
+> `else` catches every integer not in 1–6 — that is index 7 *by design*, but it
+> means a direct call with `0` silently applies index 7's transformation. The
+> call site's `if config.normalize_reward:` guard makes this unreachable in
+> normal use, and changing the control flow would alter index 7's semantics, so
+> it is documented rather than fixed. **Do not call `modify_reward` directly
+> with a 0.**
+
+> ⚠️ **Every IQL result produced before this change used an ungauged reward
+> field** and is not comparable with results produced after it, except where
+> `normalize_reward` was 6 or 7 *and* trajectory lengths were equal. Stage 4
+> must be run after this lands, not before, and any earlier policy score
+> should be re-derived rather than carried forward.
+
 ---
 
 ## 6. Results
