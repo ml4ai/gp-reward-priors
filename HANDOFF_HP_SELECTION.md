@@ -4938,6 +4938,89 @@ re-runs to finish. It should be run at whatever η is current, on large_play
 first, since that is the variant where the two hypotheses predict most
 differently.
 
+### 4.3.57 η=4 measured — and the mixing baseline it exposed
+
+**η=4 did not break the samplers.** It shuffled which variants fail the gate and
+*improved* mixing on two:
+
+| variant | rhat_bulk med η=1 → η=4 | ess_bulk η=1 → η=4 | §4.2 gate η=1 → η=4 |
+|---|---|---|---|
+| medium_play | 1.90 → 2.13 | 24.3 → 22.5 | **FAIL → PASS** |
+| large_diverse | 2.28 → 2.15 | 21.7 → 22.4 | PASS → PASS |
+| medium_diverse | 1.83 → **1.08** | 25.0 → **140.3** | PASS → **FAIL** |
+| large_play | 1.13 → 1.11 | 88.7 → 113.2 | PASS → **FAIL** |
+
+Two gates improved, two degraded; medium_diverse's ess rose 5.6×. There is no
+uniform verdict on η from this, and the CVaR numbers are not comparable across
+it while two arms sit on either side of the gate.
+
+> ⚠️ **Two errors of mine in the first read of these runs, both corrected here.**
+>
+> 1. **The η=1 rhat baseline was misquoted as "1.09–1.39".** Those are
+>    large_play's *amplitude-ladder* values (§4.3.51) — one variant, four
+>    amplitudes — applied as though they were the four-variant baseline. The
+>    real η=1 baselines are 1.13–2.28, in the table above. The conclusion drawn
+>    from the bad baseline ("all four η=4 runs are compromised, the comparison
+>    is void") does not survive: they were already marginal.
+> 2. **A claimed mechanism — prior precision ×4.4 at unchanged `sghmc_lr`, so
+>    the effective step grew ~4.4× — is refuted by the logged gradient norms.**
+>    `gradnorm_sampling_mean` η=1 → η=4: large_diverse 0.570 → 0.812 (1.42×),
+>    medium_play 0.230 → 0.258 (1.12×), large_play 3.991 → 2.853 (**0.71×**),
+>    medium_diverse 11.454 → 4.261 (**0.37×**). Gradients moved both ways and
+>    mostly *down*. The ‖K⁻¹‖ arithmetic (spectral 3.7×, mean-precision 4.3×)
+>    is correct but does **not** transmit to the realized gradient: it is a
+>    worst case over directions, applied to an `f` that itself adapts to the
+>    stiffer prior. **Do not re-derive a step-size rescaling from ‖K⁻¹‖.**
+
+**The real finding is the baseline, not η.** Three of four variants sit at
+**rhat_bulk 1.8–2.3 with ess_bulk ≈ 22** at η=1, on 16 × 75 = 1200 draws. At
+that rhat the 16 chains are effectively 16 short runs that disagree, and
+ess ≈ 22 means the *bulk* is resolved by ~22 independent draws before any tail
+is taken.
+
+> ⚠️ **`medium_play` FAILS the §4.2 gate at η=1** (`scale_z` 2.2827, 95th
+> 2.7088). That is `stage3_medium_play_jit10n256_0` — the run quoted as the
+> gold-standard baseline throughout §4.3.51–53 (ratio 0.27, CVaR acc 0.870,
+> CVaR CE 0.2648). By the gate's own printed rule those numbers are not
+> interpretable, and **every cross-variant ratio table in §4.3.52–53 inherits
+> the problem.** The ordering they establish may well survive re-measurement,
+> but it is not currently supported.
+
+**large_play has the soundest chains of the four at η=1** — rhat 1.13, ess
+88.7, gate PASS. The variant this investigation has called broken is the one
+whose CVaR conclusions rest on valid sampling; the three "usable" variants are
+the ones whose chains do not support the comparison. §4.3.51–53's findings
+about large_play specifically (amplitude-invariance, no α rescue, within-chain
+width) are therefore **not** undermined by this.
+
+### 4.3.58 The batch-size ladder was mis-designed — and what it still shows
+
+**`batch_size` 256 and 1024 both exceed the 254-pair training set**
+(`antmaze-large-play-v2_pref_train_0.hdf5`: 254 pairs; val 54, test 55). Both
+ran full-batch and produced **bit-identical chains** — every printed digit
+matches, which is what exposed it. The intended three-point ladder was a
+two-point one. Any future ladder must stay under 254: **32 / 64 / 128 / 254**.
+
+The two points that did run are still the two that matter — batch 64 versus
+**zero minibatch gradient noise** — both at η=4:
+
+| | scale_z | ess_bulk med | ratio width/pref | CVaR CE |
+|---|---|---|---|---|
+| batch 64 | 4.1271 | 113.2 | 2.4202 | 11.0856 |
+| full batch (254) | 2.0225 | 225.1 | 2.3767 | 11.1678 |
+
+Removing **all** minibatch gradient noise halved the drift `scale_z` and
+doubled ess, while moving the width/signal ratio by **1.8%**. If excess heat
+from gradient noise were inflating the width, the arm whose stationarity
+doubled should have narrowed. **Suggestive that gradient noise drives drift but
+not width** — i.e. against §4.3.56's hypothesis (b). Held loosely: both arms
+still fail the gate, so this is not yet a verdict.
+
+Note full batch does **not** remove all gradient noise in fSGHMC — the prior
+term is injected by VJP at `n_meas` randomly drawn measurement points each
+step, which full batch leaves untouched. The complete test is full batch **plus**
+a fixed measurement set, and §4.3.24 closed the latter route for other reasons.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
