@@ -558,8 +558,14 @@ trigger**.
 > **Why.** The BT/CE likelihood is exactly invariant to `f → f + c` (§4.3.10):
 > `Φ` pools by masked mean and cross-entropy on `[Φ₁, Φ₂]` depends only on
 > `Φ₁ − Φ₂`, so the offset is unidentified by the data and drift along it
-> cancels in every preference prediction — and a constant reward offset leaves
-> the IQL greedy policy unchanged. **The raw statistic mixes that unidentified
+> cancels in every preference prediction. ⚠️ **This sentence used to continue
+> "— and a constant reward offset leaves the IQL greedy policy unchanged."
+> That is FALSE for antmaze and is corrected in §5.1**: episodes terminate and
+> truncate, so a constant offset accumulates differently by time-to-termination
+> and does *not* cancel from the advantage. **The gate is unaffected** — its
+> justification is the likelihood invariance above, which is exact and
+> sufficient on its own — but the offset must be pinned before IQL consumes the
+> reward. **The raw statistic mixes that unidentified
 > direction into the criterion.** §4.3.28 makes the consequence concrete: the
 > best-sampling configuration produced in this project is stationary in the
 > identified component (centred `loc_z` 0.6144, `scale_z` 0.6469, both at the
@@ -5194,6 +5200,45 @@ partly on these.
 > read off a raw drift gate, `rhat_bulk`, or a per-point tail statistic.
 > This is a documentation audit, not a re-run: the chains still exist.
 
+### 4.3.62a Class C re-run: the nugget's `cvar_ess` gain is 3.4×, not 10×
+
+Measured with the centred block on the archived §4.3.42–46 chains:
+
+| run | raw `cvar_ess` | **centred** | inflation |
+|---|---|---|---|
+| large_play `recipe` | 58.04 | **196.94** | 3.39× |
+| large_play `nugget` | 583.30 | **663.72** | 1.14× |
+| **nugget gain** | **10.05×** | **3.37×** | |
+
+**§4.3.44's "10×" is an artefact of comparing two differently offset-inflated
+numbers.** `recipe`'s raw value was depressed 3.4× by offset drift while
+`nugget`'s was nearly clean, so a large part of what was recorded as a
+tail-resolution gain was the nugget **removing offset drift** — which raw
+`cvar_ess` cannot distinguish from resolving the shape tail. The genuine
+shape-tail gain is **3.37×**.
+
+**§4.3.44's conclusion stands**: it rests on the centred `ratio` gain at 2× the
+§4.3.35 replicate floor, not on `cvar_ess`. Quote 3.37× from here on.
+
+Other runs, raw → centred CVaR effective draws: `sigc2` 107.2 → 312.2,
+medium_diverse `recipe` 97.1 → 1023.1, `burn100k` 51.2 → 1046.9, large_diverse
+`recipe` 28.6 → 176.0, medium_play `nugget` 47.4 → 83.5. **The degeneracy
+control moves the other way** — `lr1.5e-3` 858.0 → 561.7 — consistent with its
+raw figure being partly offset-carried, which is what §4.3.44 used it to show;
+`shape_var_frac` is computed on the decomposition already, so that cross-check
+is unaffected.
+
+The unresolved-point count moves in **both** directions (large_play `recipe`
+27 → 0, but large_diverse `recipe` 2 → 23 and medium_play `nugget` 72 → 99),
+because centring shrinks `pred_sd` as well as the MCSE. Do not read it as a
+one-way correction.
+
+**Still outstanding**: medium_play `jit10n256`'s centred `cvar_ess`, the other
+arm of §4.3.45's 25.19 → 47.36. That refutation rests on centred `ratio` and
+`scale_z` *worsening*, with `cvar_ess` the lone row favouring the nugget, so
+discounting it **strengthens** the refutation — but the number should be
+completed for the record.
+
 ### 4.3.62 Per-point tail statistics centred — Class C closed in the tool
 
 `tail_diagnostics` now prints a **`CENTRED per-point tail statistics
@@ -5530,6 +5575,86 @@ The operative values (`n_episodes: 100`, `eval_freq: 5000`,
 `max_timesteps: 1000000`, `normalize_reward: <idx>`) come from the IQL run
 config, not from the dataclass defaults in `iql.py` — see the note on reading
 configuration in §3.4.
+
+### 5.1 The reward offset is unidentified, and IQL is NOT invariant to it
+
+**Correcting §3.6.3.** That section claimed "a constant reward offset leaves the
+IQL greedy policy unchanged." **False for antmaze.** Under `r → r + c`, Q
+shifts by `c·Σγᵗ` over the *remaining* horizon. With no termination that is
+`c/(1−γ)` uniformly, `A = Q − V` is invariant, and AWR is unaffected — which is
+presumably where the claim came from. But antmaze episodes **terminate at the
+goal and truncate at 1000 steps**, so the accumulated offset depends on
+time-to-termination, which varies by state, and the advantage is **not**
+invariant. Index 1 of the §5 grid is the direct evidence: the IQL paper
+subtracts 1 on antmaze precisely because turning 0/1 into −1/0 penalizes
+dawdling. That is an offset chosen for its behavioural effect.
+
+**§3.6.3's gate is unaffected.** It rests on the *likelihood* being exactly
+invariant to `f → f + c`, which is true and sufficient: drift along an
+unidentified direction is not evidence of bad sampling. Only the extra
+downstream clause was wrong.
+
+**The §5 grid handles the offset wildly unevenly.** Measured, `c = 50`:
+
+| idx | equal traj lengths | varying lengths | |
+|---|---|---|---|
+| 0, 1 | 50.0 | 50.0 | passes straight through |
+| 2, 3 | 167.6 | 23.2 | passes through, rescaled |
+| **4, 5** | **33 355** | **335.2** | **amplified ~700×** |
+| **6, 7** | **0.000000** | 22.8 | **exactly invariant** at equal lengths |
+
+Indices 6/7 cancel `c` exactly because `min_ret/trj_lens` is the per-step share
+of the minimum return, so the shift subtracts out — but only when trajectory
+lengths are equal. Indices 4/5 subtract a whole-trajectory **return** from each
+**per-step** reward, so they amplify the offset by roughly the trajectory
+length. §5 already records 4-vs-7 as the PT paper/codebase discrepancy; this is
+why that discrepancy is not cosmetic.
+
+> **The confound that matters for the paper's central claim.**
+> `r_cvar = r_mean − depth` with `depth ≥ 0`, so
+> `r_cvar = r_mean − mean(depth) − (depth − mean(depth))`.
+> The middle term is a **pure global offset** set by posterior width; only the
+> third term is conservatism. A CVaR-vs-mean policy comparison therefore
+> confounds the conservative *shaping* the paper claims with a global downward
+> *shift* that is a nuisance — and by the argument above that shift alone
+> changes IQL behaviour, since a uniformly more negative reward penalizes long
+> trajectories, which in antmaze reads as faster goal-seeking and can **improve**
+> score for reasons unrelated to conservatism. Under `normalize_reward = 0` and
+> indices 0–5 the shift survives or is amplified.
+
+**This is not BNN-specific.** MR and PT are trained on the same Bradley–Terry
+likelihood with identical pooling (§3.6.2), so **their reward fields carry an
+arbitrary offset too**. Fixing the gauge is a precondition for the cross-family
+comparison being meaningful, not a BNN patch.
+
+**Seed-transfer risk in stage 4 as designed.** The index is selected at seed 0
+and evaluated at seeds 1–10. The offset is a sampler artefact, not a property of
+the data — §4.3.61 measured offset R-hat 1.45–2.49, so it is not stable across
+*chains within one run*, let alone across seeds. An index selected partly
+because it cancelled seed 0's offset will not cancel seed 1's, and the failure
+would look like ordinary seed variance.
+
+#### Recommendation: fix the gauge before `modify_reward`, as a gauge, not a hyperparameter
+
+Pin the offset deterministically as a property of the reward model — e.g.
+subtract the model's mean predicted reward over the training dataset, so every
+reward field has a defined level by construction. This is **gauge fixing, not
+selection**: the offset is unidentified by the likelihood, so choosing it
+changes nothing the data constrains, and §3.3/§9 do not apply. It
+
+- removes an arbitrary, non-reproducible constant before IQL sees it;
+- makes the eight indices comparable across seeds and families;
+- makes CVaR-vs-mean isolate the conservatism term, which is the comparison the
+  paper exists to make;
+- must be applied **identically to MR, PT and BNN**, or it breaks the very
+  comparability it is meant to protect.
+
+One judgement to make explicitly: mean-zero is not obviously the right gauge for
+antmaze, where the sign convention carries meaning (index 1's −1/0 makes every
+step a penalty). Matching the **maximum** to 0 — all rewards ≤ 0 — is the closer
+analogue of the task reward. Either is defensible; what is not defensible is
+leaving the level to an unidentified sampler artefact. **Decide it, document it,
+apply it everywhere.**
 
 ---
 
