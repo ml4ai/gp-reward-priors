@@ -1012,24 +1012,40 @@ def drift_diagnostics(pred_chains):
     def g(name, stat):
         return d.get(f"fn_drift_{name}_{stat}", float("nan"))
 
-    loc_z, scale_z = g("loc_z", "median"), g("scale_z", "median")
-    loc_sd, ratio = g("loc_sd", "median"), g("scale_ratio", "median")
+    # The GATE IS CENTRED (section 3.6.3, 2026-08-24 amendment).  The BT/CE
+    # likelihood is exactly invariant to f -> f + c, so offset drift cancels in
+    # every preference prediction; gating on raw f both FAILS good configs whose
+    # only drift is in the unidentified offset and PASSES bad ones whose offset
+    # drift masks a widening shape.  This block printed the RAW numbers and
+    # computed `verdict` from them until 2026-08-30, which is exactly the trap
+    # it exists to prevent -- see handoff 4.3.59.  Raw is still shown, labelled,
+    # because loc_sd on raw is the effect size the NOTE below refers to.
+    loc_z = g("centred_loc_z", "median")
+    scale_z = g("centred_scale_z", "median")
 
     print("\n=== SECTION 4.2 DRIFT GATE (first vs second half of each chain) ===")
     print(f"  {C} chains x {D} draws")
-    print(f"  {'':8} {'median':>9} {'95th':>9}")
+    print(f"  {'':16} {'median':>9} {'95th':>9}")
     for label, name, note in (
-        ("loc_z", "loc_z", "<= 2.0 ; stationary ~0.67 median, ~2 at 95th"),
-        ("scale_z", "scale_z", "<= 2.0 ; same reference"),
-        ("loc_sd", "loc_sd", "RAW |E2-E1| in posterior-sd units"),
-        ("ratio", "scale_ratio", "RAW sd2/sd1"),
+        ("loc_z   (CEN)", "centred_loc_z", "<= 2.0  GATED (3.6.3)"),
+        ("scale_z (CEN)", "centred_scale_z", "<= 2.0  GATED (3.6.3)"),
+        ("loc_z   (raw)", "loc_z", "reported only -- includes the offset"),
+        ("scale_z (raw)", "scale_z", "reported only -- includes the offset"),
+        ("loc_sd  (raw)", "loc_sd", "RAW |E2-E1| in posterior-sd units"),
+        ("ratio   (raw)", "scale_ratio", "RAW sd2/sd1"),
+        ("scale_z (off)", "offset_scale_z", "unidentified; cancels in every pref"),
     ):
-        print(f"  {label:<8} {g(name, 'median'):>9.4f} {g(name, '95th'):>9.4f}"
+        print(f"  {label:<16} {g(name, 'median'):>9.4f} {g(name, '95th'):>9.4f}"
               f"   {note}")
     verdict = ("PASS" if (loc_z <= 2.0 and scale_z <= 2.0) else
                "FAIL -- these chains are not sampling P_{f|D}; every tail "
                "number below is meaningless")
-    print(f"  verdict  {verdict}")
+    print(f"  verdict  {verdict}   [on CENTRED f, per section 3.6.3]")
+    _rz = max(g("loc_z", "median"), g("scale_z", "median"))
+    if (_rz > 2.0) != (max(loc_z, scale_z) > 2.0):
+        print("  !! RAW and CENTRED disagree on this run.  The centred verdict")
+        print("     above is the one that governs: the offset is unidentified")
+        print("     by the likelihood and cancels in every preference pair.")
     print( "  NOTE: both z-scores divide by an MCSE, so their POWER grows with")
     print(f"  the {C} chains selected here.  A PASS at a low chain count is NOT")
     print( "  evidence of stationarity, and these z's are NOT comparable to a")

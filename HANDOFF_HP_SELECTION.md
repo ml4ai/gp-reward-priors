@@ -4938,6 +4938,12 @@ re-runs to finish. It should be run at whatever η is current, on large_play
 first, since that is the variant where the two hypotheses predict most
 differently.
 
+> ⚠️ **§4.3.57 and §4.3.58 below were written from the RAW drift numbers.**
+> §3.6.3 gates on **centred**. Both the first reading and its "correction" used
+> raw, which is why they contradicted each other and why both were wrong.
+> **§4.3.59 supersedes both** — read it first; the tables below are retained
+> only for the record.
+
 ### 4.3.57 η=4 measured — and the mixing baseline it exposed
 
 **η=4 did not break the samplers.** It shuffled which variants fail the gate and
@@ -5020,6 +5026,58 @@ Note full batch does **not** remove all gradient noise in fSGHMC — the prior
 term is injected by VJP at `n_meas` randomly drawn measurement points each
 step, which full batch leaves untouched. The complete test is full batch **plus**
 a fixed measurement set, and §4.3.24 closed the latter route for other reasons.
+
+### 4.3.59 Read on CENTRED: η=4 breaks three of four, and η=1 was clean
+
+Supersedes §4.3.57–58. Every drift verdict in those two sections was taken from
+the raw `f` numbers; §3.6.3's 2026-08-24 amendment gates on **centred**.
+
+| variant | η=1 centred loc_z / scale_z | η=1 | η=4 centred loc_z / scale_z | η=4 |
+|---|---|---|---|---|
+| medium_play | 0.6144 / 0.6469 | **PASS** | 0.9755 / **2.6387** | **FAIL** |
+| large_diverse | 0.7154 / 0.8091 | **PASS** | 0.8737 / **2.3912** | **FAIL** |
+| medium_diverse | 0.9787 / 1.7976 | **PASS** | 0.8734 / 0.6913 | **PASS** |
+| large_play | 0.6415 / 0.7420 | **PASS** | 1.3130 / **4.7891** | **FAIL** |
+
+**At η=1 all four pass. η=4 breaks three of four.** The correction to make is
+therefore the opposite of §4.3.57's: η=4 *is* harmful on the governing metric,
+and the reason §4.3.57 concluded otherwise is that it compared raw numbers on
+both sides.
+
+**Three retractions from §4.3.57:**
+
+1. **medium_play does NOT fail at η=1.** Raw `scale_z` 2.2827 fails; centred is
+   **0.6469**. `stage3_medium_play_jit10n256_0` is sound, and **§4.3.51–53's
+   cross-variant ratio tables are not undermined.** §4.3.57's claim that they
+   "inherit the problem" is withdrawn in full.
+2. **"η=4 did not break the samplers" is wrong.** It breaks three of four.
+3. **"rhat_bulk 1.8–2.3 is the real finding" is unsupported.** `rhat_bulk` is
+   computed on **raw** `f` and carries the same offset contamination. large_diverse
+   at η=1 pairs rhat_bulk 2.28 with a centred drift of 0.81 — a shape that
+   stationary points at an offset random walk, not a mixing failure. **Not
+   established either way**: the tool has no centred rhat. Adding one is the
+   cheapest way to settle it, and until then no conclusion should rest on
+   `rhat_bulk`.
+
+**medium_diverse at η=4 is the instructive case** and the one genuine pass. Its
+*raw* gate fails (loc_z 2.3595) with the failure confined to the **offset**
+(offset loc_z 2.8765, scale_z 2.9849) while centred reads 0.8734 / 0.6913.
+Offset drift is unidentified by the likelihood and cancels in every preference
+prediction — precisely what §3.6.3 was written for, now observed in the wild.
+
+**The full-batch arm on centred**: `scale_z` 2.05 against batch-64's **4.79**.
+Removing minibatch gradient noise more than halves centred drift while moving
+the width/signal ratio 1.8% (2.4202 → 2.3767). §4.3.58's reading survives the
+correction and is strengthened: **gradient noise drives drift, not width.**
+
+> **Tool fix, 2026-08-30.** The `SECTION 4.2 DRIFT GATE` block printed raw
+> `loc_z`/`scale_z` and computed `verdict` from them, contradicting §3.6.3.
+> It now computes the verdict on **centred**, prints centred / raw / offset rows
+> each labelled with which governs, and fires a banner when raw and centred
+> disagree. Verified on a synthetic offset-only drift: raw loc_z 8.85 (would
+> have FAILED), centred 0.62 → PASS, banner fires. **Every drift verdict
+> recorded before this date was read off the raw block** and should be
+> re-checked against the centred columns before being relied on.
 
 ### 4.4 Procedure
 
