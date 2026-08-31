@@ -1449,6 +1449,17 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     _tau = D / max(_per_chain, 1e-12)
     print(f"  {'integrated autocorr time':32s} {_tau:.1f} kept draws"
           f"  (x cycle_length = steps/indep sample)")
+    # An ESS estimate needs chain length >> tau; at D/tau near 1 the estimator
+    # saturates and tau is biased LOW by an unknown amount.  Section 4.3.67:
+    # the cyc750 run had D/tau = 1.5, its tau was not trustworthy, and the
+    # "cycle 750 is 2.6x more compute-efficient" claim of 4.3.66 was built on
+    # it and was wrong.  Guarding here so that cannot recur silently.
+    _ratio = D / max(_tau, 1e-12)
+    if _ratio < 3.0:
+        print(f"  !! tau is {_ratio:.1f}x the chain length ({D} draws) -- an ESS")
+        print("     estimate needs chain length >> tau, so this tau is biased")
+        print("     LOW and any steps/indep figure from it is unreliable.")
+        print("     Raise num_samples before comparing it to another run.")
     # A between-dominant split alone does NOT mean frozen: a chain that
     # random-walks slowly also has diverging chain means (verified on a
     # synthetic control, which this guard exists to reject).  The drift gate

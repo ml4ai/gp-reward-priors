@@ -5573,6 +5573,79 @@ across cycle lengths and the trade is neutral.
 > one — maximising effective draws at fixed total steps. The current four
 > configurations allocate it 60× apart with no principle behind the difference.
 
+### 4.3.67 Cycle length is neutral — decorrelation is set by TOTAL STEPS
+
+**§4.3.66's prediction is refuted, and its arithmetic was unsound.**
+medium_play at `cycle_length` 750 × `num_samples` 275 — 206,250 steps, exactly
+matching `jit10n256`:
+
+| | predicted | **actual** |
+|---|---|---|
+| effective draws / chain | 5.6 | **1.99** |
+
+> ⚠️ **Why §4.3.66 was wrong.** An ESS estimate needs chain length ≫ τ; near
+> 1:1 the estimator saturates and τ is biased **low**.
+>
+> | run | draws | τ | **τ : chain length** | steps / indep sample |
+> |---|---|---|---|---|
+> | `jit10n256` | 75 | 34.7 | 2.2 : 1 | 95,500 |
+> | `cyc750` | 75 | 48.6 | **1.5 : 1** | ~~36,500~~ **untrustworthy** |
+> | `cyc750x275` | 275 | 138.2 | 2.0 : 1 | 103,650 |
+>
+> `cyc750`'s chain was **1.5 τ long**, so the "36,500" that made cycle 750 look
+> 2.6× more compute-efficient was not a usable number. **§4.3.66's headline
+> claim is withdrawn**, and with it its re-reading of §4.3.64 — that section's
+> refutation of cycle length stands after all, for the reason it originally
+> gave.
+
+**The robust finding.** The two well-conditioned estimates agree at
+**95,500 and 103,650 steps per independent sample**, at cycle lengths 2750 and
+750 respectively — a 3.7× difference in partitioning producing an 8% difference
+in outcome. **Decorrelation is governed by total sampling steps, not by how they
+are divided into cycles.** `cycle_length` is neutral.
+
+This retroactively explains §4.3.64 and §4.3.65 without a new mechanism:
+**neither cycle length nor burn-in changes steps-to-decorrelate**, so neither
+moved `ess_cen`. Three refutations collapse into one invariant.
+
+**Steps per independent sample is a per-variant constant, and it spans 60×:**
+
+| variant | steps / indep sample | draws/chain at 206k steps |
+|---|---|---|
+| medium_diverse | ~1,600 | ~130 |
+| large_play | ~4,000 | ~50 |
+| large_diverse | ~77,000 | ~2.7 |
+| medium_play | **~100,000** | **~2.1** |
+
+**That is the quantity to budget on**, and it prices the problem: 20 effective
+draws per chain on medium_play needs ~2,000,000 sampling steps per chain, about
+**10× the current budget**. medium_diverse reaches the same at ~32,000.
+
+**The open question is now well-posed and is NOT about the schedule.** Why does
+medium_play's chain need 60× more steps per independent sample than
+medium_diverse's? Note it has the **largest** `sghmc_lr` of the four
+(2.49e-4 against medium_diverse's 1.25e-4), so "the step is too small" is not
+the naive answer, and §4.3.41 found ε already at its stability ceiling. The
+remaining candidates are the preconditioner (frozen at burn-in end, §4.3.37) and
+the posterior geometry itself.
+
+> **Guard added** so this estimator failure cannot recur: `tail_diagnostics`
+> now warns when τ exceeds a third of the chain length. Validated on AR(1) with
+> true τ ≈ 39 — at 60 draws it estimates 31.6 and **warns**; at 600 draws it
+> estimates 44.0 and stays silent.
+
+> **Method note.** Four proposed mechanisms have now been refuted in a row
+> (cycle length, burn-in, frozen chains, cycle-at-matched-compute). The durable
+> output of this stretch has not been any hypothesis but the **instruments and
+> the measured invariants** — centred metrics, the within/between split, τ in
+> compute units. Prefer measuring an invariant to proposing the next mechanism.
+
+**§10.2 implication.** Budget the sweep on **steps per independent sample**, not
+on `num_samples`. medium_play and large_diverse need roughly **10× the sampling
+compute** of the other two to reach comparable effective draws — or a sampler
+change. Their current allocation is not a defensible choice, it is an inherited
+accident.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
