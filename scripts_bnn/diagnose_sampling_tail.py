@@ -1440,6 +1440,15 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     print(f"  {'between-chain var (median/pt)':32s} {_bm:.6g}")
     print(f"  {'between / (within+between)':32s} {_frac:.4f}")
     print(f"  {'effective draws PER CHAIN':32s} {_per_chain:.2f}  of {D} kept")
+    # Integrated autocorrelation time of the KEPT draws.  Each kept draw is one
+    # full cycle apart, so a tau above ~1 means the cycle is not decorrelating
+    # and the draws are being spent on correlated samples.  Multiply by
+    # cycle_length for steps per independent sample -- the number that is
+    # comparable ACROSS configurations, since it is in absolute compute
+    # (section 4.3.66: 1.6k on medium_diverse against 95k on medium_play).
+    _tau = D / max(_per_chain, 1e-12)
+    print(f"  {'integrated autocorr time':32s} {_tau:.1f} kept draws"
+          f"  (x cycle_length = steps/indep sample)")
     # A between-dominant split alone does NOT mean frozen: a chain that
     # random-walks slowly also has diverging chain means (verified on a
     # synthetic control, which this guard exists to reject).  The drift gate

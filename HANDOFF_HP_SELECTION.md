@@ -5509,6 +5509,70 @@ off the cold point entirely — none of which has been varied. **Two refuted
 cross-variant correlations in a row is the reason this step is a measurement
 rather than a third hypothesis.**
 
+### 4.3.66 Frozen chains refuted — it is DECORRELATION, and the units are compute
+
+**§4.3.65's frozen-chain account is refuted.** No variant is between-dominant:
+
+| variant | between/(w+b) | **eff draws/chain** | within var | centred rhat |
+|---|---|---|---|---|
+| medium_play | 0.389 | **2.16** | 2.39 | 1.440 |
+| large_diverse | 0.318 | **2.68** | 2.62 | 1.316 |
+| large_play | 0.094 | 9.29 | 1404.4 | 1.081 |
+| medium_diverse | 0.034 | 35.00 | 128.9 | 1.023 |
+
+All four are within-chain dominated (0.03–0.39, none above 0.5), so **§3.6.2's
+cold-point under-dispersion caveat is not what is happening** and chains are not
+stuck. Three hypotheses proposed, three refuted — but this measurement isolated
+the differentiator the other two missed.
+
+**It is autocorrelation of the KEPT draws.** Chains explore; consecutive kept
+draws, a full cycle apart, are still correlated. Expressed in absolute compute
+(τ × `cycle_length` = steps per independent function-space sample):
+
+| variant | τ (kept draws) | cycle | **steps / independent sample** |
+|---|---|---|---|
+| medium_diverse | 2.1 | 750 | **1,600** |
+| large_play | 8.1 | 500 | **4,000** |
+| large_diverse | 28.0 | 2750 | **77,000** |
+| medium_play | 34.7 | 2750 | **95,500** |
+
+**A 60× spread.** medium_play spends ~95,000 sampling steps per independent
+draw. This is the quantity that is comparable across configurations, because it
+is in units of compute rather than of draws.
+
+> **This resolves §4.3.64's stated ambiguity.** That section could not separate
+> "cycle length is irrelevant and the lost compute hurt" from "short cycles
+> actively hurt". In compute units:
+>
+> | | cycle | ess/chain | τ | steps/indep | total steps | indep/chain |
+> |---|---|---|---|---|---|---|
+> | `cyc750` | 750 | 1.54 | 48.6 | **36,500** | 56,250 | 1.54 |
+> | `jit10n256` | 2750 | 2.16 | 34.7 | **95,500** | 206,250 | 2.16 |
+>
+> **Cycle 750 is 2.6× MORE compute-efficient.** `jit10n256` won only by
+> spending 3.7× more. **It was the compute** — short cycles help, and §4.3.63's
+> original instinct was directionally right for the wrong reason, while
+> §4.3.64's refutation of it was reading an unmatched budget.
+
+**Instrument**: `tail_diagnostics` now reports integrated autocorrelation time
+of the kept draws alongside effective draws per chain. Validated against AR(1)
+ground truth — independent draws read τ = 1.0, ρ = 0.8 reads τ = 10.3 against a
+theoretical 9.
+
+**The test, and it is a quantitative prediction rather than a correlation.**
+medium_play at `cycle_length` 750 with `num_samples` 275 — **206,250 sampling
+steps, exactly matching `jit10n256`**. From the measured τ, this predicts
+**≈5.6 effective draws per chain against the current 2.16**, and centred rhat
+should fall well below 1.44. If it lands near 5.6 the mechanism is confirmed and
+`cycle_length` becomes a compute-efficiency parameter to be *minimised* subject
+to the hot phase still decorrelating. If it lands near 2.2, τ does not transfer
+across cycle lengths and the trade is neutral.
+
+> **Sweep implication either way.** `cycle_length` × `num_samples` is a compute
+> allocation, not two independent knobs, and §10.2's redesign must sweep them as
+> one — maximising effective draws at fixed total steps. The current four
+> configurations allocate it 60× apart with no principle behind the difference.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
