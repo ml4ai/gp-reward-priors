@@ -5447,6 +5447,68 @@ centred rhat of 1.440. Note §4.3.33–34 already found burn-in fixes medium_div
 and is "not a general fix" — but that was measured on **raw** drift, so it is a
 §4.3.61 Class C reading and does not settle this.
 
+### 4.3.65 Burn-in refuted too — and `ess_cen ≈ 24` is invariant to every knob
+
+**§4.3.64's burn-in candidate is refuted.** medium_play at 100k burn-in, only
+that field changed from the `jit10n256` final:
+
+| medium_play config | cycle | burn-in | centred rhat | ess_cen | CVaR CE |
+|---|---|---|---|---|---|
+| `jit10n256` (final) | 2750 | 20k | **1.440** | **34.5** | **0.2648** |
+| `cyc750` (§4.3.64) | 750 | 20k | 1.865 | 24.7 | — |
+| `burn100k` | 2750 | **100k** | **1.988** | 23.5 | 0.3205 |
+
+5× burn-in made it worse on every axis, and the untouched `jit10n256` remains
+the best of the three. **Two hypotheses proposed and two refuted**; §4.3.33–34's
+"burn-in is not a general fix" is independently reconfirmed, and this time on
+centred metrics rather than the raw ones that made it a Class C reading.
+
+> **The signal that was there all along.** `ess_bulk (centred)` is **17.7–34.5
+> across every medium_play configuration ever run** — 8 chains and 16, `n_meas`
+> 35 and 256, cycle 500 through 2750, burn-in 20k and 100k. **Nothing moves
+> it.** On 1200 draws that is ~1.5 effective draws per chain, alongside centred
+> rhat 1.4–2.0 (between-chain variance ≈ 3× within-chain). That is not a
+> slowly-mixing chain, it is a **stuck** one, and it explains the whole
+> signature at once: near-zero within-chain movement makes the §4.2 drift gate
+> pass *trivially* — a frozen chain is stationary — while between-chain scatter
+> drives rhat.
+
+**This has a documented, untested predictor** — §3.6.2 on the cyclical
+schedule: *"Sampling only at the cold point may therefore under-disperse
+relative to the true posterior — untested, and not measured by `scale_ratio`,
+which is a growth ratio rather than an absolute width."* Cool-phase harvesting
+takes one sample per cycle at the annealed step size; if the hot phase does not
+carry a chain out of its basin, every cycle returns to the same local optimum.
+Within-chain spread collapses, and what presents as posterior width is really
+which basin each chain started in. Note this does **not** re-open §4.3.6, which
+compared cycling *on vs off* and is confirmed on centred (§4.3.64) — the
+suspect is the **cold-point harvest**, which neither section tested.
+
+**Instrument added** (`tail_diagnostics`, always on): within-chain vs
+between-chain variance of **centred** `f`, their ratio, and effective draws
+**per chain**. Validated on three controls:
+
+| control | between/(within+between) | verdict |
+|---|---|---|
+| frozen chains (tiny within, stationary) | 0.9996 | FROZEN CHAINS |
+| healthy (chains agree and explore) | 0.0118 | not frozen |
+| slow random walk (exploring, unconverged) | 0.6749 | NOT converged |
+
+> The third control is why the verdict is **conditioned on the drift gate** and
+> not on the ratio alone: a slow random walk also makes chain means diverge, and
+> a first implementation called it FROZEN. A frozen chain is stationary and
+> **passes** the gate; a random-walking one **fails** it. medium_play passes
+> (centred 0.61 / 0.65), so if its ratio is between-dominant the frozen reading
+> is the right one.
+
+**Next: measure, do not hypothesise.** Run the instrument across the four
+finals. If medium_play and large_diverse are between-dominant while
+medium_diverse and large_play are not, the frozen-chain account is confirmed and
+the lever is the harvest — `samples_per_cycle`, `fraction_cool`, or harvesting
+off the cold point entirely — none of which has been varied. **Two refuted
+cross-variant correlations in a row is the reason this step is a measurement
+rather than a third hypothesis.**
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

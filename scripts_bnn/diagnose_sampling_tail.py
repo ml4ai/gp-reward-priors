@@ -1385,7 +1385,7 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     pred_sd = flat.std(axis=0)                               # per-point spread
     eps = 1e-8
 
-    drift_diagnostics(pred_chains)
+    _drift = drift_diagnostics(pred_chains)
 
     print("\n=== BULK (should match logged pred_* ESS/R-hat) ===")
     _summ("ess_bulk", azs.ess(pred_chains))
@@ -1414,6 +1414,59 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     elif _r_cen > 1.1:
         print("  -> the centred shape itself is not mixing; this is a real")
         print("     mixing failure and it does bear on predictions.")
+
+    # ---- WITHIN vs BETWEEN chain variance (section 4.3.65) ---------------
+    # rhat and ESS are ratios, so neither says whether a chain is EXPLORING
+    # slowly or is FROZEN.  Those need opposite fixes and the distinction is not
+    # recoverable from rhat: a chain stuck at one point has tiny within-chain
+    # variance and passes the 4.2 drift gate trivially (a frozen chain is
+    # stationary), while the between-chain scatter it sits in drives rhat up.
+    #
+    # 3.6.2 records the untested caveat this measures: cool-phase harvesting
+    # takes one sample per cycle at the annealed step size, so if the hot phase
+    # does not carry a chain out of its basin, every cycle returns to the same
+    # local optimum -- within-chain spread collapses and what looks like
+    # posterior width is really just which basin each chain started in.
+    # Everything here is on CENTRED f: the offset is unidentified (3.6.3) and
+    # would otherwise land in the between-chain term.
+    _w = _cen.var(axis=1, ddof=1).mean(axis=0)       # mean within-chain var/pt
+    _b = _cen.mean(axis=1).var(axis=0, ddof=1)       # var of chain means /pt
+    _wm, _bm = float(np.median(_w)), float(np.median(_b))
+    _frac = _bm / max(_wm + _bm, 1e-30)
+    _ess_cen = np.asarray(azs.ess(_cen), dtype=np.float64)
+    _per_chain = float(np.median(_ess_cen)) / C
+    print("\n=== WITHIN vs BETWEEN chain variance, centred f (section 4.3.65) ===")
+    print(f"  {'within-chain var (median/pt)':32s} {_wm:.6g}")
+    print(f"  {'between-chain var (median/pt)':32s} {_bm:.6g}")
+    print(f"  {'between / (within+between)':32s} {_frac:.4f}")
+    print(f"  {'effective draws PER CHAIN':32s} {_per_chain:.2f}  of {D} kept")
+    # A between-dominant split alone does NOT mean frozen: a chain that
+    # random-walks slowly also has diverging chain means (verified on a
+    # synthetic control, which this guard exists to reject).  The drift gate
+    # separates them -- a FROZEN chain is stationary and PASSES it, a
+    # random-walking chain FAILS it -- so the verdict is conditioned on both.
+    _gz = max(_drift.get("fn_drift_centred_loc_z_median", float("nan")),
+              _drift.get("fn_drift_centred_scale_z_median", float("nan")))
+    _stationary = _gz <= 2.0
+    if _frac > 0.5 and _stationary:
+        print("  -> FROZEN CHAINS: most of the apparent posterior width is")
+        print("     BETWEEN-chain scatter, not within-chain exploration, and")
+        print(f"     each chain is stationary (centred gate {_gz:.2f} <= 2).  So")
+        print("     each chain sits near ONE point and the width is 'which")
+        print("     basin each chain landed in'.  More burn-in and different")
+        print("     cycle lengths do NOT fix this (4.3.64); the cold-point")
+        print("     harvest itself is the suspect (3.6.2).")
+    elif _frac > 0.5:
+        print("  -> NOT converged: chain means disagree AND the chains are")
+        print(f"     still moving (centred gate {_gz:.2f} > 2).  This is a slow")
+        print("     random walk, not frozen chains -- burn-in and step size")
+        print("     are the levers, and the tail numbers are meaningless until")
+        print("     the gate passes.")
+    elif _per_chain < 5.0:
+        print("  -> chains explore, but each contributes < 5 effective draws;")
+        print("     the budget is draws-per-chain limited, not chain-count.")
+    else:
+        print("  -> within-chain exploration dominates; chains are not frozen.")
 
     print(f"\n=== VaR (lower {alpha:.0%} quantile = 95% lower bound) ===")
     ess_var = np.asarray(azs.ess(pred_chains, method="quantile", prob=alpha))
