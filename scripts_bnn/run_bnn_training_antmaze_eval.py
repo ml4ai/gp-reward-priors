@@ -164,6 +164,16 @@ class TrainConfig:
     chain_init_jitter: float = 0.0
     # Safety clamp on per-element momentum (see bb_optim_star.py for details)
     max_param_step: Optional[float] = 0.5
+    # Floor on AdaptiveSGHMC's variance estimate v_hat.  It caps the
+    # preconditioner gain at minv_t <= 1/sqrt(v_hat_min), so the 1e-4 default
+    # caps it at exactly 100.  Handoff 4.3.71: large_play sampled with 50.8% of
+    # elements pinned at that floor, i.e. half the network receiving a constant
+    # gain rather than an adapted one, which is a candidate throttle on the
+    # sampling step.  Lowering this RAISES the ceiling (1e-6 -> 1000, 1e-8 ->
+    # 10000) and changes ONLY the step scale: the likelihood, the prior and the
+    # target distribution are untouched, unlike bt_pool="sum" (3.6.2), which
+    # raised gradients but also changed the model.
+    v_hat_min: Optional[float] = None
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
     # mean over valid timesteps, trajectory-length-independent) or "sum" (legacy).
     bt_pool: str = "mean"
@@ -578,6 +588,7 @@ def train(config: TrainConfig):
         mdecay=config.mdecay,
         batch_size=config.batch_size,
         max_param_step=config.max_param_step,
+        v_hat_min=config.v_hat_min,
         log_every=config.warmup_log_every,
         eval_data=(X_eval, y_eval) if config.warmup_log_every > 0 else None,
     )
@@ -701,6 +712,7 @@ def train(config: TrainConfig):
         resample_momentum=config.resample_momentum,
         fix_meas_set=config.fix_meas_set,
         max_param_step=config.max_param_step,
+        v_hat_min=config.v_hat_min,
         chains_per_gpu=config.chains_per_gpu,
         bt_pool=config.bt_pool,
         clip_grad_norm_value=config.clip_grad_norm_value,

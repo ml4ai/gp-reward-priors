@@ -334,6 +334,7 @@ class FPrefNet:
         num_burn_in_steps=3000,
         epsilon=1e-10,
         max_param_step=None,
+        v_hat_min=None,
     ):
         """Instantiate AdaptiveSGHMC (or SGHMC) with scale_grad = N / T."""
         dtype = np.float32
@@ -347,6 +348,13 @@ class FPrefNet:
             self.sampler_params["epsilon"] = dtype(epsilon)
             if max_param_step is not None:
                 self.sampler_params["max_param_step"] = float(max_param_step)
+            # Floor on the variance estimate v_hat, which caps the
+            # preconditioner gain at minv_t <= 1/sqrt(v_hat_min).  Exposed
+            # because that cap is a candidate throttle on the sampling step
+            # (handoff 4.3.71): at the 1e-4 default it is exactly 100, and
+            # large_play sampled with 50.8% of elements pinned there.
+            if v_hat_min is not None:
+                self.sampler_params["v_hat_min"] = float(v_hat_min)
             self.sampler = AdaptiveSGHMC(
                 self.net.parameters(), **self.sampler_params
             )
@@ -597,6 +605,7 @@ class FPrefNet:
         resample_momentum=True,
         fix_meas_set=False,
         max_param_step=None,
+        v_hat_min=None,
         log_every=0,
         eval_data=None,
     ):
@@ -682,7 +691,7 @@ class FPrefNet:
             self.net = self.net.float()
             self._initialize_sampler(
                 num_datapoints, lr, mdecay, num_burn_in_steps, epsilon,
-                max_param_step=max_param_step,
+                max_param_step=max_param_step, v_hat_min=v_hat_min,
             )
             num_steps += num_burn_in_steps
 
@@ -1009,6 +1018,7 @@ class FPrefNet:
         resample_momentum=True,
         fix_meas_set=False,
         max_param_step=None,
+        v_hat_min=None,
         chains_per_gpu=1,
         bt_pool="mean",
         clip_grad_norm_value=100.0,
@@ -1077,6 +1087,7 @@ class FPrefNet:
             resample_momentum=resample_momentum,
             fix_meas_set=fix_meas_set,
             max_param_step=max_param_step,
+            v_hat_min=v_hat_min,
         )
 
         # Up to this many chains run concurrently per wave: chains_per_gpu on

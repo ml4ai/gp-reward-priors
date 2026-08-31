@@ -5854,6 +5854,66 @@ and **every drift gate improved**.
 > **Do not act on this without a test that separates step scale from the
 > likelihood change.**
 
+### 4.3.71 The step-scale test: `v_hat_min` exposed
+
+> ⚠️ **Correction to §4.3.70.** That section concluded "τ is flat → no relative
+> structure → preconditioning cannot help." **Too strong.** Flat τ rules out a
+> *directional* preconditioner fix in function space. It does **not** rule out a
+> **uniform step-scale deficit**: the clamp acts in **weight** space, and a
+> uniformly saturated preconditioner under-steps every direction equally, which
+> presents as exactly the **isotropic** function-space slowness measured. Flat τ
+> is *consistent with* the clamp being the cause, not evidence against it.
+> §4.3.70's cross-validation and its FLAT verdicts stand; only the inference to
+> "preconditioning cannot help" is withdrawn.
+
+**The mechanism, and it now hangs together.** `minv_t = 1/(√v̂+ε)` is capped at
+`1/√v_hat_min = 100` by `adaptive_sghmc.py:204`. medium_play's sampling
+gradients are **17× smaller** than large_play's (0.230 vs 3.991), so its `v̂`
+sits further below the `1e-4` floor and **more** of its parameters pin at the
+cap — precisely where the adaptation that would compensate for a flat posterior
+is cut off. large_play already runs at **50.8% pinned** (§4.3.68); medium_play
+should be worse, and the new runs will log it.
+
+**Why this is the test §4.3.70 asked for.** `bt_pool="sum"` raised gradients
+~100× and improved every drift gate, but **doubled predictive CE** (0.2076 →
+0.4158) because it changed the likelihood at the same time — the two effects
+were inseparable. Lowering `v_hat_min` raises the step ceiling while leaving
+**the likelihood, the prior and the target distribution untouched**. It is a
+pure step-scale intervention.
+
+**Implemented**: `v_hat_min` threaded from the config through
+`_initialize_sampler` → `train` → `sample_multi_chains_parallel`
+(`f_pref_net.py`), plus a `v_hat_min: Optional[float] = None` field in
+`run_bnn_training_antmaze_eval.py`. `None` leaves the sampler's own `1e-4`
+default, so every existing config is unchanged.
+
+Verified the value reaches the optimizer and lifts the cap:
+
+| `v_hat_min` | observed `minv_max` | theory `1/√v_hat_min` |
+|---|---|---|
+| 1e-4 (default) | 100.0 | 100.0 |
+| 1e-6 | 1000.0 | 1000.0 |
+| 1e-8 | 10000.0 | 10000.0 |
+
+**Prediction, recorded before the runs.** If the clamp is the throttle,
+medium_play's τ falls from 34.7 toward large_play's 8.1, `ess_cen` rises from
+34.5, and **predictive CE does not degrade** — that last part is what
+distinguishes this from `bt_pool="sum"`. If τ does not move, the clamp is not
+the throttle and §4.3.67's compute pricing stands unqualified, with the
+preconditioner closed out for good.
+
+> ⚠️ **Read `param_clamp_sampling_pct` before believing any result.** The
+> `max_param_step = 0.5` momentum clamp is the remaining safety net, and it is
+> **not measure-preserving** (§3.3) — it biases the CVaR tail. If lowering
+> `v_hat_min` makes that clamp start firing during sampling, the run is being
+> held together by a non-measure-preserving operation and its tail numbers are
+> invalid regardless of how τ looks. That is the failure mode to watch, and it
+> is the reason the ladder starts at 1e-6 rather than 1e-8.
+
+**By-product**: these runs log `preconditioner_snapshot()`, so medium_play's
+saturation fraction — the comparison §4.3.68 could not make without a training
+run — comes for free.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
