@@ -5763,6 +5763,24 @@ along actual heat-kernel eigendirections:
 `--geometry` remains in the tool but prints an invalidity banner and should not
 be used.
 
+> **Bug fixed on first real use, and it surfaced a fact worth recording.**
+> `keep` is a mask over **cells** and was used to index `w`, which is indexed by
+> **eigendirection** — different index spaces, raising `IndexError: index 21 is
+> out of bounds for axis 0 with size 13`. Slicing the full eigenvectors' occupied
+> rows would also have given a **non-orthogonal** set, so τ per "direction" would
+> have mixed directions even where the shapes happened to agree. Fixed by
+> eigendecomposing the prior **restricted to the occupied cells** — one
+> consistent index space, and it is the prior the observed cells actually see.
+>
+> **The eval set occupies only 13 of 26 free cells on medium (50%).** The basis
+> therefore describes the *visited sub-maze*, which the tool now states
+> explicitly. This is worth carrying into §4.3.54's coverage discussion: half
+> the maze carries no validation signal at all, which bears directly on the
+> coverage-limited reading of large_play.
+>
+> Re-validated at **full (26/26) and partial (13/26) coverage**, three regimes
+> each — all six classify correctly.
+
 **What the run will decide.** **STIFF SLOW** → the prior's hard-pinned
 directions carry the autocorrelation, preconditioning is the lever, and minv's
 clamp at `1/√v_hat_min = 100` bounds how much of that fix is reachable — which

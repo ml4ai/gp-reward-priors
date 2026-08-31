@@ -1495,30 +1495,43 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     A, _, _ = build_maze_graph(fm)
     Kg = heat_kernel(A, float(cfg.get("map_eta", 1.0)))
     n = Kg.shape[0]
-    w, V = np.linalg.eigh(float(cfg.get("map_sig_g2", 1.0)) * Kg
-                          + float(cfg.get("map_sig_n2", 1e-3)) * np.eye(n))
-    order = np.argsort(w)[::-1]
-    w, V = w[order], V[:, order]
 
     C, D, P = pred_chains.shape
     cen = pred_chains - pred_chains.mean(axis=2, keepdims=True)
-    # cell means: (C, D, n).  Cells with no eval point are dropped from the basis.
     # Plain list, NOT an object array: when every cell holds the same number of
     # points numpy collapses it to a 2-D object array and indexing it yields an
     # object array, which is not a valid index.
     occ = [np.flatnonzero(cells == c) for c in range(n)]
-    keep = np.array([o.size > 0 for o in occ])
-    fc = np.zeros((C, D, n), dtype=np.float64)
-    for c in range(n):
-        if keep[c]:
-            fc[:, :, c] = cen[:, :, occ[c]].mean(axis=2)
-    Vk = V[keep]
-    fk = fc[:, :, keep]
-    proj = fk @ Vk                                     # (C, D, n_eig)
+    keep = np.flatnonzero([o.size > 0 for o in occ])
+    if keep.size < 4:
+        print(f"\n=== PRIOR-BASIS GEOMETRY (section 4.3.69) ===")
+        print(f"  only {keep.size} of {n} free cells are occupied by the eval "
+              f"set -- too few to form a basis.")
+        return None
+
+    # Eigendecompose the prior RESTRICTED to the occupied cells.  Taking the
+    # full n x n eigenvectors and slicing their occupied rows would give a
+    # non-orthogonal set (and puts eigenvalues and cells in different index
+    # spaces, which is what raised IndexError here before): tau per "direction"
+    # would then mix directions.  The submatrix is the prior the observed cells
+    # actually see, and its eigenpairs live in one consistent space.
+    Ksub = (float(cfg.get("map_sig_g2", 1.0)) * Kg[np.ix_(keep, keep)]
+            + float(cfg.get("map_sig_n2", 1e-3)) * np.eye(keep.size))
+    w, V = np.linalg.eigh(Ksub)
+    order = np.argsort(w)[::-1]
+    w, V = w[order], V[:, order]
+
+    fk = np.stack([cen[:, :, occ[c]].mean(axis=2) for c in keep], axis=2)
+    proj = fk @ V                                      # (C, D, n_keep)
 
     print(f"\n=== PRIOR-BASIS GEOMETRY (section 4.3.69) ===")
-    print(f"  basis: heat-kernel eigenvectors, eta={cfg.get('map_eta')}, "
-          f"{int(keep.sum())} of {n} free cells occupied")
+    print(f"  basis: heat-kernel eigenvectors of the prior RESTRICTED to the "
+          f"{keep.size} of {n} free cells the eval set occupies, "
+          f"eta={cfg.get('map_eta')}")
+    if keep.size < n:
+        print(f"  !! the eval set covers only {keep.size}/{n} free cells "
+              f"({100.0*keep.size/n:.0f}%); this basis describes the visited "
+              f"sub-maze only.")
     print("  Fixed a priori -- independent of the chains, so tau here is NOT")
     print("  confounded with the direction-selection that invalidates --geometry.")
     print(f"\n  {'eig':>5}{'prior var':>13}{'tau (draws)':>13}{'ess/chain':>11}")
@@ -1531,7 +1544,8 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
         e = float(np.asarray(azs.ess(proj[:, :, j]), dtype=np.float64)) / C
         taus[j] = D / max(e, 1e-12)
     for j in show:
-        print(f"  {j:>5}{w[keep][j]:>13.6g}{taus[j]:>13.1f}{D/max(taus[j],1e-12):>11.2f}")
+        print(f"  {j:>5}{w[j]:>13.6g}{taus[j]:>13.1f}"
+              f"{D/max(taus[j],1e-12):>11.2f}")
     hi, lo = taus[:max(1, ne // 3)].mean(), taus[-max(1, ne // 3):].mean()
     spread = float(taus.max() / max(taus.min(), 1e-12))
     print(f"\n  {'tau, top third (wide prior dirs)':36s} {hi:.1f}")
@@ -1553,7 +1567,8 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     else:
         print("  -> WIDE DIRECTIONS ARE SLOW: the loosely-constrained directions")
         print("     are the autocorrelated ones; budget compute, not geometry.")
-    return {"tau": taus, "prior_var": w[keep], "tau_spread": spread}
+    return {"tau": taus, "prior_var": w, "tau_spread": spread,
+            "n_cells_occupied": int(keep.size), "n_cells": int(n)}
 
 
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
