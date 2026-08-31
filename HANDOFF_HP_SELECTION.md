@@ -5390,6 +5390,63 @@ cyclical run's advantage survives centring, §4.3.6 stands as written on
 stationarity too; if it inverts, the schedule question is genuinely reopened and
 `use_cyclical_lr` returns to the sweep.
 
+### 4.3.64 Cycle length refuted; §4.3.6 confirmed on centred; burn-in is next
+
+**§4.3.63's hypothesis is refuted.** medium_play at `cycle_length` 750, all else
+as `jit10n256`:
+
+| | centred rhat | ess_cen | centred gate |
+|---|---|---|---|
+| cycle 2750 (`jit10n256`) | **1.440** | 34.5 | PASS 0.61 / 0.65 |
+| cycle 750 (`cyc750`) | **1.865** | 24.7 | PASS 0.91 / 1.01 |
+
+Shortening the cycle made mixing **worse**. §4.3.63 predicted the opposite.
+
+> **What the test can and cannot settle.** The 3.7× compute drop was built in
+> deliberately so that an *improvement* would be decisive. A *worsening* is
+> consistent with both "cycle length is irrelevant and the lost compute hurt"
+> and "cycle length matters in the opposite direction". Settled: **long cycles
+> do not cause the between-chain disagreement.** Unsettled: whether short
+> cycles actively hurt, or the compute did.
+
+> **This is the NINTH n=4 cross-variant ordering in this project to be refuted
+> on test** (§4.3.30–46 records eight, and already noted the pattern). A clean
+> 2-vs-2 split across four variants is not evidence; the prior against it should
+> have outweighed the appearance of the table in §4.3.63.
+
+**§4.3.6 is CONFIRMED on centred — the schedule stays exonerated.**
+
+| | raw `scale_z` | **centred `scale_z`** | centred rhat | verdict |
+|---|---|---|---|---|
+| `c8` cyclical | 1.3564 | **1.8603** | 1.4252 | **PASS** |
+| `nocyc` | 2.5834 | **2.8559** | 1.8087 | **FAIL** |
+
+Ordering and verdict are both preserved, and cyclical also wins on centred
+rhat. §4.3.6 stands as written and `use_cyclical_lr` does **not** return to the
+sweep. One caveat it could not record: `c8`'s centred `scale_z` is **1.86**
+against the raw 1.36, with a 95th of 3.34 — it passes the gate far more
+marginally than the raw number implied.
+
+**Burn-in is the leading candidate, on a better-controlled pair than §4.3.63's.**
+The refuted run supplies it:
+
+| | cycle | burn-in | `n_meas` | jitter | draws | centred rhat |
+|---|---|---|---|---|---|---|
+| medium_diverse `burn100k` | 750 | **100000** | 256 | 1.0 | 75 | **1.023** |
+| medium_play `cyc750` | 750 | **20000** | 256 | 1.0 | 75 | **1.865** |
+
+Same cycle length, measurement count, jitter and draw count. What remains is
+burn-in (5×), the step sizes, and the dataset. **The mechanism fits the observed
+signature exactly**: chains that have not yet reached the common stationary
+distribution look internally stationary inside a short sampling window while
+still disagreeing with each other — drift gate PASS, centred rhat FAIL.
+
+**Test**: medium_play at `num_burn_in_steps` 100000, everything else at the
+`jit10n256` final (cycle **2750**, so burn-in is the only change), against its
+centred rhat of 1.440. Note §4.3.33–34 already found burn-in fixes medium_diverse
+and is "not a general fix" — but that was measured on **raw** drift, so it is a
+§4.3.61 Class C reading and does not settle this.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
