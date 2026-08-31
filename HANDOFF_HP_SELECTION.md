@@ -5646,6 +5646,72 @@ compute** of the other two to reach comparable effective draws — or a sampler
 change. Their current allocation is not a defensible choice, it is an inherited
 accident.
 
+### 4.3.68 The preconditioner is clamp-saturated; a geometry instrument added
+
+Following §4.3.67's two remaining candidates for the 60× spread in steps per
+independent sample.
+
+#### Preconditioner — measured, but on ONE variant only
+
+`preconditioner_snapshot()` postdates three of the four final runs, so wandb has
+it for **large_play alone**:
+
+| metric | large_play |
+|---|---|
+| `precond_v_hat_at_floor` | **0.5077** |
+| `precond_minv_median` | **100** |
+| `precond_minv_max` | **100** |
+| `precond_tau_median` | 8.317 |
+
+**Median equals max because more than half the parameters sit at the clamp.**
+`adaptive_sghmc.py:204` applies `v_hat.clamp_(min=v_hat_min)` with
+`v_hat_min = 1e-4`, capping `minv_t = 1/(√v̂+ε)` at exactly
+`1/√1e-4 = 100` — a deliberate safety bound, documented in that file as
+preventing 2e8-magnitude parameter updates. So **50.8% of large_play's
+parameters receive no per-parameter adaptation at all**, and the effective step
+anisotropy the preconditioner can express is capped at **100:1** regardless of
+what the posterior needs.
+
+> **This does not yet explain anything.** large_play is the **fast**-mixing
+> variant (~4,000 steps per independent sample), so a half-saturated
+> preconditioner is evidently compatible with good mixing. The comparison that
+> would be informative — medium_play's saturation fraction — **does not exist**,
+> and getting it costs a training run per variant, not a diagnostic. Recorded
+> as a measured property of the sampler, not as a cause.
+
+#### Geometry — instrument added, runs on existing chains
+
+A scalar step size mixes at the rate of its stiffest direction, so anisotropy is
+the natural suspect. But "anisotropic" is not actionable on its own; what
+matters is **which** directions are slow:
+
+- slow **WIDE** directions → the posterior is genuinely broad along them, the
+  cost is compute, and preconditioning cannot help;
+- slow **NARROW** directions → a few stiff directions throttle the chain, which
+  is exactly what a preconditioner is for — and the 100:1 clamp above is then a
+  hard ceiling on the available fix.
+
+`--geometry` reports the eigenspectrum of the **centred** posterior covariance
+(centred so the unidentified offset does not appear as a spurious leading
+component), the participation ratio, and **τ per leading principal component**,
+so autocorrelation can be read against variance instead of pooled into one
+number. Validated on three synthetic regimes with known τ per direction:
+
+| regime | leading comps (var frac, τ) | small comps (var frac, τ) | verdict |
+|---|---|---|---|
+| slow = wide | 0.52 / 0.42, τ 61 / 86 | 0.017, τ 1.1 | SLOW WIDE |
+| slow = narrow | 0.59 / 0.38, τ 1.3 / 1.1 | 0.0016, τ 78 | SLOW NARROW |
+| healthy | 0.56 / 0.38, τ 1.2 | 0.018, τ 1.2 | none slow |
+
+τ recovers ground truth throughout (true 60 → 61–86, true 1.2 → 1.1–1.3).
+
+**Next**: run it on the four finals. The prediction that would make the
+preconditioner the answer is medium_play and large_diverse showing **slow narrow**
+directions while medium_diverse and large_play do not — narrow directions being
+precisely what a clamped preconditioner cannot accelerate. If instead all four
+show slow **wide** directions, the 60× spread is genuine posterior breadth,
+preconditioning is irrelevant, and §4.3.67's compute pricing is the whole story.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

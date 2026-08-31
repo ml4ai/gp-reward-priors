@@ -1372,6 +1372,78 @@ def drift_blocks(pred_chains, n_blocks=5):
         print("  energy injected per cycle rather than at a start transient.")
 
 
+def geometry_diagnostics(pred_chains, n_comp=8):
+    """Function-space posterior geometry, and WHICH directions mix slowly.
+
+    Section 4.3.68.  4.3.67 established that medium_play needs ~100k sampling
+    steps per independent draw against medium_diverse's ~1.6k, with the LARGEST
+    step size of the four and epsilon already at its stability ceiling
+    (4.3.41).  A scalar step size mixes at the rate of its stiffest direction,
+    so the natural suspect is anisotropy -- but "anisotropic" alone is not
+    actionable.  What matters is whether the slow directions are the WIDE ones
+    (the posterior is genuinely broad and needs more compute) or the NARROW
+    ones (a few stiff directions are throttling everything and preconditioning
+    is the lever).
+
+    Runs on CENTRED f: the offset is unidentified (3.6.3) and would otherwise
+    appear as a spurious leading component.
+
+    Reports the eigenspectrum of the posterior covariance, the participation
+    ratio (effective number of directions), and the integrated autocorrelation
+    time of each leading principal component -- so tau can be read against
+    variance rather than as one pooled number.
+    """
+    C, D, P = pred_chains.shape
+    cen = pred_chains - pred_chains.mean(axis=2, keepdims=True)
+    X = cen.reshape(C * D, P).astype(np.float64)
+    X -= X.mean(axis=0, keepdims=True)              # centre over draws, per point
+    # Economy SVD: (C*D, P) with C*D ~ 1200 and P ~ 5400 is cheap.
+    _, S, Vt = np.linalg.svd(X, full_matrices=False)
+    lam = S ** 2 / max(C * D - 1, 1)
+    tot = float(lam.sum())
+    pr = float(tot ** 2 / max(float((lam ** 2).sum()), 1e-300))   # participation ratio
+
+    k = min(n_comp, lam.size)
+    scores = (X @ Vt[:k].T).reshape(C, D, k)        # per-draw coordinate on each PC
+
+    print(f"\n=== POSTERIOR GEOMETRY, centred f (section 4.3.68) ===")
+    print(f"  {C} chains x {D} draws over {P} points")
+    print(f"  {'participation ratio':30s} {pr:.2f} effective directions of {min(C*D,P)}")
+    print(f"  {'top-1 variance fraction':30s} {lam[0]/tot:.4f}")
+    print(f"  {'top-8 variance fraction':30s} {lam[:min(8,lam.size)].sum()/tot:.4f}")
+    if lam.size > 1 and lam[min(49, lam.size - 1)] > 0:
+        print(f"  {'lam_1 / lam_50':30s} {lam[0]/lam[min(49,lam.size-1)]:.4g}")
+    print(f"\n  {'comp':>5}{'eigenvalue':>14}{'var frac':>10}{'tau (draws)':>13}"
+          f"{'ess/chain':>11}")
+    print("  " + "-" * 53)
+    slow_narrow = slow_wide = 0
+    for j in range(k):
+        ess_j = float(np.asarray(azs.ess(scores[:, :, j]), dtype=np.float64))
+        per_chain = ess_j / C
+        tau_j = D / max(per_chain, 1e-12)
+        print(f"  {j:>5}{lam[j]:>14.6g}{lam[j]/tot:>10.4f}{tau_j:>13.1f}"
+              f"{per_chain:>11.2f}")
+        if tau_j > 0.1 * D:
+            if lam[j] / tot > 0.05:
+                slow_wide += 1
+            else:
+                slow_narrow += 1
+    if slow_wide and not slow_narrow:
+        print("  -> the SLOW directions are the WIDE ones: the posterior really")
+        print("     is broad along them and the cost is compute, not geometry.")
+        print("     Preconditioning cannot help; budget more sampling steps.")
+    elif slow_narrow:
+        print("  -> SLOW NARROW directions exist: low-variance components are")
+        print("     autocorrelated, i.e. a few stiff directions throttle the")
+        print("     chain.  That is what a preconditioner is for -- check")
+        print("     precond_v_hat_at_floor and minv_max, since minv is CLAMPED")
+        print("     at 1/sqrt(v_hat_min) = 100 and cannot express a wider range.")
+    else:
+        print("  -> no leading component is slow; the autocorrelation is spread")
+        print("     across many directions rather than concentrated.")
+    return {"participation_ratio": pr, "lam": lam[:k]}
+
+
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
     """Print bulk, VaR(alpha), and CVaR(alpha) convergence diagnostics.
 
@@ -1711,6 +1783,14 @@ def main():
                          "(stays broken as alpha relaxes) from a merely wide "
                          "posterior (recovers smoothly to the plug-in row, "
                          "which alpha=1 reproduces exactly). Section 4.3.51.")
+    ap.add_argument("--geometry", action="store_true",
+                    help="Eigenspectrum of the centred function-space posterior "
+                         "plus the autocorrelation time of each leading "
+                         "principal component, so tau can be read against "
+                         "variance. Separates 'slow because the posterior is "
+                         "genuinely broad' (compute) from 'slow because a few "
+                         "stiff directions throttle the chain' "
+                         "(preconditioning). Section 4.3.68.")
     ap.add_argument("--cvar-ce-per-chain", action="store_true",
                     help="Also run the whole CVaR reduction inside each chain "
                          "separately. Separates a posterior that is genuinely "
@@ -1786,6 +1866,9 @@ def main():
             sys.exit(f"--draw-ladder must be comma-separated integers, got "
                      f"{args.draw_ladder!r}")
         draw_ladder(pred_chains, levels, alpha=args.alpha)
+
+    if args.geometry:
+        geometry_diagnostics(pred_chains)
 
     if args.cvar_ce:
         sweep = None
