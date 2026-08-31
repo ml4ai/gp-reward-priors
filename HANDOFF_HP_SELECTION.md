@@ -5712,6 +5712,65 @@ precisely what a clamped preconditioner cannot accelerate. If instead all four
 show slow **wide** directions, the 60× spread is genuine posterior breadth,
 preconditioning is irrelevant, and §4.3.67's compute pricing is the whole story.
 
+### 4.3.69 `--geometry` is invalid; use the PRIOR eigenbasis instead
+
+**The §4.3.68 geometry diagnostic does not work, and its results are withdrawn.**
+Run on the four finals it returned "SLOW NARROW" for **all four**, including the
+two that mix well — the threshold classified on variance fraction, and with real
+spectra (top-1 at 1–5%) every component falls below any "wide" cutoff. But the
+deeper fault is structural, and no threshold fixes it:
+
+> **PCA directions are estimated from the same autocorrelated, under-sampled
+> draws whose mixing is being measured.** A slow direction accumulates apparent
+> variance along a chain, so it is *preferentially selected* as a leading PC.
+> Geometry and mixing rate are confounded inside the estimator. Three synthetic
+> controls with known per-direction τ **all misclassified**, including one with
+> genuinely flat τ.
+
+**Withdrawn**: the "SLOW NARROW on all four" verdict, and the follow-on reading
+that τ was flat across leading components so no stiff subspace exists. Both were
+computed on unreliable eigenvectors. The participation ratios (50.6 / 77.9 /
+182.9 / 296.9) are similarly confounded — they rank *inversely* with mixing
+quality because a sample covariance cannot show directions the chain never
+explored, so a slow chain reports a low PR as a **consequence**.
+
+**Unaffected**: §4.3.67's pooled τ and steps-per-independent-sample (computed on
+raw function values, no PCA), and the §4.3.68 preconditioner clamp facts (code
+plus a logged metric).
+
+#### The replacement: `--geometry-prior`
+
+The heat-kernel prior supplies a basis **fixed a priori** — determined by the
+maze layout and `map_eta`, never by the sample. Averaging `f` within free cells
+gives a 26- or 33-dimensional signal well determined by 1200 draws, and each
+prior eigenvalue is a known prior variance, so τ reads against prior stiffness
+with no circularity. Small prior eigenvalue = a direction the prior pins hard.
+
+Validated on the same three regimes that broke the PCA version, with τ injected
+along actual heat-kernel eigendirections:
+
+| control | τ top third (wide) | τ bottom third (stiff) | verdict |
+|---|---|---|---|
+| flat τ everywhere | 42.3 | 41.0 | **FLAT** ✓ |
+| stiff dirs slow | 5.4 | 85.3 | **STIFF SLOW** ✓ |
+| wide dirs slow | 81.4 | 3.0 | **WIDE SLOW** ✓ |
+
+> The verdict gates on the **thirds**, not on max/min: per-direction τ over
+> 26–33 eigendirections is noisy enough that a genuinely flat profile still
+> shows ~2.5× extreme spread, which an earlier max/min gate misread as
+> structure. The flat control caught it.
+
+`--geometry` remains in the tool but prints an invalidity banner and should not
+be used.
+
+**What the run will decide.** **STIFF SLOW** → the prior's hard-pinned
+directions carry the autocorrelation, preconditioning is the lever, and minv's
+clamp at `1/√v_hat_min = 100` bounds how much of that fix is reachable — which
+would make §4.3.68's clamp finding causal and justify measuring the saturation
+fraction on the other three variants. **FLAT** → no rescaling of directions can
+help and §4.3.67's compute pricing is the whole story. **WIDE SLOW** → the
+loosely-constrained directions are slow, which is also a compute answer.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

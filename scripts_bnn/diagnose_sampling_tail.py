@@ -1372,7 +1372,7 @@ def drift_blocks(pred_chains, n_blocks=5):
         print("  energy injected per cycle rather than at a start transient.")
 
 
-def geometry_diagnostics(pred_chains, n_comp=8):
+def geometry_diagnostics(pred_chains, n_comp=8, deep=(15, 31, 63, 127, 255)):
     """Function-space posterior geometry, and WHICH directions mix slowly.
 
     Section 4.3.68.  4.3.67 established that medium_play needs ~100k sampling
@@ -1403,45 +1403,157 @@ def geometry_diagnostics(pred_chains, n_comp=8):
     tot = float(lam.sum())
     pr = float(tot ** 2 / max(float((lam ** 2).sum()), 1e-300))   # participation ratio
 
-    k = min(n_comp, lam.size)
-    scores = (X @ Vt[:k].T).reshape(C, D, k)        # per-draw coordinate on each PC
+    # Probe the leading components AND a geometric ladder deeper into the
+    # spectrum.  Section 4.3.69: probing only the top 8 of 50-300 effective
+    # directions never looks at a narrow direction, so it cannot test the
+    # "stiff subspace" hypothesis it was built for.
+    idx = [j for j in list(range(min(n_comp, lam.size)))
+           + [d for d in deep if d < lam.size]]
+    scores = (X @ Vt[idx].T).reshape(C, D, len(idx))
 
     print(f"\n=== POSTERIOR GEOMETRY, centred f (section 4.3.68) ===")
     print(f"  {C} chains x {D} draws over {P} points")
-    print(f"  {'participation ratio':30s} {pr:.2f} effective directions of {min(C*D,P)}")
+    print(f"  {'participation ratio':30s} {pr:.2f} effective directions"
+          f" of {min(C*D,P)}")
+    print("  !! PR is estimated from AUTOCORRELATED draws: the sample covariance")
+    print("     cannot show directions the chain never explored, so a slow chain")
+    print("     reports a LOW PR as a consequence, not a cause (4.3.69).")
     print(f"  {'top-1 variance fraction':30s} {lam[0]/tot:.4f}")
-    print(f"  {'top-8 variance fraction':30s} {lam[:min(8,lam.size)].sum()/tot:.4f}")
     if lam.size > 1 and lam[min(49, lam.size - 1)] > 0:
         print(f"  {'lam_1 / lam_50':30s} {lam[0]/lam[min(49,lam.size-1)]:.4g}")
     print(f"\n  {'comp':>5}{'eigenvalue':>14}{'var frac':>10}{'tau (draws)':>13}"
           f"{'ess/chain':>11}")
     print("  " + "-" * 53)
-    slow_narrow = slow_wide = 0
-    for j in range(k):
-        ess_j = float(np.asarray(azs.ess(scores[:, :, j]), dtype=np.float64))
+    taus = []
+    for col, j in enumerate(idx):
+        ess_j = float(np.asarray(azs.ess(scores[:, :, col]), dtype=np.float64))
         per_chain = ess_j / C
         tau_j = D / max(per_chain, 1e-12)
+        taus.append(tau_j)
         print(f"  {j:>5}{lam[j]:>14.6g}{lam[j]/tot:>10.4f}{tau_j:>13.1f}"
               f"{per_chain:>11.2f}")
-        if tau_j > 0.1 * D:
-            if lam[j] / tot > 0.05:
-                slow_wide += 1
-            else:
-                slow_narrow += 1
-    if slow_wide and not slow_narrow:
-        print("  -> the SLOW directions are the WIDE ones: the posterior really")
-        print("     is broad along them and the cost is compute, not geometry.")
-        print("     Preconditioning cannot help; budget more sampling steps.")
-    elif slow_narrow:
-        print("  -> SLOW NARROW directions exist: low-variance components are")
-        print("     autocorrelated, i.e. a few stiff directions throttle the")
-        print("     chain.  That is what a preconditioner is for -- check")
-        print("     precond_v_hat_at_floor and minv_max, since minv is CLAMPED")
-        print("     at 1/sqrt(v_hat_min) = 100 and cannot express a wider range.")
+    # The discriminator is how much tau VARIES across the spectrum, not the
+    # variance fraction of any one component: with a flat spectrum (real runs
+    # have top-1 at 1-5%) a variance-fraction threshold labels everything
+    # "narrow" and separates nothing.  That is what the first version did.
+    _t = np.asarray(taus, dtype=np.float64)
+    spread = float(_t.max() / max(_t.min(), 1e-12))
+    print(f"\n  {'tau spread across probed comps':32s} {spread:.2f}x"
+          f"   (max {_t.max():.1f}, min {_t.min():.1f})")
+    if spread < 2.0:
+        print("  -> NO STIFF SUBSPACE: tau is flat across the spectrum, so every")
+        print("     direction decorrelates at the same rate.  A preconditioner")
+        print("     rescales directions RELATIVE to each other and therefore")
+        print("     cannot help here; the cost is total compute (4.3.67).")
+    elif _t[:min(n_comp, len(_t))].mean() < _t[min(n_comp, len(_t)):].mean():
+        print("  -> SLOW NARROW directions: deeper, lower-variance components")
+        print("     are more autocorrelated than the leading ones.  This is what")
+        print("     a preconditioner is for -- and minv is CLAMPED at")
+        print("     1/sqrt(v_hat_min) = 100, a hard ceiling on that fix.")
     else:
-        print("  -> no leading component is slow; the autocorrelation is spread")
-        print("     across many directions rather than concentrated.")
-    return {"participation_ratio": pr, "lam": lam[:k]}
+        print("  -> SLOW WIDE directions: the leading, highest-variance")
+        print("     components are the autocorrelated ones.  The posterior is")
+        print("     genuinely broad along them; budget compute, not geometry.")
+    return {"participation_ratio": pr, "lam": lam[idx],
+            "tau": _t, "tau_spread": spread, "comps": idx}
+
+
+def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
+    """tau per PRIOR eigendirection -- a basis fixed independently of the chains.
+
+    Section 4.3.69.  `geometry_diagnostics` estimates its directions by PCA of
+    the same autocorrelated, under-sampled draws whose mixing it is measuring,
+    and a slow direction accumulates apparent variance along a chain, so it is
+    preferentially SELECTED as a leading PC.  Geometry and mixing rate are
+    confounded inside that estimator; three synthetic controls with known
+    per-direction tau all misclassified.  Do not use it.
+
+    The heat-kernel prior supplies a basis that is fixed a priori -- it depends
+    only on the maze layout and `map_eta`, never on the sample.  Averaging f
+    within free cells gives a 26- or 33-dimensional signal that is well
+    determined by 1200 draws, and each prior eigenvalue is a known prior
+    variance, so tau can be read against prior stiffness with no circularity.
+
+    Small prior eigenvalue = stiff direction the prior pins hard.  If those are
+    the slow ones, a preconditioner is the lever (and minv's clamp at
+    1/sqrt(v_hat_min)=100 bounds it).  If tau is flat in this basis, no
+    rescaling of directions can help and the cost is total compute.
+    """
+    from optbnn.gp.maze_layouts import get_antmaze_layout, build_maze_graph, heat_kernel
+    from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
+
+    lay = get_antmaze_layout(cfg.get("map_size", "medium"))
+    fm = np.asarray(lay[0] if isinstance(lay, tuple) else lay, dtype=bool)
+    prior = MapInformedGPPrior(
+        free_mask=fm, scaling=4.0, offset=(0.0, 0.0),
+        eta=float(cfg.get("map_eta", 1.0)), sig_c2=float(cfg.get("map_sig_c2", 1.0)),
+        sig_g2=float(cfg.get("map_sig_g2", 1.0)), sig_n2=float(cfg.get("map_sig_n2", 1e-3)),
+        amp2=float(cfg.get("map_amp2", 1.0)))
+    cells = np.asarray(prior.cell_of(torch.from_numpy(np.asarray(x_rhat, np.float32))),
+                       dtype=int).ravel()
+
+    A, _, _ = build_maze_graph(fm)
+    Kg = heat_kernel(A, float(cfg.get("map_eta", 1.0)))
+    n = Kg.shape[0]
+    w, V = np.linalg.eigh(float(cfg.get("map_sig_g2", 1.0)) * Kg
+                          + float(cfg.get("map_sig_n2", 1e-3)) * np.eye(n))
+    order = np.argsort(w)[::-1]
+    w, V = w[order], V[:, order]
+
+    C, D, P = pred_chains.shape
+    cen = pred_chains - pred_chains.mean(axis=2, keepdims=True)
+    # cell means: (C, D, n).  Cells with no eval point are dropped from the basis.
+    # Plain list, NOT an object array: when every cell holds the same number of
+    # points numpy collapses it to a 2-D object array and indexing it yields an
+    # object array, which is not a valid index.
+    occ = [np.flatnonzero(cells == c) for c in range(n)]
+    keep = np.array([o.size > 0 for o in occ])
+    fc = np.zeros((C, D, n), dtype=np.float64)
+    for c in range(n):
+        if keep[c]:
+            fc[:, :, c] = cen[:, :, occ[c]].mean(axis=2)
+    Vk = V[keep]
+    fk = fc[:, :, keep]
+    proj = fk @ Vk                                     # (C, D, n_eig)
+
+    print(f"\n=== PRIOR-BASIS GEOMETRY (section 4.3.69) ===")
+    print(f"  basis: heat-kernel eigenvectors, eta={cfg.get('map_eta')}, "
+          f"{int(keep.sum())} of {n} free cells occupied")
+    print("  Fixed a priori -- independent of the chains, so tau here is NOT")
+    print("  confounded with the direction-selection that invalidates --geometry.")
+    print(f"\n  {'eig':>5}{'prior var':>13}{'tau (draws)':>13}{'ess/chain':>11}")
+    print("  " + "-" * 42)
+    ne = proj.shape[2]
+    show = sorted(set(list(range(min(n_show // 2, ne)))
+                      + list(range(max(0, ne - n_show // 2), ne))))
+    taus = np.empty(ne)
+    for j in range(ne):
+        e = float(np.asarray(azs.ess(proj[:, :, j]), dtype=np.float64)) / C
+        taus[j] = D / max(e, 1e-12)
+    for j in show:
+        print(f"  {j:>5}{w[keep][j]:>13.6g}{taus[j]:>13.1f}{D/max(taus[j],1e-12):>11.2f}")
+    hi, lo = taus[:max(1, ne // 3)].mean(), taus[-max(1, ne // 3):].mean()
+    spread = float(taus.max() / max(taus.min(), 1e-12))
+    print(f"\n  {'tau, top third (wide prior dirs)':36s} {hi:.1f}")
+    print(f"  {'tau, bottom third (stiff prior dirs)':36s} {lo:.1f}")
+    print(f"  {'tau spread across all eigendirections':36s} {spread:.2f}x")
+    # Gate on the THIRDS, not on max/min: per-direction tau estimates are noisy
+    # over 26-33 eigendirections, so a genuinely flat profile still shows a
+    # ~2.5x extreme spread (verified on a flat synthetic control, which an
+    # earlier max/min gate misclassified).  The thirds average that noise out.
+    if 0.5 <= lo / max(hi, 1e-12) <= 2.0:
+        print("  -> FLAT: every prior direction decorrelates at the same rate.")
+        print("     A preconditioner rescales directions relative to each other")
+        print("     and cannot help; the cost is total compute (4.3.67).")
+    elif lo > 2.0 * hi:
+        print("  -> STIFF DIRECTIONS ARE SLOW: the prior's low-variance")
+        print("     directions carry the autocorrelation.  Preconditioning is")
+        print("     the lever, and minv's clamp at 100 bounds how much of it")
+        print("     is reachable.")
+    else:
+        print("  -> WIDE DIRECTIONS ARE SLOW: the loosely-constrained directions")
+        print("     are the autocorrelated ones; budget compute, not geometry.")
+    return {"tau": taus, "prior_var": w[keep], "tau_spread": spread}
 
 
 def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
@@ -1791,6 +1903,13 @@ def main():
                          "genuinely broad' (compute) from 'slow because a few "
                          "stiff directions throttle the chain' "
                          "(preconditioning). Section 4.3.68.")
+    ap.add_argument("--geometry-prior", action="store_true",
+                    help="tau per PRIOR heat-kernel eigendirection -- a basis "
+                         "fixed by the maze layout and map_eta, independent of "
+                         "the chains. Use this instead of --geometry, whose "
+                         "PCA basis is estimated from the same autocorrelated "
+                         "draws it measures and misclassified all three "
+                         "synthetic controls. Section 4.3.69.")
     ap.add_argument("--cvar-ce-per-chain", action="store_true",
                     help="Also run the whole CVaR reduction inside each chain "
                          "separately. Separates a posterior that is genuinely "
@@ -1868,7 +1987,15 @@ def main():
         draw_ladder(pred_chains, levels, alpha=args.alpha)
 
     if args.geometry:
+        print("  !! --geometry is INVALID (section 4.3.69): its PCA basis is "
+              "estimated\n     from the same autocorrelated draws it measures. "
+              "Use --geometry-prior.")
         geometry_diagnostics(pred_chains)
+
+    if args.geometry_prior:
+        if x_rhat is None:
+            sys.exit("--geometry-prior needs the eval inputs (x_rhat)")
+        geometry_prior_basis(pred_chains, x_rhat, cfg)
 
     if args.cvar_ce:
         sweep = None
