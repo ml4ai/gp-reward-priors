@@ -1555,7 +1555,16 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     # over 26-33 eigendirections, so a genuinely flat profile still shows a
     # ~2.5x extreme spread (verified on a flat synthetic control, which an
     # earlier max/min gate misclassified).  The thirds average that noise out.
-    if 0.5 <= lo / max(hi, 1e-12) <= 2.0:
+    # Absolute guard BEFORE the ratio test: when every tau is near 1 the chain
+    # is already decorrelated and there is nothing to attribute.  Without this,
+    # medium_diverse (tau 1.2 vs 2.7 -- both essentially independent) reported
+    # "STIFF DIRECTIONS ARE SLOW" purely because 2.7/1.2 > 2 (section 4.3.70).
+    if float(taus.mean()) < max(2.0, D / 25.0):
+        print(f"  -> NO DIRECTION IS SLOW: mean tau {taus.mean():.1f} over {D}"
+              f" draws,")
+        print("     so every prior direction is already near-independent.  The")
+        print("     ratio between thirds is not meaningful at this scale.")
+    elif 0.5 <= lo / max(hi, 1e-12) <= 2.0:
         print("  -> FLAT: every prior direction decorrelates at the same rate.")
         print("     A preconditioner rescales directions relative to each other")
         print("     and cannot help; the cost is total compute (4.3.67).")

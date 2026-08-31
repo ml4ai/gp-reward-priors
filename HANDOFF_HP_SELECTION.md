@@ -5789,6 +5789,71 @@ fraction on the other three variants. **FLAT** → no rescaling of directions ca
 help and §4.3.67's compute pricing is the whole story. **WIDE SLOW** → the
 loosely-constrained directions are slow, which is also a compute answer.
 
+### 4.3.70 Geometry answered: τ is FLAT — preconditioning cannot help
+
+| variant | τ wide third | τ stiff third | ratio | **verdict** | pooled τ (§4.3.67) |
+|---|---|---|---|---|---|
+| medium_play | 24.5 | 35.3 | 1.44 | **FLAT** | 34.7 |
+| large_diverse | 24.4 | 26.4 | 1.08 | **FLAT** | 28.0 |
+| large_play | 6.7 | 6.9 | 1.03 | **FLAT** | 8.1 |
+| medium_diverse | 1.2 | 2.7 | 2.25 | no direction slow | 2.1 |
+
+**τ is flat across the prior's entire stiffness spectrum on every variant with
+a mixing problem** — 1.44× from widest to stiffest on medium_play, 1.08× and
+1.03× on the others. **There is no stiff subspace.** A preconditioner rescales
+directions *relative to each other*, so with no relative structure there is
+nothing for it to exploit: **§4.3.68's clamp saturation is a real property of
+the sampler but is NOT the cause of the 60× spread**, and measuring the
+saturation fraction on the other three variants is not worth a training run.
+
+**§4.3.67's compute pricing is the answer.** The cost is total sampling steps.
+
+> **Independent cross-validation.** The prior-basis τ reproduces §4.3.67's
+> pooled τ on all four variants (24.5–35.3 vs 34.7; 24.4–26.4 vs 28.0; 6.7–6.9
+> vs 8.1; 1.2–2.7 vs 2.1) — a different basis and a different estimator giving
+> the same numbers. That validates both measurements, and is the first time in
+> this stretch two independent routes have agreed.
+
+> **Verdict guard added.** medium_diverse first reported "STIFF DIRECTIONS ARE
+> SLOW" purely because 2.7/1.2 > 2, on a chain where every τ is near 1 and
+> nothing is slow at all. The classifier now requires an absolute mixing
+> problem (mean τ ≥ max(2, D/25)) before attributing it to a direction.
+> Re-validated at D = 75, matching the real runs, across four regimes.
+
+**Coverage, recorded for §4.3.54.** The eval set occupies **13/26 free cells on
+medium (50%)** and **18/33 on large (55%)**. Every CVaR CE, accuracy and
+width/signal ratio in §4.3.47–53 therefore describes the *visited sub-maze*
+only. This strengthens the coverage-limited reading of large_play rather than
+weakening it, and belongs in §7's disclosures.
+
+#### The residual, and one observation held loosely
+
+Slowness is **isotropic**, which points at overall step scale rather than
+direction structure. The per-cycle function-space movement δ implied by
+τ ≈ (σ/δ)², against the logged sampling gradient norm:
+
+| variant | within-chain σ | τ | δ = σ/√τ | `gradnorm_sampling_mean` |
+|---|---|---|---|---|
+| medium_play | 1.55 | 34.7 | 0.26 | **0.230** |
+| large_diverse | 1.62 | 28.0 | 0.31 | **0.570** |
+| large_play | 37.5 | 8.1 | 13.2 | **3.991** |
+| medium_diverse | 11.35 | 2.1 | 7.8 | **11.454** |
+
+τ is **monotone in the gradient norm** across all four, and the mechanism is
+not merely correlational — the step is `lr · minv · gradient`, so small
+gradients give small movement per step whatever `lr` is, and a step-scale
+deficit is exactly the *isotropic* slowness observed. §3.6.2's `bt_pool="sum"`
+run is a matching intervention: gradients grew ~100×, the effective step ~50×,
+and **every drift gate improved**.
+
+> ⚠️ **This is still n=4, which has been refuted nine times in this project.**
+> It is recorded as an observation with a mechanism, not as a finding. And the
+> obvious lever is already closed: `bt_pool="sum"` raised gradients but
+> **doubled predictive CE (0.2076 → 0.4158)**, and §3.6.2 retains `"mean"` on
+> comparability grounds. `sghmc_lr` is at its stability ceiling (§4.3.41).
+> **Do not act on this without a test that separates step scale from the
+> likelihood change.**
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
