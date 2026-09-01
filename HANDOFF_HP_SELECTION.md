@@ -5914,6 +5914,79 @@ preconditioner closed out for good.
 saturation fraction — the comparison §4.3.68 could not make without a training
 run — comes for free.
 
+### 4.3.72 Step scale refuted — the preconditioner is closed out; it is compute
+
+**The run is valid**: `param_clamp_sampling_pct` and `param_clamp_burnin_pct`
+are **0** at both settings, so the non-measure-preserving momentum clamp never
+fired and the tail numbers are usable. That was the failure mode §4.3.71 said to
+check first.
+
+**§4.3.71's mechanism is wrong at its root.** medium_play was never
+clamp-limited:
+
+| run | `at_floor` | `minv_median` | `minv_max` |
+|---|---|---|---|
+| 1e-6 | **0.011** | **13.57** | 1000 |
+| 1e-8 | **0.0009** | **14.71** | 10000 |
+
+`minv_median` 13.57 implies a median `v̂ ≈ 0.0054` — **54× above the 1e-4
+floor**. Even at the default, the median parameter is nowhere near the cap, so
+medium_play cannot have been anything like large_play's 50.8% pinned. **This
+closes §4.3.68's missing comparison** without a dedicated run: the prediction
+that small gradients imply small gradient *variance* is simply false, and the
+clamp is a large_play peculiarity rather than a general throttle.
+
+**Mixing did not improve** — it drifted mildly worse:
+
+| medium_play | τ | τ : chain length | ess_cen | eff draws/chain | rhat_cen |
+|---|---|---|---|---|---|
+| baseline 1e-4 | 34.7 | 2.2 : 1 | 34.5 | 2.16 | 1.440 |
+| 1e-6 | 38.9 | **1.9 : 1** | 30.8 | 1.93 | 1.537 |
+| 1e-8 | 42.6 | **1.8 : 1** | 28.2 | 1.76 | 1.639 |
+
+All three τ sit below the 3:1 reliability threshold (§4.3.67's guard fires on
+each), so the differences are within estimator noise — but nothing improved in
+any direction.
+
+**And the objective moved without being resolvable:**
+
+| | CVaR CE | ±SE | gap vs baseline | combined 2·SE |
+|---|---|---|---|---|
+| baseline | 0.2648 | 0.0575 | — | — |
+| 1e-6 | 0.1912 | 0.0772 | 0.0736 | **0.193** |
+| 1e-8 | 0.2154 | 0.0334 | 0.0494 | **0.133** |
+
+Both gaps are well inside noise. Predictive CE also improved (0.2825 → 0.2272 /
+0.2310) with accuracy 0.8799 → 0.9034 / 0.8994, but with no SE on those and the
+CVaR CE unresolvable, **there is nothing here to select on.** Do not adopt a
+lowered `v_hat_min` on this evidence.
+
+> **The test did its job.** §4.3.71 committed in advance: "if τ does not move,
+> the clamp is not the throttle and §4.3.67's compute pricing stands
+> unqualified, with the preconditioner closed out for good." τ did not move.
+> **The preconditioner line is closed.** `v_hat_min` stays exposed (default
+> `None` → the sampler's 1e-4) as an instrument, not as a tuned parameter.
+
+#### Where the sampler investigation ends
+
+Five mechanisms proposed and refuted — cycle length, burn-in, frozen chains,
+cycle-at-matched-compute, and now the preconditioner clamp. What survives is a
+single measured invariant, and it is the one thing every refutation kept
+pointing back to:
+
+**Decorrelation is set by total sampling steps, and steps-per-independent-sample
+is a per-variant constant spanning 60×** (§4.3.67): medium_diverse ~1,600,
+large_play ~4,000, large_diverse ~77,000, medium_play ~100,000. No knob tried
+moves it. medium_play needs ~2,000,000 sampling steps per chain for 20 effective
+draws — **~10× the current budget**.
+
+**§10.2 implication.** Stop looking for a sampler fix for medium_play and
+large_diverse; there is no evidence one exists. Either budget the ~10× on those
+two variants, or report them at their achievable effective-draw count and
+disclose it. Budget the sweep on **steps per independent sample** rather than on
+`num_samples`, and note that the four variants' current allocation differs 60×
+for no principled reason.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
