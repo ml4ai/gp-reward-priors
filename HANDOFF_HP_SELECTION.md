@@ -352,8 +352,12 @@ methodological one**:
 - **α_select = 0.05 at ~1.2M steps/trial**, 6× the compute, matching deployment
   exactly.
 
-**Decision (2026-08-31): α_select = 0.25 at ~240k steps/trial**, with the risk
-measured rather than assumed — see §3.2.2.
+**Decision (2026-08-31, revised): α_select = 0.05 — matching deployment — at
+~240k steps/trial with `chains_per_gpu = 32` (128 chains).** The α = 0.25
+compromise is no longer needed: §3.2.4 measured the GPU to be badly
+underutilised, and buying resolution through *chains* rather than *steps* makes
+the deployment α affordable. §3.2.2–3.2.3 record the α analysis that was done
+under the old assumption; it stands, but is now moot.
 
 Whichever is chosen, **report the winner at α = 0.05 with its jackknife SE**,
 and **require the winner to beat the runner-up by more than the combined 2·SE**;
@@ -478,6 +482,55 @@ first time and is an independent argument against a mean-based objective.
 **Do not launch round 3 until this is decided.** A sweep that cannot rank its
 candidates produces a winner that is an artefact of trial order, and the
 stopping rule would certify it.
+
+### 3.2.4 The GPU was idle — chains buy the resolution at 4× less cost
+
+Profiled on one GPU, per-chain work held fixed (burn-in 5000, 10 samples,
+`cycle_length` 500, `n_meas` 256), varying `chains_per_gpu` with `num_chains`
+matched so only one device is used:
+
+| chains/GPU | wall (s) | work | wall vs 4 | **throughput** |
+|---|---|---|---|---|
+| 4 | 718 | 1× | 1.00× | 1.00× |
+| 8 | 744 | 2× | 1.04× | **1.93×** |
+| 16 | 948 | 4× | 1.32× | **3.03×** |
+| 32 | 1545 | 8× | **2.15×** | **3.72×** |
+
+**8× the work for 2.15× the wall-clock.** The device was idle at
+`chains_per_gpu = 4` — unsurprising for a width-64, depth-2 MLP on an A6000, and
+§3.1 already noted memory was never the constraint. Returns diminish but stay
+positive: 16 → 32 doubles chains for 1.63× wall. 32 processes per GPU completed
+successfully, so the CUDA-context memory concern is resolved empirically.
+
+**Why this fixes §3.2.3.** ESS pools across independent chains, so chain count
+buys resolution directly, and co-located chains share only compute (§3.1) —
+`ess_per_chain` is unaffected. On 4 GPUs at `chains_per_gpu = 32` (128 chains),
+combined with the planned 240k steps:
+
+| quantity | now (16 chains, 206k) | **cpg=32, 128 chains, 240k** | requirement |
+|---|---|---|---|
+| `ess_cen` | 34.5 | **322** | ≥ 40 gate; ≥ 200 for α=0.05 |
+| jackknife SE | 0.0772 | **0.0253** | ≤ 0.026 to separate the top five |
+| α=0.05 effective tail draws | 1.7 | **16.1** | ≥ 10 |
+| wall-clock per trial | 1.00× | **2.51×** | — |
+
+**Every §3.2.3 requirement is met at 2.51× per-trial wall-clock**, against the
+8.8× compute the steps-only route needed — and it delivers **α = 0.05**, the
+deployment tail, rather than the 0.25 compromise. The α risk that motivated
+§3.2.2 disappears rather than being managed.
+
+> **These are projections from a throughput measurement, not measurements of the
+> end state.** Two assumptions carry them: that `ess` scales linearly in chain
+> count (sound — chains are independent processes sharing only compute), and
+> that the sublinear throughput holds at production step budgets (likely
+> stronger there, since sampling dominates the fixed overheads more). **Verify
+> both on the first round-3 trial**: check `ess_bulk (centred)` against the
+> predicted ~322 before committing the remaining 129 trials. If it lands far
+> short, fall back to §3.2.3's option 2 rather than paying the 8.8×.
+
+> **One diagnostic cost**: the jackknife SE is leave-one-chain-out, so 128
+> chains means 128 refits of the CVaR reduction per evaluation. Tractable, but
+> it is no longer negligible — budget for it in the per-trial time.
 
 ### 3.3 What is deliberately NOT swept
 
