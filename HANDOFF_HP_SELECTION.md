@@ -566,6 +566,23 @@ deployment tail, rather than the 0.25 compromise. The α risk that motivated
 > matmuls — but 8 → 2 has not been tested. **Measure it on the first trial
 > using §10.7's normalised metric (h per 1k sampling steps), not wall-clock.**
 >
+> ✅ **MEASURED on the first trial (2026-09-01): no oversubscription.** At 128
+> chains with `OMP_NUM_THREADS=2`, `ps` totals **12814% CPU = 128.1 of 255
+> cores** — ~**1.0 core per chain** against a 2-thread cap, so chains are ~50%
+> CPU-utilised and otherwise GPU-bound. The 4× disaster is avoided and **the
+> box has ~50% headroom**.
+>
+> Two consequences. **The cap at 2 was necessary**, not merely cautious: at 1
+> core of useful work per chain, 8 threads would have demanded somewhere between
+> 1 and 8 cores each (§10.7 measured 38/chain at *default* threads, so idle
+> threads do burn CPU), and anything above ~2 cores/chain exceeds 255. And
+> **CPU is no longer the binding constraint** — at ~1 core/chain the box would
+> take ~250 chains. The limit is now the GPU, where §3.2.4 already showed
+> diminishing returns at 32 chains/GPU (3.72× throughput for 8× the work).
+>
+> Still open: whether 2 threads *slows each chain*. Headroom is not throughput —
+> judge that on §10.7's h per 1k sampling steps.
+
 > §10.7 forbids varying thread count *within* a campaign, so round 3 must use
 > one value throughout — selection **and** the seeds 1–10 evaluation runs — and
 > the change from 8 is a disclosure item alongside the existing stage-1/2
