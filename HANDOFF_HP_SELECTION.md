@@ -411,6 +411,74 @@ already known, so the candidate set is known.
 > `diagnose_sampling_tail.cvar_ce` directly rather than reimplementing it, so
 > the two cannot drift. **Do this before launching round 3.**
 
+### 3.2.3 The α risk is small; the RESOLUTION problem is not
+
+Measured on 29 archived medium_play configurations (§3.2.2), no training compute.
+
+**α = 0.25 is validated on both axes.**
+
+| subset | ρ(0.25, 0.05) | n |
+|---|---|---|
+| all archived runs | 0.716 | 29 |
+| ess_cen ≥ 25 | 0.829 | 15 |
+| ess_cen ≥ 30 | 0.842 | 10 |
+| **SE ≤ 0.10 and ess_cen ≥ 25** | **0.900** | 9 |
+
+Agreement rises **monotonically with resolution**, which is the signature of
+noise rather than genuine α-dependence: rank-movers have median SE 0.107 against
+0.064 for the stable ones, and the largest mover (`eta4`, rank 23 → 3) has
+SE **0.7232**. **Same winner at both αs; the cost of selecting at 0.25, scored
+at 0.05, is exactly 0.0000.**
+
+And α = 0.25 is the right *choice* of α, not merely a safe one:
+
+| α | ρ with deployment α = 0.05 (resolved subset) | tail draws at ess = 40 |
+|---|---|---|
+| 1.00 (the posterior mean) | **0.033** | 40 |
+| 0.50 | 0.683 | 20 |
+| **0.25** | **0.900** | 10 |
+| 0.10 | 0.967 | 4 |
+
+0.25 sits at the knee — the most deployment-fidelity available before the tail
+collapses. **α = 1.0 correlates −0.3094 with deployment across all 29 runs**,
+which quantifies §4.3.22's "the two objectives rank in opposite order" for the
+first time and is an independent argument against a mean-based objective.
+
+> ⚠️ **But the objective cannot discriminate at the planned budget.**
+>
+> | | configs tied with the winner (combined 2·SE) | spread across the tied set |
+> |---|---|---|
+> | α = 0.25 | **27 of 29** | 0.2307 |
+> | α = 0.05 | **18 of 29** | 0.5221 |
+>
+> At 240k steps/trial a 130-trial sweep would be **selecting on noise**, and the
+> K = 15 stopping rule would fire on noise. Separating just the top five
+> (spread 0.0736 at α = 0.05) needs SE ≈ 0.026 against the current 0.077 — **8.8×
+> more effective draws, ≈ 2.1M steps/trial**, which is *more* than α = 0.05
+> would have cost. **The binding constraint was never α; it is §4.3.67's
+> compute problem reappearing inside the selection objective.**
+
+**Options, in increasing cost.** None is free, and the choice is the user's:
+
+1. **Check throughput scaling in `chains_per_gpu` first — it is the only
+   candidate for a cheap fix.** The jackknife SE is over chains, so ess scales
+   with chain count; 4× the chains gives ~4× ess. §3.1 records that the model
+   (width 64, depth 2) and the `n_meas` kernel are tiny against an A6000's
+   memory, so if the GPU is **compute-underutilised** at `chains_per_gpu = 4`,
+   raising it buys ess at little wall-clock cost. If instead the chains
+   already saturate the device, it buys nothing. **This is one profiling run
+   and it decides whether the rest of this list is needed.**
+2. **Accept a tied set**: pre-register a tie-break, report the tie honestly, and
+   disclose that the sweep selects a *region* rather than a point. Note §3.1
+   forbids accuracy as a selection metric, so it cannot be the tie-break — even
+   though accuracy correlates ρ = 0.82 with CE at α = 0.05.
+3. **Pay for resolution**: ~2.1M steps/trial, ≈ 9× the sweep's compute. At that
+   budget α = 0.05 is also affordable and the α question disappears entirely.
+
+**Do not launch round 3 until this is decided.** A sweep that cannot rank its
+candidates produces a winner that is an artefact of trial order, and the
+stopping rule would certify it.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
