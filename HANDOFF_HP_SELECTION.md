@@ -352,6 +352,9 @@ methodological one**:
 - **α_select = 0.05 at ~1.2M steps/trial**, 6× the compute, matching deployment
   exactly.
 
+**Decision (2026-08-31): α_select = 0.25 at ~240k steps/trial**, with the risk
+measured rather than assumed — see §3.2.2.
+
 Whichever is chosen, **report the winner at α = 0.05 with its jackknife SE**,
 and **require the winner to beat the runner-up by more than the combined 2·SE**;
 if it does not, report the tie rather than breaking it. §4.3.72 is the cautionary
@@ -366,6 +369,47 @@ case — a 28% apparent CVaR CE improvement that sat entirely inside noise.
 - **MR and PT are not re-run** — §10.2 requires it only if `batch_size` or
   `bt_pool` changes, and neither has. The §5.2 gauge is stage-4 only and stages
   1–3 select on offset-invariant objectives, so nothing upstream moves.
+
+### 3.2.2 De-risking the α = 0.25 choice
+
+Choosing α = 0.25 for selection carries one specific risk: **if 0.25 ranks
+configurations differently from the α = 0.05 the model deploys at, the sweep
+would have to be redone at 6× budget.** That risk is measurable *before*
+spending the 130 trials, and for zero training compute.
+
+**Why it is free.** `--cvar-ce-alpha-sweep` reuses a single sort across every
+α (§4.3.51), so every archived run already carries CE at both 0.25 and 0.05.
+There are ~20 archived medium_play configurations spanning `map_amp2`, `mdecay`,
+`n_meas`, jitter, chain count, cycle length, burn-in and `v_hat_min` — a
+reasonable proxy for the space the sweep will search.
+
+**The measurement**: run the α sweep over those chains and compute the rank
+agreement between the two αs. `scripts_bnn/alpha_rank_agreement.py` reports
+Spearman ρ, and — more to the point — whether the **winner** is the same, and
+if not, what the 0.25 choice *costs* when scored at 0.05 against the combined
+2·SE. Validated on synthetic inputs with known orderings, both branches.
+
+| outcome | reading |
+|---|---|
+| ρ ≥ 0.8, same winner | α = 0.25 is low risk; proceed |
+| 0.5 ≤ ρ < 0.8 | log **both** αs per trial and re-check before stage 4 |
+| ρ < 0.5, or a resolvable penalty at 0.05 | budget for α = 0.05 now rather than redoing the sweep later |
+
+**Regardless of the outcome, log CVaR CE at every α for every trial.** The extra
+αs are free, and recording them converts the bad case from "redo 130 trials" into
+"re-run the top few configurations at higher budget" — the ranking at 0.05 is
+already known, so the candidate set is known.
+
+> ⚠️ **Implementation gap this exposed.** The training script does **not**
+> compute or log CVaR CE at all — it logs CVaR *diagnostics* (`pred_cvar_ess`,
+> `_rhat`, `_mcse_rel`) but not the objective, which currently exists only in
+> the offline diagnostic. §3.2.1's objective is therefore **not yet
+> implementable**: `x_rhat` holds only segment 0 of the first 64 pairs
+> (`run_bnn_training_antmaze_eval.py:794`), so the pairwise structure CVaR CE
+> needs is not available at that point. Closing it needs a forward pass over
+> both segments at end of training — cleanest by calling
+> `diagnose_sampling_tail.cvar_ce` directly rather than reimplementing it, so
+> the two cannot drift. **Do this before launching round 3.**
 
 ### 3.3 What is deliberately NOT swept
 
