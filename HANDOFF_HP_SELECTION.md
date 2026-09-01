@@ -589,42 +589,49 @@ deployment tail, rather than the 0.25 compromise. The α risk that motivated
 > uncapped disclosure. It is reduction-order noise, far below what the metric
 > resolves.
 
-> ⚠️ **Chain count must be PER VARIANT, not a uniform 128 — storage forces it,
-> and the statistics agree (2026-09-01).** A uniform 128 needs **2,330 GB** of
-> retained chains against **640 GB free** on leviathan, and at 115 GB/trial the
-> sweep fills the disk after **~6 of 130 trials**. Deleting all of `exp/`
-> (186 GB) leaves a 1.5 TB deficit, so deletion is not the fix.
+> ⚠️ **RETRACTED (2026-09-01): chain count stays UNIFORM at 128.** This block
+> previously argued for per-variant chain counts (108/87/26/16) sized from each
+> variant's measured `ess_cen`. **Two errors.**
 >
-> Network size is per-variant and was *selected*, not inherited from maze size:
-> medium_diverse won **width 1024**, large_play width 512 depth 6, while
-> medium_play (64×2) and large_diverse (64×4) are tiny. Archived 16×75 runs are
-> 7.4 GB, 9.0 GB, 47 MB and 104 MB respectively.
+> 1. **The ess figures come from ROUND-2-selected configurations.** Round 3
+>    changes the selection objective *and* the search space, so the winning
+>    `width`/`depth` — and therefore the mixing behaviour — are unknown in
+>    advance. Sizing chains from stale winners presumes the round-3 winner
+>    resembles the round-2 winner, which is precisely the inference this project
+>    has refuted repeatedly. If round 3 selected a poorly-mixing config for
+>    medium_diverse, 16 chains would be badly under-resolved and it would only
+>    surface *after* the sweep. **A uniform, generous count is pre-registerable
+>    and robust; per-variant sizing is not.**
+> 2. **"Per-trial cleanup is mandatory / the disk fills after ~6 trials" was
+>    wrong.** Sweep trials write to deterministic per-seed paths and
+>    **overwrite** (`launch_hp_sweeps.sh:35-37`), so exactly one chain set
+>    exists per sweep at a time. No cleanup mechanism is needed.
 >
-> Sizing chains from each variant's **measured** `ess_cen` to a common target
-> (ess ≈ 271, SE ≈ 0.026) rather than uniformly:
+> **The real storage constraint is the SEARCH SPACE, not any past winner.** Peak
+> is set by the largest architecture the sweep can propose — `width` 1024,
+> `depth` 6 = **5,287,937 params, 21.15 MB per draw**:
 >
-> | variant | ess @16ch, 240k | chains needed | GB/run | ×11 |
-> |---|---|---|---|---|
-> | medium_play | 40 | **108** | 0.5 | 6 |
-> | large_diverse | 50 | **87** | 0.9 | 10 |
-> | large_play | 173 | **26** | 23.4 | 257 |
-> | medium_diverse | 653 | **16** | 11.8 | 130 |
-> | | | | | **403 GB** |
+> | kept draws | `cycle_length` | worst trial | 4 concurrent sweeps |
+> |---|---|---|---|
+> | 120 | 2000 | **458 GB** | 1832 GB — over |
+> | 60 | 4000 | 229 GB | 916 GB — over |
+> | 40 | 6000 | 153 GB | 611 GB — fits, barely |
 >
-> **5.8× less storage, and better statistics**: uniform 128 over-provisions the
-> variants that already mix well, and those are exactly the ones with the large
-> networks. Equal *resolution* across variants is the goal; equal *chains* was
-> never it. The 128 figure was derived from medium_play alone (§3.2.4).
+> against **640 GB free**. Kept draws are the free lever — `ess` is set by total
+> steps, not kept draws (§4.3.67) — but `cycle_length` 6000 is **extrapolation**:
+> §4.3.67 measured neutrality only between 750 and 2750.
 >
-> **Per-trial cleanup is still mandatory.** At 23 GB/trial the sweep fills the
-> disk after ~27 of 130 trials. Chains are needed only until `val_cvar_ce` is
-> logged, so the sampled weights must be deleted at end of trial. **Round 3
-> cannot launch without this.**
+> **Preferred fix: run fewer sweeps concurrently.** §10.7 measured 4 concurrent
+> sweeps costing **2.8× throughput** from CPU oversubscription, so serialising
+> is better on both axes. One sweep at `cycle_length` 2000 needs 458 GB of the
+> 640 available; two at 4000 need 458 GB. Neither leaves the tested range.
 >
-> **Evaluation runs should not retain chains at all.** For seeds 1–10 the chains
-> exist only to produce reward labels; cache the labels (~4 MB) instead of the
-> chains (12–23 GB), which also removes the re-labelling cost from each of
-> stage 4's 8 normalization indices.
+> **Still unsolved, and independent of all the above**: retaining 11 sets per
+> variant after the sweep is up to 11 × 458 GB ≈ 5 TB in the worst case. For
+> seeds 1–10 the chains exist only to produce reward labels — **cache the labels
+> (~4 MB) and discard the chains**, which also removes the re-labelling cost
+> from each of stage 4's 8 normalization indices. That is the one storage change
+> that is actually required.
 
 > **These are projections from a throughput measurement, not measurements of the
 > end state.** Two assumptions carry them: that `ess` scales linearly in chain
