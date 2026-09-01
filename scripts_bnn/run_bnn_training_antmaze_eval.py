@@ -177,6 +177,22 @@ class TrainConfig:
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
     # mean over valid timesteps, trajectory-length-independent) or "sum" (legacy).
     bt_pool: str = "mean"
+    # ---- CVaR CE, the round-3 selection objective (handoff 3.2.1) ----------
+    # The sweep selects on the CVaR reward's cross-entropy, not on the mean.
+    # It cannot be computed from the per-point predictive diagnostics below:
+    # those use x_rhat, which holds only segment 0 of the first 64 pairs, while
+    # CVaR CE needs BOTH segments of every pair.  So it is computed at the end
+    # of the run from the sampled weights on disk, by calling the very function
+    # the offline diagnostic uses -- one implementation, so the sweep metric and
+    # the analysis metric cannot drift apart.
+    log_cvar_ce: bool = True
+    # Selection alpha.  0.05 matches deployment and is affordable once
+    # chains_per_gpu lifts ess (3.2.4).
+    cvar_ce_alpha: float = 0.05
+    # Every alpha is logged, not just the selection one: they reuse a single
+    # sort so the extra ones are free, and recording them means a wrong choice
+    # of selection alpha costs a re-scoring rather than a re-run (3.2.2).
+    cvar_ce_alphas: str = "1.0,0.5,0.25,0.1,0.05"
     # Gradient-clip scope (Issue 3): clip in burn-in always, in sampling only if
     # clip_during_sampling.  With bt_pool="mean" the logits are bounded, so the
     # sampling-phase clip should be unnecessary (default off).
@@ -971,6 +987,55 @@ def train(config: TrainConfig):
         # it never binds on a selected run.  ~0 here => inert => no distortion.
         if _celems > 0:
             summary[f"param_clamp_{_phase}_pct"] = 100.0 * _chits / _celems
+
+    # ------------------------------------------------------------------ #
+    # CVaR CE — the round-3 selection objective (3.2.1).  Computed here rather
+    # than inside evaluate_eval_set because it needs both segments of every
+    # pair, which x_rhat does not carry.  Delegated to the offline diagnostic's
+    # own cvar_ce so there is exactly one implementation of the metric the
+    # sweep selects on.  Defensive: a failure must not discard a finished
+    # training run, so it logs NaN and surfaces the cause.
+    # ------------------------------------------------------------------ #
+    if config.log_cvar_ce and config.OUT_DIR is not None:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from diagnose_sampling_tail import cvar_ce as _cvar_ce_fn
+
+            _alphas = [float(t) for t in config.cvar_ce_alphas.split(",")
+                       if t.strip()]
+            _res = _cvar_ce_fn(
+                config.OUT_DIR, config.val_dataset, config.width, config.depth,
+                list(range(config.num_chains)),
+                device=str(device), bt_pool=config.bt_pool,
+                alpha=config.cvar_ce_alpha, alpha_sweep=_alphas,
+            )
+            _cv = {
+                "val_cvar_ce": _res["cvar_ce"],
+                "val_cvar_ce_se": _res["cvar_ce_se"],
+                "val_cvar_acc": _res["cvar_acc"],
+                "val_cvar_tail_draws": _res["tail_draws"],
+                "val_cvar_total_draws": _res["total_draws"],
+                "val_cvar_plugin_ce": _res["plug_ce"],
+                "val_cvar_predictive_ce": _res["pred_ce"],
+            }
+            for _a, _d in _res.get("alpha_sweep", {}).items():
+                _tag = f"{_a:g}".replace(".", "p")
+                _cv[f"val_cvar_ce_a{_tag}"] = _d["ce"]
+                _cv[f"val_cvar_acc_a{_tag}"] = _d["acc"]
+                _cv[f"val_cvar_tail_draws_a{_tag}"] = _d["k_tail"]
+            wandb.log(_cv)
+            summary.update(_cv)
+            print(f"[cvar-ce] val_cvar_ce={_res['cvar_ce']:.4f} "
+                  f"+-{_res['cvar_ce_se']:.4f} at alpha={config.cvar_ce_alpha}")
+        except Exception as e:  # noqa: BLE001 — never lose a finished run
+            warnings.warn(
+                f"CVaR CE logging failed ({type(e).__name__}: {e}); logging "
+                "NaN.  The run is otherwise intact, but it CANNOT be selected "
+                "on -- 3.2.1's objective is missing for this trial.",
+                RuntimeWarning,
+            )
+            summary["val_cvar_ce"] = float("nan")
+            wandb.log({"val_cvar_ce": float("nan")})
 
     wandb.log(summary)
 

@@ -404,16 +404,39 @@ if not, what the 0.25 choice *costs* when scored at 0.05 against the combined
 "re-run the top few configurations at higher budget" — the ranking at 0.05 is
 already known, so the candidate set is known.
 
-> ⚠️ **Implementation gap this exposed.** The training script does **not**
-> compute or log CVaR CE at all — it logs CVaR *diagnostics* (`pred_cvar_ess`,
-> `_rhat`, `_mcse_rel`) but not the objective, which currently exists only in
-> the offline diagnostic. §3.2.1's objective is therefore **not yet
-> implementable**: `x_rhat` holds only segment 0 of the first 64 pairs
-> (`run_bnn_training_antmaze_eval.py:794`), so the pairwise structure CVaR CE
-> needs is not available at that point. Closing it needs a forward pass over
-> both segments at end of training — cleanest by calling
-> `diagnose_sampling_tail.cvar_ce` directly rather than reimplementing it, so
-> the two cannot drift. **Do this before launching round 3.**
+> ✅ **Implementation gap CLOSED (2026-08-31).** The training script previously
+> logged CVaR *diagnostics* (`pred_cvar_ess`, `_rhat`, `_mcse_rel`) but not the
+> objective, so §3.2.1 was not implementable: `x_rhat` holds only segment 0 of
+> the first 64 pairs (`run_bnn_training_antmaze_eval.py:794`), while CVaR CE
+> needs **both** segments of **every** pair.
+>
+> It now computes the objective at end of training from the sampled weights on
+> disk, **by calling `diagnose_sampling_tail.cvar_ce` itself** — one
+> implementation, so the sweep metric and the analysis metric cannot drift
+> apart. New config fields: `log_cvar_ce` (default `True`), `cvar_ce_alpha`
+> (`0.05`), `cvar_ce_alphas` (`"1.0,0.5,0.25,0.1,0.05"`).
+>
+> **Logged per trial** — selection key `val_cvar_ce`, plus `val_cvar_ce_se`,
+> `val_cvar_acc`, `val_cvar_tail_draws`, `val_cvar_plugin_ce`,
+> `val_cvar_predictive_ce`, and **every α** as `val_cvar_ce_a1`,
+> `_a0p5`, `_a0p25`, `_a0p1`, `_a0p05` with matching `_acc` and `_tail_draws`.
+> The extra αs reuse one sort, so they are free, and recording them means a
+> wrong choice of selection α costs a **re-scoring of finished trials rather
+> than a re-run** of the sweep.
+>
+> **Verified**: both paths resolve the same `val_dataset` (the script derives it
+> in `__post_init__`; the diagnostic reads that same key from the dumped
+> `config.yaml`), `config.width` is already the expanded width (2**exponent, set
+> in `__post_init__`), and `_save_sampled_weights()` writes one file per chain so
+> the diagnostic's single-file read is complete. Failures are caught and logged
+> as NaN with a warning — a finished training run is never discarded, but a
+> trial with NaN here **cannot be selected on** and must be treated as missing.
+>
+> ⚠️ **Unmeasured cost, check on the first round-3 trial.** The jackknife is
+> leave-one-chain-out, so at 128 chains it performs **128 refits**, each sorting
+> a ~415 MB array. I have not timed this. If it dominates the per-trial budget,
+> the mitigation is a delete-a-group jackknife (statistically valid, ~4×
+> cheaper) — but measure before building it.
 
 ### 3.2.3 The α risk is small; the RESOLUTION problem is not
 

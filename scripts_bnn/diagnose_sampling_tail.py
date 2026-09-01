@@ -743,6 +743,7 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     # corollary for selection (4.3.51): CVaR CE is minimised as widths -> 0, so
     # it rewards a collapsed posterior and cannot by itself distinguish a badly
     # sampled tail from a legitimately conservative one.
+    sweep_out = {}
     if alpha_sweep:
         print("\n  --- ALPHA SWEEP (same draws; alpha=1 is exactly the mean) ---")
         print(f"  {'alpha':>7}{'k_tail':>8}{'CE':>10}{'acc':>9}"
@@ -754,6 +755,12 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
             wr = float((np.sign(d_a) != np.where(yv0, 1.0, -1.0)).mean()) * 100.0
             print(f"  {a:>7.3f}{k_a:>8d}{ce_a:>10.4f}{acc_a:>9.4f}"
                   f"{np.median(np.abs(d_a)):>9.4f}{fl:>8.1f}{wr:>8.1f}")
+            # Returned as well as printed: the sweep logs every alpha per trial
+            # (handoff 3.2.2), which turns "the selection alpha was wrong" from
+            # a re-run of the whole sweep into a re-scoring of trials already
+            # done.  The extra alphas are free -- they reuse this one sort.
+            sweep_out[a] = {"ce": ce_a, "acc": acc_a, "k_tail": k_a,
+                            "flip_pct": fl, "wrong_pct": wr}
         print(f"  reference: plug-in sigma(E[f]) CE {plug_ce:.4f} "
               f"acc {plug_acc:.4f}  (the alpha=1 limit)")
 
@@ -821,7 +828,8 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
             print("     num_samples before selecting on this.")
     return {"cvar_ce": cvar_ce_v, "cvar_acc": cvar_acc, "cvar_ce_se": se,
             "plug_ce": plug_ce, "pred_ce": pred_ce, "tail_draws": k_tail,
-            "total_draws": S_tot}
+            "total_draws": S_tot, "plug_acc": plug_acc, "pred_acc": pred_acc,
+            "alpha_sweep": sweep_out}
 
 
 def ce_ladder(run_dir, dataset, width, depth, chain_ids, levels,
