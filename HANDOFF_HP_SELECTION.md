@@ -285,6 +285,88 @@ One value deserves its own note because it looks like tuning and is not:
   divergence guard**: it keeps a blown-up run from dying, but the chains can
   still reach Inf gradients and return a degenerate posterior.
 
+### 3.2.1 Round-3 BNN sweep design (supersedes §3.2's BNN block)
+
+Pre-registered here before any round-3 trial runs. Everything not listed is
+unchanged from §3.1 — `run_cap: 130`, stopping rule K = 15, seed 0, and the
+report-both-winners rule.
+
+#### Removed from the search: 9 dimensions → 6
+
+| param | fixed at | why it is no longer swept |
+|---|---|---|
+| `map_amp2` | **6626** (medium) / **6611** (large) | Derivable from the pooling convention and T=100 (§4.3.16), with §4.3.55's multiplier correction applied. §4.3.16 established it must stop being swept on CE. |
+| `n_meas` | **256** | §4.3.24 — it buys prior *coverage*, not just noise reduction; §4.3.25 closed the fixed-set alternative with a bound. |
+| `cycle_length` | **500** | §4.3.67: neutral for decorrelation. At fixed total steps the low end yields more draws, hence finer tail resolution, for the same compute. |
+
+Six dimensions remain — `width`, `depth`, `sghmc_lr`, `sghmc_lr_max`, `mdecay`,
+`fraction_cool` — at the same 130-trial cap, so **coverage per dimension
+improves by half** against round 2's nine. Ranges unchanged from §3.2.
+
+#### Compute is allocated on steps-per-independent-sample, not `num_samples`
+
+§4.3.67: `cycle_length × num_samples` is one compute allocation, and
+decorrelation is set by **total sampling steps**. Fix total steps per trial;
+`num_samples = total_steps / cycle_length` follows. The four variants currently
+differ **60×** in steps-per-independent-sample for no principled reason, and
+that is what the budget must be set against.
+
+#### Three hard gates, applied before selection
+
+1. **Stationarity** — `fn_drift_centred_loc_z_median ≤ 2` **and**
+   `fn_drift_centred_scale_z_median ≤ 2` (§3.6.3, centred; **never raw**,
+   §4.3.59).
+2. **Degeneracy** — `fn_drift_shape_var_frac ≥ 0.5`. **This is the fix for
+   §4.3.51's flaw in the objective.** CVaR CE is minimised as posterior widths
+   → 0, so it *rewards a collapsed posterior*; naked, it would select the
+   degenerate solution. The gate demands the identified component carry more
+   variance than the unidentified offset — a pre-registered principle, not a
+   tuned threshold. §4.3.44's collapsed `lr 1.5e-3` run reads **0.0972** and
+   healthy large_play **0.9015**, so the two are separated by an order of
+   magnitude and 0.5 is not a knife-edge.
+3. **Resolution** — centred `ess_bulk ≥ 40`. **A trial cannot be selected on a
+   quantity it cannot measure.** At α and ess below, the tail holds
+   `α × ess` effective draws; the gate keeps that at ≥ 10.
+
+#### The objective, and the α the budget can actually support
+
+**Objective: CVaR CE, minimised, on the centred-gate survivors.**
+
+The tail fraction must match the effective draw count, which §4.3.67 showed is
+far below the raw draw count:
+
+| α | required centred ess for ≥10 effective tail draws | medium_play steps needed |
+|---|---|---|
+| **0.25** | 40 | **~240k** (1.2× current) |
+| 0.10 | 100 | ~600k (3×) |
+| 0.05 | 200 | ~1.2M (6×) |
+
+medium_play currently reaches centred ess **34.5 at 206k steps**, so **α = 0.05
+is not supportable at the current budget** — it would select on ~1.6 effective
+tail draws. Two honest options, and this is a **budget decision, not a
+methodological one**:
+
+- **α_select = 0.25 at ~240k steps/trial.** Affordable now. §4.3.52 showed
+  medium_play's CVaR accuracy is flat across α (0.870 at every level), so 0.25
+  loses little ordering information for the well-behaved variants.
+- **α_select = 0.05 at ~1.2M steps/trial**, 6× the compute, matching deployment
+  exactly.
+
+Whichever is chosen, **report the winner at α = 0.05 with its jackknife SE**,
+and **require the winner to beat the runner-up by more than the combined 2·SE**;
+if it does not, report the tie rather than breaking it. §4.3.72 is the cautionary
+case — a 28% apparent CVaR CE improvement that sat entirely inside noise.
+
+#### Unchanged, and explicitly so
+
+- **Do not reinstate `early_stop_acc_threshold`** (§3.5, §4.3.36).
+- **Do not sweep `map_eta` or `map_sig_*`** (§3.3, §4.3.60).
+- **Do not gate on raw drift, `rhat_bulk`, or any raw per-point tail
+  statistic** (§9, §4.3.61).
+- **MR and PT are not re-run** — §10.2 requires it only if `batch_size` or
+  `bt_pool` changes, and neither has. The §5.2 gauge is stage-4 only and stages
+  1–3 select on offset-invariant objectives, so nothing upstream moves.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
@@ -2665,6 +2747,25 @@ reachable by prior strength alone.
 > cleanest available test of whether the sampler fix actually worked**, and it
 > costs nothing beyond re-running this four-point curve afterwards. Do not fix
 > `map_amp2` in the sweep at either value until it is settled.
+>
+> ⚠️ **Settled 2026-08-31 — and the gap was smaller than this section states.**
+> 1. **The stated test is unrunnable.** It is conditioned on a sampler fix, and
+>    §4.3.72 closed that line: five mechanisms proposed and refuted.
+> 2. **The nearest evidence is against reading (1).** That reading needs excess
+>    heat for an over-tight prior to absorb; §4.3.58 removed *all* minibatch
+>    gradient noise via full batch and the width/signal ratio moved **1.8%**.
+>    There is no excess width to absorb. (Measured on large_play rather than
+>    medium_play, which is why this is evidence and not proof.)
+> 3. **The gap is ~4×, not a decade.** §4.3.55 corrected the derived amplitude
+>    from the "1.69e4" quoted here to **6626** — the derivation had dropped the
+>    marginal-variance multiplier. Against medium_play's CVaR-optimal 1.69e3
+>    that is **3.9×**, inside the spacing of §4.3.17's decade ladder.
+>
+> **Resolution**: fix `map_amp2` at the derived value (§3.2.1) and **disclose
+> the residual ~4× disagreement with medium_play's empirical optimum in §7**.
+> Fixing on a derivation rather than on CE is what §4.3.16 required; the
+> residual is a limitation to report, not grounds to keep tuning a parameter
+> with no interior optimum under the selection metric.
 
 ### 4.3.24 The fixed measurement set fails — and the reason kills the route
 
@@ -7129,7 +7230,12 @@ Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
    currently unconfirmed at 1.12× its 2·SE, and §4.3.27's jitter-alone effect at
    3.0× the floor.
 
-3. **Redesign the sweep, then re-run stage 1 for the BNN.** Blocked on step 1.
+3. **Redesign the sweep, then re-run stage 1 for the BNN.** **The design is
+   now written and pre-registered in §3.2.1** — read that, not the summary
+   below, which is retained for its rationale links. §3.2.1 fixes `map_amp2`,
+   `n_meas` and `cycle_length` (9 swept dimensions → 6), adds a degeneracy gate
+   that closes §4.3.51's flaw in the objective, adds a resolution gate, and
+   settles the α question against the compute budget.
    - **Objective: CVaR CE** (`--cvar-ce`, α = 0.05), validated in §4.3.22–23 —
      it ranks configurations opposite to mean CE, has a genuine interior
      optimum, and resolves the differences that matter at 8×75. Mean CE cannot
