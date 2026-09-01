@@ -542,6 +542,36 @@ combined with the planned 240k steps:
 deployment tail, rather than the 0.25 compromise. The α risk that motivated
 §3.2.2 disappears rather than being managed.
 
+> ⚠️ **The profiling did not measure CPU contention, and the box is the
+> constraint.** Each chain is a separate process with `OMP_NUM_THREADS=8`
+> (§10.7), so **128 chains demand 1024 threads against leviathan's 255 logical
+> cores — 4× oversubscribed.** The profiling ran `chains_per_gpu=32` on **one**
+> GPU: 32 × 8 = 256 threads ≈ 255 cores, almost exactly 1:1, so it saw no
+> contention *by coincidence*. Production puts 4 × 32 = 128 chains on the same
+> CPU pool. §10.7 measured 2.59× oversubscription costing **2.8× throughput**,
+> so 4× would plausibly erase the gain this section claims.
+>
+> **CPU couples chains and threads: `chains × threads ≤ 255`.**
+>
+> | chains | `cpg` | threads @8 | oversub | threads for 1:1 | ess_cen | SE |
+> |---|---|---|---|---|---|---|
+> | 32 | 8 | 256 | 1.0× | 8.0 | 80 | 0.0506 |
+> | 64 | 16 | 512 | 2.0× | 4.0 | 161 | 0.0358 |
+> | **128** | **32** | **1024** | **4.0×** | **2.0** | **322** | **0.0253** |
+>
+> Only 128 chains reaches the SE ≤ 0.026 target, and that **forces
+> `OMP_NUM_THREADS = 2`**. Whether a chain runs acceptably at 2 threads is now
+> load-bearing and **unmeasured**. §10.7's A/B is encouraging — capping 255 → 8
+> was 27% *faster*, since a large pool is overhead for small GPU-resident
+> matmuls — but 8 → 2 has not been tested. **Measure it on the first trial
+> using §10.7's normalised metric (h per 1k sampling steps), not wall-clock.**
+>
+> §10.7 forbids varying thread count *within* a campaign, so round 3 must use
+> one value throughout — selection **and** the seeds 1–10 evaluation runs — and
+> the change from 8 is a disclosure item alongside the existing stage-1/2
+> uncapped disclosure. It is reduction-order noise, far below what the metric
+> resolves.
+
 > **These are projections from a throughput measurement, not measurements of the
 > end state.** Two assumptions carry them: that `ess` scales linearly in chain
 > count (sound — chains are independent processes sharing only compute), and
