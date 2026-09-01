@@ -297,7 +297,7 @@ report-both-winners rule.
 |---|---|---|
 | `map_amp2` | **6626** (medium) / **6611** (large) | Derivable from the pooling convention and T=100 (§4.3.16), with §4.3.55's multiplier correction applied. §4.3.16 established it must stop being swept on CE. |
 | `n_meas` | **256** | §4.3.24 — it buys prior *coverage*, not just noise reduction; §4.3.25 closed the fixed-set alternative with a bound. |
-| `cycle_length` | **500** | §4.3.67: neutral for decorrelation. At fixed total steps the low end yields more draws, hence finer tail resolution, for the same compute. |
+| `cycle_length` | **2000** | §4.3.67: neutral for decorrelation. Corrected 2026-08-31 — this said 500, reasoning that more kept draws give finer tail resolution. **Wrong**: resolution depends on *effective* draws, set by total steps alone, so extra kept draws are pure cost. At 240k steps, 500 keeps 480 draws/chain against 2000's 120 — 4× the memory and jackknife time in the objective for identical statistics. Fix it HIGH, not low. |
 
 Six dimensions remain — `width`, `depth`, `sghmc_lr`, `sghmc_lr_max`, `mdecay`,
 `fraction_cool` — at the same 130-trial cap, so **coverage per dimension
