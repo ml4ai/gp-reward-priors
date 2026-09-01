@@ -589,6 +589,43 @@ deployment tail, rather than the 0.25 compromise. The α risk that motivated
 > uncapped disclosure. It is reduction-order noise, far below what the metric
 > resolves.
 
+> ⚠️ **Chain count must be PER VARIANT, not a uniform 128 — storage forces it,
+> and the statistics agree (2026-09-01).** A uniform 128 needs **2,330 GB** of
+> retained chains against **640 GB free** on leviathan, and at 115 GB/trial the
+> sweep fills the disk after **~6 of 130 trials**. Deleting all of `exp/`
+> (186 GB) leaves a 1.5 TB deficit, so deletion is not the fix.
+>
+> Network size is per-variant and was *selected*, not inherited from maze size:
+> medium_diverse won **width 1024**, large_play width 512 depth 6, while
+> medium_play (64×2) and large_diverse (64×4) are tiny. Archived 16×75 runs are
+> 7.4 GB, 9.0 GB, 47 MB and 104 MB respectively.
+>
+> Sizing chains from each variant's **measured** `ess_cen` to a common target
+> (ess ≈ 271, SE ≈ 0.026) rather than uniformly:
+>
+> | variant | ess @16ch, 240k | chains needed | GB/run | ×11 |
+> |---|---|---|---|---|
+> | medium_play | 40 | **108** | 0.5 | 6 |
+> | large_diverse | 50 | **87** | 0.9 | 10 |
+> | large_play | 173 | **26** | 23.4 | 257 |
+> | medium_diverse | 653 | **16** | 11.8 | 130 |
+> | | | | | **403 GB** |
+>
+> **5.8× less storage, and better statistics**: uniform 128 over-provisions the
+> variants that already mix well, and those are exactly the ones with the large
+> networks. Equal *resolution* across variants is the goal; equal *chains* was
+> never it. The 128 figure was derived from medium_play alone (§3.2.4).
+>
+> **Per-trial cleanup is still mandatory.** At 23 GB/trial the sweep fills the
+> disk after ~27 of 130 trials. Chains are needed only until `val_cvar_ce` is
+> logged, so the sampled weights must be deleted at end of trial. **Round 3
+> cannot launch without this.**
+>
+> **Evaluation runs should not retain chains at all.** For seeds 1–10 the chains
+> exist only to produce reward labels; cache the labels (~4 MB) instead of the
+> chains (12–23 GB), which also removes the re-labelling cost from each of
+> stage 4's 8 normalization indices.
+
 > **These are projections from a throughput measurement, not measurements of the
 > end state.** Two assumptions carry them: that `ess` scales linearly in chain
 > count (sound — chains are independent processes sharing only compute), and
