@@ -188,15 +188,22 @@ class TrainConfig:
     log_cvar_ce: bool = True
     # CONSERVATISM LEVEL, in the SAME convention as the paper and as
     # algorithms/offline/iql_eval.py's `bnn_alpha`: 0 = posterior mean,
-    # 0.95 = average of the worst 5%.  Deployment runs bnn_alpha=0.95, so this
-    # defaults to 0.95 and the selection objective is computed at exactly the
-    # deployed tail.
+    # 0.95 = average of the worst 5%.
+    #
+    # SELECTION runs at 0.75, DEPLOYMENT at 0.95 (handoff 3.2.9/3.2.10).  The
+    # split is forced by resolution, not preference: the round-3 budget gives
+    # ess_cen ~40, and the tail holds (1-c)*ess EFFECTIVE draws, so 0.95 would
+    # select on ~2 of them -- enough to bias the empirical CVaR downward, which
+    # the jackknife SE does not bound.  0.75 gives ~10, the minimum 3.2.1
+    # requires.  3.2.3 measured rank agreement rho = 0.900 between these two
+    # levels among well-resolved runs, WITH THE SAME WINNER, so the ranking
+    # transfers.  The winner is re-measured and REPORTED at 0.95.
     #
     # NOTE the diagnostic's `cvar_ce(alpha=...)` takes the COMPLEMENT -- a tail
     # FRACTION, where alpha=1 is the mean.  The conversion happens once, at the
     # call site, and both numbers are printed.  Verified the two agree exactly
     # under tail = 1 - conservatism at S=1200 and S=15360 (handoff 3.2.6).
-    cvar_ce_conservatism: float = 0.95
+    cvar_ce_conservatism: float = 0.75
     # Every level is logged, not just the selection one: they reuse a single
     # sort so the extra ones are free, and recording them means a wrong choice
     # of selection level costs a re-scoring rather than a re-run (3.2.2).
@@ -1012,6 +1019,12 @@ def train(config: TrainConfig):
             # conservatism -> tail fraction, once, at the boundary
             _cons = [float(t) for t in
                      config.cvar_ce_conservatism_levels.split(",") if t.strip()]
+            # The DEPLOYMENT level is always logged, whatever the list says --
+            # the winner is reported at 0.95 (3.2.10) and that number must exist
+            # for every trial, not only the winner.
+            for _need in (0.95, config.cvar_ce_conservatism):
+                if not any(abs(_c - _need) < 1e-12 for _c in _cons):
+                    _cons.append(_need)
             for _c in [config.cvar_ce_conservatism] + _cons:
                 if not (0.0 <= _c < 1.0) and _c != 0.0:
                     raise ValueError(

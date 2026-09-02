@@ -338,7 +338,8 @@ that is what the budget must be set against.
 
 #### The objective, and the α the budget can actually support
 
-**Objective: CVaR CE, minimised, on the centred-gate survivors.**
+**Objective: CVaR CE, minimised, on the centred-gate survivors — evaluated at
+conservatism 0.75 for SELECTION, reported at 0.95 (§3.2.10).**
 
 The tail fraction must match the effective draw count, which §4.3.67 showed is
 far below the raw draw count:
@@ -1014,6 +1015,44 @@ sweeps.**
 > **(a) is the coherent option** and is what §3.2.3's analysis was for. It makes
 > selection level and reporting level differ, which must be stated in §7 — but
 > that is honest, and strictly better than selecting on 2 effective tail draws.
+
+### 3.2.10 DECIDED: select at conservatism 0.75, report at 0.95
+
+Adopted 2026-09-01, resolving §3.2.9's inconsistency by route (a).
+
+| | conservatism | tail fraction | effective tail draws at `ess_cen` 40 |
+|---|---|---|---|
+| **selection** | **0.75** | 0.25 | **10.0** — meets §3.2.1's minimum exactly |
+| **reporting / deployment** | **0.95** | 0.05 | 2.0 at sweep budget; restored by escalation |
+
+**Why the split is forced rather than chosen.** The tail holds `(1−c)·ess`
+*effective* draws. At the round-3 budget (`ess_cen` ≈ 40), conservatism 0.95
+leaves ~2 — few enough to bias the empirical CVaR downward, which the jackknife
+SE does not bound because SE measures variance, not bias. 0.75 gives exactly
+the 10 §3.2.1 requires.
+
+**Why the ranking transfers.** §3.2.3 measured rank agreement between these two
+levels on 29 archived runs: **ρ = 0.900** among the well-resolved subset, **with
+the same winner**, and the cost of selecting at the coarser level scored at the
+finer one was **exactly 0.0000**. This is the measurement that analysis was for.
+
+**Implemented.** `cvar_ce_conservatism = 0.75` is the selection level;
+conservatism **0.95 is force-added to the logged levels** whatever
+`cvar_ce_conservatism_levels` says, so `val_cvar_ce_c0p95` exists for *every*
+trial rather than only the winner. The §3.2.6 degeneracy gate is evaluated at
+the **selection** level, consistent with §3.2.9's rule that eligibility is
+decided at sweep budget and uniformly across trials.
+
+**Escalation, per §3.2.9.** The winner is re-measured at conservatism 0.95 with
+its own jackknife SE, at increased chains and/or steps, until the deployment-level
+statistics meet target or a reasonable budget is exhausted — then disclose.
+
+> **§7 must state**: hyperparameters were selected at conservatism **0.75** and
+> the model is deployed and reported at **0.95**; the levels differ because the
+> sweep budget cannot resolve the deployment tail, the ranking was measured to
+> transfer between them (ρ = 0.900, same winner, zero cost), and the winner's
+> deployment-level statistics come from a dedicated higher-budget re-measurement
+> rather than from the sweep.
 
 ### 3.3 What is deliberately NOT swept
 
