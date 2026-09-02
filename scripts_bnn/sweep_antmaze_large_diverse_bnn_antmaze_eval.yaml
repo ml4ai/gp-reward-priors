@@ -86,8 +86,13 @@ parameters:
   # separate the top five.
   num_chains:
     value: 32
+  # 32, NOT 8: launch_hp_sweeps.sh gives each agent exactly ONE GPU
+  # (CUDA_VISIBLE_DEVICES="$gpu"), so 8/GPU would address cuda:0..3 with one
+  # device visible and crash at launch.  All 32 chains on one GPU also lets the
+  # FOUR variant sweeps run concurrently on 4 of leviathan's 6 GPUs: 2.08x
+  # slower per trial than 8/GPU, but 4x the parallelism -- ~1.9x net.
   chains_per_gpu:
-    value: 8
+    value: 32
   # 75 draws/chain, NOT round 1's 35.  Round 1's horizon was ~1/9 of
   # production, and the failure mode it missed only becomes visible in the
   # metric with length: in the round-1 pilot val CE ran 0.2953 -> 0.3036 ->

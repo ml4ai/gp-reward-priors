@@ -3,7 +3,7 @@
 # (Ubuntu, 6x RTX A6000, conda env `pt` activated).
 #
 # Usage (from anywhere; the script cd's to the repo root):
-#   ./launch_hp_sweeps.sh bnn        # round-2 BNN sweeps             (4 sweeps)
+#   ./launch_hp_sweeps.sh bnn        # round-3 BNN sweeps             (4 sweeps)
 #   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
 #
 # There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
@@ -74,7 +74,11 @@ fi
 # that are unaffected by the round-2 redesign, and reusing their ids is what
 # stops a re-run from creating duplicates.
 #
-# The BNN cache filename is versioned (sweep_ids_bnn_round2.txt) ON PURPOSE.
+# The BNN cache filename is versioned (now sweep_ids_bnn_round3.txt) ON PURPOSE.
+# Bumped round2 -> round3 on 2026-09-01 with the round-3 redesign: the metric
+# changed to val_cvar_ce, the search dropped 9 dimensions to 6, width capped at
+# 9, and the per-trial budget moved to 32 chains x 120k steps.  Reusing the
+# round-2 filename would have resumed the old sweeps with the old metric.
 # The cache is keyed by entry name, so reusing a filename across a procedure
 # change silently RESUMES the old sweeps -- which would carry the old selection
 # metric and the old search ranges while appearing to start fresh.  Any change
@@ -99,7 +103,7 @@ BASELINE_ENTRIES=(
 
 if [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
-    IDS_FILE="exp/sweep_ids_bnn_round2.txt"
+    IDS_FILE="exp/sweep_ids_bnn_round3.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
     IDS_FILE="exp/sweep_ids_phase1.txt"
