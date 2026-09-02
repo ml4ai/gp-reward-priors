@@ -960,6 +960,61 @@ one-sweep-at-a-time constraint and allows concurrency again.
 recommendation, which was itself justified by the SE requirement — so this needs
 an explicit choice, not an inference.
 
+### 3.2.9 ADOPTED round-3 design, and the pre-registered escalation clause
+
+**Decided 2026-09-01: `width` 6–9, 32 chains, 120k sampling steps.**
+
+| | value | justification |
+|---|---|---|
+| `width` | **6–9** (64–512) | **Comparability, not cost.** MR searches 6–9 and PT `embd_dim` 6–8; the BNN's 6–10 gave it an octave the baselines never had. Capping matches MR and strengthens §3.1's invariant that the BNN receive *no more* tuning than the baselines. |
+| `depth` | 2–6 | unchanged |
+| `num_chains` | **32** (8/GPU) | §3.2.8 — spends part of §3.2.5's 4.9× SE margin for 2.1× throughput |
+| sampling steps | **120k** (`cycle_length` 2000 × `num_samples` 60) | §3.2.8 — 2× throughput, √2 SE |
+
+**Costed**: mean trial **6.4 h**, worst (512×6) 14.6 h, **11 days per variant**
+at 40 trials, **42 days** for four run serially — or **~18 days** at 16 chains/GPU
+(2 GPUs each, 3 sweeps concurrent on leviathan's 6; 1.27× slower each but 2.35×
+net throughput). Worst-case storage **57 GB/trial** against 738 GB free, so
+concurrency is unconstrained by disk.
+
+#### Pre-registered escalation clause
+
+**Chains and/or steps may be increased — within reason — for the WINNING
+configurations only**, to improve their reported statistics if those fall short.
+If no reasonable budget reaches the target, **disclose and move on. No further
+sweeps.**
+
+> **The guardrail this needs, or it becomes a selection loophole.** The
+> §3.2.6 degeneracy gate is `|CVaR CE − mean CE| > 2·SE`, and **more chains
+> shrink SE**, so escalation can flip a FAIL to a PASS. Therefore:
+>
+> - **Eligibility is decided at the sweep's own budget** (32 chains, 120k
+>   steps), applied uniformly to every trial. Escalation may **not** resurrect a
+>   configuration that failed the gate at sweep budget.
+> - **Escalation may not change the ranking.** It re-measures the winner more
+>   precisely; it does not re-select.
+> - If **no** trial passes the gate at sweep budget, that is itself a result —
+>   the method produced no non-degenerate configuration at this budget — and it
+>   is disclosed rather than escalated around.
+
+> ⚠️ **An inconsistency this surfaced, which must be settled before launch.**
+> At 32 chains × 120k steps the projected `ess_cen` is **~40**. §3.2.1's own
+> resolution rule requires `α × ess ≥ 10` effective tail draws, so **conservatism
+> 0.95 (tail 0.05) needs ess ≥ 200** — the design misses it 5×, giving ~2
+> effective tail draws. The jackknife SE (0.0147) still meets its target, but SE
+> bounds *variance*; too few effective tail draws also **biases** the empirical
+> CVaR downward. The two guards protect against different failures.
+>
+> **Two ways out.** (a) Select at **conservatism 0.75** (tail 0.25, which ess 40
+> does support) and escalate the winner to 0.95 for reporting — §3.2.3 already
+> measured ρ = **0.900** between those levels among well-resolved runs, *with the
+> same winner*, so the ranking transfers. (b) Raise the sweep budget 5× to reach
+> ess 200, which returns most of the cost §3.2.8 just removed.
+>
+> **(a) is the coherent option** and is what §3.2.3's analysis was for. It makes
+> selection level and reporting level differ, which must be stated in §7 — but
+> that is honest, and strictly better than selecting on 2 effective tail draws.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
