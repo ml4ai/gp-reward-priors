@@ -799,6 +799,56 @@ conservatism 0.9 gives `1.0 − 0.9 = 0.09999999999999998`, and the bare floor t
 **1535** draws of 15360 instead of 1536. Statistically negligible; confusing in a
 logged tail-draw count. The α=1 identity still holds exactly.
 
+### 3.2.7 ⚠️ Does minimising CVaR CE select AGAINST the paper's mechanism?
+
+Measured on all four finals (conservatism 0.95 vs 0, i.e. worst-5% vs mean):
+
+| final | mean CE | CVaR CE | direction | gate |
+|---|---|---|---|---|
+| medium_play | 0.2682 | 0.2648 | better by 0.0034 (inside noise) | fail |
+| large_diverse | 0.2900 | 0.3417 | **worse** by 0.0517 | fail (marginal) |
+| medium_diverse | 0.3546 | 0.6659 | **worse** by 0.3113 | PASS |
+| large_play | 0.3320 | 10.2417 | **worse** by 9.9097 | PASS |
+
+**CVaR never meaningfully improves validation CE.** It is neutral on one variant
+and worse on three. So **minimising CVaR CE pushes selection toward configurations
+where CVaR ≈ mean** — i.e. toward *less* conservatism. The §3.2.6 gate blocks the
+degenerate extreme, but the objective's gradient still points that way, and the
+gate has a measured cost: on medium_play the best CVaR CE overall is **0.1912**
+(`vhat1e-6`, which the gate rejects) against **0.3093** for the best
+gate-passing config — **+0.118 for requiring genuine conservatism.**
+
+> **This does NOT refute the method.** Conservatism is *supposed* to trade
+> in-distribution accuracy for robustness: a pessimistic reward should fit the
+> validation preferences slightly worse and hold up better under reduced data or
+> label noise. The paper's claim is a **downstream policy** claim, tested at
+> stages 4–5. Validation CE cannot see it.
+>
+> **But that is exactly the problem with using CVaR CE as the sweep objective.**
+> If the mechanism's benefit is invisible to validation CE and its *cost* is
+> visible, then minimising CVaR CE selects against the mechanism the paper is
+> about. §4.3.14 justified the objective as "the deployed quantity"; it is, but
+> being deployed is not the same as being the quantity the claim rests on.
+
+**The design question to settle before round 3 launches**, since it decides what
+130 trials per variant are optimising:
+
+1. **Keep CVaR CE + the gate.** Selects a model that fits preferences well *and*
+   is provably not degenerate. Costs ~0.12 CVaR CE on medium_play; accepts that
+   the sweep cannot see the robustness benefit.
+2. **Select on predictive CE (a pure fit criterion) + the gate**, and let
+   stage 4's normalization search carry the conservatism. Honest about what each
+   stage can measure — but §4.3.22 showed mean-based objectives rank *opposite*
+   to CVaR ones (ρ = 0.033 at conservatism 0, §3.2.3), so this risks selecting a
+   config with no usable tail at all. The gate is what would prevent that.
+3. **Select on the downstream score directly** for a small subset of candidates.
+   Aligned with the claim, but IQL runs are far more expensive than reward
+   training, so it cannot cover 130 trials.
+
+**No recommendation without your input** — this is a claim-design decision, not
+a technical one. But it should be settled before spending ~43 days per variant
+optimising a quantity that may point the wrong way.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
