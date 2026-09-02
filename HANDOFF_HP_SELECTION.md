@@ -708,6 +708,45 @@ of **0.87** — a hugely drifting offset on a perfectly stationary shape.
 > Either way the replacement must be **pre-registered before round 3 launches**,
 > not chosen after seeing which runs it admits.
 
+#### Proposed replacement (2026-09-01): a self-calibrating degeneracy gate
+
+    |CVaR CE − mean CE|  >  2 · SE(CVaR CE)
+
+**The CVaR reward must be distinguishable from the mean reward at the
+objective's own measurement precision.** If it is not, CVaR is adding nothing
+detectable and the BNN has reduced to MR — which is exactly §4.3.51's failure
+mode, tested directly rather than through a proxy.
+
+**No magic number.** The threshold *is* the resolution of the measurement, so
+nothing is calibrated against observed runs — which is what made
+`shape_var_frac ≥ 0.5` illegitimate. Both quantities are already logged
+(`val_cvar_ce_a0p05`, `val_cvar_ce_a1`, `val_cvar_ce_se`); no new instrument.
+
+Behaviour on the 29 archived medium_play runs: **admits 15, rejects 14** — it
+discriminates, unlike `shape_var_frac ≥ 0.5` which rejected all 29.
+
+| run | \|CVaR−mean\| | 2·SE | |
+|---|---|---|---|
+| **r3_trial1** | 0.0158 | 0.0104 | **PASS** |
+| `nugget` | 0.2218 | 0.2138 | PASS |
+| `amp1e3` | 0.0464 | 0.0154 | PASS |
+| **`jit10n256`** (round-2 winner) | **0.0034** | **0.1150** | **FAIL** |
+| `vhat1e-6` (§3.2.2 winner) | 0.0118 | 0.1544 | FAIL |
+
+> **The round-2 winner fails it, and that is the gate working.** `jit10n256` has
+> the *smallest* CVaR-vs-mean separation of all 29 runs. Round 2 selected on
+> `val_predictive_cross_entropy` — a mean-based objective — and it landed on the
+> configuration where the tail contributes least. That is §4.3.22's "the two
+> objectives rank in opposite order" showing up in the selected config itself,
+> and it is precisely the outcome §4.3.51 warned the round-3 objective must
+> avoid reproducing.
+
+**Caveat**: the CVaR and mean CEs come from the same draws and are correlated,
+so `2·SE(CVaR CE)` overstates the SE of their *difference* — the gate is
+therefore conservative (rejects some runs a paired SE would admit). Stated
+rather than corrected, since a conservative degeneracy gate errs in the safe
+direction.
+
 **Schedule risk, separately.** 7.98 h/trial × 130 trials = **43 days per
 variant**, and this was `width` 64 × `depth` 2 — the smallest architecture in a
 space reaching 5.29M params. **Time one trial at `width` 10, `depth` 6** before
