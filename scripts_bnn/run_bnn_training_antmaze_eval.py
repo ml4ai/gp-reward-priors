@@ -186,13 +186,21 @@ class TrainConfig:
     # the offline diagnostic uses -- one implementation, so the sweep metric and
     # the analysis metric cannot drift apart.
     log_cvar_ce: bool = True
-    # Selection alpha.  0.05 matches deployment and is affordable once
-    # chains_per_gpu lifts ess (3.2.4).
-    cvar_ce_alpha: float = 0.05
-    # Every alpha is logged, not just the selection one: they reuse a single
+    # CONSERVATISM LEVEL, in the SAME convention as the paper and as
+    # algorithms/offline/iql_eval.py's `bnn_alpha`: 0 = posterior mean,
+    # 0.95 = average of the worst 5%.  Deployment runs bnn_alpha=0.95, so this
+    # defaults to 0.95 and the selection objective is computed at exactly the
+    # deployed tail.
+    #
+    # NOTE the diagnostic's `cvar_ce(alpha=...)` takes the COMPLEMENT -- a tail
+    # FRACTION, where alpha=1 is the mean.  The conversion happens once, at the
+    # call site, and both numbers are printed.  Verified the two agree exactly
+    # under tail = 1 - conservatism at S=1200 and S=15360 (handoff 3.2.6).
+    cvar_ce_conservatism: float = 0.95
+    # Every level is logged, not just the selection one: they reuse a single
     # sort so the extra ones are free, and recording them means a wrong choice
-    # of selection alpha costs a re-scoring rather than a re-run (3.2.2).
-    cvar_ce_alphas: str = "1.0,0.5,0.25,0.1,0.05"
+    # of selection level costs a re-scoring rather than a re-run (3.2.2).
+    cvar_ce_conservatism_levels: str = "0.0,0.5,0.75,0.9,0.95"
     # Gradient-clip scope (Issue 3): clip in burn-in always, in sampling only if
     # clip_during_sampling.  With bt_pool="mean" the logits are bounded, so the
     # sampling-phase clip should be unnecessary (default off).
@@ -1001,13 +1009,19 @@ def train(config: TrainConfig):
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from diagnose_sampling_tail import cvar_ce as _cvar_ce_fn
 
-            _alphas = [float(t) for t in config.cvar_ce_alphas.split(",")
-                       if t.strip()]
+            # conservatism -> tail fraction, once, at the boundary
+            _cons = [float(t) for t in
+                     config.cvar_ce_conservatism_levels.split(",") if t.strip()]
+            for _c in [config.cvar_ce_conservatism] + _cons:
+                if not (0.0 <= _c < 1.0) and _c != 0.0:
+                    raise ValueError(
+                        f"conservatism must lie in [0, 1), got {_c!r}")
+            _alphas = [1.0 - _c for _c in _cons]
             _res = _cvar_ce_fn(
                 config.OUT_DIR, config.val_dataset, config.width, config.depth,
                 list(range(config.num_chains)),
                 device=str(device), bt_pool=config.bt_pool,
-                alpha=config.cvar_ce_alpha, alpha_sweep=_alphas,
+                alpha=1.0 - config.cvar_ce_conservatism, alpha_sweep=_alphas,
             )
             _cv = {
                 "val_cvar_ce": _res["cvar_ce"],
@@ -1018,15 +1032,19 @@ def train(config: TrainConfig):
                 "val_cvar_plugin_ce": _res["plug_ce"],
                 "val_cvar_predictive_ce": _res["pred_ce"],
             }
+            # Keys are named by CONSERVATISM level, matching the paper and
+            # bnn_alpha -- val_cvar_ce_c0p95 is the worst 5%, the deployed tail.
             for _a, _d in _res.get("alpha_sweep", {}).items():
-                _tag = f"{_a:g}".replace(".", "p")
-                _cv[f"val_cvar_ce_a{_tag}"] = _d["ce"]
-                _cv[f"val_cvar_acc_a{_tag}"] = _d["acc"]
-                _cv[f"val_cvar_tail_draws_a{_tag}"] = _d["k_tail"]
+                _tag = f"{1.0 - _a:g}".replace(".", "p")
+                _cv[f"val_cvar_ce_c{_tag}"] = _d["ce"]
+                _cv[f"val_cvar_acc_c{_tag}"] = _d["acc"]
+                _cv[f"val_cvar_tail_draws_c{_tag}"] = _d["k_tail"]
             wandb.log(_cv)
             summary.update(_cv)
             print(f"[cvar-ce] val_cvar_ce={_res['cvar_ce']:.4f} "
-                  f"+-{_res['cvar_ce_se']:.4f} at alpha={config.cvar_ce_alpha}")
+                  f"+-{_res['cvar_ce_se']:.4f} at conservatism="
+                  f"{config.cvar_ce_conservatism:g} "
+                  f"(tail fraction {1.0 - config.cvar_ce_conservatism:g})")
         except Exception as e:  # noqa: BLE001 — never lose a finished run
             warnings.warn(
                 f"CVaR CE logging failed ({type(e).__name__}: {e}); logging "

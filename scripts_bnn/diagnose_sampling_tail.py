@@ -558,7 +558,11 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
         k = floor(a*S) rows.  So an entire alpha sweep costs one sort.
         """
         S = s1.shape[0]
-        k = max(1, int(math.floor(a * S)))
+        # +1e-9 before the floor: a conservatism level converted as 1-c gives
+        # e.g. 1.0-0.9 = 0.09999999999999998, and a bare floor would take 1535
+        # draws of 15360 instead of 1536.  Statistically negligible, but the
+        # off-by-one is confusing in a logged tail-draw count.
+        k = max(1, int(math.floor(a * S + 1e-9)))
         r1 = s1[:k].mean(axis=0)
         r2 = s2[:k].mean(axis=0)
         f1 = bt_pool_logit_np(r1 * am1, am1, bt_pool)
@@ -598,7 +602,17 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     else:
         se = float("nan")
 
-    print(f"\n=== CVaR CROSS-ENTROPY (alpha={alpha}) ===")
+    # CONVENTION.  `alpha` here is a TAIL FRACTION: the mean of the lowest
+    # alpha*S draws, so alpha=1 is the posterior mean and alpha->0 is the
+    # minimum.  The paper and algorithms/offline/iql_eval.py use the
+    # COMPLEMENT -- a CONSERVATISM LEVEL, where iql_eval.empirical_cvar takes
+    # n_tail = floor((1-alpha)*S), so their alpha=0 is the mean and alpha=0.95
+    # is the worst 5%.  The two agree exactly under alpha_tail = 1 - alpha_cons
+    # (verified for both conventions at S=1200 and S=15360).  Deployment runs
+    # bnn_alpha=0.95, i.e. tail fraction 0.05.  Both are printed everywhere an
+    # alpha appears, so no reader has to remember which is which.
+    print(f"\n=== CVaR CROSS-ENTROPY (tail fraction alpha={alpha:g}"
+          f"  ==  conservatism {1.0 - alpha:g}, the paper/iql_eval convention) ===")
     print("  A selection objective computed from the DEPLOYED quantity.")
     print("  Mean CE averages over the posterior and so cannot see a badly")
     print("  sampled tail (4.3.14); this can.  Same FORM as the MR/PT metric,")
@@ -746,6 +760,10 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     sweep_out = {}
     if alpha_sweep:
         print("\n  --- ALPHA SWEEP (same draws; alpha=1 is exactly the mean) ---")
+        print("  alpha is a TAIL FRACTION; conservatism = 1 - alpha "
+              "(paper / iql_eval convention):")
+        print("    " + "   ".join(f"tail {a:g} = cons {1.0-a:g}"
+                                  for a in sorted(alpha_sweep, reverse=True)))
         print(f"  {'alpha':>7}{'k_tail':>8}{'CE':>10}{'acc':>9}"
               f"{'med|d|':>9}{'flip%':>8}{'wrong%':>8}")
         print("  " + "-" * 57)
@@ -1916,6 +1934,12 @@ def main():
                          "posterior and cannot see a badly sampled tail "
                          "(section 4.3.14), while keeping the same FORM as the "
                          "MR/PT metric so the comparison stays like-for-like.")
+    ap.add_argument("--conservatism", type=float, default=None, metavar="C",
+                    help="Tail depth in the PAPER / iql_eval convention "
+                         "(conservatism level: 0 = posterior mean, 0.95 = worst "
+                         "5%%, matching bnn_alpha). Converted internally to the "
+                         "tail fraction 1-C. Prefer this over --cvar-ce-alpha, "
+                         "whose argument is the complement.")
     ap.add_argument("--cvar-ce-alpha", type=float, default=0.05, metavar="A",
                     help="Tail fraction for --cvar-ce (default 0.05, matching "
                          "every CVaR diagnostic in section 4).")
@@ -2040,9 +2064,16 @@ def main():
                          f"floats, got {args.cvar_ce_alpha_sweep!r}")
             if any(not (0.0 < a <= 1.0) for a in sweep):
                 sys.exit("--cvar-ce-alpha-sweep values must lie in (0, 1]")
+        _a = args.cvar_ce_alpha
+        if args.conservatism is not None:
+            if not (0.0 <= args.conservatism < 1.0):
+                sys.exit("--conservatism must lie in [0, 1)")
+            _a = 1.0 - args.conservatism
+            print(f"[cvar-ce] --conservatism {args.conservatism:g} "
+                  f"-> tail fraction {_a:g}")
         cvar_ce(args.run_dir, dataset, width, depth, chain_ids,
                 device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
-                alpha=args.cvar_ce_alpha, alpha_sweep=sweep,
+                alpha=_a, alpha_sweep=sweep,
                 per_chain=args.cvar_ce_per_chain,
                 max_pairs=args.ce_pairs, max_draws=args.max_draws)
 

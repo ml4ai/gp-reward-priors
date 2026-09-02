@@ -755,6 +755,50 @@ tells you whether the SE margin survives a large network. At 128 chains the SE
 is 4.9× inside target, which is worth 25× in chains — real headroom to trade
 against both, but measured on one architecture only.
 
+### 3.2.6 α convention: the codebase had TWO, now reconciled
+
+**No numerical error was found**, but the same symbol meant complementary things
+in two places, which would have made every α figure in this document unreadable
+against the paper.
+
+| | formula | α = 0.05 means | α = 0 means |
+|---|---|---|---|
+| **paper / `iql_eval.empirical_cvar`** | `n_tail = floor((1−α)·S)` | worst **95%** | the **mean** |
+| `diagnose_sampling_tail.cvar_ce` | `k = floor(α·S)` | worst **5%** | the **minimum** |
+
+The paper's α is a **conservatism level** (higher = more conservative); the
+diagnostic's is a **tail fraction**. They agree exactly under
+`α_tail = 1 − α_conservatism` — verified against `iql_eval`'s own function at
+every level and at S = 1200 and 15360.
+
+> **The selection objective was already correct.** Deployment runs
+> `bnn_alpha = 0.95` (worst 5%); selection ran `cvar_ce_alpha = 0.05` (tail
+> fraction 0.05 = worst 5%). **Same quantity.** The mismatch was notation only.
+
+**Reconciled in favour of the paper's convention**, since that is what the
+drafts and `iql_eval.py` use:
+
+- `run_bnn_training_antmaze_eval.py` now takes **`cvar_ce_conservatism = 0.95`**
+  and `cvar_ce_conservatism_levels = "0.0,0.5,0.75,0.9,0.95"`, matching
+  `bnn_alpha` directly. Conversion to the tail fraction happens **once**, at the
+  call boundary.
+- Logged keys are named by conservatism: **`val_cvar_ce_c0p95`** is the deployed
+  worst-5% tail; `val_cvar_ce_c0` is the posterior mean.
+- `diagnose_sampling_tail.py` prints **both** conventions wherever an α appears,
+  and accepts **`--conservatism`** (converting internally). `--cvar-ce-alpha`
+  still takes the tail fraction, so archived commands remain reproducible.
+
+> ⚠️ **Reading older sections.** Every α in §3.2.1–3.2.5 and §4.3.51–52 is a
+> **tail fraction**. Translate with `conservatism = 1 − α`: the "α = 0.05"
+> selection level throughout is **conservatism 0.95**, and "α = 1, the posterior
+> mean" is **conservatism 0**. §3.2.3's α-fidelity table reads, in paper terms:
+> conservatism 0 → ρ 0.033, 0.5 → 0.683, **0.75 → 0.900**, 0.9 → 0.967.
+
+**Also fixed**: `k = floor(α·S)` became `floor(α·S + 1e-9)`. Converting
+conservatism 0.9 gives `1.0 − 0.9 = 0.09999999999999998`, and the bare floor took
+**1535** draws of 15360 instead of 1536. Statistically negligible; confusing in a
+logged tail-draw count. The α=1 identity still holds exactly.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
