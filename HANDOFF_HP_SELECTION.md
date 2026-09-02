@@ -316,7 +316,8 @@ that is what the budget must be set against.
 1. **Stationarity** — `fn_drift_centred_loc_z_median ≤ 2` **and**
    `fn_drift_centred_scale_z_median ≤ 2` (§3.6.3, centred; **never raw**,
    §4.3.59).
-2. **Degeneracy** — `fn_drift_shape_var_frac ≥ 0.5`. **This is the fix for
+2. **Degeneracy** — ⚠️ **THIS GATE IS BROKEN AS SPECIFIED; see §3.2.5. Do not
+   launch round 3 until it is replaced.** `fn_drift_shape_var_frac ≥ 0.5`. **This is the fix for
    §4.3.51's flaw in the objective.** CVaR CE is minimised as posterior widths
    → 0, so it *rewards a collapsed posterior*; naked, it would select the
    degenerate solution. The gate demands the identified component carry more
@@ -645,6 +646,75 @@ deployment tail, rather than the 0.25 compromise. The α risk that motivated
 > **One diagnostic cost**: the jackknife SE is leave-one-chain-out, so 128
 > chains means 128 refits of the CVaR reduction per evaluation. Tractable, but
 > it is no longer negligible — budget for it in the per-trial time.
+
+### 3.2.5 First round-3 trial: machinery validated, degeneracy gate refuted
+
+medium_play, 128 chains, 240k steps, `map_amp2` 6626, `OMP_NUM_THREADS=2`.
+
+**What passed.**
+
+| check | predicted | actual | |
+|---|---|---|---|
+| `ess_bulk (centred)` | 322 | **275.6** | 86% of projection ✓ |
+| `val_cvar_ce_se` | 0.0253 | **0.005197** | 4.9× inside target ✓ |
+| stationarity gate (centred) | ≤ 2.0 | 0.974 / 0.872 | **PASS** ✓ |
+| resolution gate | ≥ 40 (≥200 for α=0.05) | 275.6 | **PASS** ✓ |
+| `param_clamp_sampling_pct` | 0 | **0** | clamp inert ✓ |
+| throughput vs `OMP=8` | unknown | **1.40× faster** | 2 threads helped ✓ |
+
+CVaR CE logged with all five αs, no NaN — **the §3.2.2 implementation works**.
+The linear-ESS-in-chains assumption held (276 against 322 predicted). Wall clock
+7.98 h, at the *smallest* architecture in the search space.
+
+> ⚠️ **The degeneracy gate fails, and the fault is the GATE.**
+> `shape_var_frac = 0.0751` against the required 0.5 — worse than §4.3.44's
+> collapsed control (0.0972). But **no medium_play run in the project has ever
+> passed 0.5**; the ceiling across every configuration is **0.4510**:
+>
+> | run | `map_amp2` | shape_var_frac |
+> |---|---|---|
+> | `nugget` | 1.689e4 | **0.4510** |
+> | `eta4` | 1.689e5 | 0.4468 |
+> | `cyc750` | 1.689e5 | 0.3085 |
+> | `decouple` | 1689 | 0.2797 |
+> | **r3_trial1** | 6626 | **0.0751** |
+> | `vhat1e-8` | 1.689e5 | 0.0097 |
+>
+> The threshold was calibrated from **large_play's 0.9015** and is unreachable
+> for medium_play. **As written the gate rejects the entire variant.** It also
+> does not track `map_amp2` — at 1.689e5 the values span 0.0097 to 0.4468 — so
+> amplitude is not the driver.
+
+**The instrument is measuring the wrong thing.**
+`shape_var_frac = var(shape)/(var(shape)+var(offset))`, so it falls both when the
+**shape collapses** (what §4.3.51 cares about) and when the **offset wanders**
+(harmless — the offset cancels in every preference prediction, §3.6.3). This
+trial is the second case: `offset_scale_z` **6.44** against a centred `scale_z`
+of **0.87** — a hugely drifting offset on a perfectly stationary shape.
+§4.3.44's 0.9015-vs-0.0972 contrast conflated the two.
+
+> **Do not reactively lower the threshold** — §9 forbids changing a gate in
+> response to observed behaviour, and a threshold picked to admit the runs we
+> have is not a gate. Two legitimate routes:
+> 1. **Re-derive a threshold from principle** on a quantity that isolates
+>    posterior-width collapse from offset wander — the natural candidate is the
+>    *within-chain* centred variance per point, which a collapsed posterior
+>    drives to zero and a wandering offset leaves untouched.
+> 2. **Replace the gate.** §4.3.51's failure mode is CVaR CE being minimised as
+>    widths → 0; the direct test is whether the CVaR objective still differs
+>    from the mean objective, which the α sweep already logs
+>    (`val_cvar_ce_a0p05` vs `val_cvar_ce_a1`) at no extra cost.
+>
+> Either way the replacement must be **pre-registered before round 3 launches**,
+> not chosen after seeing which runs it admits.
+
+**Schedule risk, separately.** 7.98 h/trial × 130 trials = **43 days per
+variant**, and this was `width` 64 × `depth` 2 — the smallest architecture in a
+space reaching 5.29M params. **Time one trial at `width` 10, `depth` 6** before
+committing: it bounds both the schedule and the 458 GB worst-case storage, and
+tells you whether the SE margin survives a large network. At 128 chains the SE
+is 4.9× inside target, which is worth 25× in chains — real headroom to trade
+against both, but measured on one architecture only.
 
 ### 3.3 What is deliberately NOT swept
 
