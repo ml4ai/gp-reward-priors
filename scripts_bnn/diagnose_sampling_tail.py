@@ -834,6 +834,38 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
                 print("    -> WITHIN-chain: single chains are no better than")
                 print("       the pool, so the width is not chain scatter.")
 
+    # ---- DEGENERACY GATE (handoff 3.2.6) --------------------------------
+    # CVaR CE is minimised as posterior widths -> 0 (4.3.51), so a sweep that
+    # minimises it will happily select a collapsed posterior -- a BNN that has
+    # reduced to MR.  The gate demands the CVaR reward be DISTINGUISHABLE from
+    # the mean reward at the objective's own measurement precision:
+    #
+    #     |CVaR CE - mean CE|  >  2 * SE(CVaR CE)
+    #
+    # The threshold IS the resolution, so nothing is calibrated against observed
+    # runs -- the flaw that made an absolute `shape_var_frac >= 0.5` cutoff
+    # illegitimate (3.2.5): that one rejected all 29 archived medium_play runs.
+    # `plug_ce` is sigma(E[f]), which equals the conservatism-0 CVaR row
+    # bit-for-bit, so this does not depend on that row being requested.
+    #
+    # CONSERVATIVE BY CONSTRUCTION: the two CEs share draws and are positively
+    # correlated, so 2*SE(CVaR CE) overstates the SE of their difference.  The
+    # gate therefore rejects some runs a paired SE would admit -- the safe
+    # direction for a degeneracy check.
+    _gap = abs(cvar_ce_v - plug_ce)
+    _thr = 2.0 * se
+    _deg_pass = bool(_gap > _thr) if not math.isnan(se) else False
+    print(f"\n  --- DEGENERACY GATE (3.2.6) ---")
+    print(f"  {'|CVaR CE - mean CE|':<30}{_gap:>10.4f}")
+    print(f"  {'2 * SE(CVaR CE)':<30}{_thr:>10.4f}")
+    print(f"  verdict  {'PASS' if _deg_pass else 'FAIL'}"
+          f"   [margin {_gap - _thr:+.4f}]")
+    if not _deg_pass:
+        print("  -> the CVaR reward is NOT distinguishable from the mean reward")
+        print("     at this precision.  CVaR is contributing nothing detectable,")
+        print("     so the model has effectively reduced to MR and must not be")
+        print("     selected on a CVaR objective (4.3.51).")
+
     print(f"\n  jackknife-over-chains SE on the CVaR CE: {se:.4f}")
     print(f"  tail depth: {k_tail} of {S_tot} draws at alpha={alpha}")
     if not math.isnan(se):
@@ -845,6 +877,8 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
             print("     the honest cost of that.  Raise num_chains or")
             print("     num_samples before selecting on this.")
     return {"cvar_ce": cvar_ce_v, "cvar_acc": cvar_acc, "cvar_ce_se": se,
+            "degeneracy_gap": _gap, "degeneracy_thr": _thr,
+            "degeneracy_pass": _deg_pass,
             "plug_ce": plug_ce, "pred_ce": pred_ce, "tail_draws": k_tail,
             "total_draws": S_tot, "plug_acc": plug_acc, "pred_acc": pred_acc,
             "alpha_sweep": sweep_out}

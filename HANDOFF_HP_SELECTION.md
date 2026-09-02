@@ -316,8 +316,15 @@ that is what the budget must be set against.
 1. **Stationarity** — `fn_drift_centred_loc_z_median ≤ 2` **and**
    `fn_drift_centred_scale_z_median ≤ 2` (§3.6.3, centred; **never raw**,
    §4.3.59).
-2. **Degeneracy** — ⚠️ **THIS GATE IS BROKEN AS SPECIFIED; see §3.2.5. Do not
-   launch round 3 until it is replaced.** `fn_drift_shape_var_frac ≥ 0.5`. **This is the fix for
+2. **Degeneracy** — **`|CVaR CE − mean CE| > 2·SE(CVaR CE)`** (adopted
+   2026-09-01; replaces the refuted `shape_var_frac ≥ 0.5`, see §3.2.5–3.2.6).
+   The CVaR reward must be **distinguishable from the mean reward at the
+   objective's own measurement precision**; if it is not, CVaR contributes
+   nothing detectable and the BNN has reduced to MR — §4.3.51's failure mode,
+   tested directly rather than through a proxy. The threshold *is* the
+   resolution, so nothing is calibrated against observed runs. Logged as
+   `val_cvar_degeneracy_pass` / `_gap` / `_thr` / `_margin`; **applied at
+   winner-selection time**, since a wandb sweep cannot express a gate. **This is the fix for
    §4.3.51's flaw in the objective.** CVaR CE is minimised as posterior widths
    → 0, so it *rewards a collapsed posterior*; naked, it would select the
    degenerate solution. The gate demands the identified component carry more
@@ -708,7 +715,7 @@ of **0.87** — a hugely drifting offset on a perfectly stationary shape.
 > Either way the replacement must be **pre-registered before round 3 launches**,
 > not chosen after seeing which runs it admits.
 
-#### Proposed replacement (2026-09-01): a self-calibrating degeneracy gate
+#### ADOPTED (2026-09-01): a self-calibrating degeneracy gate
 
     |CVaR CE − mean CE|  >  2 · SE(CVaR CE)
 
@@ -740,6 +747,23 @@ discriminates, unlike `shape_var_frac ≥ 0.5` which rejected all 29.
 > objectives rank in opposite order" showing up in the selected config itself,
 > and it is precisely the outcome §4.3.51 warned the round-3 objective must
 > avoid reproducing.
+
+**Implemented and validated.** `diagnose_sampling_tail.cvar_ce` computes and
+prints it (`--- DEGENERACY GATE (3.2.6) ---`) and returns `degeneracy_pass` /
+`_gap` / `_thr`; the training script logs
+`val_cvar_degeneracy_{pass,gap,thr,margin}` and prints the verdict. The mean
+term uses `plug_ce` = σ(E[f]), which equals the conservatism-0 CVaR row
+bit-for-bit, so the gate does not depend on that row being requested.
+
+Validated against ground truth on synthetic posteriors:
+
+| control | \|CVaR−mean\| | 2·SE | verdict |
+|---|---|---|---|
+| collapsed (every draw identical) | 0.00000 | 0.00000 | **FAIL** ✓ |
+| genuinely wide posterior | 0.00406 | 0.00218 | **PASS** ✓ |
+
+The collapsed case gives a gap of exactly zero — identical draws make CVaR ≡
+mean — and the strict inequality rejects it.
 
 **Caveat**: the CVaR and mean CEs come from the same draws and are correlated,
 so `2·SE(CVaR CE)` overstates the SE of their *difference* — the gate is

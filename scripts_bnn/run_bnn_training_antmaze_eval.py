@@ -1023,7 +1023,15 @@ def train(config: TrainConfig):
                 device=str(device), bt_pool=config.bt_pool,
                 alpha=1.0 - config.cvar_ce_conservatism, alpha_sweep=_alphas,
             )
+            # Degeneracy gate (3.2.6), logged so the winner-selection step can
+            # filter on it -- wandb sweeps cannot express a gate, so it is
+            # applied when the winner is read off, not by the optimiser.
             _cv = {
+                "val_cvar_degeneracy_gap": _res["degeneracy_gap"],
+                "val_cvar_degeneracy_thr": _res["degeneracy_thr"],
+                "val_cvar_degeneracy_margin": (_res["degeneracy_gap"]
+                                               - _res["degeneracy_thr"]),
+                "val_cvar_degeneracy_pass": int(_res["degeneracy_pass"]),
                 "val_cvar_ce": _res["cvar_ce"],
                 "val_cvar_ce_se": _res["cvar_ce_se"],
                 "val_cvar_acc": _res["cvar_acc"],
@@ -1041,6 +1049,10 @@ def train(config: TrainConfig):
                 _cv[f"val_cvar_tail_draws_c{_tag}"] = _d["k_tail"]
             wandb.log(_cv)
             summary.update(_cv)
+            print(f"[cvar-ce] degeneracy gate: "
+                  f"{'PASS' if _res['degeneracy_pass'] else 'FAIL'} "
+                  f"(|CVaR-mean| {_res['degeneracy_gap']:.4f} vs 2SE "
+                  f"{_res['degeneracy_thr']:.4f})")
             print(f"[cvar-ce] val_cvar_ce={_res['cvar_ce']:.4f} "
                   f"+-{_res['cvar_ce_se']:.4f} at conservatism="
                   f"{config.cvar_ce_conservatism:g} "
