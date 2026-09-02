@@ -3,7 +3,21 @@ program: run_bnn_training_antmaze_eval.py
 method: bayes
 run_cap: 130   # safety limit only -- the K=15 stopping rule decides (see below)
 metric:
-  name: val_predictive_cross_entropy
+  # ROUND 3 (handoff 3.2.1): the objective is CVaR CROSS-ENTROPY, computed from
+  # the DEPLOYED conservative reward, at conservatism 0.75 for selection and
+  # reported at 0.95 (3.2.10).  Round 2 selected on
+  # val_predictive_cross_entropy, a MEAN-based statistic whose ranking
+  # correlation with the deployment tail 3.2.3 measured at rho = 0.033 --
+  # effectively none -- so it cannot stand as the objective for a method about
+  # conservatism.
+  #
+  # Three GATES apply at WINNER-SELECTION time, not here (a wandb sweep cannot
+  # express a gate).  A trial is INELIGIBLE unless all hold:
+  #   val_fn_drift_centred_loc_z_median   <= 2.0   (3.6.3 -- centred, NOT raw)
+  #   val_fn_drift_centred_scale_z_median <= 2.0
+  #   val_cvar_degeneracy_pass            == 1     (3.2.6)
+  #   centred ess_bulk                    >= 40    (3.2.1 resolution)
+  name: val_cvar_ce
   goal: minimize
 
 # SELECTION METRIC (round 2b): the posterior-predictive cross-entropy of
@@ -66,10 +80,14 @@ parameters:
   # ---- Per-trial budget -------------------------------------------------
   # 4 chains on a single GPU, so all four variants' sweeps run concurrently
   # on 4 of leviathan's 6 GPUs under the section 10.7 thread caps.
+  # 3.2.8/3.2.9: 32 chains at 8/GPU (4 GPUs), 120k sampling steps
+  # (cycle_length 2000 x num_samples 60).  Spends part of 3.2.5's 4.9x SE
+  # margin for ~4x throughput; SE 0.0147 stays 1.8x inside the 0.026 needed to
+  # separate the top five.
   num_chains:
-    value: 4
+    value: 32
   chains_per_gpu:
-    value: 4
+    value: 8
   # 75 draws/chain, NOT round 1's 35.  Round 1's horizon was ~1/9 of
   # production, and the failure mode it missed only becomes visible in the
   # metric with length: in the round-1 pilot val CE ran 0.2953 -> 0.3036 ->
@@ -81,7 +99,7 @@ parameters:
   # horizon, so selection and production then run at the same horizon by
   # construction and the round-1 mismatch cannot recur.
   num_samples:
-    value: 75
+    value: 60
   n_discarded:
     value: 5
   # 20000, NOT round 1's 5000.  Burn-in now runs at the swept `sghmc_lr`,
@@ -107,16 +125,28 @@ parameters:
   # diagnostics after this sweep, not searched by it.
   samples_per_cycle:
     value: 1
+  # NOT decided in 3.2.1 -- set to 1.0 because every stage-3 final and the
+  # r3_trial1 probe used it; 0.0 would search a regime stage 3 never validated.
   chain_init_jitter:
-    value: 0.0
+    value: 1.0
 
   # Warm-up gate: DISABLED, as in round 1.  Accuracy is always >= 0, so
   # `warmup_final_acc < 0.0` never fires and every trial runs to completion
   # and is ranked on the pre-registered objective.  0.0 rather than `null`
   # because of the wandb/pyrallis CLI interaction noted above.  See section
   # 3.5 for why the earlier static 0.75 gate was removed.
+  # 3.5 removed this in round 1 and 4.3.36 confirmed warm-up quality does not
+  # predict final quality.  Do NOT reinstate.
   early_stop_acc_threshold:
     value: 0.0
+  # SELECTION conservatism (3.2.10).  Deployment is 0.95, but at this budget
+  # (ess_cen ~40) the 0.95 tail holds ~2 EFFECTIVE draws -- few enough to bias
+  # the empirical CVaR, which the jackknife SE does not bound.  0.75 holds ~10,
+  # the minimum 3.2.1 requires.  3.2.3 measured rho = 0.900 between the two
+  # levels with the SAME winner, so the ranking transfers.  0.95 is logged for
+  # every trial regardless.
+  cvar_ce_conservatism:
+    value: 0.75
 
   # NOTE: `burn_in_lr` is deliberately ABSENT.  Burn-in inherits the swept
   # `sghmc_lr`.  Do not add it back.
@@ -129,10 +159,14 @@ parameters:
   # metric round 2 retires, so they are not evidence about the optimum under
   # `val_mean_cross_entropy`.  Not narrowed either -- narrowing in response
   # to observed behaviour is what section 9 prohibits.
+  # 6-9, not 6-10: MR searches width 6-9 and PT embd_dim 6-8, so 6-10 gave the
+  # BNN an octave the baselines never had.  Capping MATCHES MR and strengthens
+  # 3.1's invariant that the BNN receive no more tuning than the baselines
+  # (3.2.9).  A comparability argument, not a cost one.
   width:
     distribution: int_uniform
     min: 6
-    max: 10
+    max: 9
   depth:
     distribution: int_uniform
     min: 2
@@ -142,10 +176,10 @@ parameters:
   # n_meas = 0 disables the functional prior entirely, so the optimiser can
   # reject it outright.  Range unchanged; round-1 winners (10-35) were
   # mid-range.
+  # FIXED (3.2.1): 4.3.24 showed n_meas buys prior COVERAGE, not just noise
+  # reduction, and 4.3.25 closed the fixed-set alternative with a bound.
   n_meas:
-    distribution: int_uniform
-    min: 0
-    max: 64
+    value: 256
   # Prior amplitude multiplier (K -> map_amp2*K).  EXPANDED 1e3 -> 1e6.
   #
   # Justified by the likelihood, not by observed winners.  Every preference
@@ -160,10 +194,12 @@ parameters:
   # all four winners at 313-773; round 2 at cap 1e4 put two leaders at 6647 and
   # 8699.  1e6 leaves two decades of headroom above the predicted scale so the
   # search is not boundary-limited a third time.
+  # FIXED (3.2.1): derivable from the pooling convention and T=100 (4.3.16),
+  # with 4.3.55's marginal-variance correction.  4.3.16 established it must stop
+  # being swept on CE.  The residual ~4x disagreement with medium_play's
+  # empirical optimum is disclosed in section 7, not tuned away (4.3.23).
   map_amp2:
-    distribution: log_uniform_values
-    min: 1
-    max: 1000000
+    value: 6611
 
   # ---- Swept: sampler schedule -----------------------------------------
   # Cool-phase / minimum step size (lr_min), and in round 2 also the BURN-IN
@@ -184,11 +220,11 @@ parameters:
     max: 5e-3
   # Steps per hot+cool cycle.  Cost scales linearly:
   # steps/chain = ceil((num_samples + n_discarded) / samples_per_cycle) * cycle_length.
+  # FIXED (3.2.1): 4.3.67 measured cycle_length NEUTRAL for decorrelation --
+  # that is set by total sampling steps.  Fixed HIGH: extra kept draws are pure
+  # memory and jackknife cost at identical statistics.
   cycle_length:
-    distribution: q_uniform
-    min: 500
-    max: 3000
-    q: 250
+    value: 2000
   # Friction, during burn-in as well as sampling.  EXPANDED 1e-1 -> 1.0:
   # round-1 winners reached 0.0953 (tier-1, medium_diverse) and 0.0892
   # (tier-2, large_diverse), i.e. 89-95% of the old cap, so the optimum
