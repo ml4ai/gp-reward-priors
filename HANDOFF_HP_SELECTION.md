@@ -7386,7 +7386,9 @@ was removed. None had fired, so no winner was ever read from them; they inform
 
 ## 7. Disclosures required in the write-up
 
-Split into what is settled and what is still pending round 2.
+§7.1 is settled regardless of any sweep outcome; §7.2 covers round-2 results;
+§7.3 covers the round-3 procedure and was written **before** the round-3 sweep
+ran, so none of it is post-hoc.
 
 ### 7.1 Settled — report these regardless of how round 2 turns out
 
@@ -7651,6 +7653,101 @@ rather than pressing against a real boundary.
 exists yet.
 
 ---
+
+### 7.3 Round-3 procedure — written BEFORE the sweep ran
+
+Four disclosures fixed by the round-3 design (§3.2.1, §3.2.9–3.2.10). All are
+procedural, all were decided before any round-3 trial completed, and none
+depends on how the sweep turns out.
+
+---
+
+**Hyperparameters were selected at conservatism 0.75; the model is deployed and
+reported at 0.95.** The levels differ, and the reason is resolution rather than
+preference. CVaR at conservatism `c` averages the worst `1−c` of the posterior,
+so the tail holds `(1−c)·ess` **effective** draws. At the round-3 budget
+(`ess_cen` ≈ 40) conservatism 0.95 leaves about **2** — few enough that the
+empirical CVaR is biased downward, which the jackknife SE does not bound because
+SE measures variance, not bias. 0.75 leaves about **10**, the minimum §3.2.1
+requires.
+
+The ranking was **measured** to transfer before the choice was made: across 29
+archived medium_play configurations, rank correlation between the two levels is
+**ρ = 0.900** among the well-resolved subset, the **winner is the same**, and the
+cost of selecting at 0.75 scored at 0.95 is **exactly 0.0000** (§3.2.3).
+Conservatism 0.95 is logged for *every* trial, not only the winner, so the
+transfer can be re-checked on round 3's own data rather than taken on faith from
+the archive. The winner's deployment-level statistics come from a dedicated
+higher-budget re-measurement (§3.2.9's escalation clause), not from the sweep.
+
+*Note the symbol collision*: this document's §3.2.1–3.2.5 and §4.3.51–52 use α as
+a **tail fraction** (α = 0.05 is the worst 5%); the paper and
+`algorithms/offline/iql_eval.py` use α as a **conservatism level** (α = 0.95 is
+the worst 5%). They agree under `tail = 1 − conservatism`, verified against
+`iql_eval.empirical_cvar` at every level (§3.2.6). The write-up should use the
+conservatism convention throughout.
+
+---
+
+**Every CVaR number describes the visited sub-maze, not the whole maze.** The
+evaluation set occupies **13 of 26 free cells on medium (50%)** and **18 of 33 on
+large (55%)** — discovered while building the prior-basis geometry diagnostic
+(§4.3.69). Roughly half of each maze carries no validation signal at all, so
+every CVaR CE, accuracy and width/signal ratio in §4.3.47–53 is conditional on
+the visited region.
+
+This **strengthens** the coverage-limited reading of large_play rather than
+weakening it: a reward model whose posterior is widest exactly where preference
+data is thin will look worse on a validation set that never visits those cells,
+not better. It should be reported as a limit on what the validation metrics can
+certify, not as a defect in the models.
+
+---
+
+**`map_amp2` was fixed on a derivation, and the derived value disagrees with the
+empirical optimum by ~4×.** §4.3.16 established that `map_amp2` must stop being
+swept on CE — it has no interior optimum under that metric and simply chases
+whatever ceiling it is given (round-1 cap 1e3 → winners 313–773; round-2 cap 1e6
+→ winner 168,940). It is therefore fixed at the value derived from the pooling
+convention and the segment length T = 100: **6626 (medium) / 6611 (large)**,
+after §4.3.55's correction for the prior's marginal-variance multiplier, which
+the original "~1e4" figure had dropped.
+
+medium_play's empirically CVaR-optimal amplitude is **1.69e3** — a **3.9×**
+disagreement, inside the spacing of §4.3.17's decade ladder but real. §4.3.23
+pre-registered a test to settle it (fix the sampler's gradient noise and see
+whether the empirical optimum moves toward the derived value); that test is
+**unrunnable**, because it was conditioned on a sampler fix and §4.3.72 closed
+that line after five refuted mechanisms. The nearest available evidence is
+against the reading that an over-tight prior is absorbing sampler excess heat:
+§4.3.58 removed *all* minibatch gradient noise via full batch and the
+width/signal ratio moved **1.8%**. Report the residual as an open disagreement,
+not as a resolved question.
+
+---
+
+**Thread count changed between stages, and runs across stages are not strictly
+numerically comparable.** §10.7 established that thread count alters
+floating-point reduction order. Three environments now exist:
+
+| stage | `OMP_NUM_THREADS` |
+|---|---|
+| stages 1–2 | uncapped (255 on leviathan) |
+| stage 3 | 8 |
+| **round 3 and everything after** | **2** |
+
+The round-3 value is forced by concurrency: four sweeps × 32 chains = 128 chain
+processes, which at 8 threads each demands 1024 against 255 cores — the 4×
+oversubscription §10.7 measured as costing 2.8× throughput. At 2 threads the
+measured load is **128.1 of 255 cores** (~1.0 core per chain), and 2 threads is
+**1.40× faster per GPU-hour** than 8, so the cap is a speed-up rather than a
+sacrifice.
+
+**Round 3's selection runs and the seeds 1–10 evaluation runs must share this
+setting**, per §10.7's rule against varying thread count within a campaign. The
+effect is reduction-order noise, far below the differences any selection metric
+resolves — but it should be stated rather than left implicit, exactly as the
+stage-1/2-versus-3 change already is in §7.1.
 
 ## 8. Tooling
 
