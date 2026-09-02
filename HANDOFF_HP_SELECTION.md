@@ -905,6 +905,61 @@ CVaR ≈ mean exactly as §3.2.7 warned, and the gate is doing all the work.
 **check the margin distribution across trials before reading the winner.** A
 healthy sweep has winners comfortably clear of the threshold, not hugging it.
 
+### 3.2.8 Round 3 as designed is INFEASIBLE — measured, and the levers costed
+
+**The large-architecture probe (2026-09-01).** `width` 1024, `depth` 6 — the
+largest point in the search space — 128 chains, everything else as
+`r3_trial1`:
+
+| | `width` 64, `depth` 2 | `width` 1024, `depth` 6 |
+|---|---|---|
+| params | 6,657 | 5,287,937 (794×) |
+| trial time (260k steps) | **7.98 h** | **103.0 h = 4.29 days** (12.9×) |
+| storage at 120 draws | 0.5 GB | **456 GB** (predicted 458) |
+
+Time scales as **params^0.383** — strongly sublinear, consistent with small
+networks leaving the GPU idle. Over the 25-point (width 6–10, depth 2–6) grid the
+mean trial is **37.6 h**, so:
+
+| | 40 trials (round-1 stopping rule fired at 20–56) | run_cap 130 |
+|---|---|---|
+| per variant | **63 days** | 204 days |
+| all four | **251 days** | 815 days |
+
+**That is not a schedule; it is a rewrite of the project's timeline.** The levers,
+costed against §3.2.3's requirement that SE ≤ 0.026 separates the top five:
+
+| option | trial h | 40 trials ×4 variants | SE |
+|---|---|---|---|
+| as designed | 37.6 | **251 d** | 0.0052 |
+| + 32 chains (8/GPU) | 18.1 | 121 d | 0.0104 |
+| + 120k steps | 18.8 | 125 d | 0.0073 |
+| **+ 32 chains AND 120k steps** | **9.1** | **60 d** | **0.0147** |
+| width capped 6–9 | 26.4 | 176 d | 0.0052 |
+| **width 6–9 + 32 ch + 120k steps** | **6.4** | **42 d** | **0.0147** |
+
+**Every option stays inside the SE budget**, because §3.2.5 measured a 4.9×
+margin at 128 chains — that margin is exactly what is now spendable. Storage
+falls with chains too: 456 GB → **114 GB** at 32 chains, which removes the
+one-sweep-at-a-time constraint and allows concurrency again.
+
+> **On capping `width` at 9.** This is *not* reactive range-narrowing (§9). MR
+> searches width **6–9** and PT `embd_dim` 6–8; the BNN's 6–10 gives it an extra
+> octave the baselines never had. Capping to 6–9 **matches MR's range** and is
+> defensible on the comparability grounds §3.1 already rests on — the invariant
+> that the BNN receive *no more* tuning than the baselines. It should be argued
+> that way, or not done.
+
+> **What is being spent.** SE 0.0052 → 0.0147 is still 1.8× inside the 0.026
+> requirement, but the margin that absorbed §3.2.4's projection error is gone.
+> If the round-3 winners' `val_cvar_degeneracy_margin` distribution turns out to
+> sit near zero (§3.2.7's warning), there is no headroom left to buy resolution
+> by adding chains back without re-running.
+
+**Not yet decided.** The 32-chain figure also reverses §3.2.4's uniform-128
+recommendation, which was itself justified by the SE requirement — so this needs
+an explicit choice, not an inference.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
