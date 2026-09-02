@@ -823,7 +823,7 @@ conservatism 0.9 gives `1.0 − 0.9 = 0.09999999999999998`, and the bare floor t
 **1535** draws of 15360 instead of 1536. Statistically negligible; confusing in a
 logged tail-draw count. The α=1 identity still holds exactly.
 
-### 3.2.7 ⚠️ Does minimising CVaR CE select AGAINST the paper's mechanism?
+### 3.2.7 Does minimising CVaR CE select AGAINST the paper's mechanism? — resolved
 
 Measured on all four finals (conservatism 0.95 vs 0, i.e. worst-5% vs mean):
 
@@ -869,9 +869,41 @@ gate-passing config — **+0.118 for requiring genuine conservatism.**
    Aligned with the claim, but IQL runs are far more expensive than reward
    training, so it cannot cover 130 trials.
 
-**No recommendation without your input** — this is a claim-design decision, not
-a technical one. But it should be settled before spending ~43 days per variant
-optimising a quantity that may point the wrong way.
+**DECIDED 2026-09-01: option 1 — keep CVaR CE, with the §3.2.6 gate.**
+
+**The rationale, stated so the paper can state it.** Selection optimises how
+well the *conservative* reward — the one the policy actually consumes —
+predicts held-out preferences. That is a coherent and desirable property: it
+says the deployed quantity is a good predictor, not that conservatism is
+maximised. The robustness claim is a **separate, downstream** hypothesis, tested
+at stages 4–5 on evaluation seeds 1–10 that no selection ever touched. Selecting
+on the deployed quantity and testing the claim on unseen seeds is the clean
+division; conflating them by selecting *for* conservatism would make the claim
+partly circular.
+
+**What this commits us to.**
+
+- **The §3.2.6 gate is load-bearing, not a formality.** Without it the objective
+  is minimised by a collapsed posterior (§4.3.51) and the sweep would select a
+  BNN that has reduced to MR. Every reported winner must carry
+  `val_cvar_degeneracy_pass = 1`; a trial that fails is **not eligible**,
+  whatever its CVaR CE.
+- **A measured, disclosed cost.** On medium_play the best CVaR CE overall is
+  **0.1912** (`vhat1e-6`, gate-rejected) against **0.3093** for the best
+  gate-passing configuration — **+0.118 for requiring the reward to be genuinely
+  conservative.** Report the gated winner as primary and state this gap.
+- **The sweep cannot see the robustness benefit**, by construction. Validation
+  CE measures in-distribution fit; conservatism is expected to cost a little
+  there and pay off out-of-distribution. **§7 must say plainly that selection
+  optimised in-distribution fit of the conservative reward, and that the
+  robustness claim rests entirely on stages 4–5.**
+
+**What would complicate this later.** If the round-3 winners cluster near the
+gate boundary — passing only marginally — the objective is drifting toward
+CVaR ≈ mean exactly as §3.2.7 warned, and the gate is doing all the work.
+`val_cvar_degeneracy_margin` is logged per trial precisely so this is visible:
+**check the margin distribution across trials before reading the winner.** A
+healthy sweep has winners comfortably clear of the threshold, not hugging it.
 
 ### 3.3 What is deliberately NOT swept
 
