@@ -333,8 +333,20 @@ that is what the budget must be set against.
    healthy large_play **0.9015**, so the two are separated by an order of
    magnitude and 0.5 is not a knife-edge.
 3. **Resolution** — centred `ess_bulk ≥ 40`. **A trial cannot be selected on a
-   quantity it cannot measure.** At α and ess below, the tail holds
-   `α × ess` effective draws; the gate keeps that at ≥ 10.
+   quantity it cannot measure.** The tail holds `(1−c) × ess` effective draws;
+   the gate keeps that at ≥ 10.
+
+   > ⚠️ **Applied via a raw proxy — centred ess is NOT logged by the sweep**
+   > (found 2026-09-01, five trials in). The training script logs only raw
+   > `val_pred_ess_median`; centred ess comes from the offline diagnostic, and
+   > sweep trials **overwrite** the run dir, so it cannot be recovered after the
+   > fact. The operative rule is therefore **raw `val_pred_ess_median ≥ 40`**,
+   > which is *conservative*: centring removes a shared, slowly-mixing component
+   > and so can only raise ESS, and centred exceeded raw in **all five** cases
+   > ever measured here (ratios 1.42, 1.64, 1.68, 1.98, 22.40 — floor 1.42×).
+   > Raw ≥ 40 therefore implies centred ≥ 40 with margin. **Not fixed mid-sweep**:
+   > adding a logged metric would leave early trials without it and make the
+   > campaign internally inconsistent.
 
 #### The objective, and the α the budget can actually support
 
