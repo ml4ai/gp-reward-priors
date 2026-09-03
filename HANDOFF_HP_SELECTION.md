@@ -918,6 +918,41 @@ CVaR ≈ mean exactly as §3.2.7 warned, and the gate is doing all the work.
 **check the margin distribution across trials before reading the winner.** A
 healthy sweep has winners comfortably clear of the threshold, not hugging it.
 
+> ⚠️ **CONFIRMED on round-3 data, 14 trials in (2026-09-02).** Rank correlation
+> between `val_cvar_ce` and `val_cvar_degeneracy_margin`:
+>
+> | variant | n | ρ |
+> |---|---|---|
+> | large-diverse | 3 | **+1.000** |
+> | large-play | 3 | **+1.000** |
+> | medium-diverse | 3 | **+1.000** |
+> | medium-play | 5 | −0.200 (contaminated: one run at CE = 0.6931 = log 2 exactly, `scale_z` 848.9) |
+> | **all** | **14** | **+0.670** |
+>
+> **The configurations that score best on the objective are the ones least
+> distinguishable from the mean.** The objective and the gate oppose each other
+> directly, and the winner will be whatever sits just inside the boundary.
+>
+> Best-eligible so far, with `|CVaR CE − mean CE|` as a fraction of CE:
+> medium-play **6.6%**, large-diverse **6.7%**, medium-diverse **8.6%**,
+> large-play **34.3%**. Three of four variants would be won by a config whose
+> CVaR reward is barely separable from its mean reward; medium-diverse's margin
+> is **+0.0010**, a hair inside the gate.
+>
+> **This is the anticipated cost of §3.2.7's decision materialising, not a
+> surprise** — but it is now quantified and must be disclosed. Whether a small
+> CE separation implies a small *policy* effect is a stage-4 question: the two
+> reward fields could differ materially while predicting preferences equally
+> well. Do not assert either way from these numbers.
+>
+> ⚠️ **A related risk to check before reading any winner.** The K = 15 stopping
+> rule tracks best-so-far `val_cvar_ce`, which is **ungated**. Since lower CE
+> correlates with lower margin, the ungated frontier can keep improving while
+> the *eligible* frontier stalls — §7.2 recorded exactly this failure for round
+> 2 ("the eligible frontier was still improving when two sweeps stopped").
+> **Evaluate the stopping rule on the eligible subset as well**, and disclose if
+> the two disagree.
+
 ### 3.2.8 Round 3 as designed is INFEASIBLE — measured, and the levers costed
 
 **The large-architecture probe (2026-09-01).** `width` 1024, `depth` 6 — the
