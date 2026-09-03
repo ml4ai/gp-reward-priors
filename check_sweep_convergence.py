@@ -96,6 +96,67 @@ def diverged_reasons(summ):
     return reasons
 
 
+# --- Round-3 eligibility gates (handoff 3.2.1) ---------------------------
+# A wandb sweep cannot express a gate, so the optimiser ranks and the Bayes
+# search explores INELIGIBLE trials freely.  Eligibility is applied here, when
+# the winner is read off.  Each gate is checked only when its key is present,
+# so MR/PT sweeps -- which log none of them -- are unaffected and behave exactly
+# as before.
+#
+# The resolution gate is specified on CENTRED ess but the sweep logs only raw
+# `val_pred_ess_median`; raw is a conservative proxy because centring removes a
+# shared slowly-mixing component and can only raise ESS (centred > raw in all
+# five cases measured, floor 1.42x).  See 3.2.1.
+_GATES = (
+    ("val_fn_drift_centred_loc_z_median",   "loc_z",   lambda v: v <= 2.0),
+    ("val_fn_drift_centred_scale_z_median", "scale_z", lambda v: v <= 2.0),
+    ("val_cvar_degeneracy_pass",            "degen",   lambda v: bool(v)),
+    ("val_pred_ess_median",                 "ess",     lambda v: v >= 40.0),
+)
+
+
+def gate_failures(summ):
+    """Names of the 3.2.1 gates this trial fails.  Absent keys are not checked."""
+    bad = []
+    for key, label, ok in _GATES:
+        v = summ.get(key)
+        if v is None:
+            continue
+        if isinstance(v, float) and math.isnan(v):
+            bad.append(label + "=NaN")
+            continue
+        if not ok(v):
+            bad.append(label)
+    return bad
+
+
+def has_gate_keys(summ):
+    """True if this sweep logs any gate key at all (i.e. it is a round-3 BNN sweep)."""
+    return any(summ.get(k) is not None for k, _, _ in _GATES)
+
+
+def frontier(trials, goal, patience, eligible_only):
+    """Best-so-far and patience trigger, optionally over ELIGIBLE trials only.
+
+    The patience counter runs over ALL trials in order either way: an
+    ineligible trial consumes budget and counts as non-improving, which is the
+    honest reading of "K consecutive trials without improvement".  Only the
+    best-so-far is restricted.
+    """
+    best = best_i = trigger = None
+    since = 0
+    for i, t in enumerate(trials, 1):
+        val, ok = t[1], t[3]
+        improves = better(val, best, goal) and (ok or not eligible_only)
+        if improves:
+            best, best_i, since = val, i, 0
+        else:
+            since += 1
+        if trigger is None and since >= patience:
+            trigger = i
+    return best, best_i, since, trigger
+
+
 def swept_keys(cfg):
     """Names of the parameters this sweep actually searches (not fixed values)."""
     return sorted(
@@ -124,7 +185,10 @@ def summarize(entity, project, sweep_id, patience):
         # NOT legitimately early-stopped (early_stopped==1 has no eval block)
         if val is None and summ.get("early_stopped") != 1:
             unsynced.append((r.id, r.state))
-        trials.append((r.id, val, {k: r.config.get(k) for k in keys}))
+        fails = gate_failures(summ)
+        trials.append((r.id, val, {k: r.config.get(k) for k in keys},
+                       not fails, fails, summ.get("val_cvar_degeneracy_margin"),
+                       has_gate_keys(summ)))
 
         # numerical-divergence fingerprint: the trial completed and reported the
         # metric, so it is NOT unsynced, but its chains blew up — the convergence
@@ -134,15 +198,8 @@ def summarize(entity, project, sweep_id, patience):
         if why:
             diverged.append((r.id, val, why))
 
-    # best-so-far + patience trigger
-    best, best_i, since, trigger = None, None, 0, None
-    for i, (_, val, _) in enumerate(trials, 1):
-        if better(val, best, goal):
-            best, best_i, since = val, i, 0
-        else:
-            since += 1
-        if trigger is None and since >= patience:
-            trigger = i
+    # best-so-far + patience trigger, UNGATED (the historical behaviour)
+    best, best_i, since, trigger = frontier(trials, goal, patience, False)
 
     n = len(trials)
     print(f"\n=== {project}/{sweep_id} ===")
@@ -157,7 +214,7 @@ def summarize(entity, project, sweep_id, patience):
 
     stop_at = trigger if trigger is not None else n
     stop_best, stop_id, stop_cfg = None, None, None
-    for rid, val, rcfg in trials[:stop_at]:
+    for rid, val, rcfg, _ok, _f, _m, _g in trials[:stop_at]:
         if better(val, stop_best, goal):
             stop_best, stop_id, stop_cfg = val, rid, rcfg
     all_id, all_cfg = trials[best_i - 1][0], trials[best_i - 1][2]
@@ -178,6 +235,61 @@ def summarize(entity, project, sweep_id, patience):
     else:
         print(f"  STOP FIRED  : no — {since}/{patience} non-improving trials so far")
         print(f"  ACTION      : keep running ({patience - since} more non-improving trials would trigger)")
+
+    # ---- ELIGIBLE frontier (handoff 3.2.1 / 3.2.7) ----------------------
+    # Only meaningful for sweeps that log the gate keys; MR/PT skip this block.
+    if any(t[6] for t in trials):
+        e_best, e_i, e_since, e_trig = frontier(trials, goal, patience, True)
+        n_el = sum(1 for t in trials if t[3])
+        print(f"\n  --- ELIGIBLE frontier (3.2.1 gates applied) ---")
+        print(f"  eligible    : {n_el} of {n} trials ({100.0*n_el/max(n,1):.0f}%)")
+        from collections import Counter
+        fc = Counter(f for t in trials for f in t[4])
+        if fc:
+            print(f"  rejected on : "
+                  + ", ".join(f"{k} x{v}" for k, v in fc.most_common()))
+        if e_best is None:
+            print("  !! NO ELIGIBLE TRIAL HAS REPORTED THE METRIC.")
+            print("     Per 3.2.9 that is itself a result -- the method produced no")
+            print("     non-degenerate configuration at this budget -- and it is")
+            print("     DISCLOSED rather than escalated around.")
+        else:
+            e_id = trials[e_i - 1][0]
+            print(f"  best        : {e_best:.6g}  (trial {e_i}, run {e_id})")
+            print(f"                {trials[e_i - 1][2]}")
+            if e_trig is not None:
+                print(f"  STOP FIRED  : yes -- at trial {e_trig}")
+            else:
+                print(f"  STOP FIRED  : no -- {e_since}/{patience} non-improving")
+            # The disagreement 7.2 recorded for round 2: the UNGATED frontier can
+            # keep improving while the eligible one stalls, so the rule can fire
+            # on progress that is not selectable.
+            if e_id != all_id:
+                gap = ((e_best / best - 1) if goal == "minimize"
+                       else (best / e_best - 1)) * 100
+                print(f"  !! the ungated best ({best:.6g}, run {all_id}) is NOT eligible;")
+                print(f"     selecting the eligible best costs {abs(gap):.1f}% "
+                      f"on {metric} -> DISCLOSE (7.2)")
+            if trigger is not None and e_trig is None:
+                print(f"  !! the UNGATED rule fired at trial {trigger} but the eligible")
+                print(f"     frontier is still improving -- stopping now would discard")
+                print(f"     selectable progress.  This is 7.2's round-2 failure.")
+            elif trigger is None and e_trig is not None:
+                print(f"  !! the ELIGIBLE frontier stalled at trial {e_trig} while the")
+                print(f"     ungated one keeps improving -- the search is chasing")
+                print(f"     configurations the gates reject (3.2.7).")
+            # 3.2.7: winners hugging the gate boundary mean the objective is
+            # drifting toward CVaR ~ mean and the gate is doing all the work.
+            mg = [t[5] for t in trials if t[3] and isinstance(t[5], (int, float))]
+            if mg:
+                mg_s = sorted(mg)
+                print(f"  degeneracy margin among eligible: min {mg_s[0]:+.4f}  "
+                      f"median {mg_s[len(mg_s)//2]:+.4f}  max {mg_s[-1]:+.4f}")
+                wm = trials[e_i - 1][5]
+                if isinstance(wm, (int, float)) and wm < 0.02:
+                    print(f"  !! the eligible best sits at margin {wm:+.4f} -- hugging the")
+                    print(f"     gate.  3.2.7: the objective is drifting toward CVaR ~ mean")
+                    print(f"     and the gate is carrying the selection.  Disclose.")
 
     if unsynced:
         print(f"  !! UNSYNCED : {len(unsynced)} trial(s) completed but missing '{metric}':")
