@@ -239,7 +239,15 @@ parameters:
     min: 1e-3
     max: 1.0
   # Fraction of each cycle spent in the cool/sampling tail.
+  # REMOVED from the search 2026-09-04 (handoff 4.3.76).  Not because it is
+  # inert -- it is, with samples_per_cycle=1 the harvest step is cycle_len-1 for
+  # every value -- but because ACTIVATING it (samples_per_cycle > 1) is now known
+  # to be harmful.  4.3.67 established decorrelation is set by TOTAL SAMPLING
+  # STEPS, so k draws per cycle reaches a fixed draw count in 1/k the cycles and
+  # therefore 1/k the steps: spc=3 gives 60 draws for 40,000 steps instead of
+  # 120,000, i.e. a THIRD of the effective draws.  It also spreads eps^2 by up to
+  # 2.64x ACROSS draws within one cycle, so they carry different discretisation
+  # bias.  3.2.1 already made this call in the other direction by fixing
+  # cycle_length HIGH.  Pinned, not swept.
   fraction_cool:
-    distribution: uniform
-    min: 0.1
-    max: 0.5
+    value: 0.25

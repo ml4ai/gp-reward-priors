@@ -7120,11 +7120,76 @@ were carrying.
 > established hypothesis 6 cannot produce `scale_z > 2`** — a non-transient
 > mechanism is required, and this is the cheapest candidate.
 
-**Completeness check.** All 20 quantities the gates, the objective and the drift
-investigation require are logged. Two initially read as missing
+**Completeness check, done properly.** A first pass claimed coverage on the
+basis of the 20 quantities the gates need; a full enumeration showed that was
+**not** the same as "every relevant metric has a centred form" — coverage was
+**12 of 29**. The gaps were the secondary summaries (`_mean`, `_95th_pct`,
+`_pct_over_1.01`, `_min`, `_norm`) and the **entire `folded_rhat` block**, which
+is the VaR tail R-hat and squarely Class C. The centred block now **mirrors the
+raw block key-for-key**: 29 raw per-point keys, 29 centred twins, 0 gaps, plus
+three intentional additions (`between_chain_var`, `between_frac`,
+`cvar_unresolved_pct`). Mirroring rather than hand-picking is what stops either
+block silently gaining a statistic the other lacks.
+
+All 20 gate/objective quantities are logged. Two initially read as missing
 (`chainspread_*_ratio`, `param_clamp_sampling_pct`); both are built by f-string
 interpolation and are present — the same interpolation trap that made an earlier
 grep miss the entire `fn_drift` block.
+
+### 4.3.76 `fraction_cool`: it SHOULD be inert — activating it would be harmful
+
+The obvious reading of §4.3.74's finding is "it was swept, so it was meant to be
+active; activate it." **That is wrong, and the reason is a measurement that
+postdates its inclusion.**
+
+`fraction_cool` only bites when `samples_per_cycle > 1`, and the code comment
+records why that was wanted: *"num_samples is the TOTAL sample count, reached in
+ceil(num_samples / samples_per_cycle) cycles -> the wall-clock lever."* Taking
+k draws per cycle reaches a fixed draw count in 1/k the cycles. That is a true
+statement about wall-clock and it was a reasonable design intent.
+
+**§4.3.67 removed the benefit.** Decorrelation is set by **total sampling
+steps**, so 1/k the cycles is 1/k the steps is **1/k the effective draws**:
+
+| `samples_per_cycle` | cycles for 60 draws | total steps | effective draws |
+|---|---|---|---|
+| 1 | 60 | 120,000 | 1.00× |
+| 2 | 30 | 60,000 | **0.50×** |
+| 3 | 20 | **40,000** | **0.33×** |
+
+You would get the same 60 draws for a third of the information.
+
+**And it adds a bias the single-draw harvest does not have.** With `spc > 1` the
+draws within one cycle sit at different points on the cosine, so they carry
+different discretisation bias. At `cycle_length` 2000 and medium_play's
+`lr_min`/`lr_max`, ε² spreads across the within-cycle draws by:
+
+| `fraction_cool` | 0.10 | 0.34 | 0.50 |
+|---|---|---|---|
+| ε² spread within a cycle | 1.06× | 1.70× | **2.64×** |
+
+**§3.2.1 already made this call in the other direction**, fixing `cycle_length`
+**high** because "extra kept draws are pure memory and jackknife cost at
+identical statistics". Activating `fraction_cool` is the same mistake in a
+different variable.
+
+> **Would it ever be right?** Yes — if τ were comparable to the *within-cycle*
+> spacing, extra draws would carry independent information. It is not: the
+> within-cycle spacing is ~226 steps at `spc = 3` against τ of 1,600 steps on
+> the fastest variant and ~100,000 on the slowest. Even medium_diverse's draws
+> would be 0.14 τ apart. The design was not unreasonable when written; the
+> regime simply is not the one it assumed.
+
+**Action: `fraction_cool` is PINNED at 0.25, not swept** (all four sweeps), with
+`samples_per_cycle` left at 1. The round-3 search drops from 6 dimensions to
+**5** — `width`, `depth`, `sghmc_lr`, `sghmc_lr_max`, `mdecay` — which improves
+coverage per dimension again at the same 130-trial cap.
+
+**Re-read anything that rested on it.** The four settled configs' values
+(0.120 / 0.127 / 0.337 / 0.402) are optimiser noise, and §4.5's observation that
+"neither swept schedule parameter correlates with any mixing metric" has a
+trivial explanation for one of the two. Trials differing only in
+`fraction_cool` are free replicate estimates of the run-to-run floor.
 
 ### 4.4 Procedure
 

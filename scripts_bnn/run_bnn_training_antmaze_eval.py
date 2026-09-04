@@ -957,21 +957,58 @@ def train(config: TrainConfig):
             # wide posterior from chains that merely disagree.
             _w = float(np.median(_cen.var(axis=1, ddof=1).mean(axis=0)))
             _b = float(np.median(_cen.mean(axis=1).var(axis=0, ddof=1)))
+            _c_folded = np.asarray(azs.rhat(_cen, method="folded"))
+            _c_q05_rel = _c_q05_mcse / (_cen_sd + 1e-8)
+            _c_tot = float(_cen.shape[0] * _cen.shape[1])
+            # within- vs between-chain split (4.3.66): distinguishes a genuinely
+            # wide posterior from chains that merely disagree.
+            _w = float(np.median(_cen.var(axis=1, ddof=1).mean(axis=0)))
+            _b = float(np.median(_cen.mean(axis=1).var(axis=0, ddof=1)))
+            # Mirrors the RAW block key-for-key so the two are directly
+            # comparable and neither can silently gain a statistic the other
+            # lacks.  Any raw key without a centred twin is a Class C hole
+            # (4.3.61), which is what this block exists to close.
             _centred = {
+                f"{label}_pred_centred_ess_mean": float(np.nanmean(_c_ess)),
                 f"{label}_pred_centred_ess_median": float(np.nanmedian(_c_ess)),
                 f"{label}_pred_centred_ess_min": float(np.nanmin(_c_ess)),
+                f"{label}_pred_centred_ess_median_norm":
+                    float(np.nanmedian(_c_ess)) / _c_tot,
+                f"{label}_pred_centred_ess_min_norm":
+                    float(np.nanmin(_c_ess)) / _c_tot,
+                f"{label}_pred_centred_rhat_mean": float(np.nanmean(_c_rhat)),
                 f"{label}_pred_centred_rhat_median": float(np.nanmedian(_c_rhat)),
                 f"{label}_pred_centred_rhat_max": float(np.nanmax(_c_rhat)),
+                f"{label}_pred_centred_rhat_95th_pct":
+                    float(np.nanpercentile(_c_rhat, 95)),
+                f"{label}_pred_centred_rhat_pct_over_1.01":
+                    _pct_over(_c_rhat, 1.01),
+                f"{label}_pred_centred_folded_rhat_median":
+                    float(np.nanmedian(_c_folded)),
+                f"{label}_pred_centred_folded_rhat_max": float(np.nanmax(_c_folded)),
+                f"{label}_pred_centred_folded_rhat_95th_pct":
+                    float(np.nanpercentile(_c_folded, 95)),
+                f"{label}_pred_centred_folded_rhat_pct_over_1.01":
+                    _pct_over(_c_folded, 1.01),
+                f"{label}_pred_centred_q05_ess_median": float(np.nanmedian(_c_q05_ess)),
+                f"{label}_pred_centred_q05_ess_min": float(np.nanmin(_c_q05_ess)),
+                f"{label}_pred_centred_q05_ess_min_norm":
+                    float(np.nanmin(_c_q05_ess)) / _c_tot,
+                f"{label}_pred_centred_q05_mcse_median": float(np.nanmedian(_c_q05_mcse)),
+                f"{label}_pred_centred_q05_mcse_max": float(np.nanmax(_c_q05_mcse)),
+                f"{label}_pred_centred_q05_mcse_rel_median":
+                    float(np.nanmedian(_c_q05_rel)),
+                f"{label}_pred_centred_q05_mcse_rel_max": float(np.nanmax(_c_q05_rel)),
                 f"{label}_pred_centred_cvar_ess_median": float(np.nanmedian(_c_cvar_ess)),
                 f"{label}_pred_centred_cvar_ess_min": float(np.nanmin(_c_cvar_ess)),
                 f"{label}_pred_centred_cvar_rhat_median": float(np.nanmedian(_c_cvar_rhat)),
+                f"{label}_pred_centred_cvar_rhat_max": float(np.nanmax(_c_cvar_rhat)),
+                f"{label}_pred_centred_cvar_rhat_pct_over_1.01":
+                    _pct_over(_c_cvar_rhat, 1.01),
                 f"{label}_pred_centred_cvar_mcse_rel_median": float(np.nanmedian(_c_cvar_rel)),
                 f"{label}_pred_centred_cvar_mcse_rel_max": float(np.nanmax(_c_cvar_rel)),
                 f"{label}_pred_centred_cvar_unresolved_pct":
                     100.0 * float(np.mean(_c_cvar_rel > 1.0)),
-                f"{label}_pred_centred_q05_ess_median": float(np.nanmedian(_c_q05_ess)),
-                f"{label}_pred_centred_q05_mcse_rel_median":
-                    float(np.nanmedian(_c_q05_mcse / (_cen_sd + 1e-8))),
                 f"{label}_pred_centred_within_chain_var": _w,
                 f"{label}_pred_centred_between_chain_var": _b,
                 f"{label}_pred_centred_between_frac": _b / max(_w + _b, 1e-30),
