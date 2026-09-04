@@ -299,9 +299,11 @@ report-both-winners rule.
 | `n_meas` | **256** | §4.3.24 — it buys prior *coverage*, not just noise reduction; §4.3.25 closed the fixed-set alternative with a bound. |
 | `cycle_length` | **2000** | §4.3.67: neutral for decorrelation. Corrected 2026-08-31 — this said 500, reasoning that more kept draws give finer tail resolution. **Wrong**: resolution depends on *effective* draws, set by total steps alone, so extra kept draws are pure cost. At 240k steps, 500 keeps 480 draws/chain against 2000's 120 — 4× the memory and jackknife time in the objective for identical statistics. Fix it HIGH, not low. |
 
-Six dimensions remain — `width`, `depth`, `sghmc_lr`, `sghmc_lr_max`, `mdecay`,
-`fraction_cool` — at the same 130-trial cap, so **coverage per dimension
-improves by half** against round 2's nine. Ranges unchanged from §3.2.
+**Five** dimensions remain — `width`, `depth`, `sghmc_lr`, `sghmc_lr_max`,
+`mdecay` — at the same 130-trial cap, so coverage per dimension improves
+substantially against round 2's nine. Ranges unchanged from §3.2.
+(`fraction_cool` was a sixth until §4.3.76 established it is inert and that
+activating it would be harmful; it is pinned at 0.25.)
 
 #### Compute is allocated on steps-per-independent-sample, not `num_samples`
 
@@ -1106,7 +1108,16 @@ statistics meet target or a reasonable budget is exhausted — then disclose.
 > deployment-level statistics come from a dedicated higher-budget re-measurement
 > rather than from the sweep.
 
-### 3.2.11 ⚠️ 64% of round-3 trials fail the stationarity gate — likely the budget
+### 3.2.11 64% of round-3 trials fail the stationarity gate
+
+> ⚠️ **This section's conclusion is REFUTED by §4.3.74.** It proposed the failures
+> were "likely budget-induced", implying an instrument artefact. A null
+> calibration of the gate at every τ these chains run at shows it does **not**
+> false-positive, and at high τ its ESS is biased low, making `z_scale` biased
+> **small** — the gate is **lenient**, not strict. **The failures are real
+> non-stationarity and may be understated.** What survives is only the narrower
+> claim that a shorter window contains more of the transient. Read §4.3.74
+> before acting on anything below.
 
 **25 trials in (2026-09-02), the eligible set is thin and may be near-random.**
 
@@ -8286,7 +8297,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
 | 3b | BNN | **two of four usable; large_play's reward model is SATURATED (§4.3.50).** Its mean logit has median |Δ| = 18.70 (σ = 0.99999999), so CVaR reorders 44% of pairs and is confidently wrong — CVaR CE 10.24, reproduced. The other three sit at 1.9–5.1. CVaR CE itself is reproducible across replicates. Next: large_play's own amplitude curve, since §4.3.23's was medium_play-only |
 | 3c | BNN | **closed.** Five sampler mechanisms proposed and refuted (§4.3.73). What survives is one invariant: decorrelation is set by **total sampling steps**, and steps-per-independent-sample is a per-variant constant spanning **60×** (§4.3.67). No knob moves it |
-| **R3** | BNN | **RUNNING** (4 sweeps, GPUs 0–3, launched 2026-09-01). Objective `val_cvar_ce` at conservatism 0.75, reported at 0.95 (§3.2.10); 6 swept dims; 32 chains × 120k steps. **26 trials in, 9 eligible (36%)** — and **16 of 17 rejections are the centred `scale_z` gate**, which correlates with nothing being swept (max \|ρ\| 0.399). §3.2.11 flags this as likely budget-induced; §4.3.73 gives the current hypothesis. **Do not read a winner until the drift question is settled** |
+| **R3** | BNN | **STOPPED 2026-09-04 after 26 trials**, deliberately, for three defects now fixed: `fraction_cool` was a swept dimension that does nothing (§4.3.76), the centred convergence metrics the gates specify were not logged (§4.3.75), and 16 of 17 rejections were one gate whose behaviour was not understood. Of 26 trials, 9 were eligible (36%). **Trials are not wasted** — they are valid `val_cvar_ce` measurements and carry into a relaunch via `check_sweep_convergence.py --emit-prior-runs`. **Relaunch is gated on §10.2** |
 | 4 | all | not started; blocked on R3, and on label caching (§3.2.9 — 11 chain sets/variant is up to 5 TB, cached reward labels are ~4 MB) |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -8311,205 +8322,97 @@ round-1 reference values that stage 3 sets.
 > R-hat needs overdispersed starts while the drift gate needs chains already at
 > stationarity, and a burn-in too short to absorb the jitter cannot serve both.
 
-### 10.2 Immediate next action
+### 10.2 Immediate next action — the road back to a relaunched sweep
 
-**Stage 3: the BNN draw budget (§4).** Stage 1 is complete for all three
-families; nothing is waiting on a sweep.
+Round 3 was **stopped after 26 trials on 2026-09-04**. This section replaces the
+stage-3 draw-budget plan that stood here until then; that ladder was closed as a
+negative result long ago (§4.3.13) and §4.3.73 lists the five sampler mechanisms
+refuted since.
 
-Stage 3 raises **`num_chains` only**, with `num_samples` pinned at the sweep's
-75 draws/chain — selection and production must run at the same horizon, which is
-the round-1 mistake §3.7 exists to prevent. `chains_per_gpu` is placement.
+#### Why it was stopped
 
-Judge it on the CVaR tail diagnostics (§4), reading the median / 95th-pct /
-`pct_over_1.01` variants rather than the `_max`/`_min` extremes (§4.5 explains
-why those are sparse rather than censored), and **check `fn_drift_*` and
-`param_clamp_sampling_pct` first**: a run that is not sampling the target
-measure makes every tail number meaningless. Read the raw `loc_sd` alongside
-the z-scores — the z's are not comparable across chain counts, and a PASS at a
-low count is not evidence of stationarity (§4.2.1). The winners pass the
-z-gate at 4 chains × 75 draws; §4.3.2 shows that PASS does not survive
-contact with a longer ladder.
+| defect | status |
+|---|---|
+| `fraction_cool` swept but **inert** — one of six dimensions did nothing | **fixed** (§4.3.76): pinned at 0.25, search is now 5 dims |
+| the **centred** convergence metrics the §3.2.1 gates specify were **not logged** — coverage was 12 of 29, the resolution gate ran on a raw proxy | **fixed** (§4.3.75): centred block now mirrors raw key-for-key, 29/29 |
+| **16 of 17 rejections** were the centred `scale_z` gate, correlating with nothing swept (max \|ρ\| 0.399) | **not fixed — this is the open question** |
 
-**Progress so far — and why the ladder stopped.** medium_play's `c4`, `c8` and
-`c16` rungs are done (2026-08-16 / 08-17 / 08-17), recorded in §4.3.1 and
-§4.3.2. `c16` changed the question. Raw `loc_sd` — the drift effect size, which
-unlike the z-scores does not depend on chain count — went 0.4319 → 0.4222 →
-0.6460 while stationarity requires it to fall as 1/√draws (0.4319 → 0.3054 →
-0.2160). It never falls. **There is a real within-chain location drift at every
-rung, and the `c4`/`c8` gate PASSes were low-power false negatives** (§4.2.1).
+#### Already done, no compute
 
-Because `function_space_drift` splits each chain's *own* draws in half, adding
-chains cannot reduce that drift — it only measures it better. Stage 3 as
-specified (§4.1: `num_chains` only, `num_samples` pinned at 75) therefore
-ladders an axis orthogonal to the binding constraint. **No budget can be
-selected from this ladder**, and the flat `cvar_mcse_rel_median` across 4× the
-compute (0.220 → 0.271 → 0.223) is the same fact seen from the tail.
+1. **Gate null calibration** (`calibrate_drift_gate.py --mode null`, 8 reps, our
+   environment). Null medians `loc_z` 0.54–0.71 and `scale_z` 0.43–0.68 across
+   τ = 1–50; every τ passes. **The gate does not false-positive**, so the
+   failures are real (§4.3.74).
+2. **The review's τ ≈ 2–5 mis-calibration band did NOT reproduce here**, so
+   §4.3.46's medium_diverse decision stands: its `scale_z` 1.7976 is ~3.3× its
+   noise floor, not an instrument artefact.
+3. **The gate's own ESS is now returned** (`fn_drift_*_ess_half_*`), so its
+   2.5–3.5× disagreement with §4.3.67's τ gets settled on real runs.
+4. **Per-chain frozen-preconditioner spread is now logged**
+   (`chainspread_precond_*`).
 
-**Since then**, `--per-chain-drift` showed the drift is common to 14/16 chains
-(alignment 0.7564, §4.3.5), and the compute-matched non-cyclical control cleared
-the cyclical schedule while incidentally supplying the empirical support §3.6.2
-lacked for it (§4.3.6). The `chain_init_jitter` test meant to separate the two
-remaining hypotheses was inconclusive at 8 chains (§4.3.7) and **refuted the
-shared start** when redone at 16 (§4.3.8): ALIGNMENT held at 0.7216 against
-0.7564, where the hypothesis predicted a collapse toward 0.25. Weight-space
-diffusion could not be tested across chains — ‖w‖ growth is 1.51× in every
-chain to ±1%, leaving no leverage (§4.3.9). That test did reveal that most of
-the drift is a shift in the *global offset* of `f`, which the BT/CE likelihood
-is exactly invariant to. Splitting the gate (§4.3.10, §4.3.11) showed the centred
-location PASSES and, redone on centred `loc_sd`, §4.3.2's headline does not
-survive — the identified location drift *does* shrink with chains. The
-remaining defect is a widening of the identified component, and `d150`
-(§4.3.12) settled it: the spread grows as a **scale-free power law `t^0.4`**,
-so no horizon fixes it, and doubling the draws bought +4% bulk ESS and a CVaR
-ESS that went *down*. **Both of §4.1's levers are exhausted; stage 3 closes
-without a budget (§4.3.13).**
+#### Next, cheapest first
 
-**The sampler repair is now the work (§4.3.13's fork, resolved).** CVaR is the
-paper's mechanism, no theory makes the posterior *mean* a differentiator under
-reduced data or label noise, and a mean-only fallback would be a different and
-much weaker paper. So the sampler is fixed rather than worked around.
+5. **Grep surviving chain logs on the box for the per-chain `minv` spread**
+   (review §9.4). Zero compute — the workers already printed it. **A 2× spread
+   is a persistent, scale-only, between-chain difference**, which is a
+   non-transient mechanism for `scale_z` failing while `loc_z` passes. This
+   matters because §4.3.74 showed hypothesis 6 **cannot** produce `scale_z > 2`,
+   so a non-transient mechanism is required and this is the cheapest candidate.
+6. **Build the MSD probe** (review §8). Record `f` at the diagnostic points every
+   `k` steps for a few thousand steps post-burn-in and regress mean squared
+   displacement on lag; the slope is `2·D_f`, and `σ_f²/(2·D_f)` predicts
+   steps-per-independent-sample. **One chain, ~5k steps, no ESS estimator
+   anywhere** — against the 220k-step 16-chain runs every mechanism test has
+   cost so far, and every one of those was read on an estimator needing
+   τ:chain ≥ 3:1 that none of them achieved. It also separates the two
+   timescales §4.3.74 showed are needed. Validate it on an OU process with known
+   `D` and `σ`, as every other instrument here was validated.
+7. **`mdecay` ladder** 0.195 / 0.05 / 0.01 on medium_play, read on MSD-derived
+   `D_f` and `scale_ratio`. Highest expected payoff (review §6): `D = η/α` per
+   step while the stationary momentum variance is α-independent, so `mdecay`
+   changes the mixing **rate** and leaves the **target** alone. If `τ ∝ mdecay`
+   holds even roughly, this buys the ~10× §4.3.72 priced at 2M steps/chain, free.
+   §4.3.21's earlier `mdecay` test was read on ESS at τ:chain ≈ 1.8:1 and was
+   never revisited under the corrected reading.
+8. **Jitter ladder**, with §4.3.74's two corrections: read on **`scale_ratio`,
+   not `scale_z`** (which barely moves and would refute hypothesis 6 for the
+   wrong reason), and include **j > 1** as well as below.
+9. **ε ladder with `burn_in_lr` pinned**, plus a first-ever `sghmc_lr_max`
+   ladder (review §3). `burn_in_lr` is unset in all four configs — **verified** —
+   so `sghmc_lr` sets the burn-in, hence where `v̂` freezes, as well as the
+   sampling floor; §4.3.41's ladder moved three things at once and "ε is at its
+   ceiling" does not follow from it. `sghmc_lr_max` carries 83–94% of the
+   step-size budget and has never been laddered.
 
-**Judge every candidate fix on centred `ratio` AND predictive CE together.**
-§4.3.15 is the reason: a `bt_pool="sum"` run drove the widening from 1.6026 to
-1.0661 and passed every §4.2 gate while *doubling* CE, because ~50× larger
-effective steps equilibrate fast onto the wrong measure. Stationarity is
-necessary, not sufficient, and centred `ratio` on its own can be bought by
-breaking the sampler.
+#### Relaunch criteria — do not restart before these hold
 
-**Do this next, in order.** Rewritten 2026-08-24 against §4.3.26–36; the
-previous list was reorganised around a gradient-noise fix that §4.3.26 voided,
-and its step 1 had accumulated four layers of correction.
+- **The `scale_z` rejection rate is understood.** Either a change raises the
+  eligible fraction materially on a pilot (target ≥ 60% against the observed
+  36%), or there is an accepted account of why ~36% is intrinsic. Relaunching
+  without this selects from a set whose membership is driven by something not
+  being searched.
+- **The two τ estimates agree**, or the disagreement is explained. §4.3.72's
+  "~10× more compute" pricing and §3.2.1's resolution gate both rest on
+  §4.3.67's τ; the gate's own ESS says 2.5–3.5× faster.
+- **A pilot at the intended settings passes its own gates**, with
+  `val_pred_centred_ess_median` ≥ 40 read directly rather than through the raw
+  proxy.
 
-**Where the sampler stands.** The recipe — `map_amp2` **16893.98**,
-`chain_init_jitter` **1.0**, `n_meas` **256**, at 16 chains — reaches centred
-stationarity on three of four variants:
+When those hold: relaunch with `./launch_hp_sweeps.sh bnn`, **bumping
+`IDS_FILE` to a new round tag** — the cache is keyed by entry name, so reusing
+`sweep_ids_bnn_round3.txt` would silently resume the stopped sweeps with the old
+search space. Carry the 26 completed trials in with
+`check_sweep_convergence.py --emit-prior-runs` so the Bayes optimiser keeps
+their information.
 
-| variant | burn-in | centred `ratio` | centred `scale_z` | status |
-|---|---|---|---|---|
-| medium_play | 20,000 | 1.0871 / 1.1198 | 0.6469 / 0.6999 | PASS, **replicated** (§4.3.35) |
-| large_diverse | 20,000 | 1.1278 | 0.8091 | PASS, unreplicated |
-| medium_diverse | 100,000 | 0.9087 | 1.7976 | PASS, marginal (§4.3.33) |
-| **large_play** | — | 0.8578 @20k, 0.6194 @100k | — | **FAILS both ways** (§4.3.30, §4.3.34) |
+#### Still queued behind the sweep
 
-Resolution floor on centred `ratio` is **0.0327** (§4.3.35): differences below
-~0.05 are not readable from single runs.
-
-1. **~~Re-run large_play with `warmup_use_best`.~~ DONE — negative (§4.3.37).**
-   Handing over a 22% better warm-up moved centred `ratio` by 0.003 against a
-   0.0327 floor. The warm-up state is not the channel, and large_play still
-   fails. **The remaining candidate is the frozen preconditioner**: `tau`, `g`
-   and `v_hat` adapt only during burn-in and are frozen for all of sampling
-   (`adaptive_sghmc.py:107`), so `num_burn_in_steps` silently sets a
-   sampling-phase hyperparameter. **Superseded by §4.3.38** — the audit against Springenberg et al. found
-   `sghmc_lr` is **40–130× below the paper's ε = 1e-2**, giving 1,600–17,000×
-   less diffusion per step, which is a direct candidate for the slow relaxation
-   the preconditioner hypothesis was invented to explain. It also found `τ`'s
-   unbounded growth is the *published* algorithm's behaviour, not a defect. **Done, and it collapsed (§4.3.40).**
-   `sghmc_lr` 0.008 drove `f` to a CONSTANT: mean CE 0.6932 = `log 2`,
-   accuracy 0.4606, and a *perfect* stationarity gate (centred `scale_z`
-   0.0000) because a constant function cannot drift. The reference ε does not
-   transfer to this model. **Ladder done (§4.3.41): the selected ε is
-   already at the ceiling.** 5e-4 — only 3.5× up — already gives mean CE worse
-   than `log 2`, and every rung is worse than the selected value on every
-   axis. `sghmc_lr` was pinned by stability, not by CE pathology. **The
-   posterior is stiff and `ess_bulk` ≈ 2.4% cannot be fixed by tuning ε.**
-   Remaining levers are of a different kind — better preconditioning, a
-   different sampler, or reducing stiffness at source — so **stop tuning the
-   existing sampler's scalars**. Gate on `fn_drift_shape_var_frac` regardless. The preconditioner
-   instrumentation is in place (§4.3.37): `precond_*` is logged to wandb from the warm-up and printed per
-   chain to the run log. Read `precond_tau_over_burnin` on large_play at 20k
-   and 100k — a ratio that stays constant means the adaptation window never
-   saturated and a longer burn-in freezes a staler preconditioner; a falling
-   ratio exonerates burn-in length. **Two runs, no new sampling** — but note the
-   existing runs predate the instrumentation, so this needs the two
-   configurations re-run, or the snapshot recomputed from saved chains.
-
-   *Superseded rationale, kept for the record:* §4.3.36 showed the warm-up does
-   not converge monotonically and the final-state hand-off discards the best
-   state visited — worst on large_play, which reached NLL **0.172** and handed
-   off **0.426** (2.48× worse). `warmup_use_best: true` (added 2026-08-24, needs
-   `warmup_log_every > 0`) hands over the best-by-NLL burn-in state instead.
-   **This removes a knob rather than tuning one**: keeping the best state makes
-   burn-in length largely irrelevant, where §4.3.36's early-stopping rule still
-   requires picking a criterion. Judge on centred `ratio`/`scale_z` **and CVaR
-   CE against 3.0359** — §4.3.30 showed large_play passing both gates with a
-   worse-than-chance CVaR reward, so the gate alone cannot clear it.
-
-2. **Close out the four settled configurations (§4.3.46).** CVaR CE on all
-   four (it is the selection objective and exists only for medium_play's
-   flagship — `--cvar-ce` on saved chains, no new sampling); replicates via
-   `--sampling_seed 100` for the three unreplicated finals; and the §7.1
-   disclosure that these settings were tuned on diagnostics rather than
-   produced by the pre-registered procedure. This also settles §4.3.28's CVaR CE gain,
-   currently unconfirmed at 1.12× its 2·SE, and §4.3.27's jitter-alone effect at
-   3.0× the floor.
-
-3. **Redesign the sweep, then re-run stage 1 for the BNN.** **The design is
-   now written and pre-registered in §3.2.1** — read that, not the summary
-   below, which is retained for its rationale links. §3.2.1 fixes `map_amp2`,
-   `n_meas` and `cycle_length` (9 swept dimensions → 6), adds a degeneracy gate
-   that closes §4.3.51's flaw in the objective, adds a resolution gate, and
-   settles the α question against the compute budget.
-   - **Objective: CVaR CE** (`--cvar-ce`, α = 0.05), validated in §4.3.22–23 —
-     it ranks configurations opposite to mean CE, has a genuine interior
-     optimum, and resolves the differences that matter at 8×75. Mean CE cannot
-     be used: §4.3.22 shows it rewards worse stationarity, and at the amplitude
-     it selected the CVaR reward is worse than chance.
-   - **Fix `map_amp2`** at the value §4.3.23's post-fix curve settles. It has no
-     interior optimum under mean CE (§4.3.16's cap history) and is derivable
-     from the pooling convention and segment length.
-   - **Fix `n_meas` high.** §4.3.24 showed it buys prior *coverage*, not just
-     noise reduction, and §4.3.25 closed the fixed-set alternative with a bound.
-   - **Gate on `fn_drift_centred_*`** per §3.6.3's 2026-08-24 amendment, now
-     logged automatically (§4.3.29). Do **not** gate on raw: it is not even
-     reproducible across replicates (§4.3.35).
-   - **Do not reinstate `early_stop_acc_threshold`** — §3.5 removed it in round
-     1 and §4.3.36 confirms warm-up quality does not predict final quality.
-   - Sweep the rest jointly. Re-run MR and PT **only** if `batch_size` or
-     `bt_pool` changes (§3.6.2, §4.3.15).
-
-4. **Repeat for the other three variants**, then **transcribe** `num_chains` /
-   `chains_per_gpu` into `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` and
-   re-run the field-by-field verification (§10.3).
-
-5. **Then stage 4** (§5) — the 8-way normalization grid, which runs outside this
-   repo in the surrounding `iqlpref` pipeline.
-
-**Standing rules for every run above.**
-- Judge on **centred `ratio` AND CVaR CE together**. §4.3.15's `bt_pool=sum` run
-  and §4.3.30's large_play both passed every gate while the model was broken:
-  **stationarity is necessary, not sufficient.**
-- Read `ratio` from `--offset-shape-split`, never raw — raw is a mixture that
-  cancelled a real effect twice (§4.3.16, §4.3.19) and is not reproducible
-  (§4.3.35).
-- **Replicate anything load-bearing** with `sampling_seed` (§4.3.35).
-- Do not read ALIGNMENT at 8 chains (§4.3.7), and do not build arguments on
-  orderings of the four variants — three mutually confounded orderings have
-  already been refuted (§4.3.30, §4.3.31, §4.3.32).
-- A §4.2 gate PASS is chain-count dependent and is not evidence of stationarity
-  (§4.3.18, §7.1).
-
-**What is not reachable, and what is disclosed.** Prior strength alone plateaus
-near centred `ratio` ≈ 1.10 (§4.3.23); jitter and `n_meas` compose past it
-(§4.3.28). The residual, and the fact that the shipped sampler is not stationary
-in the raw sense, are §7.1 disclosures rather than open work.
-
-The §4.1 write-up conclusion stands and is strengthened: the tail is not
-reachable by adding chains at a 75-draw horizon. The reason is now identified —
-the sampler is not stationary at that horizon — which makes it a result about
-the cyclical schedule composed with fSGHMC (§3.6.2's known deviation), and it
-belongs in the paper.
-
-**Always capture the diagnostic to a file next to the run.** The
-unresolved-point count and the `--worst-k` listing are the two things §4.6 asks
-to be recorded that are *not* logged to wandb, so the terminal is their only
-copy otherwise, and `exp/` is gitignored — the file stays local and can be
-pulled off the box for analysis. The `c4`/`c8`/`c16` captures are in `exp/` on
-the analysis Mac.
-
-Every stage-3 run needs a distinct `OUT_DIR`. The deterministic
-`{OUT_DIR}_{seed}` path has already destroyed evidence three times (§10.3), and
-two runs sharing a path will silently clobber each other.
+- **Label caching before stage 4** (§3.2.9): 11 chain sets per variant is up to
+  5 TB; cached reward labels are ~4 MB and also remove the re-labelling cost
+  from each of stage 4's 8 normalization indices.
+- **§7.3's disclosures** are written; §7.4 (round-3 results) cannot be until
+  there are results.
 
 ### 10.3 The BNN production configs — done for round 2
 
@@ -8549,15 +8452,18 @@ these are uniform project-wide and the sweep yamls say so explicitly.
 but `num_chains`/`chains_per_gpu` are still round-1 values until stage 3 sets
 them.
 
-### 10.4 Then: stage 3, then stage 4
+### 10.4 Then: round 3, then stage 4
 
-**Stage 3 is specified in full in §4** — what it chooses, the stationarity
-precondition, the measured starting point, the launch command, what to judge it
-on, and when to stop. That section is the single source of truth; this one only
-says where it sits in the sequence. Do not follow a summary of §4 written
-elsewhere, including an earlier version of this paragraph, which told the reader
-to check a `sampling_weight_growth` metric that no longer exists (§3.6.2
-explains why weight-space statistics were removed).
+> ⚠️ **Stage 3 as originally specified is CLOSED** (§4.3.13) — its ladder raised
+> `num_chains` against a constraint that turned out to be orthogonal to it, and
+> no budget was selectable from it. It is superseded by the **round-3 sweep**
+> (§3.2.1, §3.2.9–3.2.10), which re-selects the whole configuration on
+> `val_cvar_ce`. §4 remains the source of truth for the *diagnostics*; do not
+> follow it as a plan.
+
+Round 3 is specified in §3.2.1 (search space, gates, objective), §3.2.9 (budget
+and the escalation clause) and §3.2.10 (selection at conservatism 0.75,
+reporting at 0.95). §10.2 holds the current blockers and the relaunch criteria.
 
 Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
 seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
@@ -8573,6 +8479,17 @@ Entity `champlin-university-of-arizona`.
 | MR stage 1 | `70742ym5` | `vilrah4f` | `qkjet6r3` | `59czpdwf` |
 | PT stage 1 | `z6nrw1vy` | `sridqxoj` | `1z6xo2u0` | `gjphiwvs` |
 | BNN stage 1 (round 2) | `9gifb8sa` | `bq7ygeqe` | `ojk7k4vb` | `m5sp9bw9` |
+
+**Round 3 (stopped 2026-09-04 after 26 trials, §10.2):** medium_play
+`804kjssq`, large_play `4q0ybj7l`, medium_diverse `kp27gr0n`, large_diverse
+`t8byjk36`. Cached in `exp/sweep_ids_bnn_round3.txt`.
+
+> ⚠️ **A relaunch MUST bump `IDS_FILE` again** (e.g. `_round3b.txt`). The cache
+> is keyed by entry name, so reusing the round-3 filename silently *resumes*
+> these four sweeps — carrying the old search space, including the inert
+> `fraction_cool` dimension, while appearing to start fresh.
+> `launch_hp_sweeps.sh` carries this warning at its head; it is repeated here
+> because that is the failure that would be hardest to notice.
 
 Round-2 ids are cached in `exp/sweep_ids_bnn_round2.txt`. All four fired
 (triggers 40 / 42 / 29 / 40) and their agents exited on their own.
