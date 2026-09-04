@@ -336,7 +336,12 @@ that is what the budget must be set against.
    quantity it cannot measure.** The tail holds `(1−c) × ess` effective draws;
    the gate keeps that at ≥ 10.
 
-   > ⚠️ **Applied via a raw proxy — centred ess is NOT logged by the sweep**
+   > ✅ **RESOLVED 2026-09-04: `val_pred_centred_ess_median` is now logged**
+   > (§4.3.75), so the gate is applied on the centred quantity it specifies.
+   > The raw-proxy note below applies only to the round-3 trials run before
+   > that date.
+   >
+   > ⚠️ **Applied via a raw proxy — centred ess was NOT logged by the sweep**
    > (found 2026-09-01, five trials in). The training script logs only raw
    > `val_pred_ess_median`; centred ess comes from the offline diagnostic, and
    > sweep trials **overwrite** the run dir, so it cannot be recovered after the
@@ -7071,6 +7076,55 @@ Reproduced here at medium_play's geometry:
 This puts the gate's own autocorrelation estimate next to §4.3.67's on every
 future run, which is what settles the disagreement on real data rather than by
 inversion.
+
+### 4.3.75 Metric audit: every convergence statistic now has a centred form
+
+Done 2026-09-04 with the sweeps stopped, so there is no mid-campaign
+inconsistency (which is why §3.2.1's raw proxy was *not* fixed while they ran).
+
+**What was wrong.** The sweep logged **84 `val_*` keys, of which 8 were centred**
+— all from the drift block. Every per-point convergence and tail statistic was
+**raw only**: `pred_ess`, `pred_rhat`, `pred_folded_rhat`, `pred_q05_*` (VaR),
+`pred_cvar_*` and `pred_within_chain_var` — 29 keys. §4.3.62 added centred forms
+to the offline diagnostic in August; the training script never got them, so
+§3.2.1's resolution gate had been running on a raw proxy.
+
+**Added** (computed from `_cen = pred_chains − mean over points`, by the same
+expressions as the raw block so the two cannot drift apart; raw kept unchanged
+so archived runs stay comparable):
+
+| | keys |
+|---|---|
+| bulk | `pred_centred_ess_median` / `_min`, `pred_centred_rhat_median` / `_max` |
+| CVaR | `pred_centred_cvar_ess_median` / `_min`, `_cvar_rhat_median`, `_cvar_mcse_rel_median` / `_max`, `_cvar_unresolved_pct` |
+| VaR | `pred_centred_q05_ess_median`, `_q05_mcse_rel_median` |
+| §4.3.66 split | `pred_centred_within_chain_var`, `_between_chain_var`, `_between_frac` |
+| the unidentified direction | `pred_offset_rhat`, `pred_offset_ess` |
+| review §2 | `fn_drift_{,centred_,offset_}ess_half_median` / `_95th` — the gate's own ESS, previously computed and discarded |
+| review §9.4 | `chainspread_precond_{minv_median,v_hat_at_floor,tau_median}_{median,min,max,ratio}` |
+
+**Validated** on a chain with a known offset random walk — centred vs raw:
+`ess` **39.3×**, `rhat` 0.54×, `cvar ess` 35.2×, `cvar mcse_rel` 0.13×. The
+direction §4.3.61 predicted, at a magnitude that shows how much the raw numbers
+were carrying.
+
+> **The per-chain preconditioner spread is new instrumentation, not a rename.**
+> Every chain runs its own burn-in with `tau/g/v_hat` re-initialised, so each
+> freezes a different `minv` and samples at its own effective step
+> `η_i = ε²·minv_i`. That is a **persistent, scale-only, between-chain**
+> difference — a candidate mechanism for `scale_z` failing while `loc_z` passes
+> that, unlike a jitter transient, does not decay. It was previously visible
+> only in each worker's text log (workers run with wandb disabled); the worker
+> now persists `precond_at_freeze.pt` and the parent logs the **spread**, which
+> is the quantity the mechanism predicts. **This matters because §4.3.74
+> established hypothesis 6 cannot produce `scale_z > 2`** — a non-transient
+> mechanism is required, and this is the cheapest candidate.
+
+**Completeness check.** All 20 quantities the gates, the objective and the drift
+investigation require are logged. Two initially read as missing
+(`chainspread_*_ratio`, `param_clamp_sampling_pct`); both are built by f-string
+interpolation and are present — the same interpolation trap that made an earlier
+grep miss the entire `fn_drift` block.
 
 ### 4.4 Procedure
 

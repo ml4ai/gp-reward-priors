@@ -183,6 +183,19 @@ def _fpref_chain_worker(
     _stats = getattr(bayes_net, "_grad_norm_stats", None)
     if _stats is not None:
         torch.save(_stats, os.path.join(chain_dir, "grad_norm_stats.pt"))
+    # Each chain runs its OWN 20k burn-in with tau/g/v_hat re-initialised, so
+    # each freezes a DIFFERENT preconditioner and runs the whole sampling phase
+    # at a different effective step eta_i = eps^2 * minv_i.  Discretisation bias
+    # scales with eta, so the chains sit at slightly different effective
+    # temperatures -- a persistent, scale-only, BETWEEN-chain difference that no
+    # amount of burn-in or extra draws removes (independent review 2026-09-04,
+    # section 9.4).  That is a candidate mechanism for scale_z failing while
+    # loc_z passes, and unlike a jitter transient it is not transient at all.
+    # Persisted here so the parent can log the per-chain SPREAD; workers run
+    # with wandb disabled, so it was previously only in each chain's text log.
+    _pre = getattr(bayes_net, "_precond_at_freeze", None)
+    if _pre is not None:
+        torch.save(_pre, os.path.join(chain_dir, "precond_at_freeze.pt"))
 
 
 # ---------------------------------------------------------------------------

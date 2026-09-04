@@ -924,8 +924,73 @@ def train(config: TrainConfig):
         _drift = {f"{label}_{k}": v
                   for k, v in util.function_space_drift(pred_chains).items()}
 
+        # ---- CENTRED convergence + tail block (handoff 4.3.61/4.3.62) -----
+        # Everything in the raw block above is computed on RAW f, which carries
+        # the unidentified additive offset.  The BT/CE likelihood is exactly
+        # invariant to f -> f + c (3.6.3), so a wandering offset inflates every
+        # raw ESS/R-hat/MCSE without bearing on any prediction: 4.3.61 measured
+        # centred ESS exceeding raw by 1.42x-22.4x on the four finals, and
+        # 4.3.59 found the raw drift gate both FAILING good configs and PASSING
+        # bad ones.  3.2.1's resolution gate is specified on CENTRED ess and was
+        # being applied through a raw proxy because this was not logged.
+        #
+        # Computed by the same expressions as the raw block, on `_cen`, so the
+        # two cannot drift apart.  Raw is kept unchanged so archived runs stay
+        # comparable.
+        _cen = pred_chains - pred_chains.mean(axis=2, keepdims=True)
+        _off = pred_chains.mean(axis=2)              # (chain, draw) scalar/draw
+        _cen_flat = _cen.reshape(-1, _cen.shape[-1])
+        _cen_sd = _cen_flat.std(axis=0)
+        _centred = {}
+        try:
+            _c_ess = np.asarray(azs.ess(_cen))
+            _c_rhat = np.asarray(azs.rhat(_cen))
+            _c_var = np.quantile(_cen_flat, _alpha, axis=0)
+            _c_u = np.minimum(_cen - _c_var[None, None, :], 0.0) / _alpha
+            _c_cvar_ess = np.asarray(azs.ess(_c_u, method="mean"))
+            _c_cvar_mcse = np.asarray(azs.mcse(_c_u, method="mean"))
+            _c_cvar_rhat = np.asarray(azs.rhat(_c_u, method="folded"))
+            _c_q05_ess = np.asarray(azs.ess(_cen, method="quantile", prob=_alpha))
+            _c_q05_mcse = np.asarray(azs.mcse(_cen, method="quantile", prob=_alpha))
+            _c_cvar_rel = _c_cvar_mcse / (_cen_sd + 1e-8)
+            # within- vs between-chain split (4.3.66): distinguishes a genuinely
+            # wide posterior from chains that merely disagree.
+            _w = float(np.median(_cen.var(axis=1, ddof=1).mean(axis=0)))
+            _b = float(np.median(_cen.mean(axis=1).var(axis=0, ddof=1)))
+            _centred = {
+                f"{label}_pred_centred_ess_median": float(np.nanmedian(_c_ess)),
+                f"{label}_pred_centred_ess_min": float(np.nanmin(_c_ess)),
+                f"{label}_pred_centred_rhat_median": float(np.nanmedian(_c_rhat)),
+                f"{label}_pred_centred_rhat_max": float(np.nanmax(_c_rhat)),
+                f"{label}_pred_centred_cvar_ess_median": float(np.nanmedian(_c_cvar_ess)),
+                f"{label}_pred_centred_cvar_ess_min": float(np.nanmin(_c_cvar_ess)),
+                f"{label}_pred_centred_cvar_rhat_median": float(np.nanmedian(_c_cvar_rhat)),
+                f"{label}_pred_centred_cvar_mcse_rel_median": float(np.nanmedian(_c_cvar_rel)),
+                f"{label}_pred_centred_cvar_mcse_rel_max": float(np.nanmax(_c_cvar_rel)),
+                f"{label}_pred_centred_cvar_unresolved_pct":
+                    100.0 * float(np.mean(_c_cvar_rel > 1.0)),
+                f"{label}_pred_centred_q05_ess_median": float(np.nanmedian(_c_q05_ess)),
+                f"{label}_pred_centred_q05_mcse_rel_median":
+                    float(np.nanmedian(_c_q05_mcse / (_cen_sd + 1e-8))),
+                f"{label}_pred_centred_within_chain_var": _w,
+                f"{label}_pred_centred_between_chain_var": _b,
+                f"{label}_pred_centred_between_frac": _b / max(_w + _b, 1e-30),
+                # the unidentified direction, reported so a raw/centred gap can
+                # be attributed rather than guessed at
+                f"{label}_pred_offset_rhat": float(azs.rhat(_off)),
+                f"{label}_pred_offset_ess": float(azs.ess(_off)),
+            }
+        except Exception as e:  # noqa: BLE001 — diagnostics must not kill a run
+            warnings.warn(
+                f"[{label}] centred diagnostics failed ({type(e).__name__}: {e}); "
+                "logging none.  The 3.2.1 resolution gate will have to fall back "
+                "to the raw proxy.",
+                RuntimeWarning,
+            )
+
         return {
             **_drift,
+            **_centred,
             # Theory-aligned predictive (Wu et al. Eq. 10) — the SELECTION
             # metric.  Averages the likelihood over draws, so it is sensitive to
             # posterior width, which the plug-in below is not.
@@ -978,6 +1043,31 @@ def train(config: TrainConfig):
     # gradnorm_sampling_pct_over_clip: ~0 => the clip is inert during sampling
     # and the CVaR tail is clip-unbiased; >0 => it fires => real tail bias.
     # ------------------------------------------------------------------ #
+    # ---- Per-chain frozen preconditioner spread (review 2026-09-04 §9.4) ---
+    # Every chain freezes its own v_hat, so each samples at its own effective
+    # step.  A few percent is noise; a 2x spread is a persistent, scale-only,
+    # between-chain difference and a direct mechanism for scale_z failing while
+    # loc_z passes.  Logged as a spread, not a mean, because that is the
+    # quantity the mechanism predicts.
+    _pc = []
+    for _i in range(config.num_chains):
+        _p = os.path.join(saved_dir, f"chain_{_i}", "precond_at_freeze.pt")
+        if os.path.exists(_p):
+            try:
+                _pc.append(torch.load(_p, weights_only=False))
+            except Exception:  # noqa: BLE001 — never lose a finished run
+                pass
+    if len(_pc) >= 2:
+        for _k in ("precond_minv_median", "precond_v_hat_at_floor",
+                   "precond_tau_median"):
+            _v = np.array([d[_k] for d in _pc if _k in d], dtype=float)
+            if _v.size >= 2 and np.all(np.isfinite(_v)):
+                summary[f"chainspread_{_k}_median"] = float(np.median(_v))
+                summary[f"chainspread_{_k}_min"] = float(_v.min())
+                summary[f"chainspread_{_k}_max"] = float(_v.max())
+                summary[f"chainspread_{_k}_ratio"] = float(
+                    _v.max() / max(_v.min(), 1e-30))
+
     for _phase in ("burnin", "sampling"):
         _cnt = _nover = 0
         _sm = _mx = 0.0
