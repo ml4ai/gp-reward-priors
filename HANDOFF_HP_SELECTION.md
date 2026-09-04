@@ -6975,6 +6975,103 @@ slow ones. The fix would have to scale with each variant's relaxation time.
 > expansion) rather than being fitted to a summary statistic. That is weak
 > evidence, not strong. Run test (1) before believing it.
 
+### 4.3.74 Independent review (2026-09-04): what verified, what did not
+
+An external review (`DRIFT_REVIEW_2026-09-04.md`, with
+`scripts_bnn/calibrate_drift_gate.py`) audited the sampler against Wu et al.,
+Springenberg et al. and Zhang et al. **Every claim below was re-checked here
+before being accepted**; the review is treated as evidence, not instruction.
+
+#### Verified against the code — accept
+
+| claim | status |
+|---|---|
+| **`fraction_cool` is INERT when `samples_per_cycle == 1`** | **CONFIRMED.** With `_spc = 1` the harvest condition reduces to `_from_end == 0`. Computed directly: at `cycle_length` 2000 and 2750 the harvest step is `cycle_len − 1` for `fraction_cool` 0.10 / 0.12 / 0.34 / 0.50 alike. |
+| the gate computes `ess1`/`ess2` and discards them | **CONFIRMED** (`util.py:467-468`) |
+| `burn_in_lr` is unset in all four configs, so `sghmc_lr` also sets the 20k burn-in and hence where `v̂` freezes | **CONFIRMED** — absent from every config. §4.3.41's ε ladder moved three things at once. |
+| the discretisation, `scale_grad`, the Wu Eq. 6 prior gradient and the `−ε⁴` `B̂` correction are all faithful | accepted; consistent with §4.3.26 |
+
+> ⚠️ **`fraction_cool` is a swept dimension of the RUNNING round-3 sweep and it
+> does nothing.** One of six dimensions is noise, and the four settled configs'
+> values (0.120 / 0.127 / 0.337 / 0.402) are optimiser noise. Silver lining:
+> trials differing only in `fraction_cool` are free replicates.
+
+#### Did NOT reproduce — reject as stated
+
+**§1(b): a "mis-calibration band at τ ≈ 2–5".** The review reports null medians
+`loc_z` 1.490 / `scale_z` 1.163 at τ = 2.1, and re-reads medium_diverse's
+`scale_z` 1.7976 as "substantially instrument". **Run here at 8 replicates it
+does not appear:**
+
+| τ | 1.0 | 2.1 | 5.0 | 8.1 | 20.0 | 28.0 | 34.7 | 50.0 |
+|---|---|---|---|---|---|---|---|---|
+| null `loc_z` median | 0.712 | **0.708** | 0.622 | 0.597 | 0.575 | 0.582 | 0.567 | 0.539 |
+| null `scale_z` median | 0.684 | **0.537** | 0.461 | 0.433 | 0.470 | 0.499 | 0.509 | 0.522 |
+
+All close to the documented 0.67, all passing. The likely cause is an
+`arviz_stats` version difference — and the review itself said to run it *in your
+environment*, which is the right instruction. **Our environment is the one that
+produced every number in this document, so this calibration is the operative
+one, and medium_diverse's 1.7976 stands at ~3.3× its noise floor.**
+
+#### Verified by controlled test — direction right, consequence inverted
+
+The gate's ESS, on AR(1) chains with known τ (16 × 75, via the returned
+`ess_half`):
+
+| true τ | gate's implied τ | bias |
+|---|---|---|
+| 2.0 | 1.71 | 0.86× |
+| 10.0 | 10.06 | 1.01× |
+| **34.7** | **20.22** | **0.58×** |
+
+The review's §2 direction is right — the gate sees faster mixing at high τ —
+though 1.7× here, not 3.5×. **But the consequence is the opposite of the
+review's framing.** `z_scale = |log ratio| / sqrt(1/(2e₁)+1/(2e₂))`, so an ESS
+biased *low* makes the denominator *larger* and `z_scale` biased **small**. With
+the null table above, **the gate at high τ is LENIENT, not strict.**
+
+> ⚠️ **This refutes §3.2.11's reading.** That section proposed the 64% `scale_z`
+> failure rate was "likely budget-induced", implying an instrument artefact. It
+> is not: the gate does not false-positive at any τ, and at high τ it
+> *under*-reports drift. **The 16-of-26 failures are real non-stationarity, and
+> the true drift may be larger than reported.** What survives from §3.2.11 is
+> only the narrower claim that a shorter window contains more of the transient —
+> which is real drift being captured, not noise.
+
+#### Corrections to §4.3.73's hypothesis and its test
+
+The review made hypothesis 6 quantitative: `s(t) = sqrt(1 + (j²−1)·exp(−2t/τ))`.
+Reproduced here at medium_play's geometry:
+
+| j | 0.00 | 0.50 | 1.00 | 1.50 | 2.00 | 3.00 |
+|---|---|---|---|---|---|---|
+| `scale_ratio` | 1.060 | 1.047 | 1.005 | 0.944 | 0.852 | 0.740 |
+| `scale_z` | 0.553 | 0.508 | 0.501 | 0.543 | 0.889 | 1.579 |
+
+1. **The test must be pre-registered on `scale_ratio`, not `scale_z`.**
+   §4.3.73 specified `scale_z`, which barely moves — a ladder read on it would
+   have returned "no effect" and refuted hypothesis 6 **for the wrong reason**,
+   which is how several predecessors died. This is a real error in my test
+   design, caught by the review.
+2. **The ladder must include j > 1.** §4.3.73 specified 1.0 / 0.1 / 0.0, which
+   can only walk toward expansion; medium_play *contracts* (j > 1) so its
+   optimum is not in that range at all.
+3. **Hypothesis 6 is INCOMPLETE.** The single-timescale model reproduces the
+   contraction magnitude (0.852 at j = 2 vs the observed failure median 0.837)
+   and the variant sign flip, but **cannot produce `scale_z > 2`** — yet 2.67,
+   3.71 and 848.90 are observed. Since the gate is not false-positiving, a
+   second, slower timescale is required. The jitter transient may be part of the
+   story; it is not the whole of it.
+
+#### Implemented
+
+`_function_space_drift_core` now returns **`fn_drift_ess_half_median` / `_95th`**
+(and the `centred_` / `offset_` variants). Previously computed and discarded.
+This puts the gate's own autocorrelation estimate next to §4.3.67's on every
+future run, which is what settles the disagreement on real data rather than by
+inversion.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

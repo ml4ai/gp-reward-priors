@@ -478,14 +478,25 @@ def _function_space_drift_core(a, eps, prefix):
             RuntimeWarning,
         )
         z_loc = z_scale = np.full(P, np.nan)
+        ess1 = ess2 = np.full(P, np.nan)
 
     def fin(x):
         x = np.asarray(x, float)
         return x[np.isfinite(x)]
 
+    # ess1/ess2 are RETURNED, not just used inside the z_scale denominator.
+    # They are a second, independent estimate of the same chains' autocorrelation
+    # -- tau_half = D_half / ess_per_chain -- and inverting the settled runs'
+    # reported numbers showed it disagreeing with 4.3.67's tau by 2.5-3.5x on
+    # three of four variants, always with the gate seeing FASTER mixing
+    # (independent review, 2026-09-04 section 2; reproduced locally).  Both
+    # cannot be right, and which one is decides whether 4.3.72's "~10x more
+    # compute" pricing is correct.  They were already computed and discarded.
     out = {}
     for name, arr in (("loc_z", z_loc), ("scale_z", z_scale),
-                      ("loc_sd", raw_loc), ("scale_ratio", ratio)):
+                      ("loc_sd", raw_loc), ("scale_ratio", ratio),
+                      ("ess_half", 0.5 * (np.asarray(ess1, float)
+                                          + np.asarray(ess2, float)))):
         v = fin(arr)
         if v.size:
             out[f"fn_drift_{prefix}{name}_median"] = float(np.median(v))
