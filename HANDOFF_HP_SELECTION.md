@@ -6880,6 +6880,101 @@ disclose it. Budget the sweep on **steps per independent sample** rather than on
 `num_samples`, and note that the four variants' current allocation differs 60×
 for no principled reason.
 
+### 4.3.73 The drift: where it stands, and the current hypothesis
+
+Written 2026-09-02 at the user's request, consolidating everything established
+about drift and stating one hypothesis explicitly enough to be refuted.
+
+#### What is REFUTED (do not re-test these)
+
+| mechanism | refuted by | note |
+|---|---|---|
+| the cyclical schedule | §4.3.6, re-confirmed on **centred** in §4.3.64 | removing it made drift *worse*: `nocyc` centred `scale_z` 2.86 FAIL vs `c8` 1.86 PASS |
+| cycle **length** | §4.3.64, §4.3.67 | neutral for decorrelation; 750 vs 2750 differ 8% in steps-per-independent-sample |
+| burn-in length (as a general fix) | §4.3.34, §4.3.65 | 100k burn-in made medium_play *worse* (centred rhat 1.44 → 1.99) |
+| frozen chains / cold-point under-dispersion | §4.3.66 | all four variants are **within**-chain dominated (0.03–0.39) |
+| a stiff subspace / preconditioning | §4.3.70 | τ **flat** across the prior's whole eigenspectrum (1.03–1.44×) |
+| the `minv` clamp / step scale | §4.3.72 | `v_hat_min` 1e-6 and 1e-8 changed nothing; τ 34.7 → 38.9 → 42.6 |
+| gradient noise as the *width* driver | §4.3.58 | full batch halved drift `scale_z` but moved the width ratio 1.8% |
+
+**Five proposed mechanisms have been refuted on test.** The durable results have
+come from instruments and measured invariants, not from hypotheses.
+
+#### What is ESTABLISHED
+
+1. **The drift is a decaying transient**, not an ongoing drive (§4.3.32).
+2. **Decorrelation is set by total sampling steps**, and steps-per-independent-
+   sample is a per-variant constant spanning **60×** — medium_diverse ~1,600,
+   large_play ~4,000, large_diverse ~77,000, medium_play ~**100,000** (§4.3.67).
+3. **The prior's Gram conditioning at λ_min matters**: the `sig_n2` nugget fixed
+   large_play where `sig_c2` did nothing (§4.3.42–44).
+4. **NEW (2026-09-02, 26 round-3 trials): the failure is entirely in SCALE.**
+   `loc_z > 2` in **0 of 26** trials; `scale_z > 2` in **16 of 26**. Location is
+   perfectly stationary everywhere.
+5. **NEW: failing chains predominantly CONTRACT.** Centred `scale_ratio` < 1 in
+   11 of 16 failures, median **0.837**. Per variant: medium_play **0 of 8**
+   expand (median 0.837), large_play 5 of 7 expand (median 1.218).
+
+#### Current hypothesis: an unabsorbed `chain_init_jitter` transient
+
+**`chain_init_jitter = 1.0` perturbs each chain's start by 1.0 × the per-tensor
+std of the warm-up weights** (`f_pref_net.py:136-143`). The order is: warm-up
+point → **jitter** → burn-in (20k) → sampling. So burn-in has 20k steps to
+absorb the perturbation.
+
+**But 20k is a fixed budget against a relaxation time that varies 60× by
+variant.** For medium_play, §4.3.67 measured ~100,000 steps per independent
+sample — **20k burn-in is one fifth of a single relaxation time.** The transient
+cannot be absorbed, so it spills into the sampling window and appears there as a
+monotone contraction of scale as the chain settles from an over-dispersed start
+back toward the posterior's typical set.
+
+**Why this explains the location/scale asymmetry, which nothing else does.**
+Jitter adds **zero-mean** noise to each weight tensor. Zero-mean perturbation
+inflates the *scale* of the chain ensemble while leaving its *location*
+unchanged — exactly the observed signature: `loc_z` clean in 26 of 26,
+`scale_z` failing in 16 of 26.
+
+**Why it explains the variant ordering.** medium_play has the slowest relaxation
+(~100k steps) and shows the most contraction (0 of 8 expanding) and the worst
+eligibility (1 of 8). large_play relaxes ~25× faster (~4k steps), so 20k burn-in
+is ~5 relaxation times — enough to absorb the jitter — and it does not contract
+(5 of 7 expand).
+
+**Why it explains §4.3.34/§4.3.65's puzzle.** Burn-in "is not a general fix"
+because a *fixed* 20k is adequate for the fast variants and hopeless for the
+slow ones. The fix would have to scale with each variant's relaxation time.
+
+> **The tension this exposes, which is the real problem.** `chain_init_jitter`
+> exists because **shared starts under-estimate R-hat** — the code comment at
+> `f_pref_net.py:130-133` says so, and §4.2's convergence argument depends on it.
+> **The two diagnostics have opposite requirements**: R-hat wants overdispersed
+> starts, the §4.2 drift gate wants chains already at stationarity. With a
+> burn-in too short to absorb the jitter, **no configuration can satisfy both**,
+> and the gate will keep rejecting trials for a perturbation we injected
+> deliberately.
+
+#### Decisive tests, cheapest first
+
+1. **Jitter ladder.** Re-run one round-3 config at `chain_init_jitter` 1.0 / 0.1
+   / 0.0, all else identical. If centred `scale_ratio` moves toward 1 and
+   `scale_z` falls as jitter drops, the hypothesis holds. **This is the test to
+   run.** It is one variable and three runs.
+2. **Burn-in scaled to relaxation time.** medium_play at `num_burn_in_steps`
+   200k (≈2 relaxation times) with jitter 1.0, at the round-3 sampling budget.
+   Distinguishes "not enough burn-in" from "jitter is simply wrong here".
+3. **The §3.2.11 step test** (already proposed): same config at 240k sampling
+   steps. If `scale_z` falls, part of the effect is the measurement window
+   rather than the transient itself — these are not mutually exclusive and the
+   ladder in (1) is cleaner.
+
+> **Held loosely.** This is hypothesis six; five predecessors were refuted, and
+> two of those looked at least as good on the evidence available at the time.
+> What distinguishes this one is that it predicts a **signature already observed
+> and previously unexplained** (location clean, scale failing, contraction not
+> expansion) rather than being fitted to a summary statistic. That is weak
+> evidence, not strong. Run test (1) before believing it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -7974,7 +8069,9 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 1 | BNN | **4/4 fired** (round 2, merged); winners in `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` |
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
 | 3b | BNN | **two of four usable; large_play's reward model is SATURATED (§4.3.50).** Its mean logit has median |Δ| = 18.70 (σ = 0.99999999), so CVaR reorders 44% of pairs and is confidently wrong — CVaR CE 10.24, reproduced. The other three sit at 1.9–5.1. CVaR CE itself is reproducible across replicates. Next: large_play's own amplitude curve, since §4.3.23's was medium_play-only |
-| 4 | all | not started |
+| 3c | BNN | **closed.** Five sampler mechanisms proposed and refuted (§4.3.73). What survives is one invariant: decorrelation is set by **total sampling steps**, and steps-per-independent-sample is a per-variant constant spanning **60×** (§4.3.67). No knob moves it |
+| **R3** | BNN | **RUNNING** (4 sweeps, GPUs 0–3, launched 2026-09-01). Objective `val_cvar_ce` at conservatism 0.75, reported at 0.95 (§3.2.10); 6 swept dims; 32 chains × 120k steps. **26 trials in, 9 eligible (36%)** — and **16 of 17 rejections are the centred `scale_z` gate**, which correlates with nothing being swept (max \|ρ\| 0.399). §3.2.11 flags this as likely budget-induced; §4.3.73 gives the current hypothesis. **Do not read a winner until the drift question is settled** |
+| 4 | all | not started; blocked on R3, and on label caching (§3.2.9 — 11 chain sets/variant is up to 5 TB, cached reward labels are ~4 MB) |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
 trial/trigger, predictive CE and accuracy, all three acceptance numbers, the
@@ -7985,6 +8082,18 @@ fields match the winning wandb run for every variant, `burn_in_lr` is absent,
 The `SUPERSEDED-ROUND1` markers are gone, so `train_rewards.sh` will now launch.
 It should not be launched yet — `num_chains` / `chains_per_gpu` still hold
 round-1 reference values that stage 3 sets.
+
+> ⚠️ **The live question is what causes the drift (§4.3.73).** The round-3
+> stationarity gate is rejecting ~64% of trials on the *scale* statistic while
+> location is clean in 26 of 26, and failing chains predominantly **contract**
+> (medium_play: 0 of 8 expand). The current hypothesis is an unabsorbed
+> `chain_init_jitter` transient — 20k burn-in against a relaxation time that
+> reaches ~100k steps for medium_play — which would explain the location/scale
+> asymmetry, the variant ordering, and why burn-in "is not a general fix".
+> **It is hypothesis six and five predecessors were refuted; run §4.3.73's
+> jitter ladder before believing it.** The deeper tension it exposes is that
+> R-hat needs overdispersed starts while the drift gate needs chains already at
+> stationarity, and a burn-in too short to absorb the jitter cannot serve both.
 
 ### 10.2 Immediate next action
 
