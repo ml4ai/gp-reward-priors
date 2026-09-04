@@ -1101,6 +1101,64 @@ statistics meet target or a reasonable budget is exhausted — then disclose.
 > deployment-level statistics come from a dedicated higher-budget re-measurement
 > rather than from the sweep.
 
+### 3.2.11 ⚠️ 64% of round-3 trials fail the stationarity gate — likely the budget
+
+**25 trials in (2026-09-02), the eligible set is thin and may be near-random.**
+
+| variant | eligible | rejections |
+|---|---|---|
+| medium_play | **1 of 8 (12%)** | `scale_z` ×7, `degen` ×1 |
+| large_play | 3 of 7 (43%) | `scale_z` ×4 |
+| medium_diverse | 2 of 5 (40%) | `scale_z` ×3 |
+| large_diverse | 3 of 5 (60%) | `scale_z` ×2 |
+| **overall** | **9 of 25 (36%)** | **`scale_z` 16 of 17** |
+
+**The gate barely tracks what is being swept.** Rank correlation of
+`log(centred scale_z)` with each searched parameter: depth **0.399**, mdecay
+−0.209, and width / `sghmc_lr` / `sghmc_lr_max` / `fraction_cool` all below
+0.05. A gate rejecting two-thirds of trials for reasons largely unrelated to
+the search makes the eligible set close to a **random subsample**, which is a
+poor basis for selection.
+
+**The suspect is §3.2.8's step-budget cut, not the configurations.**
+
+| | chains | steps | medium_play centred `scale_z` |
+|---|---|---|---|
+| `r3_trial1` (§3.2.5) | 128 | 240k | **0.8718 — PASSED** |
+| round 3 | 32 | **120k** | 6.76, 2.28, 2.42, 3.27, 848.90, 2.39, 0.77, 2.67 |
+
+**The chain-count difference makes this stronger, not weaker.** The z-scores
+divide by an MCSE, so *more* chains means *more* power to detect drift (§4.2.1).
+The 128-chain run had every advantage for failing and passed comfortably; the
+32-chain runs fail despite less power. The underlying drift is genuinely larger
+at 120k steps.
+
+**Mechanism.** The drift statistic compares the first against the second half of
+the sampling window. At 120k steps that window is 20k–80k / 80k–140k, so a much
+larger fraction of any decaying post-burn-in transient falls inside the first
+half. At 240k it is 20k–140k / 140k–260k and both halves sit further from it.
+§4.3.32 already established the drift here *is* a decaying transient.
+
+> **The decisive test, and it is cheap.** Re-run one failing round-3
+> configuration at **240k steps**, everything else identical — e.g. medium_play
+> `w7d3` (`scale_z` 2.67). If `scale_z` drops below 2, the gate failures are
+> **budget-induced** and the sweep is selecting on a criterion that partly
+> measures the step budget rather than the configuration. Two GPUs are idle
+> (the sweeps use 4 of 6), so this runs in parallel without pausing anything.
+>
+> **If confirmed**, §3.2.8's 2× step saving is not free after all: it was costed
+> against the SE budget, which it met, but not against the stationarity gate,
+> which it appears to break. The options would be to restore 240k steps (giving
+> back half the throughput), or to raise `num_burn_in_steps` so the transient
+> falls outside the measurement window — noting §4.3.65 found more burn-in made
+> medium_play *worse* on mixing, though that was measured at 240k steps.
+
+**Also**: one medium_play trial (`6cbj4ifm`) is flagged DIVERGED at
+`gradnorm_sampling_pct_over_clip` = **71.0%**. With `clip_during_sampling:
+false` the clip does not fire, so this is not tail bias — it is a chain whose
+gradients routinely exceed 100 during sampling. It is ineligible anyway, but
+counts toward the search budget.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
