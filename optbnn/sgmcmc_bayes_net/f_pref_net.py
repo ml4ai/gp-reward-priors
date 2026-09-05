@@ -196,6 +196,16 @@ def _fpref_chain_worker(
     _pre = getattr(bayes_net, "_precond_at_freeze", None)
     if _pre is not None:
         torch.save(_pre, os.path.join(chain_dir, "precond_at_freeze.pt"))
+    # MSD probe trace (independent review 2026-09-04, section 8).  Saved as
+    # .npz rather than .pt because scripts_bnn/msd_probe.py is a pure-numpy
+    # analysis that must run on the analysis Mac, where the box's torch
+    # pickles are an unnecessary dependency.
+    _msd = getattr(bayes_net, "_msd_trace", None)
+    if _msd is not None:
+        np.savez_compressed(
+            os.path.join(chain_dir, "msd_trace.npz"),
+            **{k: np.asarray(v) for k, v in _msd.items()},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -621,6 +631,10 @@ class FPrefNet:
         v_hat_min=None,
         log_every=0,
         eval_data=None,
+        msd_points=None,
+        msd_every=10,
+        msd_window=0,
+        msd_start=0,
     ):
         """Run the fSGHMC training loop.
 
@@ -662,6 +676,18 @@ class FPrefNet:
                 posterior predictive, since no samples exist during burn-in).
             eval_data: optional ``(X_eval, y_eval)`` numpy tuple used for
                 periodic evaluation when ``log_every`` > 0.
+            msd_points: optional numpy (P, obs_dim) of diagnostic inputs at
+                which to record f every ``msd_every`` steps during a window of
+                the SAMPLING phase — the mean-squared-displacement probe
+                (independent review 2026-09-04, section 8).  Pass the same
+                points the section 4.2 drift gate uses, so sigma_f is the same
+                quantity in both.  ``None`` (default) disables the probe and
+                costs nothing.
+            msd_every: record f every this many steps within the window.
+            msd_window: length of the recording window in steps.  0 (default)
+                disables the probe.
+            msd_start: steps after the end of burn-in at which recording
+                begins, so the window can be placed clear of any transient.
         """
         # ---- Data loader ------------------------------------------------
         if data_loader is not None:
@@ -769,6 +795,36 @@ class FPrefNet:
                     "clamp_hits": 0, "clamp_elems": 0}
             for phase in ("burnin", "sampling")
         }
+
+        # ---- MSD probe (independent review 2026-09-04, section 8) --------
+        # Every mechanism test in sections 4.3.6-4.3.73 cost a 220k-step,
+        # 16-chain run and was then read on an ESS estimator that needs
+        # tau:chain >= 3:1 -- which none of those runs achieved, which is why
+        # five refutations later turned out to rest on unusable numbers
+        # (section 4.3.67's withdrawal).  The invariant section 4.3.67 named,
+        # steps per independent sample, is sigma_f^2 / D_f, and D_f is
+        # measurable directly from the mean squared displacement of f at short
+        # lags -- one chain, a few thousand steps, and no ESS estimator
+        # anywhere, since MSD's reliability needs lag_max << n rather than
+        # tau << n.  The recorded curve also SEPARATES the two timescales
+        # section 4.3.74 showed are needed: free diffusion is linear in the
+        # lag, confinement plateaus at 2*sigma_f^2, and the knee is the
+        # relaxation time.  Analysed by scripts_bnn/msd_probe.py.
+        self._msd_trace = None
+        _msd_t = None
+        if msd_points is not None and int(msd_window) > 0:
+            _msd_t = torch.from_numpy(
+                np.ascontiguousarray(msd_points, dtype=np.float32)
+            ).to(self.device)
+            _msd_k = max(1, int(msd_every))
+            _msd_first = int(num_burn_in_steps) + int(msd_start)
+            _msd_last = _msd_first + int(msd_window)
+            _msd_f, _msd_step, _msd_lr = [], [], []
+            self.print_info(
+                f"[msd] probe ARMED: {_msd_t.shape[0]} points, every "
+                f"{_msd_k} steps over steps {_msd_first:,}-{_msd_last:,} "
+                f"({int(msd_window) // _msd_k:,} samples)"
+            )
 
         for step, (x_batch, y_batch) in batch_generator:
             x_batch = x_batch.to(self.device, non_blocking=True)
@@ -923,6 +979,25 @@ class FPrefNet:
             _st["clamp_elems"] += int(getattr(self.sampler, "_clamp_elems", 0))
             self.step += 1
 
+            # ---- MSD probe sample ---------------------------------------
+            # One forward pass at the diagnostic points, post-step, and the
+            # step size in force when it was taken -- D scales with eps^2, so
+            # the cyclical schedule modulates the short-lag slope within a
+            # cycle and the analysis needs the lr to read a phase-resolved D.
+            if (_msd_t is not None
+                    and _msd_first <= step < _msd_last
+                    and (step - _msd_first) % _msd_k == 0):
+                _was_training = self.net.training
+                self.net.eval()
+                with torch.no_grad():
+                    _msd_f.append(
+                        self.net(_msd_t).detach().float().cpu().numpy().ravel()
+                    )
+                if _was_training:
+                    self.net.train()
+                _msd_step.append(step)
+                _msd_lr.append(float(self.sampler.param_groups[0]["lr"]))
+
             # ---- Preconditioner freeze point (section 4.3.37) ------------
             # adaptive_sghmc adapts tau/g/v_hat only while
             # iteration <= num_burn_in_steps, so this is the last step on which
@@ -999,6 +1074,30 @@ class FPrefNet:
                     self.sampled_weights.append(self.network_weights)
                     self.num_samples += 1
 
+        # ---- MSD probe: hand the trace to the caller ---------------------
+        # The schedule scalars travel WITH the trace: D is only interpretable
+        # against the step size that produced it, and steps-per-independent-
+        # sample is only comparable with section 4.3.67 through cycle_length.
+        if _msd_t is not None and _msd_f:
+            self._msd_trace = {
+                "f": np.stack(_msd_f).astype(np.float32),   # [n_samples, P]
+                "step": np.asarray(_msd_step, dtype=np.int64),
+                "lr": np.asarray(_msd_lr, dtype=np.float64),
+                "msd_every": int(_msd_k),
+                "num_burn_in_steps": int(num_burn_in_steps),
+                "cycle_length": int(_cycle_len),
+                "lr_min": float(_lr_min),
+                "lr_max": float(_lr_max),
+                "mdecay": float(mdecay),
+                "use_cyclical_lr": bool(use_cyclical_lr),
+            }
+            self.print_info(
+                f"[msd] probe RECORDED: {len(_msd_f):,} samples x "
+                f"{self._msd_trace['f'].shape[1]} points, steps "
+                f"{_msd_step[0]:,}-{_msd_step[-1]:,}, lr "
+                f"{min(_msd_lr):.3e}-{max(_msd_lr):.3e}"
+            )
+
     # ------------------------------------------------------------------
     # Parallel chain dispatch
     # ------------------------------------------------------------------
@@ -1037,6 +1136,10 @@ class FPrefNet:
         clip_grad_norm_value=100.0,
         clip_during_sampling=False,
         chain_init_jitter=0.0,
+        msd_points=None,
+        msd_every=10,
+        msd_window=0,
+        msd_start=0,
     ):
         """Run multiple fSGHMC chains in parallel, packing chains onto GPUs.
 
@@ -1101,6 +1204,10 @@ class FPrefNet:
             fix_meas_set=fix_meas_set,
             max_param_step=max_param_step,
             v_hat_min=v_hat_min,
+            msd_points=msd_points,
+            msd_every=msd_every,
+            msd_window=msd_window,
+            msd_start=msd_start,
         )
 
         # Up to this many chains run concurrently per wave: chains_per_gpu on

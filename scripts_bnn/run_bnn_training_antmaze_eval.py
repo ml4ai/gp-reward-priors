@@ -174,6 +174,30 @@ class TrainConfig:
     # target distribution are untouched, unlike bt_pool="sum" (3.6.2), which
     # raised gradients but also changed the model.
     v_hat_min: Optional[float] = None
+    # ---- MSD probe (independent review 2026-09-04 section 8; handoff 10.2) ---
+    # Record f at the drift gate's OWN diagnostic points every msd_every steps
+    # over a window of msd_window sampling steps, starting msd_start steps after
+    # burn-in, and write chain_<i>/msd_trace.npz.  The mean squared displacement
+    # of f gives D_f directly, so steps-per-independent-sample = sigma_f^2 / D_f
+    # is estimated from ONE chain over a few thousand steps instead of a
+    # 16-chain 220k-step run read on an ESS estimator that needs tau:chain >=
+    # 3:1 -- the reading failure that invalidated five mechanism refutations
+    # (4.3.67).  msd_window: 0 disables the probe entirely; it then costs
+    # nothing and every production run is byte-identical to before.
+    #
+    # A probe run is a DIAGNOSTIC run, not a selection run: set num_samples so
+    # the job is burn-in + the window and stops.  Size the window by the
+    # question (4.3.77): 5,000 steps is enough for D_f alone, but resolving a
+    # SECOND timescale needs the lag range -- a quarter of the window -- to
+    # bracket the fast knee, which takes ~50,000.  The harvested draws of the
+    # same run supply sigma_f, which the probe cannot measure for itself.
+    msd_window: int = 0
+    msd_every: int = 10
+    msd_start: int = 0
+    # Diagnostic points are subsampled from the same x_rhat block the gate uses
+    # (first msd_n_points valid, non-padded val states), so sigma_f in the ratio
+    # above is the same quantity the gate reports.  <= 0 uses all of them.
+    msd_n_points: int = 256
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
     # mean over valid timesteps, trajectory-length-independent) or "sum" (legacy).
     bt_pool: str = "mean"
@@ -374,6 +398,32 @@ class TrainConfig:
         if self.OUT_DIR is not None:
             self.OUT_DIR = f"{osp.expanduser(self.OUT_DIR)}_{self.seed}"
             util.ensure_dir(self.OUT_DIR)
+
+
+def diagnostic_points(X_e, n_traj=64, label="diag"):
+    """The input points every function-space diagnostic is evaluated at.
+
+    One block of the first ``n_traj`` trajectories' first segment, flattened to
+    states, with attention-masked (padded) timesteps dropped — the last feature
+    column is the attn_mask (see util.load_pref_data) and the net produces
+    garbage at padded steps.  No-op for full-length trajectories.
+
+    Factored out because the section 4.2 drift gate and the MSD probe must
+    evaluate f at the SAME points: steps-per-independent-sample is
+    sigma_f^2 / D_f, and the two halves of that ratio are measured by different
+    code paths — the gate's sigma_f from the harvested draws, D_f from the
+    probe's within-window trace.  Two independent constructions of "the
+    diagnostic points" would silently make the ratio meaningless.
+    """
+    _B = min(n_traj, X_e.shape[0])
+    _obs_dim = X_e.shape[-1] - 1
+    _block = X_e[:_B, 0, :, :]                            # [B, T, obs_dim+1]
+    _valid = (_block[..., _obs_dim].reshape(-1) > 0.5)     # attn_mask column
+    x = _block[..., :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
+    x = x[_valid]
+    print(f"[{label}] x_rhat: {int(_valid.sum())}/{_valid.size} "
+          "valid (non-padded) points")
+    return x
 
 
 @pyrallis.wrap()
@@ -715,6 +765,25 @@ def train(config: TrainConfig):
                    "warmup_best_step": _best[2]})
 
     # ------------------------------------------------------------------ #
+    # MSD probe points — the SAME points the section 4.2 drift gate uses, so
+    # sigma_f (from the gate, on harvested draws) and D_f (from the probe, on
+    # the within-window trace) are the two halves of one ratio.  Subsampled on
+    # a fixed stride rather than at random: reproducible without carrying a
+    # second RNG stream, and a stride over concatenated trajectories spreads
+    # the points across trajectories instead of taking one whole trajectory.
+    # ------------------------------------------------------------------ #
+    msd_points = None
+    if config.msd_window > 0:
+        _mp = diagnostic_points(X_val, label="msd")
+        if 0 < config.msd_n_points < _mp.shape[0]:
+            _mp = _mp[:: max(1, _mp.shape[0] // config.msd_n_points)]
+            _mp = _mp[: config.msd_n_points]
+        msd_points = np.ascontiguousarray(_mp)
+        print(f"[msd] probe ON: {msd_points.shape[0]} points, every "
+              f"{config.msd_every} steps, window {config.msd_window:,} steps "
+              f"starting {config.msd_start:,} steps after burn-in")
+
+    # ------------------------------------------------------------------ #
     # Parallel chain sampling (fSGHMC)
     # ------------------------------------------------------------------ #
     bayes_net_f.sample_multi_chains_parallel(
@@ -749,6 +818,10 @@ def train(config: TrainConfig):
         clip_grad_norm_value=config.clip_grad_norm_value,
         clip_during_sampling=config.clip_during_sampling,
         chain_init_jitter=config.chain_init_jitter,
+        msd_points=msd_points,
+        msd_every=config.msd_every,
+        msd_window=config.msd_window,
+        msd_start=config.msd_start,
     )
 
     # ------------------------------------------------------------------ #
@@ -815,19 +888,7 @@ def train(config: TrainConfig):
 
     # ---- Predictive diagnostics, computed per eval set (val_* and test_*) ----
     def evaluate_eval_set(label, X_e, y_e):
-        _B_rhat = min(64, X_e.shape[0])
-        _obs_dim = X_e.shape[-1] - 1
-        # Drop attention-masked (padded) timesteps: the last feature column is
-        # the attn_mask (see util.load_pref_data), and the net produces garbage
-        # at padded steps.  No-op for full-length trajectories.
-        _block = X_e[:_B_rhat, 0, :, :]                       # [B, T, obs_dim+1]
-        _valid = (_block[..., _obs_dim].reshape(-1) > 0.5)     # attn_mask column
-        x_rhat = _block[..., :_obs_dim].reshape(-1, _obs_dim).astype(np.float32)
-        x_rhat = x_rhat[_valid]
-        print(
-            f"[diag/{label}] x_rhat: {int(_valid.sum())}/{_valid.size} "
-            "valid (non-padded) points"
-        )
+        x_rhat = diagnostic_points(X_e, label=f"diag/{label}")
         x_rhat_t = torch.from_numpy(x_rhat).to(bayes_net_f.device)
 
         mean_ce = []
@@ -898,6 +959,22 @@ def train(config: TrainConfig):
         # get a scale-free "fraction of the spread" — the trustworthy _max.
         _pred_sd = pred_chains.reshape(-1, pred_chains.shape[-1]).std(axis=0)
         mcse_pred_q05_rel = mcse_pred_q05 / (_pred_sd + 1e-8)
+        # LOG it, do not only divide by it.  This pooled per-point sd is
+        # sigma_f -- the same quantity util.py:_function_space_drift_core
+        # computes -- and it is the numerator of the MSD probe's
+        # steps-per-independent-sample = sigma_f^2 / D_f.  The probe measures
+        # D_f from a short window but CANNOT measure sigma_f from one (a
+        # window shorter than tau under-estimates it by exactly the factor
+        # that would have told you tau).  Computed and discarded is how the
+        # gate's own ESS went missing until 4.3.74; not repeating it.
+        # Centred as well as raw, because 3.6.3 gates on centred: the BT
+        # likelihood is invariant to f -> f + c, so the offset direction is
+        # unidentified and must not enter the ratio the probe reports.
+        _cen_sd = (pred_chains - pred_chains.mean(axis=2, keepdims=True))
+        _cen_sd = _cen_sd.reshape(-1, pred_chains.shape[-1]).std(axis=0)
+        print(f"[diag/{label}] sigma_f (pooled per-point sd): raw "
+              f"{np.median(_pred_sd):.4g}, centred {np.median(_cen_sd):.4g} "
+              f"-- pass the centred one to msd_probe.py --sigma-f")
 
         # ---- CVaR (mean of the lowest 5%) convergence — the downstream
         # quantity.  Rockafellar–Uryasev: CVaR = VaR + (1/a)·E[min(X-VaR,0)] is
@@ -1038,6 +1115,9 @@ def train(config: TrainConfig):
             f"{label}_mean_cross_entropy": np.mean(mean_ce),
             f"{label}_mean_accuracy": np.mean(mean_acc),
             f"{label}_pred_within_chain_var": pred_within_chain_var,
+            # sigma_f, the MSD probe's numerator (see its computation above).
+            f"{label}_pred_sd_median": float(np.median(_pred_sd)),
+            f"{label}_pred_centred_sd_median": float(np.median(_cen_sd)),
             f"{label}_pred_rhat_max": float(np.nanmax(rhats_pred)),
             f"{label}_pred_rhat_95th_pct": float(np.nanpercentile(rhats_pred, 95)),
             f"{label}_pred_rhat_median": float(np.nanmedian(rhats_pred)),

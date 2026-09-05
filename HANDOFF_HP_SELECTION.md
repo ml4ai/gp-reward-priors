@@ -7202,6 +7202,82 @@ coverage per dimension again at the same 130-trial cap.
 trivial explanation for one of the two. Trials differing only in
 `fraction_cool` are free replicate estimates of the run-to-run floor.
 
+### 4.3.77 The MSD probe — built and validated 2026-09-04
+
+§10.2 item 6, from the review's §8. **Built and validated offline; not yet run
+on a real chain.** `scripts_bnn/msd_probe.py`, plus a `msd_*` block in
+`TrainConfig` and a recording hook in `FPrefNet.train()`.
+
+**What it measures.** From a chain that has finished burn-in, record `f` at the
+gate's own diagnostic points every `k` steps for a window of `W` steps, and
+regress mean squared displacement on lag. The short-lag slope is `2·D_f`, and
+
+```
+steps per independent sample  =  sigma_f^2 / D_f  x  2
+```
+
+is §4.3.67's invariant. MSD is a mean over overlapping lag pairs, so it needs
+`lag_max ≪ n`, **not `τ ≪ n`** — which is the reading failure that invalidated
+five mechanism refutations and forced §4.3.67's withdrawal.
+
+**Validated on OU processes with known τ**, the way §4.3.66/68/69/70's
+instruments were. `msd_probe.py validate`:
+
+| block | result |
+|---|---|
+| A. `D_f` recovery | max error **10.7%**, median 6.0%, over τ = 100–100,000 |
+| A. at medium_play's regime | τ = 100,000 read from a **5,000-step window** (5% of one relaxation time): `D_f` to **2.6%** |
+| B. vs arviz ESS read §4.3.67's way | median ratio **1.038**, range 1.00–1.07 |
+| C. two-timescale detection | fires on all cases where the short-lag reading is materially low **and the knee is resolvable** |
+| D. false fires on single-timescale | **0 of 6** |
+
+**The one thing the probe cannot do alone, and it is not a defect.** A window
+of length `W` samples a process that has explored `1 − exp(−W/τ)` of its
+stationary variance, so a window with `W ≪ τ` under-estimates `sigma_f²` by
+exactly the factor that would have told you τ. Measured: at τ = 10,000 with a
+5,000-step window the window variance returns τ = 1,463. **`D_f` from the
+probe; `sigma_f` from the harvested draws pooled across chains.** The
+validation carries this as a permanent control column, which reads 0.996 →
+0.70 → 0.15 as the window falls below τ.
+
+`sigma_f` was **computed and discarded** at `run_bnn_training_antmaze_eval.py`
+(used only as an MCSE denominator) — the same way the gate's own ESS went
+missing until §4.3.74. Now logged as `val_pred_sd_median` and
+`val_pred_centred_sd_median`. **Pass the centred one**: §3.6.3 gates on the
+centred component because the BT likelihood is invariant to `f → f + c`, and
+`msd_probe.py analyse` centres by default to match.
+
+> ⚠️ **The probe reads only the FAST mode when two timescales are present**,
+> and §4.3.74 established that a second, slower timescale is *required* to
+> explain `scale_z > 2`. Measured on simulated two-scale processes: the
+> short-lag reading is **8× to 100× low**. That is not a reason to distrust
+> the instrument — **the discrepancy is the measurement.** If the MSD-derived
+> steps-per-independent-sample comes back far below §4.3.67's ESS-derived
+> figure, that is direct evidence of a slow component, and `slow_var_frac`
+> quantifies its share of `sigma_f²`.
+>
+> **Detection limit, stated rather than papered over.** A slow component is
+> resolvable only when the lag range brackets the fast knee — `lag_max` is a
+> quarter of the window. At a 5,000-step window a component with
+> `τ_fast ≳ 1,250` reads **"not identified"**, and the same case at a
+> 50,000-step window reads **DETECTED**. An earlier version of the detector
+> fired at 86% "slow variance" on a single-timescale process, because the
+> fitted amplitude is unidentified when the curve has not bent; the
+> identification test is what stops that.
+
+**Cost.** One chain, `W` steps, one forward pass at 256 points every `k`
+steps — against the 220k-step 16-chain runs every mechanism test has cost so
+far. **Verified non-invasive**: with the probe on and off, the harvested
+weights are **bit-identical**. `msd_window: 0` (the default) disables it
+entirely, so every production run is unaffected.
+
+**Two window sizes, and they answer different questions:**
+
+| goal | window | why |
+|---|---|---|
+| `D_f` only — the `mdecay` / ε / jitter ladders | **5,000** steps | validated to 2.6% at τ = 100,000 |
+| resolve a second timescale (§4.3.74's open question) | **50,000** steps | `lag_max` = 12,500 steps must bracket `τ_fast` |
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8178,6 +8254,13 @@ stage-1/2-versus-3 change already is in §7.1.
 
 ## 8. Tooling
 
+> `scripts_bnn/msd_probe.py` — the MSD probe (§4.3.77). `validate` runs the OU
+> battery and must PASS before any `analyse` output is read; `analyse
+> <OUT_DIR>_<seed>/sampling_f --sigma-f <val_pred_centred_sd_median>` reports
+> `D_f`, τ and steps-per-independent-sample per chain. It centres by default,
+> matching §3.6.3. Recording is off unless `msd_window > 0`.
+
+
 **`launch_hp_sweeps.sh <bnn|baselines>`** (repo root) — creates and runs the
 sweeps on the GPU box. The old `phase1`/`phase2` arguments are gone: those
 numbers encoded the retired two-tier BNN structure. `bnn` launches the four
@@ -8359,15 +8442,48 @@ refuted since.
    non-transient mechanism for `scale_z` failing while `loc_z` passes. This
    matters because §4.3.74 showed hypothesis 6 **cannot** produce `scale_z > 2`,
    so a non-transient mechanism is required and this is the cheapest candidate.
-6. **Build the MSD probe** (review §8). Record `f` at the diagnostic points every
-   `k` steps for a few thousand steps post-burn-in and regress mean squared
-   displacement on lag; the slope is `2·D_f`, and `σ_f²/(2·D_f)` predicts
-   steps-per-independent-sample. **One chain, ~5k steps, no ESS estimator
-   anywhere** — against the 220k-step 16-chain runs every mechanism test has
-   cost so far, and every one of those was read on an estimator needing
-   τ:chain ≥ 3:1 that none of them achieved. It also separates the two
-   timescales §4.3.74 showed are needed. Validate it on an OU process with known
-   `D` and `σ`, as every other instrument here was validated.
+6. ~~Build the MSD probe~~ — **DONE 2026-09-04 (§4.3.77).**
+   `scripts_bnn/msd_probe.py` plus a `msd_*` block in `TrainConfig` and a
+   recording hook in `FPrefNet.train()`. Validated on OU processes with known
+   τ: `D_f` to 2.6% from a **5,000-step window at τ = 100,000**, and the
+   MSD-derived steps-per-independent-sample matches an arviz ESS read
+   §4.3.67's way to within 4%. Non-invasive — harvested weights are
+   bit-identical with the probe on and off, and `msd_window: 0` (default)
+   disables it. `σ_f` is now logged (`val_pred_centred_sd_median`) because the
+   probe cannot measure it from a short window; that limit, and the
+   two-timescale detection limit, are in §4.3.77. **Not yet run on a real
+   chain — that is the next command.**
+
+   Launch from `scripts_bnn/` — the script `os.chdir("..")`s at import, so
+   `config_path` is repo-root-relative (§10.6.1, and the sweep yaml's head).
+   `OUT_DIR` gets `_{seed}` appended and chains land in
+   `<OUT_DIR>_<seed>/sampling_f/chain_*`.
+
+   ```
+   # medium_play, burn-in + a 50,000-step probe window.  num_samples 19 x
+   # cycle_length 2750 = 52,250 sampling steps -- about a quarter of a
+   # production run -- and the 19 harvested draws give sigma_f in the SAME run.
+   cd ~/iqlpref/gp_reward-priors/scripts_bnn && \
+   CUDA_VISIBLE_DEVICES=0 python run_bnn_training_antmaze_eval.py \
+     --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml \
+     --seed 0 --num_samples 19 --n_discarded 0 \
+     --msd_window 50000 --msd_every 20 --msd_start 0 \
+     --OUT_DIR ./exp/reward_learning/bnn_msd_probe_medium_play
+   ```
+
+   Then locally, taking σ_f from the run's `val_pred_centred_sd_median`:
+
+   ```
+   /opt/anaconda3/envs/irl/bin/python scripts_bnn/msd_probe.py analyse \
+     exp/reward_learning/bnn_msd_probe_medium_play_0/sampling_f \
+     --sigma-f <val_pred_centred_sd_median>
+   ```
+
+   Read it against §4.3.67's 95,500–103,650 steps per independent sample for
+   medium_play. **Three outcomes, all informative:** agreement confirms the
+   invariant and makes every subsequent ladder ~1 GPU-hour; a large shortfall
+   with `slow_var_frac` firing is the second timescale §4.3.74 requires,
+   measured for the first time; `not identified` means lengthen the window.
 7. **`mdecay` ladder** 0.195 / 0.05 / 0.01 on medium_play, read on MSD-derived
    `D_f` and `scale_ratio`. Highest expected payoff (review §6): `D = η/α` per
    step while the stationary momentum variance is α-independent, so `mdecay`
