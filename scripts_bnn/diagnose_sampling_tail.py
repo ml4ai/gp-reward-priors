@@ -1276,6 +1276,307 @@ def per_chain_drift(pred_chains, chain_ids=None):
     print("  Rank chains on loc_sd; use loc_z only to compare like with like.")
 
 
+def precond_drift_coupling(pred_chains, chain_ids, precond_log,
+                           n_blocks=4):
+    """Does a chain's own frozen step size predict its own contraction?
+
+    THE TEST (hypothesis 7, section 4.3.79).  Every chain runs its own 20k
+    burn-in with `tau/g/v_hat` re-initialised, so each freezes a different
+    `minv` and samples the whole run at its own effective step
+    `eta_i = eps^2 * minv_i`.  Measured across 31 saved logs, that spread is
+    2.29x median and up to 5.53x.
+
+    Section 4.3.79 showed by simulation that this spread, being PERSISTENT,
+    cannot itself fail the gate: `sd1` and `sd2` each pool over all chains, so
+    a time-constant between-chain difference cancels in the ratio, and even a
+    10x spread reads `scale_z` 1.01.  What DOES fail the gate, hard, is the
+    same spread while it is still DECAYING -- `scale_z` 6-14 at
+    `scale_ratio` 0.57-0.79, which is the observed signature.
+
+    So the mechanism on the table is not "chains differ" but "chains
+    equilibrate at DIFFERENT RATES": a chain with smaller `minv` takes a
+    smaller effective step, relaxes more slowly, and is therefore further from
+    stationarity at any given draw -- so it should still be contracting when
+    the faster chains have settled.
+
+    That is a per-chain prediction, and every statistic in this project pools
+    chains before looking at them.  This function does not.
+
+    WHY NOT `scale_ratio`, THOUGH IT IS THE GATE'S OWN STATISTIC.  It is
+    NON-MONOTONE in the relaxation rate, so a correlation against it has no
+    predicted sign.  With `s(t) = sqrt(1 + (j^2-1) exp(-2 r t))` over a window
+    [0, T], a chain with `rT >> 1` finished relaxing before the window opened
+    and reads ratio ~ 1; a chain with `rT << 1` never relaxes inside it and
+    ALSO reads ratio ~ 1; only `rT ~ 1` contracts.  Ranking chains on it would
+    therefore refute the hypothesis for the wrong reason -- the error section
+    4.3.74 caught in section 4.3.73's jitter ladder, and the way five earlier
+    mechanisms died.
+
+    THE TWO QUESTIONS THAT DO DISCRIMINATE.  Split the draws into blocks and
+    take each chain's own centred sd in the first and last block, `s_first[i]`
+    and `s_last[i]` (chain i alone, centred, median over points).  Then:
+
+      Q1. Is the per-chain scale CHANGING at all?  `median_i s_last/s_first`.
+          Section 4.3.79's whole point is that only a DECAYING between-chain
+          difference can fail the gate; a standing one cancels.  So a value
+          at 1.0 settles the question before `minv` is even consulted.
+      Q2. Is that change ORDERED BY the frozen step?
+          `rho(minv, s_last/s_first)`.  This is hypothesis 7's actual claim --
+          that `minv` modulates the relaxation rate.
+
+    | Q1 | Q2 | reading |
+    |---|---|---|
+    | ~1.0 | any | STANDING DIFFERENCE. Per-chain scale is constant through the run, so whatever spread exists cannot fail the gate (4.3.79). Exonerates the preconditioner. |
+    | <1.0 | significant | HETEROGENEOUS RELAXATION (hyp. 7 supported). The chains are relaxing AND `minv` sets how fast. |
+    | <1.0 | null | Relaxation is real but `minv` does not set its rate. Hypothesis 7's specific mechanism fails; the transient has another source. |
+
+    Note the SIGN of Q2 is not itself the test.  With `s(t)` relaxing from an
+    over-dispersed start, a chain that relaxes faster shows MORE contraction
+    inside a window placed early on the curve and LESS inside one placed late,
+    so the sign reports where the window sits, not whether the mechanism holds.
+    Only the magnitude and significance are read.
+
+    CENTRED, not raw: section 3.6.3 gates on the centred component because the
+    BT/CE likelihood is exactly invariant to f -> f + c, so the offset
+    direction is unidentified (section 4.3.28).  `per_chain_drift` above
+    reports the raw ratio, which mixes the two.
+
+    `precond_log` is a saved stdout log for THIS run.  The first
+    `[precond] FROZEN` line is the parent's warm-up; each line after it is one
+    chain, in chain order.
+    """
+    import re as _re
+    a = np.asarray(pred_chains, dtype=np.float64)
+    C, D, P = a.shape
+    print("\n=== PRECONDITIONER vs PER-CHAIN CONTRACTION (4.3.79, hyp. 7) ===")
+    if D // 2 < 4 or C < 4:
+        print("  needs >= 4 chains and >= 8 draws -- not computed.")
+        return
+
+    pat = _re.compile(r"\[precond\]\s+FROZEN at step [0-9,]+:.*?"
+                      r"v_hat median\s+([0-9.eE+-]+),\s+([0-9.]+)%\s+at floor,"
+                      r"\s+minv median\s+([0-9.]+)")
+    warm, recs = None, []
+    with open(precond_log, errors="replace") as fh:
+        for line in fh:
+            m = pat.search(line)
+            if not m:
+                continue
+            r = {"v_hat": float(m.group(1)), "at_floor": float(m.group(2)),
+                 "minv": float(m.group(3))}
+            if warm is None:
+                warm = r
+            else:
+                recs.append(r)
+    if not recs:
+        print(f"  no per-chain [precond] lines in {precond_log} -- "
+              "nothing to correlate.")
+        return
+    print(f"  {len(recs)} chain lines in {os.path.basename(precond_log)} "
+          f"(warm-up minv {warm['minv']:.2f})")
+
+    ids = list(chain_ids) if chain_ids is not None else list(range(C))
+    if max(ids) >= len(recs):
+        print(f"  !! the log has {len(recs)} chain lines but chain ids reach "
+              f"{max(ids)} -- the log is from a DIFFERENT run, or a subset "
+              f"selection does not line up.  Not computed.")
+        return
+
+    # Centred per-chain scale, block by block.  Centring is per (chain, draw)
+    # over points -- the same operation util.function_space_drift applies
+    # before its centred block -- so `s` below is the identified component's
+    # sd and is directly comparable with the gate's centred numbers.
+    cen = a - a.mean(axis=2, keepdims=True)
+    nb = max(2, min(n_blocks, D // 8))
+    edges = np.linspace(0, D, nb + 1).astype(int)
+
+    def block_sd(k, b):
+        seg = cen[k, edges[b]:edges[b + 1], :]
+        if seg.shape[0] < 2:
+            return float("nan")
+        return float(np.median(seg.std(axis=0)))
+
+    print(f"\n  draws split into {nb} blocks of ~{D // nb}; s = centred sd, "
+          f"median over points")
+    print(f"\n  {'chain':>6} {'minv':>8} {'at_floor':>9} {'s_first':>9} "
+          f"{'s_last':>9} {'s_last/s_first':>15} {'cen ratio':>10}")
+    print("  " + "-" * 72)
+    rows = []
+    for k, cid in enumerate(ids):
+        with contextlib.redirect_stdout(io.StringIO()):
+            d = util.function_space_drift(a[k:k + 1], quiet=True)
+        ratio = d.get("fn_drift_centred_scale_ratio_median", float("nan"))
+        sf, sl = block_sd(k, 0), block_sd(k, nb - 1)
+        mvi, fl = recs[cid]["minv"], recs[cid]["at_floor"]
+        rows.append((cid, mvi, fl, sf, sl, ratio))
+        print(f"  {cid:>6} {mvi:>8.2f} {fl:>8.1f}% {sf:>9.4g} {sl:>9.4g} "
+              f"{(sl / sf if sf else float('nan')):>15.4f} {ratio:>10.4f}")
+
+    mv = np.array([r[1] for r in rows], float)
+    s_first = np.array([r[3] for r in rows], float)
+    s_last = np.array([r[4] for r in rows], float)
+    rt = np.array([r[5] for r in rows], float)
+    ok = np.isfinite(mv) & np.isfinite(s_first) & np.isfinite(s_last)
+    if ok.sum() < 4:
+        print("\n  too few finite pairs to correlate.")
+        return
+
+    def _spear(x, y):
+        def rank(v):
+            _, inv, cnt = np.unique(v, return_inverse=True, return_counts=True)
+            order = np.argsort(v, kind="mergesort")
+            r = np.empty(v.size, float)
+            r[order] = np.arange(v.size, dtype=float)
+            sums = np.zeros(cnt.size)
+            np.add.at(sums, inv, r)
+            return (sums / cnt)[inv]
+        rx, ry = rank(x) - rank(x).mean(), rank(y) - rank(y).mean()
+        den = np.sqrt(np.dot(rx, rx) * np.dot(ry, ry))
+        return float(np.dot(rx, ry) / den) if den > 0 else float("nan")
+
+    n = int(ok.sum())
+    rs = np.random.default_rng(0)
+
+    def _rho_p(y):
+        r = _spear(mv[ok], y[ok])
+        # Permutation p, because n is the CHAIN count (often 16) and a normal
+        # approximation on a rank correlation at n=16 is not trustworthy.
+        null = np.array([_spear(mv[ok], rs.permutation(y[ok]))
+                         for _ in range(20000)])
+        return r, float((np.abs(null) >= abs(r)).mean())
+
+    change = np.where(s_first > 0, s_last / np.where(s_first > 0, s_first, 1),
+                      np.nan)
+    r_c, p_c = _rho_p(change)
+    r_f, p_f = _rho_p(s_first)
+    r_l, p_l = _rho_p(s_last)
+    r_r, p_r = _rho_p(rt)
+    med_change = float(np.median(change[ok]))
+
+    print(f"\n  Q1  per-chain scale change, median s_last/s_first = "
+          f"{med_change:.4f}")
+    print(f"      ({int((change[ok] < 1).sum())}/{n} chains shrink; "
+          f"spread first block "
+          f"{s_first[ok].max() / max(s_first[ok].min(), 1e-30):.2f}x, "
+          f"last {s_last[ok].max() / max(s_last[ok].min(), 1e-30):.2f}x)")
+    print(f"  Q2  rho(minv, s_last/s_first) = {r_c:+.3f}  (p = {p_c:.4f})")
+    print(f"      rho(minv, s_first)       = {r_f:+.3f}  (p = {p_f:.4f})")
+    print(f"      rho(minv, s_last)        = {r_l:+.3f}  (p = {p_l:.4f})")
+    print(f"      rho(minv, centred ratio) = {r_r:+.3f}  (p = {p_r:.4f})  "
+          f"[non-monotone -- context only]")
+    print(f"  n = {n} chains; {int((rt[ok] < 1.0).sum())}/{n} contract on the "
+          f"gate's own\n      centred ratio (median {np.median(rt[ok]):.4f})")
+
+    # 5% is a deliberate, pre-stated band for "no change": the per-block sd of
+    # ~D/nb draws carries a few percent of noise on its own.
+    changing = abs(med_change - 1.0) > 0.05
+    print()
+    if not changing:
+        print(f"  -> STANDING DIFFERENCE (hypothesis 7 REFUTED).  Per-chain "
+              f"scale is flat\n     through the run "
+              f"(s_last/s_first = {med_change:.3f}), so whatever between-chain\n"
+              f"     spread exists does NOT decay -- and 4.3.79 showed a "
+              f"persistent\n     difference cannot fail the gate, because both "
+              f"halves pool over chains\n     and it cancels.  This exonerates "
+              f"the preconditioner; the driver of\n     centred scale_z is "
+              f"elsewhere.")
+    elif p_c < 0.05:
+        print(f"  -> HETEROGENEOUS RELAXATION (hypothesis 7 SUPPORTED).  The "
+              f"chains ARE\n     relaxing (s_last/s_first = {med_change:.3f}) "
+              f"and minv orders how much\n     (rho = {r_c:+.3f}, p = "
+              f"{p_c:.3f}).  That is a DECAYING between-chain\n     "
+              f"difference, which 4.3.79 showed is exactly what fails the "
+              f"gate.  The\n     lever is then the SPREAD in minv, not its "
+              f"level: equalise the frozen\n     preconditioner across chains, "
+              f"or give each chain a start already at\n     its own operating "
+              f"scale (review section 10's thinned warm-up starts).")
+    else:
+        print(f"  -> TRANSIENT REAL, minv NOT ITS RATE (hypothesis 7's "
+              f"MECHANISM refuted).\n     The chains are relaxing "
+              f"(s_last/s_first = {med_change:.3f}) so a decaying\n     "
+              f"difference is present and CAN fail the gate -- but it is not "
+              f"ordered by\n     the frozen step (rho = {r_c:+.3f}, p = "
+              f"{p_c:.3f}).  So 4.3.79's composition\n     of 9.4 with "
+              f"hypothesis 6 does not hold, and what sets the per-chain\n"
+              f"     relaxation rate is still unidentified.  Hypothesis 6 "
+              f"alone survives.")
+    print(f"\n  NOTE: n is the CHAIN count, and these chains share a warm-up "
+          f"point and a\n  config -- they are not {n} independent runs.  Read "
+          f"this as one run's\n  internal structure, and replicate on a second "
+          f"run before acting on it.")
+
+
+def precond_drift_selftest(tmpdir=None, C=16, D=75, P=400, seed=0):
+    """Validate precond_drift_coupling on three processes with known answers.
+
+    Same discipline as sections 4.3.66/68/69/70 and the MSD probe: an
+    instrument is not read until it has reproduced a case whose answer is
+    known.  The three cases span the verdict space, and the middle one is the
+    trap -- a large, highly significant `minv` ordering that is nonetheless
+    NOT the driver, because it does not decay.
+    """
+    import tempfile
+    rng = np.random.default_rng(seed)
+    tmpdir = tmpdir or tempfile.mkdtemp(prefix="precond_selftest_")
+    # A spread like the measured one (medium_play nugget: 2.68-9.77, 3.65x).
+    minv = np.geomspace(2.7, 9.8, C)
+    rng.shuffle(minv)
+    log = os.path.join(tmpdir, "selftest_precond.log")
+    with open(log, "w") as f:
+        f.write("[precond] FROZEN at step 20,000: tau median 2 (0.000 x "
+                "burn-in -- saturated), v_hat median 4.265e-03, 16.4% at "
+                "floor, minv median 15.31 (max 100.0)\n")
+        for m in minv:
+            f.write("[precond] FROZEN at step 20,000: tau median 1 (0.000 x "
+                    "burn-in -- saturated), v_hat median 1.196e-02, 16.2% at "
+                    f"floor, minv median {m:.2f} (max 100.0)\n")
+
+    t = np.linspace(0, 1, D)[None, :, None]
+
+    def relaxing(rate, j=2.0):
+        sd = np.sqrt(1.0 + (j ** 2 - 1.0)
+                     * np.exp(-3.0 * t * rate[:, None, None]))
+        return rng.standard_normal((C, D, P)) * sd
+
+    cases = [
+        ("relaxation rate proportional to minv",
+         "HETEROGENEOUS RELAXATION",
+         lambda: relaxing(minv / minv.mean())),
+        ("stationary throughout, scale proportional to minv "
+         "(O(eta) bias) -- the TRAP: a perfect minv ordering that does "
+         "NOT decay",
+         "STANDING DIFFERENCE",
+         lambda: (rng.standard_normal((C, D, P))
+                  * np.sqrt(minv / minv.mean())[:, None, None])),
+        ("one shared transient, identical rate in every chain",
+         "TRANSIENT REAL, minv NOT ITS RATE",
+         lambda: relaxing(np.full(C, 1.0))),
+    ]
+    print("=== precond_drift_coupling SELF-TEST ===")
+    print(f"{C} chains x {D} draws x {P} points; minv spread "
+          f"{minv.max() / minv.min():.2f}x\n")
+    ok_all = True
+    for desc, expect, make in cases:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            precond_drift_coupling(make(), list(range(C)), log)
+        out = buf.getvalue()
+        got = "?"
+        for line in out.splitlines():
+            if "  -> " in line:
+                got = line.split("-> ", 1)[1].strip()
+                break
+        good = got.startswith(expect)
+        ok_all = ok_all and good
+        print(f"  [{'ok ' if good else 'FAIL'}] {desc}")
+        print(f"         expected {expect}")
+        print(f"         got      {got}")
+    print(f"\nSELF-TEST: {'PASS' if ok_all else 'FAIL'}")
+    if not ok_all:
+        print("Do NOT read --precond-drift output until this passes.")
+    return 0 if ok_all else 1
+
+
 def drift_blocks(pred_chains, n_blocks=5):
     """Is the drift DECAYING (a transient) or CONSTANT (an ongoing drive)?
 
@@ -1877,8 +2178,14 @@ def tail_diagnostics(pred_chains, x_rhat=None, alpha=0.05, worst_k=0):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--run-dir", required=True,
-                    help="A run's OUT_DIR (contains config.yaml and sampling_f/).")
+    ap.add_argument("--run-dir", default=None,
+                    help="A run's OUT_DIR (contains config.yaml and sampling_f/). "
+                         "Required except with --precond-selftest.")
+    ap.add_argument("--precond-selftest", action="store_true",
+                    help="Validate --precond-drift's verdict logic on three "
+                         "synthetic processes with known answers, and exit. "
+                         "Needs no run directory. Run this after any change to "
+                         "the statistic, and before reading its output.")
     ap.add_argument("--alpha", type=float, default=0.05,
                     help="Lower-tail fraction for VaR/CVaR (default 0.05).")
     ap.add_argument("--b-rhat", type=int, default=64,
@@ -1925,6 +2232,17 @@ def main():
                          "equilibrated -- more chains cannot help) from "
                          "independent per-chain wandering (more chains do "
                          "help). Needs no extra sampling (section 4.3.4).")
+    ap.add_argument("--precond-drift", metavar="LOG", default=None,
+                    help="Correlate each chain's CENTRED scale_ratio against "
+                         "that chain's own frozen minv, read from LOG (a saved "
+                         "stdout log for this run: first [precond] FROZEN line "
+                         "is the warm-up, the rest are chains in order). Tests "
+                         "hypothesis 7 (section 4.3.79): the preconditioner "
+                         "spread cannot fail the gate by itself, because the "
+                         "gate pools chains and a persistent difference "
+                         "cancels -- but it makes chains relax at different "
+                         "RATES, and a heterogeneous transient does fail it. "
+                         "Predicts rho > 0. Needs no new sampling.")
     ap.add_argument("--offset-shape-split", action="store_true",
                     help="Split the section 4.2 drift into the UNIDENTIFIED "
                          "global offset (which the BT/CE likelihood is exactly "
@@ -2021,6 +2339,11 @@ def main():
                          "<split>_mean_cross_entropy.")
     args = ap.parse_args()
 
+    if args.precond_selftest:
+        sys.exit(precond_drift_selftest())
+    if not args.run_dir:
+        ap.error("--run-dir is required (except with --precond-selftest)")
+
     cfg = _load_run_config(args.run_dir)
     dataset, src = _resolve_dataset(cfg, args.split, args.dataset)
     print(f"[split] {args.split}  (from {src}) -> compare against this run's "
@@ -2057,6 +2380,9 @@ def main():
 
     if args.per_chain_drift:
         per_chain_drift(pred_chains, chain_ids=chain_ids)
+
+    if args.precond_drift:
+        precond_drift_coupling(pred_chains, chain_ids, args.precond_drift)
 
     if args.drift_blocks:
         drift_blocks(pred_chains, n_blocks=args.drift_blocks)

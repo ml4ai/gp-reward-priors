@@ -7415,13 +7415,54 @@ shows no effect: 20,000 steps → median centred `scale_z` **1.20** (n=24),
 stands, and hypothesis 7 predicts longer burn-in *should* help. Two runs is
 not a test, but it is not encouraging either.
 
-**The decisive test is cheap and it is not another ladder.** Hypothesis 7 is a
-claim about *per-chain* behaviour, and every statistic in this document pools
-chains before looking. Compute centred `scale_ratio` **per chain** and
-correlate it with that chain's own `minv`: hypothesis 7 predicts chains with
-smaller `minv` (slower equilibration) contract more. The chains are already
-saved; this needs no new run, only a per-chain pass over an existing
-`sampled_weights` set with `diagnose_sampling_tail.py`.
+#### The test — built and validated, awaiting one run's saved chains
+
+`diagnose_sampling_tail.py --precond-drift <log>`. Hypothesis 7 is a claim
+about *per-chain* behaviour, and every statistic in this document pools chains
+before looking. This one does not: it pairs each chain's own centred scale
+with that chain's own `minv`, read from the log's line for that chain.
+
+> ⚠️ **Not read on `scale_ratio`, even though that is the gate's own
+> statistic.** It is **non-monotone** in the relaxation rate: with
+> `s(t) = sqrt(1 + (j²−1)e^{−2rt})` over a window, a chain with `rT ≫ 1`
+> finished relaxing before the window opened and reads ratio ≈ 1, a chain with
+> `rT ≪ 1` never relaxes inside it and **also** reads ratio ≈ 1, and only
+> `rT ≈ 1` contracts. Ranking chains on it would refute hypothesis 7 for the
+> wrong reason — the error §4.3.74 caught in §4.3.73's jitter ladder, and the
+> way five earlier mechanisms died. This was caught in validation, not in
+> design: the first version of this test used `scale_ratio` and returned a
+> confident wrong verdict on a case whose answer was known.
+
+What is read instead, on per-chain centred sd in the first and last block:
+
+| | question | discriminates |
+|---|---|---|
+| **Q1** | `median s_last/s_first` — is per-chain scale changing at all? | §4.3.79 showed only a *decaying* difference can fail the gate; a value at 1.0 settles it before `minv` is consulted |
+| **Q2** | `ρ(minv, s_last/s_first)` — is the change ordered by the frozen step? | hypothesis 7's actual claim |
+
+The **sign** of Q2 is not the test — with an over-dispersed start, a faster
+chain contracts more inside an early window and less inside a late one, so the
+sign reports where the window sits. Only magnitude and significance are read,
+against a 20,000-draw permutation null (n is the chain count, and a normal
+approximation on a rank correlation at n = 16 is not trustworthy).
+
+**Validated** — `--precond-selftest`, three synthetic processes with known
+answers, all three verdicts correct:
+
+| ground truth | verdict returned |
+|---|---|
+| relaxation rate ∝ `minv` | HETEROGENEOUS RELAXATION — hyp. 7 supported |
+| stationary, scale ∝ `minv` (**the trap**: a perfect, highly significant `minv` ordering that does not decay) | STANDING DIFFERENCE — hyp. 7 refuted |
+| one shared transient, same rate in every chain | TRANSIENT REAL, `minv` NOT ITS RATE |
+
+The middle case is why the self-test exists: a *perfect* ρ = +1.000 ordering
+on `minv` is compatible with the preconditioner being entirely exonerated,
+because §4.3.79's simulation showed a standing difference cancels in the gate.
+An instrument that reported only a correlation would have called that a
+confirmation.
+
+**Run it on `r3_trial1_medium_play_0`** — 128 chains, the largest spread
+measured (5.53×, `minv` 2.44–13.50), and its log is `exp/r3_trial1_medium_play.log`.
 
 ### 4.4 Procedure
 
@@ -8598,12 +8639,30 @@ refuted since.
    optimiser moved off `depth`, the one dimension that predicts failure, and
    the pass rate went 43% → 36%.
 
-   **Next, and it needs no run:** every statistic in this document pools
-   chains before looking, and hypothesis 7 is a claim about per-chain
-   behaviour. Compute centred `scale_ratio` **per chain** on an existing
-   saved chain set and correlate it against that chain's own `minv` from the
-   log — hypothesis 7 predicts smaller `minv` (slower equilibration) contracts
-   more. Do this before item 6.
+   **Next, and it needs no new sampling — do this before item 6.** The
+   per-chain test of hypothesis 7 is built and self-validated (§4.3.79). Run
+   it on the 128-chain `r3_trial1_medium_play_0`, which carries the largest
+   measured spread (5.53×), on the box, where its saved chains live:
+
+   ```
+   cd ~/iqlpref/gp_reward-priors && python scripts_bnn/diagnose_sampling_tail.py \
+     --run-dir exp/r3_trial1_medium_play_0 \
+     --precond-drift exp/r3_trial1_medium_play.log \
+     --per-chain-drift --device cuda
+   ```
+
+   Confirm the instrument first — it needs no run directory and takes seconds:
+
+   ```
+   python scripts_bnn/diagnose_sampling_tail.py --precond-selftest
+   ```
+
+   All three outcomes are decisive. HETEROGENEOUS RELAXATION makes the lever
+   the *spread* in `minv` (equalise the frozen preconditioner, or use review
+   §10's thinned warm-up starts, which give every chain a start already at its
+   own operating scale). STANDING DIFFERENCE exonerates the preconditioner
+   outright. TRANSIENT REAL / `minv` NOT ITS RATE leaves hypothesis 6 standing
+   alone and sends the search back to what sets the per-chain relaxation rate.
 6. ~~Build the MSD probe~~ — **DONE 2026-09-04 (§4.3.77).**
    `scripts_bnn/msd_probe.py` plus a `msd_*` block in `TrainConfig` and a
    recording hook in `FPrefNet.train()`. Validated on OU processes with known
