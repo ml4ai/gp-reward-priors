@@ -7616,6 +7616,78 @@ existing config is byte-identical. A tanh run **changes the model**, so it is a
 **diagnostic, not a selection run** — it would need its own stage-1
 re-selection before any reported number rested on it.
 
+### 4.3.82 Hypothesis 7 refuted — and §4.3.79's structural claim confirmed on real data
+
+`--precond-drift` on `r3_trial1_medium_play_0`, 128 chains × 120 draws, against
+`exp/r3_trial1_medium_play.log`. Result in `exp/precond_drift.txt`.
+
+| | |
+|---|---|
+| **Q1** median `s_last/s_first` | **1.0117** — per-chain scale is FLAT; 54 of 128 shrink, a coin flip |
+| **Q2** ρ(`minv`, `s_last/s_first`) | **+0.036**, p = 0.68 |
+| ρ(`minv`, `s_first`) | −0.098, p = 0.27 |
+| ρ(`minv`, `s_last`) | −0.080, p = 0.37 |
+
+**STANDING DIFFERENCE — hypothesis 7 refuted.** The frozen preconditioner does
+not order per-chain relaxation, and there is no per-chain relaxation to order.
+The preconditioner is exonerated. That is mechanism **seven** refuted.
+
+#### The confirmation, which is worth more than the refutation
+
+This run carries the **largest `minv` spread ever measured here — 5.53×**
+(2.44–13.50) — and its centred gate **PASSES**: `loc_z` 0.974, `scale_z`
+**0.872**. §4.3.79 predicted exactly this by simulation: a persistent
+between-chain difference of even 10× reads `scale_z` ≈ 1.0, because `sd1` and
+`sd2` each pool over all chains and it cancels. **That prediction is now
+confirmed on real chains rather than synthetic ones**, which retires review
+§9.4 properly rather than by correlation.
+
+> ⚠️ **But read the refutation narrowly: this run PASSES the gate.** Hypothesis
+> 7 is a claim about what happens when the gate *fails*, and there is
+> essentially nothing to explain here — median centred ratio 0.9909, 69 of 128
+> "contracting", i.e. chance. **The mechanism has been refuted on a run that
+> does not exhibit the phenomenon.** It must be re-run on a FAILING run before
+> hypothesis 7 is closed. Candidates with saved chains *and* per-chain
+> `[precond]` lines *and* a failing centred gate:
+>
+> | run | chains | centred `scale_z` | `minv` spread |
+> |---|---|---|---|
+> | `r3_probe_w1024d6_0` | 128 | **10.16** | 1.31× |
+> | `stage3_medium_play_eta4_0` | 16 | 2.64 | 3.43× |
+> | `stage3_large_play_eta4_0` | 16 | 4.79 | 2.00× |
+>
+> `r3_probe_w1024d6_0` first: 128 chains and an unambiguous failure.
+
+#### Two further readings from the same output
+
+**1. On this run the scale drift is ENTIRELY in the offset.** Raw `scale_z`
+6.255, **offset** `scale_z` 6.437, **centred** `scale_z` 0.872; raw ratio 1.620
+against centred 1.047. The unidentified direction is diffusing hard while the
+identified shape is stationary. That is **§4.3.14's signature**, not a sampler
+defect: `map_amp2` is 168,940 here, so the functional prior barely constrains
+`f`'s magnitude and the offset is close to free. The BT likelihood is exactly
+invariant to `f → f + c`, so it cancels in every preference — but it is worth
+recording that the raw gate would have rejected this run for a direction that
+changes no prediction.
+
+**2. Mixing fails even though the drift gate passes.** Centred `rhat_bulk`
+median **1.4274** and centred `ess_bulk` median **275.6** out of 15,360 draws
+(1.8%). The tool says it plainly: "the centred shape itself is not mixing; this
+is a real mixing failure and it does bear on predictions." **Stationarity and
+mixing are separate failures here, and only the first one has a gate.** τ is
+also reported as 55.7 kept draws against a 120-draw chain — 2.2:1, so the
+§4.3.67 guard fires and that τ is biased low.
+
+**ALIGNMENT is 0.0330 against an independent-wandering baseline of 0.0884** at
+128 chains, i.e. *below* independent — against 0.7564 (COMMON) at 16 chains in
+§4.3.8. The common-drift picture of §4.3.5 does not survive at this chain
+count. Note the configs differ, so this is not a controlled comparison.
+
+*Caveat on one number:* the between-chain spread of `s` narrows 2.40× → 1.62×
+across the run, which looks like a decaying difference. It is `max/min` over
+128 chains — an extreme-value statistic driven by two outlier chains (82 and
+24, `s_first` 1.233 and 1.082). Do not read it as a trend.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8791,15 +8863,18 @@ refuted since.
    optimiser moved off `depth`, the one dimension that predicts failure, and
    the pass rate went 43% → 36%.
 
-   **Next, and it needs no new sampling — do this before item 6.** The
-   per-chain test of hypothesis 7 is built and self-validated (§4.3.79). Run
-   it on the 128-chain `r3_trial1_medium_play_0`, which carries the largest
-   measured spread (5.53×), on the box, where its saved chains live:
+   ~~The per-chain test of hypothesis 7 on `r3_trial1_medium_play_0`~~ —
+   **DONE 2026-09-04 (§4.3.82). Hypothesis 7 REFUTED**, and §4.3.79's
+   structural claim confirmed on real chains: a 5.53× persistent `minv` spread
+   coexists with a **passing** centred gate, exactly as simulated. **But that
+   run passes the gate**, so the refutation must be repeated on a failing one
+   before hypothesis 7 is closed — `r3_probe_w1024d6_0` first (128 chains,
+   centred `scale_z` 10.16):
 
    ```
    cd ~/iqlpref/gp_reward-priors && python scripts_bnn/diagnose_sampling_tail.py \
-     --run-dir exp/r3_trial1_medium_play_0 \
-     --precond-drift exp/r3_trial1_medium_play.log \
+     --run-dir exp/r3_probe_w1024d6_0 \
+     --precond-drift exp/r3_probe_w1024d6.log \
      --per-chain-drift --device cuda
    ```
 
@@ -8815,8 +8890,14 @@ refuted since.
 
    ```
    python scripts_bnn/gauge_diffusion.py --self-test
-   python scripts_bnn/gauge_diffusion.py --run-dir exp/r3_trial1_medium_play_0
+   python scripts_bnn/gauge_diffusion.py --run-dir exp/r3_probe_w1024d6_0
    ```
+
+   Run it on **`r3_probe_w1024d6_0`**, not on `r3_trial1_medium_play_0`:
+   §4.3.82 showed the latter passes the gate, and a mechanism for the failure
+   cannot be tested on a run that does not fail. Its depth 6 also gives the
+   ReLU symmetry group its largest dimension of any saved run, which is where
+   hypothesis 8 predicts the strongest gauge signal.
 
    Queued behind these two: **large_diverse's capacity ladder** (§4.3.80), at
    fixed sampler settings, sweeping only capacity over the 70× it already
