@@ -7534,6 +7534,88 @@ settings and its selected `n_meas`/`map_amp2`, sweeping only capacity over the
 70× it already spans. That is the only way to tell a real capacity effect from
 six trials that happened to order themselves.
 
+### 4.3.81 ReLU makes the weight posterior IMPROPER — hypothesis 8, and it is provable
+
+Raised 2026-09-04: can ReLU cause SGHMC non-stationarity, and does that extend
+to fSGHMC? **It extends, and here it is not a heuristic concern but a
+structural property of the target that can be written down.**
+
+`transfer_fn` was **hardcoded to `"relu"`**
+(`run_bnn_training_antmaze_eval.py:454`) — never a config field, never swept,
+used by **every run in this entire investigation**. Upstream's own notebooks
+use relu 7× and tanh 3×, so it is a defensible choice; it was simply never a
+recorded decision.
+
+**The symmetry.** ReLU is positively homogeneous, `ReLU(az) = a·ReLU(z)` for
+`a > 0`. Scaling layer *i*'s weights **and bias** by `a` while scaling layer
+*i+1*'s weights by `1/a` leaves `f` exactly unchanged. Verified numerically on
+this MLP: max relative change in `f` is **2e-7** for relu, **0.55** for tanh.
+
+**Why that is fatal here rather than merely inconvenient.** It would be
+harmless if the potential saw `w`. It does not:
+
+> There is **no weight-space prior term anywhere in this codebase.** The
+> gradient is the Bradley–Terry likelihood plus Wu et al.'s functional prior,
+> and **both depend on `w` only through `f`** — which is exactly what §3.6.2
+> already asserts ("U depends on w only through f, so weight space carries no
+> information about convergence") and what `f_pref_net.py`'s header documents.
+
+So `U(w) = V(f(w))`, and `U` is **exactly constant** along a non-compact group
+orbit whose dimension is the number of hidden layers, i.e. **`depth`**. The
+posterior over `w` is **improper** along those directions and the sampler
+free-diffuses there forever. **§4.3.13's "no budget fixes it" then follows by
+derivation rather than by observation** — no burn-in, draw count or chain count
+equilibrates a direction carrying infinite mass.
+
+**What it explains, all of it measured *before* the hypothesis existed:**
+
+| observation | fit |
+|---|---|
+| §4.3.12: identified spread grows as `t^0.37–0.41`, "against 0.5 for **free diffusion**", and that section already concluded "the weight-space diffusion is not purely f-preserving; a component leaks into the spread of the identified shape" | it never identified *which* direction — this is the answer |
+| §4.3.9: `‖w‖` grows **1.51× in every chain to ±1%**, dismissed as "uninformative" because a *between*-chain test cannot see a common cause (which that section says explicitly) | gauge diffusion is common to every chain by construction |
+| `loc_z` clean 26/26, `scale_z` fails 16/26 | the orbit coordinate diffuses symmetrically in ±log a: inflates **scale**, leaves **location** |
+| §4.3.78/§4.3.80: pooled ρ(**depth**, centred `scale_z`) = **+0.354** vs ρ(**width**, ·) = **+0.038** | the symmetry group's dimension **is** the hidden-layer count; width adds no flat directions of this kind |
+| §4.3.79: the 2–5× per-chain `minv` spread | chains at different points on the orbit have different gradient magnitudes, so `v_hat` freezes differently |
+
+**This is hypothesis 8, and it differs from its seven predecessors in kind:**
+the previous seven were guesses about the *sampler*; this is a provable
+property of the *target*, and the arithmetic was verified before the hypothesis
+was written down rather than after.
+
+#### The test — built, calibrated, needs no new sampling
+
+`scripts_bnn/gauge_diffusion.py`. With `r_i(t) = log‖W_i(t)‖_F`, the group acts
+as `r_i → r_i + log a`, `r_{i+1} → r_{i+1} − log a`, so the **gauge** subspace
+is `r − mean(r)` (U exactly flat) and the **invariant** direction is `mean(r)`
+(U constrains it). Prediction: the gauge diffuses, the invariant is confined.
+
+> ⚠️ **Read as a CONTRAST, not against a threshold.** At 75 draws per chain the
+> lag range reaches only ~18 draws, and a confined process whose relaxation
+> time exceeds that range is indistinguishable from a free one — the same
+> identification limit §4.3.77 documents for the MSD probe. Calibrated at the
+> exact geometry (128 chains × 75 draws, 12 replicates):
+>
+> | truth | gauge slope | invariant slope | contrast |
+> |---|---|---|---|
+> | gauge random-walks, invariant OU | +0.99 | +0.70 | **+0.29** |
+> | everything confined | +0.695 | +0.688 | **+0.007** |
+>
+> The invariant's *absolute* slope is uninformative (0.70 either way); the
+> **contrast** separates cleanly, and it cancels the shared lag-range limit.
+> Verdict is on `slope(gauge) − slope(invariant)` with a bootstrap over chains.
+
+Two bugs were caught in calibration and are worth recording: an initial version
+**concatenated chains along the draw axis**, which manufactures a plateau out of
+independent chains, and the first discriminator was a plateau/linearity
+heuristic that failed its own known-answer cases. `--self-test` passes at real
+geometry (contrast +0.331 [+0.228, +0.422] when true, −0.080 [−0.173, +0.027]
+when not).
+
+**`transfer_fn` is now a config field**, defaulting to `"relu"` so every
+existing config is byte-identical. A tanh run **changes the model**, so it is a
+**diagnostic, not a selection run** — it would need its own stage-1
+re-selection before any reported number rested on it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8726,6 +8808,20 @@ refuted since.
    ```
    python scripts_bnn/diagnose_sampling_tail.py --precond-selftest
    ```
+
+   **Then, on the same saved chains and also free — the ReLU gauge test**
+   (§4.3.81). Confirm the instrument first (`--self-test`, seconds, no run
+   directory):
+
+   ```
+   python scripts_bnn/gauge_diffusion.py --self-test
+   python scripts_bnn/gauge_diffusion.py --run-dir exp/r3_trial1_medium_play_0
+   ```
+
+   Queued behind these two: **large_diverse's capacity ladder** (§4.3.80), at
+   fixed sampler settings, sweeping only capacity over the 70× it already
+   spans — worth exactly one controlled run, and only after the two free tests
+   above have had their say, since either could change what it is for.
 
    All three outcomes are decisive. HETEROGENEOUS RELAXATION makes the lever
    the *spread* in `minv` (equalise the frozen preconditioner, or use review

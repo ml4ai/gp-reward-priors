@@ -198,6 +198,25 @@ class TrainConfig:
     # (first msd_n_points valid, non-padded val states), so sigma_f in the ratio
     # above is the same quantity the gate reports.  <= 0 uses all of them.
     msd_n_points: int = 256
+    # Activation.  DEFAULT "relu", which is what every run in this project has
+    # used -- it was hardcoded here until 2026-09-04 and was never a recorded
+    # decision (upstream's own notebooks use relu 7x and tanh 3x).
+    #
+    # It is exposed because it is not a free choice for THIS target.  ReLU is
+    # positively homogeneous, so scaling layer i's weights and bias by a and
+    # layer i+1's weights by 1/a leaves f EXACTLY unchanged (verified: 2e-7
+    # relative change, against 0.55 for tanh).  U here depends on w ONLY
+    # through f -- the BT likelihood and Wu et al.'s functional prior both do,
+    # and there is no weight-space prior term anywhere -- so U is exactly
+    # constant along a group orbit of dimension DEPTH, the w-posterior is
+    # improper along it, and the sampler free-diffuses there forever.  tanh
+    # has no such symmetry.  See handoff 4.3.81 and scripts_bnn/
+    # gauge_diffusion.py.
+    #
+    # Changing it CHANGES THE MODEL, so a tanh run is a DIAGNOSTIC, not a
+    # selection run: it would need its own stage-1 re-selection before any
+    # reported number rests on it.
+    transfer_fn: str = "relu"
     # Bradley-Terry trajectory pooling, shared across BNN/MR/PT: "mean" (masked
     # mean over valid timesteps, trajectory-length-independent) or "sum" (legacy).
     bt_pool: str = "mean"
@@ -451,7 +470,7 @@ def train(config: TrainConfig):
 
     width = config.width
     depth = config.depth
-    transfer_fn = "relu"
+    transfer_fn = config.transfer_fn
 
     # ------------------------------------------------------------------ #
     # Resolve reward source function (only needed for the LCF prior)
