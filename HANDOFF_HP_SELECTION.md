@@ -7278,6 +7278,74 @@ entirely, so every production run is unaffected.
 | `D_f` only — the `mdecay` / ε / jitter ladders | **5,000** steps | validated to 2.6% at τ = 100,000 |
 | resolve a second timescale (§4.3.74's open question) | **50,000** steps | `lag_max` = 12,500 steps must bracket `τ_fast` |
 
+### 4.3.78 The preconditioner read from wandb — §9.4 is not answerable retrospectively, and the exploration account of the 36% is refuted
+
+§10.2 item 5 planned to grep surviving chain logs on the box for the per-chain
+`minv` spread. The local wandb directory was cleaned, but
+`precond_minv_median` / `_max` turn out to be **wandb metrics on the last 59
+runs** (2026-08-26 to 2026-09-04), so the question moved to a local query.
+`scripts_bnn/precond_vs_drift.py`.
+
+> ⚠️ **The per-chain spread is NOT recoverable, and item 5 is closed
+> unanswered.** The wandb metric is logged by the **parent** only
+> (`run_bnn_training_antmaze_eval.py:742`, after the warm-up) — one value per
+> run. Chain workers run with wandb disabled *and* are spawned through
+> `mp.spawn`, so their own `[precond] FROZEN` lines never reach wandb's
+> `output.log` either: **verified on four 32-chain runs, each containing
+> exactly one such line and no worker output at all.** Those lines only ever
+> existed in the box's agent `nohup` logs. Review §9.4's between-chain
+> mechanism now requires a **fresh** run carrying the `chainspread_precond_*`
+> instrumentation added in §4.3.75.
+
+**What the 59 runs do settle.**
+
+1. **Clamp saturation, confirmed at scale (§4.3.68, §4.3.71).**
+   `precond_minv_max` sits at its cap in **97%** of runs, and
+   `precond_v_hat_at_floor` has median **25.7%**, range 0.1–77.7%.
+   §4.3.71's large_play reading of 50.8% was not an outlier: between a
+   quarter and three quarters of the network routinely samples on a constant
+   gain rather than an adapted one.
+2. **The frozen preconditioner does not predict the gate, between runs.**
+   Rank correlation with centred `scale_z`: |ρ| ≤ **0.271** pooled, and
+   ≤ 0.11 within medium_play (n=22) and large_play (n=21), the two
+   best-sampled variants. It does not out-predict the swept dimensions.
+   This does **not** touch §9.4, which is about the spread *within* a run.
+3. **A `mdecay` correlation that must NOT be read.** Pooled within
+   medium_play it reads ρ = −0.540, which would matter for the review §6
+   ladder. It is an artefact: the sweep trials sit at `mdecay` 0.0011–0.0115
+   and **every ad-hoc run sits at exactly 0.1946**, so `mdecay` is perfectly
+   confounded with sweep-vs-diagnostic. Within the designed sample alone it is
+   −0.310 at n=8. The script now separates the two subsets for this reason.
+
+**And one result that answers a relaunch criterion, in the negative.**
+
+`depth` is the strongest swept predictor of centred `scale_z` in three of four
+variants (ρ +0.44 to +0.85; large_diverse is +0.00). But it is **not a
+trade-off**: depth correlates **positively with `val_cvar_ce` in all four**
+variants (+0.62 to +0.93), and the objective is minimised — deeper is worse on
+the gate *and* worse on the objective. So the optimiser should walk away from
+depth unaided, and it did:
+
+| | pass the `scale_z` gate | median depth |
+|---|---|---|
+| first 14 trials | 43% | 4.5 |
+| last 14 trials | **36%** | **2.0** |
+
+> **The exploration account of the 36% is refuted.** "Eligibility is low
+> because the optimiser is still exploring, and it will rise as it converges"
+> is the cheapest way to satisfy §10.2's relaunch criterion 1, and it is
+> false: the optimiser moved decisively off the dimension that predicts
+> failure and **the pass rate did not follow.** The residual failures are
+> driven by something not in the search space. Relaunching now would select
+> from a set whose membership is set by that something — which is exactly what
+> criterion 1 exists to prevent.
+
+Note also what the depth-2 failures look like: `scale_z` 2.16, 2.20, 2.28,
+2.30, 2.42, 2.87, 3.27 — all within 1.6× of the threshold, against a null
+median of ~0.5 (§4.3.74). Real drift at 4–6× the noise floor, not a blow-up.
+The one catastrophic value in the whole round, **848.90**, is a depth-5
+medium_play trial that also scored the worst `val_cvar_ce` of its variant.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8436,12 +8504,22 @@ refuted since.
 
 #### Next, cheapest first
 
-5. **Grep surviving chain logs on the box for the per-chain `minv` spread**
-   (review §9.4). Zero compute — the workers already printed it. **A 2× spread
-   is a persistent, scale-only, between-chain difference**, which is a
-   non-transient mechanism for `scale_z` failing while `loc_z` passes. This
-   matters because §4.3.74 showed hypothesis 6 **cannot** produce `scale_z > 2`,
-   so a non-transient mechanism is required and this is the cheapest candidate.
+5. ~~Grep surviving chain logs for the per-chain `minv` spread~~ —
+   **CLOSED UNANSWERED 2026-09-04 (§4.3.78).** The data does not exist
+   anywhere reachable: workers run with wandb disabled *and* are spawned via
+   `mp.spawn`, so their `[precond] FROZEN` lines never reached wandb's
+   `output.log` (verified on four 32-chain runs — one line each, no worker
+   output), and the box's agent `nohup` logs are the only place they ever
+   lived. **Review §9.4 still needs testing**, but now only by a fresh run
+   carrying §4.3.75's `chainspread_precond_*`. Fold it into the MSD probe run
+   in item 6 — that run already writes them, at no extra cost.
+
+   What the wandb metrics *did* settle (`scripts_bnn/precond_vs_drift.py`,
+   59 runs): clamp saturation is pervasive (`v_hat_at_floor` median 25.7%,
+   up to 77.7%); the parent's frozen preconditioner does **not** predict
+   centred `scale_z` between runs (|ρ| ≤ 0.27); and **the exploration account
+   of the 36% eligibility is refuted** — the optimiser moved off `depth`,
+   the one dimension that predicts failure, and the pass rate went 43% → 36%.
 6. ~~Build the MSD probe~~ — **DONE 2026-09-04 (§4.3.77).**
    `scripts_bnn/msd_probe.py` plus a `msd_*` block in `TrainConfig` and a
    recording hook in `FPrefNet.train()`. Validated on OU processes with known
@@ -8508,6 +8586,13 @@ refuted since.
   36%), or there is an accepted account of why ~36% is intrinsic. Relaunching
   without this selects from a set whose membership is driven by something not
   being searched.
+  > **One candidate account is already refuted (§4.3.78).** "It is an
+  > early-exploration artefact and will rise as the optimiser converges" is
+  > false: the optimiser moved decisively off `depth` — the one swept
+  > dimension that predicts failure, and one it should abandon unaided since
+  > deeper is worse on the *objective* too — median depth 4.5 → 2.0, while the
+  > pass rate went **43% → 36%**. Whatever drives the residual failures is not
+  > in the search space, so no amount of further searching will find it.
 - **The two τ estimates agree**, or the disagreement is explained. §4.3.72's
   "~10× more compute" pricing and §3.2.1's resolution gate both rest on
   §4.3.67's τ; the gate's own ESS says 2.5–3.5× faster.
