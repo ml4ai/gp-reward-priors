@@ -7688,6 +7688,89 @@ across the run, which looks like a decaying difference. It is `max/min` over
 128 chains — an extreme-value statistic driven by two outlier chains (82 and
 24, `s_first` 1.233 and 1.082). Do not read it as a trend.
 
+### 4.3.83 Hypothesis 7 closed on a FAILING run; the gauge test needs step resolution
+
+Both tools run on `r3_probe_w1024d6_0` (width 1024, depth 6, 128 chains,
+`num_samples` **10**, burn-in **2,000**). Outputs in
+`exp/precond_drift_r3_probe_w1024d6_0.txt` and
+`exp/gauge_diffusion_r3_probe_w1024d6_0.txt`.
+
+#### Hypothesis 7 is now closed — refuted where the phenomenon IS present
+
+This run fails hard and unambiguously: centred `scale_z` **10.16**, centred
+`loc_z` 2.33, verdict FAIL. §4.3.82's refutation was on a passing run; this one
+is not.
+
+| | |
+|---|---|
+| Q1 median `s_last/s_first` | **1.3670** — a real transient, and **0 of 128 chains shrink** |
+| Q2 ρ(`minv`, `s_last/s_first`) | **−0.008**, p = 0.93 |
+| ρ(`minv`, `s_first`) / `s_last` | +0.099 / +0.076, both null |
+| centred ratio | median **1.3585**, **0 of 128** contract |
+
+**TRANSIENT REAL, `minv` NOT ITS RATE.** The chains are genuinely relaxing, so
+a decaying difference is present and *can* fail the gate — but it is not
+ordered by the frozen preconditioner at all. **§4.3.79's composition of review
+§9.4 with hypothesis 6 does not hold. Hypothesis 6 survives alone, and the
+preconditioner is closed out for good** (mechanism seven, on both a passing and
+a failing run).
+
+> **The drift here is uniform EXPANSION, not contraction: 0 of 128 chains
+> shrink, every one widens by ~1.37×, and the between-chain spread of `s` is
+> 1.53× at both ends — unchanged.** That is a *homogeneous* effect. It is the
+> opposite sign to §4.3.73's medium_play reading (0 of 8 *expand*), so the
+> direction is configuration-dependent and "contraction" is not a general
+> signature. Note this run had only a **2,000-step burn-in** against
+> medium_play's ~100,000-step relaxation, so an unabsorbed warm-up transient
+> (hypothesis 6) is the obvious reading.
+
+#### The gauge test cannot be run on harvested draws — measured, not assumed
+
+`gauge_diffusion.py` returned **NaN**: with `num_samples = 10` the lag range is
+1–4 and the late-slope has fewer than three points. That is my error in
+choosing the run — it was picked for its 128 chains and `scale_z` 10.16 without
+checking the draw count.
+
+**But the run diagnosed a deeper problem that would have invalidated the test
+on *any* saved-draw set.** Both coordinates reach **0.97 of their confinement
+plateau by a lag of ONE draw**:
+
+| | variance | MSD at lag 4 | as a fraction of the plateau |
+|---|---|---|---|
+| gauge | 1.45e-4 | 2.83e-4 | **0.97** |
+| invariant | 1.88e-3 | 3.65e-3 | **0.97** |
+
+Draws are `cycle_length` apart — 2,000 steps and up — and **the gauge
+coordinate decorrelates well inside a single cycle**. No draw-spaced lag can
+ever see it diffusing, whatever the draw count. The harvested-draw form of this
+test is dead.
+
+**Fix, and it costs nothing.** The MSD probe (§4.3.77) already records every
+`msd_every` steps, which is the resolution the question needs. It now also
+records **per-layer log weight-norms** (`layer_lognorm` in `msd_trace.npz`) —
+no forward pass, just a norm per matrix — and `gauge_diffusion.py --msd-traces
+<OUT_DIR>` reads them. Verified end-to-end on a CPU run: trace written,
+read back, gauge/invariant split, contrast and CI computed.
+
+**So hypothesis 8 is untested, not refuted**, and it is now folded into the
+probe run that §10.2 item 6 already schedules rather than needing a run of its
+own.
+
+#### One more reading, and it is the one that should change the plan
+
+Both runs now show the same thing from opposite directions:
+
+| run | centred gate | centred `rhat_bulk` | centred `ess_bulk` |
+|---|---|---|---|
+| `r3_trial1_medium_play_0` | **PASS** (0.87) | 1.4274 | 276 / 15,360 (1.8%) |
+| `r3_probe_w1024d6_0` | **FAIL** (10.16) | 1.2617 | 637 / 1,280 |
+
+**The passing run mixes worse than the failing one on R-hat.** §3.2.1 gates on
+stationarity and has no gate on mixing, so a configuration can clear the gate
+while `rhat_bulk` sits at 1.43 — nowhere near 1.01. This is not a new mechanism
+but it does bear directly on §10.2's relaunch criteria, which are written
+entirely around the `scale_z` rejection rate.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8884,22 +8967,16 @@ refuted since.
    python scripts_bnn/diagnose_sampling_tail.py --precond-selftest
    ```
 
-   **Then, on the same saved chains and also free — the ReLU gauge test**
-   (§4.3.81). Confirm the instrument first (`--self-test`, seconds, no run
-   directory):
+   ~~The ReLU gauge test on saved chains~~ — **NOT POSSIBLE on harvested
+   draws, measured 2026-09-05 (§4.3.83).** Both coordinates reach 0.97 of
+   their confinement plateau at a lag of ONE draw, because draws are
+   `cycle_length` apart and the gauge decorrelates inside a single cycle.
+   **Folded into the probe run below instead**: the probe now records
+   `layer_lognorm` at step resolution, and
+   `gauge_diffusion.py --msd-traces <OUT_DIR>` reads it. Hypothesis 8 is
+   untested, not refuted.
 
-   ```
-   python scripts_bnn/gauge_diffusion.py --self-test
-   python scripts_bnn/gauge_diffusion.py --run-dir exp/r3_probe_w1024d6_0
-   ```
-
-   Run it on **`r3_probe_w1024d6_0`**, not on `r3_trial1_medium_play_0`:
-   §4.3.82 showed the latter passes the gate, and a mechanism for the failure
-   cannot be tested on a run that does not fail. Its depth 6 also gives the
-   ReLU symmetry group its largest dimension of any saved run, which is where
-   hypothesis 8 predicts the strongest gauge signal.
-
-   Queued behind these two: **large_diverse's capacity ladder** (§4.3.80), at
+   Queued behind these: **large_diverse's capacity ladder** (§4.3.80), at
    fixed sampler settings, sweeping only capacity over the 70× it already
    spans — worth exactly one controlled run, and only after the two free tests
    above have had their say, since either could change what it is for.
@@ -8946,6 +9023,20 @@ refuted since.
      exp/reward_learning/bnn_msd_probe_medium_play_0/sampling_f \
      --sigma-f <val_pred_centred_sd_median>
    ```
+
+   **The same trace answers hypothesis 8** (§4.3.81, §4.3.83) — the probe
+   records `layer_lognorm` alongside `f`, so this costs nothing extra:
+
+   ```
+   /opt/anaconda3/envs/irl/bin/python scripts_bnn/gauge_diffusion.py --self-test
+   /opt/anaconda3/envs/irl/bin/python scripts_bnn/gauge_diffusion.py \
+     --msd-traces exp/reward_learning/bnn_msd_probe_medium_play_0/sampling_f
+   ```
+
+   > Use a config with **depth ≥ 4** for this, not medium_play's depth 2. The
+   > ReLU symmetry group's dimension is the hidden-layer count, so depth 2
+   > gives it the smallest possible signal; hypothesis 8's own explanation of
+   > ρ(depth, `scale_z`) = +0.354 predicts the effect grows with depth.
 
    Read it against §4.3.67's 95,500–103,650 steps per independent sample for
    medium_play. **Three outcomes, all informative:** agreement confirms the

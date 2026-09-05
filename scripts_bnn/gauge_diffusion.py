@@ -165,7 +165,7 @@ def pooled_msd(traces, lags):
     return out, den
 
 
-def msd_report(x, label, n_fit_frac=0.25):
+def msd_report(x, label, n_fit_frac=0.25, unit="draws"):
     """MSD of a trace (or list of per-chain traces) against lag.
 
     `x` may be one (draws, k) array or a list of them, one per chain.
@@ -180,7 +180,7 @@ def msd_report(x, label, n_fit_frac=0.25):
         msd, npair = pooled_msd(traces, lags)
         var = float(np.mean([np.mean(t.var(axis=0)) for t in traces]))
         return _msd_print(label, lags, msd, var, n_chains=len(traces),
-                          npair=npair)
+                          npair=npair, unit=unit)
     x = np.asarray(x, float)
     if x.ndim == 1:
         x = x[:, None]
@@ -190,10 +190,12 @@ def msd_report(x, label, n_fit_frac=0.25):
                                            num=min(30, lag_max))).astype(int))
     msd, npair = msd_curve(x, lags)
     var = float(np.mean(x.var(axis=0)))
-    return _msd_print(label, lags, msd, var, n_chains=1, npair=npair)
+    return _msd_print(label, lags, msd, var, n_chains=1, npair=npair,
+                      unit=unit)
 
 
-def _msd_print(label, lags, msd, var, n_chains, npair=None):
+def _msd_print(label, lags, msd, var, n_chains, npair=None,
+               unit="draws"):
     a_all = loglog_slope(lags, msd)
     # The LATE slope is the discriminator: a confined process is linear at
     # short lag too (every process is), and only reveals itself by flattening.
@@ -203,7 +205,7 @@ def _msd_print(label, lags, msd, var, n_chains, npair=None):
     print(f"  {label}")
     print(f"    chains pooled                      {n_chains}")
     print(f"    variance within a chain            {var:.4e}")
-    print(f"    MSD at lag {int(lags[-1]):>4} draws            {msd[-1]:.4e}  "
+    print(f"    MSD at lag {int(lags[-1]):>4} {unit:<7}          {msd[-1]:.4e}  "
           f"({plateau_frac:.2f} x the plateau 2*var)")
     print(f"    log-log slope, all lags            {a_all:+.3f}")
     print(f"    log-log slope, lags >= {int(mid):>4}       {a_late:+.3f}"
@@ -212,6 +214,61 @@ def _msd_print(label, lags, msd, var, n_chains, npair=None):
           f"sd ~ t^0.37-0.41\n        is an MSD slope of 0.74-0.82.)")
     return {"var": var, "a_all": a_all, "a_late": a_late,
             "plateau_frac": plateau_frac, "lags": lags, "msd": msd}
+
+
+def analyse_msd_traces(out_dir):
+    """Gauge test at STEP resolution, from chain_*/msd_trace.npz.
+
+    The harvested-draw version of this test is DEAD, and the reason is
+    measured: on r3_probe_w1024d6_0 both the gauge and the invariant
+    coordinate reach 0.97 of their confinement plateau by a lag of ONE draw
+    (handoff 4.3.83).  Draws are `cycle_length` steps apart -- 2,000 and up --
+    and the gauge decorrelates well inside a single cycle, so no draw-spaced
+    lag can ever see it diffusing.  The MSD probe records every `msd_every`
+    steps, which is the resolution the question needs.
+    """
+    import glob
+    paths = sorted(glob.glob(os.path.join(out_dir, "chain_*", "msd_trace.npz")))
+    if not paths:
+        print(f"No chain_*/msd_trace.npz under {out_dir}.\n"
+              "Was the run launched with msd_window > 0?")
+        return 1
+    G, M, stride = [], [], None
+    for p in paths:
+        z = np.load(p, allow_pickle=False)
+        if "layer_lognorm" not in z.files:
+            print(f"{os.path.basename(os.path.dirname(p))}: no layer_lognorm "
+                  "-- trace predates 4.3.83; re-run the probe.")
+            return 1
+        R = np.asarray(z["layer_lognorm"], float)
+        if R.ndim != 2 or R.shape[1] < 2:
+            print("layer_lognorm needs >= 2 weight matrices.")
+            return 1
+        g, m = gauge_split(R)
+        G.append(g)
+        M.append(m[:, None])
+        stride = int(z["msd_every"])
+    print(f"{len(G)} chain trace(s) under {out_dir}")
+    print(f"{G[0].shape[0]} samples x {G[0].shape[1]} weight matrices, "
+          f"every {stride} STEPS (lags below are in samples; "
+          f"x{stride} for steps)\n")
+    print("=== GAUGE coordinate (r - mean r): U is EXACTLY flat here ===")
+    gg = msd_report(G, "gauge, pooled across chains", unit="samples")
+    print()
+    print("=== INVARIANT coordinate (mean r): U constrains this ===")
+    mm = msd_report(M, "invariant, pooled across chains", unit="samples")
+    print()
+    print("=== VERDICT (on the CONTRAST) ===")
+    d, lo, hi = contrast_bootstrap(G, M)
+    print(f"  slope(gauge) - slope(invariant) = {d:+.3f}  "
+          f"[95% CI {lo:+.3f}, {hi:+.3f}] over chains")
+    if lo > 0.10:
+        print("  GAUGE DIFFUSES FASTER -- hypothesis 8 SUPPORTED.")
+    elif hi < 0.10:
+        print("  NO CONTRAST -- hypothesis 8 REFUTED at step resolution.")
+    else:
+        print("  INCONCLUSIVE -- widen msd_window or shorten msd_every.")
+    return 0
 
 
 def contrast_bootstrap(G, M, reps=400, seed=0):
@@ -380,11 +437,18 @@ def main():
                     help="A run's OUT_DIR (contains config.yaml and sampling_f/)")
     ap.add_argument("--num-chains", type=int, default=None)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--msd-traces", default=None, metavar="OUT_DIR",
+                    help="read chain_*/msd_trace.npz and run the gauge test at "
+                         "STEP resolution.  Required for any real answer: the "
+                         "harvested-draw version saturates at lag 1 because "
+                         "draws are cycle_length apart (4.3.83).")
     ap.add_argument("--self-test", action="store_true",
                     help="validate the free-vs-confined readout and exit")
     args = ap.parse_args()
     if args.self_test:
         return self_test()
+    if args.msd_traces:
+        return analyse_msd_traces(args.msd_traces)
     if not args.run_dir:
         ap.error("--run-dir is required (except with --self-test)")
     ids = list(range(args.num_chains)) if args.num_chains else None

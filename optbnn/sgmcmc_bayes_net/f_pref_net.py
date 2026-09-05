@@ -819,7 +819,7 @@ class FPrefNet:
             _msd_k = max(1, int(msd_every))
             _msd_first = int(num_burn_in_steps) + int(msd_start)
             _msd_last = _msd_first + int(msd_window)
-            _msd_f, _msd_step, _msd_lr = [], [], []
+            _msd_f, _msd_step, _msd_lr, _msd_w = [], [], [], []
             self.print_info(
                 f"[msd] probe ARMED: {_msd_t.shape[0]} points, every "
                 f"{_msd_k} steps over steps {_msd_first:,}-{_msd_last:,} "
@@ -993,6 +993,19 @@ class FPrefNet:
                     _msd_f.append(
                         self.net(_msd_t).detach().float().cpu().numpy().ravel()
                     )
+                    # Per-layer log weight-norms, for the ReLU gauge test
+                    # (handoff 4.3.81).  ReLU's rescaling symmetry moves
+                    # log||W_i|| against log||W_{i+1}||, and the harvested
+                    # draws CANNOT see it: measured on r3_probe_w1024d6_0, the
+                    # gauge coordinate reaches 0.97 of its confinement plateau
+                    # by a lag of ONE draw, i.e. it decorrelates well inside a
+                    # single cycle.  Only step resolution can resolve it, and
+                    # this costs no forward pass -- just a norm per matrix.
+                    _msd_w.append([
+                        float(torch.linalg.norm(p.detach()).log())
+                        for p in self._bare_net.parameters()
+                        if p.detach().ndim == 2
+                    ])
                 if _was_training:
                     self.net.train()
                 _msd_step.append(step)
@@ -1081,6 +1094,9 @@ class FPrefNet:
         if _msd_t is not None and _msd_f:
             self._msd_trace = {
                 "f": np.stack(_msd_f).astype(np.float32),   # [n_samples, P]
+                # [n_samples, n_weight_matrices] -- the ReLU gauge coordinate
+                # lives here; see the recording site above and handoff 4.3.81.
+                "layer_lognorm": np.asarray(_msd_w, dtype=np.float64),
                 "step": np.asarray(_msd_step, dtype=np.int64),
                 "lr": np.asarray(_msd_lr, dtype=np.float64),
                 "msd_every": int(_msd_k),
