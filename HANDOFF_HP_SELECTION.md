@@ -7346,6 +7346,83 @@ median of ~0.5 (§4.3.74). Real drift at 4–6× the noise floor, not a blow-up.
 The one catastrophic value in the whole round, **848.90**, is a depth-5
 medium_play trial that also scored the worst `val_cvar_ce` of its variant.
 
+### 4.3.79 The per-chain spread measured — §9.4 is real, cannot be the driver, and inverts §4.3.74
+
+Saved stdout from the §4.3.x diagnostic runs was recovered into `exp/`, and it
+carries what wandb never did: **31 runs with per-chain `[precond] FROZEN`
+lines**. The first line in each log is the parent's warm-up, every line after
+is one chain. `scripts_bnn/chain_precond_spread.py`. This supersedes §4.3.78's
+"closed unanswered".
+
+**The spread is real, and larger than the review's threshold.**
+
+| | |
+|---|---|
+| between-chain `minv` spread (max/min) | median **2.29×**, range 1.17–5.53× |
+| runs at or above review §9.4's 2× threshold | **52%** (16 of 31) |
+| largest | `r3_trial1_medium_play` at 128 chains: **5.53×** (2.44–13.50) |
+
+Each chain samples at `η_i = ε²·minv_i` for the **entire run**, so this is a
+2–5× spread in effective step size that no amount of burn-in or extra draws
+removes. **Review §9.4's empirical premise is confirmed.**
+
+> ⚠️ **And it still cannot be the driver — for a structural reason, not a
+> statistical one.** `_function_space_drift_core` computes
+> `sd1 = first.reshape(-1, P).std(axis=0)` and likewise `sd2`: **each half
+> pools over all chains.** A *time-constant* between-chain difference inflates
+> both halves by the same factor and cancels exactly in `ratio = sd2/sd1`.
+
+Confirmed by simulation (`--simulate`), stationary chains throughout:
+
+| between-chain spread | persistent | decaying to a common sd |
+|---|---|---|
+| 2.29× | `scale_z` 0.84, ratio 0.998 — **PASS** | `scale_z` **6.08**, ratio 0.786 — FAIL |
+| 3.65× | `scale_z` 0.84, ratio 1.005 — **PASS** | `scale_z` **10.26**, ratio 0.667 — FAIL |
+| 5.53× | `scale_z` 1.03, ratio 0.996 — **PASS** | `scale_z` **14.24**, ratio 0.570 — FAIL |
+| 10.0× | `scale_z` 1.01, ratio 0.997 — **PASS** | — |
+
+A persistent difference of even **10×** passes cleanly. The measured
+ρ(spread, centred `scale_z`) = **−0.246** over the 31 runs is therefore the
+*expected* result, not a surprise — and note the ratio statistic is separately
+confounded by where `minv` sits relative to its clamp, being compressed both
+when saturated at 100 and when tiny.
+
+#### This inverts §4.3.74's inference, and gives hypothesis 7
+
+§4.3.74 reasoned: hypothesis 6's single-timescale jitter cannot produce
+`scale_z > 2`, therefore **"a non-transient mechanism is required"**. The table
+above says the opposite — **non-transient is precisely what the gate cannot
+see.** What fails the gate is a *transient*, and what makes a transient fail it
+this hard is that the transient is **heterogeneous across chains**.
+
+> **Hypothesis 7: the two mechanisms compose rather than compete.** Chains
+> freeze preconditioners differing by 2–5× in `minv`, so they equilibrate at
+> **2–5× different rates**. A shared perturbation — `chain_init_jitter`, or
+> simply an unconverged warm-up — then decays at a different rate in each
+> chain. That is panel B, and it produces `scale_z` 6–14 with `scale_ratio`
+> 0.57–0.79: **contraction**, matching §4.3.73's signature (medium_play 0 of 8
+> expanding, median ratio 0.837) and reaching the magnitudes §4.3.74 said a
+> single timescale could not (2.67, 3.71, 848.90).
+
+It also explains why the spread alone does not correlate with `scale_z`: what
+matters is spread **×** how much transient is left, and the second factor is
+not in this table.
+
+**What does NOT support it, and is recorded rather than smoothed over.**
+Grouping the 31 runs by burn-in (the freeze step labels each log for free)
+shows no effect: 20,000 steps → median centred `scale_z` **1.20** (n=24),
+100,000 steps → **1.26** (n=2). §4.3.34's "burn-in is not a general fix"
+stands, and hypothesis 7 predicts longer burn-in *should* help. Two runs is
+not a test, but it is not encouraging either.
+
+**The decisive test is cheap and it is not another ladder.** Hypothesis 7 is a
+claim about *per-chain* behaviour, and every statistic in this document pools
+chains before looking. Compute centred `scale_ratio` **per chain** and
+correlate it with that chain's own `minv`: hypothesis 7 predicts chains with
+smaller `minv` (slower equilibration) contract more. The chains are already
+saved; this needs no new run, only a per-chain pass over an existing
+`sampled_weights` set with `diagnose_sampling_tail.py`.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -8505,21 +8582,28 @@ refuted since.
 #### Next, cheapest first
 
 5. ~~Grep surviving chain logs for the per-chain `minv` spread~~ —
-   **CLOSED UNANSWERED 2026-09-04 (§4.3.78).** The data does not exist
-   anywhere reachable: workers run with wandb disabled *and* are spawned via
-   `mp.spawn`, so their `[precond] FROZEN` lines never reached wandb's
-   `output.log` (verified on four 32-chain runs — one line each, no worker
-   output), and the box's agent `nohup` logs are the only place they ever
-   lived. **Review §9.4 still needs testing**, but now only by a fresh run
-   carrying §4.3.75's `chainspread_precond_*`. Fold it into the MSD probe run
-   in item 6 — that run already writes them, at no extra cost.
+   **DONE 2026-09-04 (§4.3.79), from saved stdout recovered into `exp/`.**
+   Not from wandb, which never had it (§4.3.78). The spread is **real and
+   above the review's threshold** — median 2.29×, up to 5.53×, ≥2× in 52% of
+   31 runs — **and structurally cannot be the driver**, because the gate pools
+   chains within each half, so a persistent between-chain difference of even
+   10× passes cleanly. **This inverts §4.3.74**: non-transient is exactly what
+   the gate cannot see, and what fails it is a *heterogeneous transient*.
+   §9.4 and hypothesis 6 compose into **hypothesis 7**, which reaches the
+   observed magnitudes that a single timescale could not.
 
-   What the wandb metrics *did* settle (`scripts_bnn/precond_vs_drift.py`,
-   59 runs): clamp saturation is pervasive (`v_hat_at_floor` median 25.7%,
-   up to 77.7%); the parent's frozen preconditioner does **not** predict
-   centred `scale_z` between runs (|ρ| ≤ 0.27); and **the exploration account
-   of the 36% eligibility is refuted** — the optimiser moved off `depth`,
-   the one dimension that predicts failure, and the pass rate went 43% → 36%.
+   Also settled from wandb (`scripts_bnn/precond_vs_drift.py`, 59 runs):
+   clamp saturation is pervasive (`v_hat_at_floor` median 25.7%, up to 77.7%),
+   and **the exploration account of the 36% eligibility is refuted** — the
+   optimiser moved off `depth`, the one dimension that predicts failure, and
+   the pass rate went 43% → 36%.
+
+   **Next, and it needs no run:** every statistic in this document pools
+   chains before looking, and hypothesis 7 is a claim about per-chain
+   behaviour. Compute centred `scale_ratio` **per chain** on an existing
+   saved chain set and correlate it against that chain's own `minv` from the
+   log — hypothesis 7 predicts smaller `minv` (slower equilibration) contracts
+   more. Do this before item 6.
 6. ~~Build the MSD probe~~ — **DONE 2026-09-04 (§4.3.77).**
    `scripts_bnn/msd_probe.py` plus a `msd_*` block in `TrainConfig` and a
    recording hook in `FPrefNet.train()`. Validated on OU processes with known
