@@ -7771,6 +7771,83 @@ while `rhat_bulk` sits at 1.43 — nowhere near 1.01. This is not a new mechanis
 but it does bear directly on §10.2's relaunch criteria, which are written
 entirely around the `scale_z` rejection rate.
 
+### 4.3.84 Hypothesis 8 REFUTED — and the weight norms are DRIFTING, not diffusing
+
+Two probe runs, 2026-09-05, seed 0, `msd_window` 50,000, `msd_every` 20,
+8 chains: `bnn_msd_probe_large_play_0` (depth 6, `cycle_length` 500) and
+`bnn_msd_probe_medium_play_0` (depth 2, `cycle_length` 2750). Four outputs in
+`exp/`.
+
+#### Hypothesis 8 is refuted, in both runs, with tight intervals
+
+| run | gauge slope | invariant slope | contrast |
+|---|---|---|---|
+| large_play (depth 6, 7 matrices) | +1.559 | +1.761 | **−0.202** [−0.246, −0.163] |
+| medium_play (depth 2, 3 matrices) | +1.039 | +1.724 | **−0.685** [−0.808, −0.605] |
+
+The contrast is **negative** in both — the direction the potential *constrains*
+moves faster than the direction it is exactly flat along, which is the opposite
+of the prediction. It is refuted most strongly at **depth 6**, where §4.3.81
+predicted the largest symmetry group and therefore the strongest signal.
+
+**ReLU's rescaling symmetry is real** (verified exactly, 2e-7) **and it is not
+the driver.** Mechanism **eight** refuted. What that also settles: the ReLU
+choice at `run_bnn_training_antmaze_eval.py:473` needs no change, and a tanh
+diagnostic run is no longer warranted. `transfer_fn` stays exposed as a config
+field, defaulting to `"relu"`.
+
+#### The finding that matters more: every slope is SUPER-diffusive
+
+> A log-log MSD slope of 1.0 is free diffusion and **a stationary process
+> cannot exceed it at long lag.** Slope 2.0 is pure ballistic drift. The
+> invariant coordinate reads **1.72–1.76 in both runs**, and large_play's
+> gauge reads 1.56.
+
+So the weight norms are not diffusing about an equilibrium — **they are
+drifting**, and predominantly in `mean(log‖W_i‖)`, the direction that
+*changes* `f`. Scaling every layer together scales `f`, so this is the
+widening, measured directly at step resolution for the first time. It is
+§4.3.9's `‖w‖` growth of 1.51×, and it points at **§4.3.14** — `map_amp2` at
+168,940 leaves the functional prior too weak to hold `f`'s scale — not at the
+sampler, the schedule, the preconditioner or the activation.
+
+**But the probe window opens at `msd_start = 0`, immediately after burn-in, so
+a decaying transient is inside it — and a decaying transient reads
+super-diffusive exactly as an ongoing drive does.** These two are not yet
+separated. `--halves` now does it from the *same traces*, at no compute:
+if the second half's slope falls toward 1.0 the motion is a transient and
+burn-in is the fix; if it holds at ~1.7 the drive is ongoing and burn-in cannot
+touch it. **Run that before drawing any conclusion from the paragraph above.**
+
+#### The τ readings, and a bias in my own instrument
+
+| variant | MSD steps/indep (median) | §4.3.67's τ | |
+|---|---|---|---|
+| large_play | **501** (441–1,255) | ~4,000 | **8× faster** |
+| medium_play | **32,635** (23,814–138,201) | 95,500–103,650 | **3× faster** |
+
+Both say §4.3.67's τ is too slow, in the same direction and rough magnitude as
+the review §2 finding that the gate's own ESS sees mixing 2.5–3.5× faster.
+**Three instruments now disagree with §4.3.67 the same way**, which bears
+directly on §10.2's relaunch criterion 2.
+
+> ⚠️ **Do not quote these numbers yet — there is a known bias and its direction
+> is known.** `σ_f` comes from the harvested draws, taken at the **single
+> coldest step** of each cycle, while `D_f` is measured across the **whole
+> cosine**, where ε reaches `lr_max` (6.4× `lr_min` on large_play). The two
+> halves of `σ²/D` are therefore not on the same footing. The tell is in the
+> output: large_play's `plateau` column reads **1.39–1.53**, i.e. the
+> within-window spread **exceeds** the cool-point `2σ_f²`, which is impossible
+> if they measured the same distribution. τ is biased **low** by roughly that
+> factor, so the corrected large_play figure is nearer 700 than 501 — still
+> far from 4,000, so the direction of the disagreement survives, but the
+> magnitude does not yet.
+
+Also measured: **per-chain `D_f` spread of 2.84× (large_play) and 5.80×
+(medium_play)** — review §9.4's quantity, now at step resolution rather than
+inferred from `minv`. §4.3.79/§4.3.82/§4.3.83 already established a persistent
+between-chain difference cannot fail the gate, so this is recorded, not chased.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -9024,8 +9101,22 @@ refuted since.
      --sigma-f <val_pred_centred_sd_median>
    ```
 
-   **The same trace answers hypothesis 8** (§4.3.81, §4.3.83) — the probe
-   records `layer_lognorm` alongside `f`, so this costs nothing extra:
+   ~~The same trace answers hypothesis 8~~ — **DONE 2026-09-05 (§4.3.84):
+   hypothesis 8 REFUTED** in both runs, contrast −0.202 and −0.685, negative
+   and tightest at depth 6 where it predicted the strongest signal. The live
+   question is now the **super-diffusive drift** those runs exposed, and the
+   next step needs no compute:
+
+   ```
+   /opt/anaconda3/envs/irl/bin/python scripts_bnn/gauge_diffusion.py \
+     --msd-traces exp/bnn_msd_probe_large_play_0/sampling_f --halves
+   ```
+
+   Second-half slope falling toward 1.0 ⇒ a decaying transient, and burn-in is
+   the fix. Holding at ~1.7 ⇒ an ongoing drive that burn-in cannot touch,
+   which sends the question to §4.3.14 and `map_amp2`.
+
+   The commands that produced §4.3.84, kept for reproduction:
 
    ```
    /opt/anaconda3/envs/irl/bin/python scripts_bnn/gauge_diffusion.py --self-test

@@ -216,7 +216,7 @@ def _msd_print(label, lags, msd, var, n_chains, npair=None,
             "plateau_frac": plateau_frac, "lags": lags, "msd": msd}
 
 
-def analyse_msd_traces(out_dir):
+def analyse_msd_traces(out_dir, halves=False):
     """Gauge test at STEP resolution, from chain_*/msd_trace.npz.
 
     The harvested-draw version of this test is DEAD, and the reason is
@@ -248,6 +248,29 @@ def analyse_msd_traces(out_dir):
         G.append(g)
         M.append(m[:, None])
         stride = int(z["msd_every"])
+    if halves:
+        # Separate a DECAYING TRANSIENT from an ONGOING DRIVE, from the same
+        # trace and at no extra cost.  The probe window opens at msd_start,
+        # which defaults to 0 -- immediately after burn-in -- so a transient
+        # that has not finished decaying is inside it, and a decaying
+        # transient reads SUPER-diffusive (log-log MSD slope > 1) exactly as
+        # an ongoing drive does.  If the second half's slope falls toward 1.0
+        # the motion is a transient and more burn-in is the fix; if it holds,
+        # the drive is ongoing and burn-in cannot touch it (the 4.3.32 vs
+        # 4.3.6 distinction, now readable at step resolution).
+        print(f"{len(G)} chain trace(s) under {out_dir}")
+        print(f"{G[0].shape[0]} samples every {stride} STEPS, split into "
+              f"halves of the probe window\n")
+        for lbl, sl in (("FIRST half of the window", slice(0, G[0].shape[0] // 2)),
+                        ("SECOND half of the window", slice(G[0].shape[0] // 2, None))):
+            print(f"--- {lbl} ---")
+            gh = msd_report([g[sl] for g in G], "  gauge", unit="samples")
+            mh = msd_report([m[sl] for m in M], "  invariant", unit="samples")
+            d, lo, hi = contrast_bootstrap([g[sl] for g in G],
+                                           [m[sl] for m in M])
+            print(f"  contrast {d:+.3f} [95% CI {lo:+.3f}, {hi:+.3f}]\n")
+        return 0
+
     print(f"{len(G)} chain trace(s) under {out_dir}")
     print(f"{G[0].shape[0]} samples x {G[0].shape[1]} weight matrices, "
           f"every {stride} STEPS (lags below are in samples; "
@@ -442,13 +465,19 @@ def main():
                          "STEP resolution.  Required for any real answer: the "
                          "harvested-draw version saturates at lag 1 because "
                          "draws are cycle_length apart (4.3.83).")
+    ap.add_argument("--halves", action="store_true",
+                    help="with --msd-traces: report the first and second half "
+                         "of the probe window separately.  Separates a DECAYING "
+                         "TRANSIENT from an ONGOING DRIVE -- both read "
+                         "super-diffusive over a window that opens at the end "
+                         "of burn-in.  Costs no new sampling.")
     ap.add_argument("--self-test", action="store_true",
                     help="validate the free-vs-confined readout and exit")
     args = ap.parse_args()
     if args.self_test:
         return self_test()
     if args.msd_traces:
-        return analyse_msd_traces(args.msd_traces)
+        return analyse_msd_traces(args.msd_traces, halves=args.halves)
     if not args.run_dir:
         ap.error("--run-dir is required (except with --self-test)")
     ids = list(range(args.num_chains)) if args.num_chains else None
