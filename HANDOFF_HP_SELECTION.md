@@ -7464,6 +7464,76 @@ confirmation.
 **Run it on `r3_trial1_medium_play_0`** — 128 chains, the largest spread
 measured (5.53×, `minv` 2.44–13.50), and its log is `exp/r3_trial1_medium_play.log`.
 
+### 4.3.80 Capacity vs stationarity — not the general driver, but large_diverse is ordered perfectly
+
+Asked 2026-09-04: these are small preference sets, so is the `scale_z` gate
+rejecting **overparameterised** configurations? §4.3.78 had found `depth` the
+strongest swept predictor in three of four variants and `width` the strongest
+in the fourth, but neither was analysed as capacity.
+`scripts_bnn/capacity_vs_drift.py`.
+
+Under `hidden_dims = [W]*depth`, `n_params ≈ depth·W²`, so depth and width are
+two views of one quantity. Measured from the seed-0 splits: `obs_dim` 37,
+`T` 100, and **254–514 training pairs**. The round-3 search spanned
+**14,977 to 1,333,249 parameters (89×)**, i.e. **30 to 2,677 parameters per
+training pair**.
+
+| variant | train pairs | n | ρ(`n_params`, centred `scale_z`) | exact p | ρ vs `val_cvar_ce` |
+|---|---|---|---|---|---|
+| large_play | 254 | 8 | +0.712 | 0.054 | +0.540 |
+| medium_play | 358 | 8 | **+0.012** | 0.989 | +0.036 |
+| medium_diverse | 498 | 6 | **+0.169** | 1.000 | +0.338 |
+| large_diverse | 514 | 6 | **+1.000** | **0.0028** | +0.486 |
+
+Exact permutation p, enumerated — at n = 6 there are only 720 orderings, so
+the smallest attainable two-sided p is 0.0028 and a perfect ordering is less
+impressive than a t-approximation would claim (~1e-6). Four variants are
+tested, so the Bonferroni threshold is 0.0125.
+
+**large_diverse is perfectly monotone over 70× of capacity** (0.69 → 3.21),
+and it is not a proxy for a sampler setting: no swept sampler dimension
+co-moves with `n_params` by more than |ρ| 0.486 within that variant.
+
+> **But capacity is not the general driver, and the counterexample is direct.**
+> If overparameterisation caused the failure, the smallest model in each
+> variant should be among the cleanest. In the two null variants it is the
+> **worst**:
+>
+> | variant | smallest model | largest model |
+> |---|---|---|
+> | medium_play | 19,137p → `scale_z` **848.90** | 807,937p → 6.76 |
+> | medium_diverse | 14,977p → **3.71** | 1,333,249p → 4.08 |
+> | large_diverse | 19,137p → 0.69 | 1,333,249p → 3.21 |
+>
+> The single catastrophic value of the whole round, **848.90, is the smallest
+> model in its variant** (width 6, depth 5). medium_diverse's 14,977-parameter
+> trial is the smallest in the entire round and fails at 3.71. Note also that
+> narrow-and-deep is catastrophic on medium_play (0.69 vs 848.90 at nearly
+> identical parameter counts) and *clean* on large_diverse — so **shape**
+> matters more than **size**, in a variant-dependent way.
+
+**Data size does not order the failures either.** medium_play has 358 pairs
+and fails 88%; large_play has the *smallest* set at 254 pairs and fails 50%.
+ρ(train pairs, median `scale_z`) = −0.600 over four points, which is nothing.
+
+**And capacity cannot explain the 36% eligibility**, for the same reason
+§4.3.78 gave: capacity is positively correlated with `val_cvar_ce` in all four
+variants, and that objective is minimised — bigger is worse on the gate *and*
+worse on the objective, so it is not a trade-off the search cannot win. The
+optimiser already walked down to depth 2 (§4.3.78, median 4.5 → 2.0) **and the
+pass rate did not improve.**
+
+**Mechanistically this is the expected answer.** In the Wu et al. construction
+the **functional prior**, not the parameter count, is what regularises, so
+capacity should not act through overfitting at all — it would have to act
+through sampling geometry, and §4.3.70 measured τ as *flat* across the prior's
+whole eigenspectrum.
+
+**Worth one controlled run, not more.** large_diverse at fixed sampler
+settings and its selected `n_meas`/`map_amp2`, sweeping only capacity over the
+70× it already spans. That is the only way to tell a real capacity effect from
+six trials that happened to order themselves.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
