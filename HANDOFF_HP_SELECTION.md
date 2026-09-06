@@ -7811,13 +7811,10 @@ widening, measured directly at step resolution for the first time. It is
 168,940 leaves the functional prior too weak to hold `f`'s scale — not at the
 sampler, the schedule, the preconditioner or the activation.
 
-**But the probe window opens at `msd_start = 0`, immediately after burn-in, so
-a decaying transient is inside it — and a decaying transient reads
-super-diffusive exactly as an ongoing drive does.** These two are not yet
-separated. `--halves` now does it from the *same traces*, at no compute:
-if the second half's slope falls toward 1.0 the motion is a transient and
-burn-in is the fix; if it holds at ~1.7 the drive is ongoing and burn-in cannot
-touch it. **Run that before drawing any conclusion from the paragraph above.**
+> ⚠️ **The paragraph above is WITHDRAWN by §4.3.85.** The window opens at
+> `msd_start = 0`, so a decaying transient was inside it, and — decisively —
+> the run with the *most* ballistic invariant drift is the one that **passes**
+> the gate. The weight-norm drift is real but it is not the widening.
 
 #### The τ readings, and a bias in my own instrument
 
@@ -7847,6 +7844,72 @@ Also measured: **per-chain `D_f` spread of 2.84× (large_play) and 5.80×
 (medium_play)** — review §9.4's quantity, now at step resolution rather than
 inferred from `minv`. §4.3.79/§4.3.82/§4.3.83 already established a persistent
 between-chain difference cannot fail the gate, so this is recorded, not chased.
+
+### 4.3.85 The halves split — the gauge is closed, and §4.3.84's drift reading is withdrawn
+
+`--halves` on both probe traces, plus the two runs' own gate results from
+wandb. Outputs in `exp/halves_gauge_diffusion_*`.
+
+| | large_play (depth 6) | medium_play (depth 2) |
+|---|---|---|
+| centred `scale_z` | **1.739 PASS** | **9.144 FAIL** |
+| centred `scale_ratio` | 1.196 | 2.341 |
+| centred `rhat` / `ess` | **1.040** / 192.7 | 1.648 / 18.4 |
+| gauge slope, 1st → 2nd half | 1.661 → **1.153** | 1.122 → **0.923** |
+| invariant slope, 1st → 2nd half | 1.833 → **1.944** | 1.696 → **1.519** |
+| invariant variance, 1st → 2nd | 7.9× drop | 3.4× drop |
+
+#### 1. The gauge settles to free diffusion — the symmetry is real and harmless
+
+The gauge slope falls to **1.153** and **0.923** in the second half: **exactly
+1.0, free diffusion**, which is what a direction the potential is *exactly
+flat* along must do at equilibrium. So §4.3.81's structural claim is
+**confirmed** — `U` really is flat there and the chain really does free-diffuse
+along it — while §4.3.84's contrast already showed it is **not the driver**,
+because `f` is exactly invariant along that direction by construction.
+
+**Hypothesis 8 is closed: the ReLU rescaling symmetry is real, exact, and
+harmless.** It was worth deriving; it is not the problem. ReLU stays.
+
+#### 2. §4.3.84's "this is the widening" is WITHDRAWN
+
+The invariant coordinate stays super-diffusive in the second half (1.944 and
+1.519), and its amplitude decays — a 7.9× and 3.4× variance drop across
+25,000 steps implies an envelope relaxation time of **~24,000 and ~41,000
+steps**. So it is a *slow* transient, locally ballistic only because the window
+is shorter than its own timescale.
+
+> **But it does not track the gate, and the sign is backwards.** The run with
+> the **most** ballistic invariant drift (large_play, 1.944) is the one that
+> **PASSES** at `scale_z` 1.739 with `rhat` **1.040**; the run with less
+> (medium_play, 1.519) **FAILS** at 9.144. Scaling every layer together scales
+> `f`, so I read the drift as the widening — the gate results refute that
+> directly. **The weight-norm drift is real, ongoing on this timescale, and
+> not the mechanism.** `map_amp2` is not indicted by this evidence.
+
+#### 3. What the two runs DID establish, and it is the useful part
+
+**large_play at 100 draws is the best-converged configuration in this entire
+investigation**: centred `rhat` **1.040**, centred `ess` 193, and it passes
+both drift gates. Nothing else here has come near 1.01–1.05.
+
+And the pair is a clean confirmation of §4.3.67 at **matched total steps**:
+
+| | sampling steps | `cycle_length` × draws | §4.3.67 steps/indep | centred `rhat` |
+|---|---|---|---|---|
+| large_play | 50,000 | 500 × 100 | ~4,000 → **12 independent samples** | **1.040** |
+| medium_play | 52,250 | 2750 × 19 | ~100,000 → **0.5** | 1.648 |
+
+Same compute, 25× different outcome, entirely predicted by the per-variant
+constant. **§4.3.67's §10.2 implication — that medium_play and large_diverse
+need ~10× the sampling compute of the other two — is now confirmed on a fresh
+run rather than inferred**, and it is a budget fact the round-3 design does not
+encode: every variant currently gets the same `num_samples`.
+
+*Caveat worth keeping:* large_play's `val_cvar_ce` here is **7.786**, i.e. it
+converges beautifully to a bad model — consistent with §4.3.50's finding that
+large_play's reward model is saturated. Convergence and quality are separate
+axes and this run separates them cleanly.
 
 ### 4.4 Procedure
 
@@ -9112,9 +9175,19 @@ refuted since.
      --msd-traces exp/bnn_msd_probe_large_play_0/sampling_f --halves
    ```
 
-   Second-half slope falling toward 1.0 ⇒ a decaying transient, and burn-in is
-   the fix. Holding at ~1.7 ⇒ an ongoing drive that burn-in cannot touch,
-   which sends the question to §4.3.14 and `map_amp2`.
+   **DONE 2026-09-05 (§4.3.85).** The gauge settles to slope ~1.0 — free
+   diffusion, as an exactly-flat direction must — so **hypothesis 8 is closed:
+   the ReLU symmetry is real, exact and harmless.** The invariant coordinate's
+   drift is a slow transient (envelope ~24k–41k steps) but **does not track the
+   gate** — the most ballistic run is the one that PASSES — so §4.3.84's
+   "this is the widening" is withdrawn and `map_amp2` is not indicted.
+
+   **The live lever is now the per-variant budget, not a mechanism.** At
+   matched total steps (~50k) large_play reached centred `rhat` **1.040** —
+   the best-converged run in this project — while medium_play reached 1.648,
+   exactly as §4.3.67's 25× per-variant τ ratio predicts. Round 3 gives every
+   variant the same `num_samples`, which §4.3.67 already called "not a
+   defensible choice, an inherited accident".
 
    The commands that produced §4.3.84, kept for reproduction:
 
