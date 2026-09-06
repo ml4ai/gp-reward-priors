@@ -7968,6 +7968,94 @@ config. **Read on `|log(scale_ratio)|`** — reading it on `scale_z` or on the
 signed ratio would repeat §4.3.74's error, which is exactly what happened in
 the first pass above.
 
+### 4.3.87 The gate's tolerance was set by the chain count, not by anyone — relaunch criterion 1 answered
+
+`--num-chains` 8/16/32/64/128 on two saved 128-chain runs, one with real drift
+and one without. Outputs in `exp/chain_count_curve_*`. Zero compute: chains are
+deterministic in (seed, index), so this reproduces every lower rung exactly.
+
+**`r3_probe_w1024d6_0` — real drift (centred ratio ≈ 1.31):**
+
+| chains | 8 | 16 | 32 | 64 | 128 |
+|---|---|---|---|---|---|
+| centred `scale_ratio` | 1.335 | 1.315 | 1.312 | 1.319 | 1.314 |
+| centred `scale_z` | **2.01** | 2.94 | 4.46 | 6.87 | **10.16** |
+| `z / z(8)` | 1.00 | 1.46 | 2.22 | 3.42 | **5.05** |
+| `sqrt(chains/8)` | 1.00 | 1.41 | 2.00 | 2.83 | **4.00** |
+
+**The effect size is flat — 1.8% variation across a 16× chain range — while the
+statistic grows 5.05×, tracking `sqrt(chains)`.** The drift is identical at
+every rung; only the power to detect it changes.
+
+**`r3_trial1_medium_play_0` — no real drift (ratio ≈ 1.05):** `scale_z` goes
+0.53 → 0.87, i.e. **flat**, exactly as a z-statistic must behave under the
+null. **The gate is not broken**, and this independently re-confirms §4.3.74's
+null calibration.
+
+#### What that means, and it is not "the rejections are artefacts"
+
+The rejections are real drift, correctly detected. But the `z ≤ 2` threshold
+encodes a **different physical tolerance at every chain count**:
+
+| chains | 8 | 16 | **32** | 64 | 128 |
+|---|---|---|---|---|---|
+| widening the gate tolerates | 1.333× | 1.205× | **1.129×** | 1.084× | 1.055× |
+
+> **Nobody chose 1.129×.** Round 3 runs 32 chains because §3.2.5/§3.2.8 set
+> that for the **objective's standard error**. The stationarity tolerance fell
+> out of it as a side effect — two design decisions coupled through a
+> statistic neither of them was about. §4.2.1 warned that these z's "are NOT
+> comparable to a selection of a different size"; this quantifies it.
+
+**It also explains §4.3.78.** Eligibility did not improve as the optimiser
+converged because the tolerance is pinned at ~13% widening whatever the
+optimiser does. That was the last unexplained piece of relaunch criterion 1.
+
+#### The fix: state gate 1 as an effect size
+
+`|log(centred scale_ratio)| ≤ log(τ)` is **chain-count invariant**; `z` is not.
+Gate 3 (`ess ≥ 40`) already guarantees the ratio is *measurable*, so resolution
+and tolerance become two separate, explicit requirements instead of one
+implicit product. Report `z` as a diagnostic.
+
+The two statistics also **rank trials differently** — ρ(|log ratio|, z) = 0.828,
+not 1.0 — with real inversions inside one variant:
+
+| variant | centred ratio | \|log ratio\| | `z` | verdict |
+|---|---|---|---|---|
+| medium_play | 0.935 | 0.0667 | 0.77 | **PASS** |
+| medium_play | 0.978 | **0.0220** | 2.39 | **FAIL** |
+
+**A 2.2% widening was rejected while a 6.7% widening passed.** (The cause
+cannot be pinned down on these trials: the gate divides by its own per-half
+centred `ess1`/`ess2`, which round 3 did not log — §4.3.74 added
+`fn_drift_centred_ess_half_median` on 2026-09-04, so any future run can be
+checked directly.)
+
+#### Eligibility under an effect-size gate — and a warning about reading it
+
+| gate | eligible |
+|---|---|
+| current `z ≤ 2` | **39%** (11/28) |
+| ratio within [1/1.10, 1.10] | 25% |
+| ratio within [1/1.15, 1.15] | 39% |
+| ratio within [1/1.20, 1.20] | 54% |
+| ratio within [1/1.25, 1.25] | **61%** (17/28) |
+| ratio within [1/1.30, 1.30] | 71% |
+
+> ⚠️ **Do NOT pick the threshold off this table.** §10.2's target is ≥60% and
+> 1.25 delivers exactly 61% — choosing it for that reason is precisely the
+> reactive tuning §0 prohibits and would poison the procedure's auditability.
+> The table is here to show the gate is *reformulable*, not to select a number.
+>
+> **The threshold must come from a stated principle.** The defensible anchor is
+> downstream: the gate exists so the chains sample `P_{f|D}` well enough for
+> the estimand, and a scale error of `r` in the posterior propagates to the
+> CVaR reward roughly as `r`. So fix τ from the accuracy CVaR needs, decide it
+> before looking at the table again, and record the reasoning. An alternative
+> anchor — the null noise floor — just restates the current gate (§4.3.74's
+> null 95th ≈ 2 is 1.129× at 32 chains) and buys nothing.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -9283,11 +9371,15 @@ refuted since.
 
 #### Relaunch criteria — do not restart before these hold
 
-- **The `scale_z` rejection rate is understood.** Either a change raises the
-  eligible fraction materially on a pilot (target ≥ 60% against the observed
-  36%), or there is an accepted account of why ~36% is intrinsic. Relaunching
-  without this selects from a set whose membership is driven by something not
-  being searched.
+- **The `scale_z` rejection rate is understood.** ✅ **ANSWERED 2026-09-06
+  (§4.3.87).** The rejections are real drift, correctly detected — but the
+  `z ≤ 2` threshold encodes a tolerance that is a function of the CHAIN COUNT
+  (1.333× at 8 chains, **1.129× at 32**, 1.055× at 128), and 32 chains was
+  chosen for the *objective's standard error* (§3.2.5/§3.2.8), not for a drift
+  tolerance. The effect size is chain-count invariant (1.8% over a 16× range)
+  while `z` tracks `sqrt(chains)` (5.05× observed against 4.00× predicted).
+  **What remains is to restate gate 1 as an effect size and fix its threshold
+  from a stated principle — not from the eligibility table (§0).**
   > **One candidate account is already refuted (§4.3.78).** "It is an
   > early-exploration artefact and will rise as the optimiser converges" is
   > false: the optimiser moved decisively off `depth` — the one swept
