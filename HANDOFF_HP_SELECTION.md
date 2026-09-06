@@ -8056,6 +8056,94 @@ checked directly.)
 > anchor — the null noise floor — just restates the current gate (§4.3.74's
 > null 95th ≈ 2 is 1.129× at 32 chains) and buys nothing.
 
+### 4.3.88 τ settled at 1.122, from principle — and it does NOT raise eligibility
+
+§4.3.87 established the stationarity gate must be restated as an effect size.
+This fixes its threshold **before** consulting the eligibility table, as §0
+requires.
+
+#### The principle
+
+> **A systematic error must not exceed the random error the procedure already
+> accepts on the same quantity.** Rejecting a trial for a bias smaller than
+> your own noise floor is incoherent — you cannot measure it.
+
+Both inputs are already pre-registered; nothing is fitted to observed results.
+
+**The propagation is exact.** For a posterior with mean μ and sd σ,
+`CVaR = μ − k·σ` with `k = φ(z_α)/α`. A scale error `r` (σ → rσ) therefore
+multiplies the CVaR's deviation from the mean **exactly by `r`** — the
+quantity the whole objective is built on.
+
+**The noise floor** is gate 3's own: centred `ess ≥ 40`, and §3.2.1's "the tail
+holds `(1−c)·ess` effective draws". Note the convention, checked against the
+code (`cvar_ce()`'s docstring: "mean of the lowest **alpha** fraction", caller
+passes `alpha = 1 − conservatism`): **`alpha` is the tail fraction**, so
+selection at conservatism 0.75 is a **25% tail** and reporting at 0.95 a 5%
+tail.
+
+| use | conservatism | tail | `k` | sd(tail)/σ | tail draws | MCSE/σ | **τ** |
+|---|---|---|---|---|---|---|---|
+| **selection (the gate)** | 0.75 | 0.25 | 1.271 | 0.492 | 10.0 | 0.155 | **1.122** |
+| reporting | 0.95 | 0.05 | 2.063 | 0.372 | 2.0 | 0.263 | 1.127 |
+
+**τ = 1.122.** The two conservatism levels give 1.122 and 1.127 — essentially
+identical, so the answer does not depend on which one you anchor to, which is
+the robustness check that makes it worth trusting.
+
+**Gate 1 and gate 3 are now coupled by one principle**, `τ = 1 + C/√ess`, so
+they stop being two independent arbitrary numbers: a procedure demanding more
+resolution automatically demands less bias.
+
+| ess floor | 20 | **40** | 60 | 100 | 200 |
+|---|---|---|---|---|---|
+| τ | 1.172 | **1.122** | 1.100 | 1.077 | 1.055 |
+
+#### The uncomfortable consequence
+
+| gate | eligible (28 round-3 trials, 32 chains) |
+|---|---|
+| current `z ≤ 2` | **39%** |
+| principled `\|log ratio\| ≤ log(1.122)` | **39%** |
+
+The two agree on **86%** of trials. The 32-chain choice landed on a tolerance
+of 1.129× and the principle gives 1.122× — **a coincidence, but it means the
+current gate's severity was accidentally about right.**
+
+> **So §10.2's relaunch criterion 1 cannot be met by fixing the gate.** The
+> target of ≥60% eligibility was written on the assumption that the rejection
+> rate might be an artefact. It is not (§4.3.87: the gate is a correct z-test;
+> §4.3.74: it does not false-positive). **The eligible fraction is low because
+> the sampler genuinely does not deliver stationary chains at this budget.**
+> The reformulation buys chain-count invariance and interpretability, not a
+> higher pass rate. **The lever is the budget.**
+
+#### And the budget has TWO components, which I had been conflating
+
+They move different statistics:
+
+| lever | moves | why |
+|---|---|---|
+| **burn-in** | the **ratio** (gate 1) | §4.3.85 measured the drift envelope decaying with a ~24,000–41,000-step timescale; burn-in absorbs it |
+| **sampling steps** | the **ess** (gate 3) | §4.3.67: decorrelation is set by total sampling steps |
+
+§4.3.34/§4.3.65's "burn-in is not a general fix" was measured on **mixing**
+statistics (`rhat`, `ess_cen`), which burn-in should not move. It does not
+contradict this.
+
+**Weak supporting evidence, re-read on the effect size** (§4.3.79 grouped by
+burn-in on `scale_z`, which §4.3.87 has since shown is power-confounded):
+
+| burn-in | n | median ratio | within τ |
+|---|---|---|---|
+| 20,000 | 24 | 1.193× | **29%** |
+| 100,000 | 2 | 1.081× | **100%** |
+
+Suggestive and in the predicted direction, but **n = 2** at 100k. (The 5,000
+row is excluded: those are the `prof_cpg*` throughput runs, with different
+draw counts and 4–32 chains, not comparable.) **This needs a burn-in ladder
+read on `|log(scale_ratio)|` before any budget is fixed.**
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
