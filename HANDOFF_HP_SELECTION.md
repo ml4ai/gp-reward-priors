@@ -7534,6 +7534,11 @@ settings and its selected `n_meas`/`map_amp2`, sweeping only capacity over the
 70× it already spans. That is the only way to tell a real capacity effect from
 six trials that happened to order themselves.
 
+> **Amended 2026-09-05 (§4.3.86): the ρ = +1.000 above is on `scale_z`, which
+> is power-dependent. On the effect size it is +0.943 (exact p 0.0167) — same
+> conclusion, better grounded — and the ladder must be READ on
+> `|log(scale_ratio)|`, not on `scale_z` and not on the signed ratio.**
+
 ### 4.3.81 ReLU makes the weight posterior IMPROPER — hypothesis 8, and it is provable
 
 Raised 2026-09-04: can ReLU cause SGHMC non-stationarity, and does that extend
@@ -7910,6 +7915,58 @@ encode: every variant currently gets the same `num_samples`.
 converges beautifully to a bad model — consistent with §4.3.50's finding that
 large_play's reward model is saturated. Convergence and quality are separate
 axes and this run separates them cleanly.
+
+### 4.3.86 The capacity effect survives both confounds — on the effect size, not the statistic
+
+Checked 2026-09-05 when the capacity ladder (§4.3.80) came back up the queue.
+Two confounds had become live since it was written, and the second nearly
+destroyed the finding.
+
+**Confound 1 — budget. Runs the wrong way.** If capacity acted by slowing
+mixing, a ladder at fixed total steps would measure budget, not capacity. It
+does not: within large_diverse, ρ(`n_params`, raw `ess`) = **+0.771** and
+ρ(`n_params`, raw `rhat`) = **−0.771**. **Bigger models mix better here** and
+still fail stationarity harder.
+
+**Confound 2 — statistical power, and the first test of it was wrong.**
+`scale_z = |log ratio| / MCSE` grows with ESS at fixed drift, so the effect
+size must be read instead. Tested first on the **signed** `scale_ratio`:
+ρ = −0.371, p = 0.50 — which would have refuted the finding. **That is the
+wrong statistic**: expansion and contraction cancel, and large_diverse has
+both (ratios 1.2556 and 0.7295 at its two largest sizes). The gate acts on the
+magnitude.
+
+On `|log(scale_ratio)|`:
+
+| variant | ρ(`n_params`, \|log ratio\|) | exact p |
+|---|---|---|
+| **large_diverse** | **+0.943** | **0.0167** |
+| large_play | +0.687 | 0.067 |
+| medium_diverse | −0.169 | 1.000 |
+| medium_play | +0.096 | 0.830 |
+
+And `z / |log ratio|` is **9.4–13.3, flat** across large_diverse's whole
+capacity range while `ess` sits at 44–56 — so `z` is a near-constant rescaling
+of the effect size there, not an ESS artefact.
+
+**The capacity signal is real drift.** It survives both confounds, in two of
+four variants, measured on the effect size rather than the test statistic.
+§4.3.80's ρ = +1.000 was partly ordering-by-`z`; **+0.943 on `|log ratio|`** is
+the number to quote.
+
+> **And it now has no mechanism at all.** Hypothesis 8's appeal included
+> explaining ρ(depth, `scale_z`) = +0.354 through the ReLU symmetry group's
+> dimension being the hidden-layer count. §4.3.84 refuted hypothesis 8, so
+> that explanation is withdrawn and capacity is once again an unexplained,
+> replicated empirical effect on the gate — **the only one left.**
+
+**Ladder design, amended.** Vary **width** at fixed depth: within
+large_diverse width is the driver (§4.3.78, ρ +0.956) and it gives a clean
+one-axis capacity sweep. Width 6–9 at depth 4 spans 14,977 → 807,937 (54×),
+entirely inside the searched range, every sampler setting at the settled
+config. **Read on `|log(scale_ratio)|`** — reading it on `scale_z` or on the
+signed ratio would repeat §4.3.74's error, which is exactly what happened in
+the first pass above.
 
 ### 4.4 Procedure
 
