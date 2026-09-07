@@ -8266,6 +8266,76 @@ already-saved chains. K is directly comparable to `n_discarded` (one draw per
 cycle). Applied before `--max-draws`. So the discard lever can be laddered on
 the burn-in ladder's four saved runs at no compute.
 
+### 4.3.91 `n_discarded` is the efficient equilibrator — ~10× better per step than burn-in
+
+`--skip-draws` on `burnin_ladder_medium_play_b20000_0`'s saved chains, no
+compute. `exp/n_discarded_ladder_medium_play_0.txt`.
+
+| discarded | 0 | 2 | 5 | 10 | 15 |
+|---|---|---|---|---|---|
+| centred `scale_ratio` | 2.159 | 1.946 | 1.711 | 1.458 | **1.262** |
+| `\|log ratio\|` | 0.770 | 0.666 | 0.537 | 0.377 | **0.233** |
+| vs τ = 1.122 | 6.69× | 5.78× | 4.67× | 3.28× | **2.02×** |
+
+**Monotone, and steep.** The fit is exponential — `|log ratio| ∝ exp(−0.0785·K)`,
+an e-folding every **12.7 draws** — against burn-in's power law of exponent
+−0.259. Extrapolated, τ is reached at **K ≈ 24 draws ≈ 67,000 steps**.
+
+#### The comparison that matters, on one axis
+
+Both levers spend sampling steps on equilibration. On the **same config**:
+
+| lever | steps spent | `\|log ratio\|` cut |
+|---|---|---|
+| burn-in 20,000 → 200,000 | 180,000 | 44% |
+| **discard 0 → 15 draws** | **41,250** | **70%** |
+
+**Discarding at the sampling schedule is roughly an order of magnitude more
+efficient per step than extending burn-in.**
+
+> **And there is an obvious mechanism.** `burn_in_lr` is deliberately absent
+> (§10.3, review §3), so **burn-in runs the whole time at `lr_min`** — the
+> coldest step size in the schedule, i.e. the least exploratory setting
+> available. Discarded draws instead run the **full cosine, hot phase
+> included**. So the project has been equilibrating with its least efficient
+> step size and sampling with its most efficient one. This also fits §4.3.6,
+> where *removing* the cyclical schedule made drift worse.
+>
+> **Prediction:** setting `burn_in_lr` toward `lr_max` (or making burn-in
+> cyclical) should recover most of burn-in's lost efficiency. Review §3 has
+> recommended pinning `burn_in_lr` since 2026-09-04 for a different reason —
+> deconfounding the ε ladder — and this makes it a design lever too.
+
+#### Provisional, and the confound that must be cleared first
+
+**Discarding also shortens the window** (30 draws → 30−K), and the ratio
+depends on window length. §4.3.90 measured that dependence *within* a run at
+exponent −0.643 — and it runs the **opposite** way: fewer draws gave a
+*larger* `|log ratio|`. So the window effect opposes what is observed here and
+the discard effect is, if anything, **understated**. But that exponent came
+from a different (well-behaved) run, so it is an argument, not a control.
+
+**The clean control is a fixed-width sliding window** — `--skip-draws K
+--max-draws W` with `W` held fixed, which the tool now supports (skip is
+applied before truncate). At 30 draws and `W` = 15 that gives K = 0, 5, 10, 15
+at constant width. **Run that before budgeting on this.**
+
+#### If it survives, the budget rule gets simpler
+
+Both requirements then live on **one axis, draws**:
+
+```
+total sampling steps = (n_discarded + num_samples) x cycle_length
+    n_discarded  sized per variant to reach tau      (stationarity, gate 1)
+    num_samples  sized to reach the ess floor        (resolution, gate 3)
+```
+
+For medium_play that is `n_discarded` ≈ 24 against round 3's **5** — and at
+`cycle_length` 2000 the trial cost goes from (5+60)×2000 = 130,000 to
+(24+60)×2000 = **168,000 steps, a 1.3× increase**. Affordable, and far below
+the 10× §4.3.67 implied. §10.3 lists `n_discarded` as "owned by no stage;
+decide deliberately" — this is the measurement that would let a stage own it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
