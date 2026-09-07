@@ -8318,7 +8318,8 @@ from a different (well-behaved) run, so it is an argument, not a control.
 **The clean control is a fixed-width sliding window** — `--skip-draws K
 --max-draws W` with `W` held fixed, which the tool now supports (skip is
 applied before truncate). At 30 draws and `W` = 15 that gives K = 0, 5, 10, 15
-at constant width. **Run that before budgeting on this.**
+at constant width. ✅ **Run 2026-09-07 — the confound is CLEARED and the effect
+is larger than the variable-width ladder showed. See §4.3.92.**
 
 #### If it survives, the budget rule gets simpler
 
@@ -8335,6 +8336,45 @@ For medium_play that is `n_discarded` ≈ 24 against round 3's **5** — and at
 (24+60)×2000 = **168,000 steps, a 1.3× increase**. Affordable, and far below
 the 10× §4.3.67 implied. §10.3 lists `n_discarded` as "owned by no stage;
 decide deliberately" — this is the measurement that would let a stage own it.
+
+### 4.3.92 The discard effect survives the fixed-width control — but it decelerates
+
+`--skip-draws K --max-draws 15` on the same saved chains: **window held at 15
+draws throughout**, so only the start point moves.
+`exp/sliding_window_check_medium_play_0.txt`.
+
+| K discarded | 0 | 5 | 10 | 15 |
+|---|---|---|---|---|
+| centred `scale_ratio` (width 15) | **2.409** | 1.634 | 1.376 | **1.262** |
+| `\|log ratio\|` | 0.879 | 0.491 | 0.319 | **0.233** |
+| *variable-width ladder, for comparison* | *0.770* | *0.537* | *0.377* | *0.233* |
+
+**The confound is cleared.** At constant width `|log ratio|` falls **74%**,
+*more* than the variable-width ladder's 70% — exactly as §4.3.90's window
+direction predicted, since the shrinking window had been working against the
+discard. `n_discarded` is a real lever, and §4.3.91's ~10×-better-per-step
+comparison against burn-in stands.
+
+> ⚠️ **But the decay DECELERATES, so §4.3.91's "K ≈ 24" must not be used.**
+> The log-decrements per 5 draws are −0.583, −0.431, −0.316 — successive ratios
+> **0.74, 0.73**, i.e. geometric rather than exponential-in-K. Extrapolating
+> that geometric series puts the floor at `|log ratio|` ≈ 0.095 — it *would*
+> cross τ = 0.115, but only just, and at **K ≈ 40+** rather than 24.
+>
+> **Four points ending at 2× τ cannot pin this down.** The honest statement is
+> that discarding reaches τ somewhere between K = 24 and K = 40+, or asymptotes
+> just above it. Budgeting on any of those numbers would be extrapolating a
+> decelerating curve well past its data.
+
+**What would settle it:** one medium_play run at `n_discarded 0` with enough
+draws to ladder K past 40 at fixed width — `num_samples` 90 gives K = 0…60 at
+width 30, for 247,500 sampling steps (about half a round-3 trial).
+
+**But §4.3.91's mechanism suggests a cheaper fix first.** If burn-in is
+inefficient *because it runs at `lr_min`*, then raising `burn_in_lr` recovers
+that efficiency **without spending draw budget at all** — burn-in steps are not
+draws. That test is one or two runs and it makes the discard-curve question
+moot if it works.
 
 ### 4.4 Procedure
 
