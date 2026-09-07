@@ -8144,6 +8144,58 @@ row is excluded: those are the `prof_cpg*` throughput runs, with different
 draw counts and 4–32 chains, not comparable.) **This needs a burn-in ladder
 read on `|log(scale_ratio)|` before any budget is fixed.**
 
+### 4.3.89 Burn-in is a real but far too weak lever; the sampling WINDOW is the strong one
+
+Burn-in ladder on medium_play, settled config, `num_samples` pinned at 30 so
+the rungs are comparable (§4.3.12: the ratio depends on window length).
+`exp/burnin_ladder_medium_play_0.txt`.
+
+| burn-in | 20,000 | 50,000 | 100,000 | 200,000 |
+|---|---|---|---|---|
+| centred `scale_ratio` | 2.159 | 2.086 | 1.722 | 1.544 |
+| `\|log ratio\|` | 0.770 | 0.735 | 0.544 | 0.434 |
+| × over τ = 1.122 | 6.7× | 6.4× | 4.7× | **3.8×** |
+
+**Burn-in does move the effect size** — §4.3.85's decaying envelope predicted
+it, and §4.3.79's null grouping (on the power-confounded `scale_z`) had missed
+it. But the exponent is **−0.259**: a **10× burn-in bought a 44% cut**, and
+reaching τ from 200,000 would need **~40,000,000 steps**. **§4.3.34's "burn-in
+is not a general fix" now holds on the effect size too, and is quantified.**
+
+#### The window is a 6.5× stronger lever — three matched points
+
+All settled medium_play (width 64, depth 2, `cycle_length` 2750), **all at
+20,000 burn-in** (verified from each run's `FROZEN at step` line), differing
+only in the number of draws:
+
+| draws | sampling steps | ratio | `\|log ratio\|` | vs τ | source |
+|---|---|---|---|---|---|
+| 19 | 52,250 | 2.341 | 0.851 | 7.4× | MSD probe run |
+| 30 | 82,500 | 2.159 | 0.770 | 6.7× | burn-in ladder rung 1 |
+| **120** | **330,000** | **1.047** | **0.046** | **0.4× — PASSES** | `r3_trial1_medium_play_0` |
+
+Power-law exponent **−1.689** against burn-in's −0.259. Extrapolating, τ is
+reached at **~74 draws / ~203,000 sampling steps** — against round 3's 120,000.
+That is a **1.7× budget increase**, not the 10× §4.3.67 implied.
+
+> ⚠️ **DO NOT budget on this until the mechanism is checked.** The gate
+> compares the **first half against the second half**. A saturating transient
+> that finishes early gets **buried inside the first half** as the window
+> grows, so `sd1 ≈ sd2` and the gate passes — **without the early draws being
+> any less contaminated.** A falling ratio is therefore consistent with two
+> very different things:
+>
+> | reading | consequence |
+> |---|---|
+> | the chain really does settle, and the late draws are stationary | budget on the window, and use `n_discarded` to drop the transient — the honest fix |
+> | the transient persists but the halves become similar | the gate is **losing sensitivity**, and a longer window is gaming it |
+>
+> **This is decidable for free** from `r3_trial1_medium_play_0`'s saved chains:
+> `--drift-blocks 5` shows whether the block-to-block shift decays to zero
+> (settling) or stays flat (persistent drive), and `--max-draws` reproduces
+> the shorter windows from the same chains, isolating window length from
+> everything else.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
