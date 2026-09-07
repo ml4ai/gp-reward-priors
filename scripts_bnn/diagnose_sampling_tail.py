@@ -2263,6 +2263,16 @@ def main():
                          "drive (burn-in cannot fix it -- it acts during "
                          "sampling). Try K=5. Needs no extra sampling "
                          "(section 4.3.5).")
+    ap.add_argument("--skip-draws", type=int, default=0, metavar="K",
+                    help="Drop the FIRST K draws of every chain before any "
+                         "statistic. Emulates n_discarded on already-saved "
+                         "chains, so the discard lever can be laddered for "
+                         "free instead of one training run per rung. "
+                         "n_discarded is measured in CYCLES and each cycle "
+                         "yields one draw, so K here is directly comparable "
+                         "to n_discarded. Applied BEFORE --max-draws. "
+                         "Section 10.3 notes n_discarded is 'owned by no "
+                         "stage'; 4.3.90 is why that matters.")
     ap.add_argument("--max-draws", type=int, default=None,
                     help="Use only the first N draws per chain (default: all). "
                          "Lets one completed run stand in for a smaller budget.")
@@ -2363,6 +2373,18 @@ def main():
 
     pred_chains, x_rhat = build_pred_chains(
         args.run_dir, dataset, width, depth, chain_ids, args.b_rhat, args.device)
+
+    if args.skip_draws:
+        if args.skip_draws < 1:
+            sys.exit("--skip-draws must be >= 1")
+        avail = pred_chains.shape[1]
+        if args.skip_draws >= avail:
+            sys.exit(f"--skip-draws {args.skip_draws} leaves nothing of the "
+                     f"{avail} draws saved per chain.")
+        pred_chains = pred_chains[:, args.skip_draws:, :]
+        print(f"[draws] dropped the first {args.skip_draws} per chain "
+              f"(emulating n_discarded={args.skip_draws}) -> "
+              f"{pred_chains.shape[1]} remain")
 
     if args.max_draws is not None:
         if args.max_draws < 1:

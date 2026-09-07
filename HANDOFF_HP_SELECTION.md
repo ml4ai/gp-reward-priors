@@ -8196,6 +8196,76 @@ That is a **1.7× budget increase**, not the 10× §4.3.67 implied.
 > the shorter windows from the same chains, isolating window length from
 > everything else.
 
+> ⚠️ **The window claim above is WITHDRAWN by §4.3.90.** The three "matched"
+> points were matched on neither `n_discarded` (5 vs 0) nor `cycle_length`
+> (2000 vs 2750). Within one run the exponent is −0.643, non-monotone, and
+> every window passes τ. **The burn-in ladder's own internal trend stands** —
+> its four rungs shared every setting.
+
+### 4.3.90 The window finding is withdrawn — it was my own confound, and it exposes `n_discarded`
+
+Both free checks run on `r3_trial1_medium_play_0`'s saved chains.
+`exp/drift_blocks_*`, `exp/max_draws_ladder_*`.
+
+#### The window effect does not survive a within-run test
+
+Varying the window on **the same chains**:
+
+| draws | 19 | 30 | 60 | 120 |
+|---|---|---|---|---|
+| centred `scale_ratio` | 0.904 | 0.929 | 0.988 | 1.047 |
+| `\|log ratio\|` | 0.101 | 0.074 | 0.012 | 0.046 |
+| vs τ | 0.88× | 0.64× | 0.10× | 0.40× |
+
+Exponent **−0.643**, non-monotone, and **every window is already inside τ**.
+Against the cross-run claim of −1.689.
+
+**§4.3.89's window finding is withdrawn, and the cause was mine.** Checked
+against wandb:
+
+| run | `n_discarded` | `cycle_length` | ratio |
+|---|---|---|---|
+| `r3_trial1_medium_play_0` | **5** | **2000** | 1.047 |
+| MSD probe medium_play | **0** | 2750 | 2.341 |
+| burn-in ladder rung 1 | **0** | 2750 | 2.159 |
+
+The three points differed in `n_discarded` *and* `cycle_length`. I set
+`--n_discarded 0` in both diagnostic commands, which **removed a discard the
+production config applies**. The burn-in ladder's *internal* trend stands
+(all four rungs shared every setting); only the comparison against
+`r3_trial1` was invalid.
+
+#### The blocks say ONGOING DRIVE, not a transient
+
+Centred spread across 5 blocks: **1.000 → 0.964 → 1.004 → 1.028 → 1.051**.
+The tool's reading: *"the identified component is WIDENING (1.0512 by the last
+block). The per-block change is roughly CONSTANT... i.e. an ONGOING DRIVE
+throughout sampling. Initialisation is NOT the cause and burn-in cannot fix
+it."*
+
+So the "buried transient" worry is answered — **there is no large early
+transient in the centred component here.** The widening is ~5% over the whole
+run, ongoing and small. Note the raw column climbs 1.00 → 2.12, which is the
+offset again, not the identified shape.
+
+*Carry the tool's own caveat:* "SHAPE NOT RESOLVED. No block step reaches 2×
+the floor (max 0.24×)" — the block-to-block *mean* shifts are unresolved. The
+sd trajectory is the better-determined column and is what the reading above
+rests on.
+
+#### What this leaves: `n_discarded`, a knob no stage owns
+
+§10.3 lists `n_discarded` as "owned by no stage; decide deliberately". It has
+never been laddered, and the accidental contrast above — 1.047 at
+`n_discarded` 5 against 2.159–2.341 at 0 — is confounded with `cycle_length`
+but large enough to be worth one clean measurement.
+
+**Now free to test:** `diagnose_sampling_tail.py --skip-draws K` drops the
+first K draws of every chain before any statistic, emulating `n_discarded` on
+already-saved chains. K is directly comparable to `n_discarded` (one draw per
+cycle). Applied before `--max-draws`. So the discard lever can be laddered on
+the burn-in ladder's four saved runs at no compute.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
