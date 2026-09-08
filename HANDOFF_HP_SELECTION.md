@@ -8427,6 +8427,54 @@ chains. A result near 0.116 confirms composition and hands over a recipe; a
 result near 0.383 means the discard was substituting for burn-in all along and
 the two are the same lever seen twice.
 
+### 4.3.94 The levers compose, but sub-multiplicatively — and we are now at the noise floor
+
+`--skip-draws K --max-draws 15` on the `burn_in_lr = lr_max` run's saved
+chains. Both arms at burn-in 20,000, width 15 draws; **only `burn_in_lr`
+differs.** `exp/burnlr_skip_draws_medium_play_0.txt`.
+
+| K | `lr_min` ratio | `\|log\|` | `lr_max` ratio | `\|log\|` | ratio of ratios | vs τ |
+|---|---|---|---|---|---|---|
+| 0 | 2.409 | 0.879 | 1.315 | 0.274 | 0.311 | 2.38× |
+| 5 | 1.634 | 0.491 | 1.254 | 0.226 | 0.461 | 1.97× |
+| **10** | 1.376 | 0.319 | **1.172** | **0.159** | 0.497 | **1.38×** |
+| 15 | 1.262 | 0.233 | 1.188 | 0.172 | 0.740 | 1.50× |
+
+**The pre-registered prediction was 0.1157. Observed 0.1723 — 1.49× off.**
+
+**Composition is real but sub-multiplicative.** `lr_max` cuts 69% at K = 0 and
+only 26% at K = 15: the two levers partly do the same job, which is what
+§4.3.91's mechanism implies — both are equilibration, one before the draws and
+one during them.
+
+**The recipe is nonetheless a large, cheap win.** `burn_in_lr = lr_max` plus
+`n_discarded ≈ 10` takes medium_play from `|log ratio|` 0.879 to **0.159** — an
+**82% reduction**, ratio 2.409 → **1.172** — at no extra sampling budget and
+one tenth the burn-in compute of the 200k rung.
+
+> ⚠️ **But it stops at ~1.4× τ, and we are at the noise floor.** Two
+> independent signs:
+>
+> 1. **K = 10 → 15 goes the wrong way**: 0.159 → 0.172.
+> 2. **The window effect flips sign between the two runs.** `lr_min`:
+>    w30 0.770 → w15 0.879 (shorter *worse*). `lr_max`: w30 0.383 → w15 0.274
+>    (shorter *better*). §4.3.90 measured this within a run as a real,
+>    consistent effect; it cannot legitimately point both ways.
+>
+> Both discrepancies are ~0.1 in `|log ratio|`. **Below ~0.2 these single-run
+> measurements are not resolved**, and **the replicate is still missing** — the
+> file delivered as the noise estimate was this composition test, and no
+> `replicate_*` output exists. Every comparison in §4.3.89–§4.3.94 rests on
+> unreplicated points; this is now the binding measurement.
+
+> ⚠️ **A trap to name explicitly.** The achieved floor (~1.17) sits close to
+> τ = 1.122, and §4.3.88's `τ = 1 + C/√ess` gives **exactly 1.172 at an ess
+> floor of 20**. It would be easy to "discover" that gate 3's floor should be
+> 20 and declare the problem solved. **That is reverse-engineering τ from what
+> is achievable — the same reactive tuning §0 prohibits and that §4.3.87
+> refused over the eligibility table.** τ stays at 1.122 unless the *downstream
+> accuracy argument* changes.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
