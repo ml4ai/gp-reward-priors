@@ -8376,6 +8376,57 @@ that efficiency **without spending draw budget at all** — burn-in steps are no
 draws. That test is one or two runs and it makes the discard-curve question
 moot if it works.
 
+### 4.3.93 `burn_in_lr` confirms the mechanism — 20k steps at `lr_max` beats 200k at `lr_min`
+
+§4.3.91 predicted that burn-in is inefficient *because* it runs at `lr_min`
+(`burn_in_lr` is deliberately absent, §10.3). Tested on medium_play, all at
+20,000 burn-in steps, 30 draws, `n_discarded 0`.
+`exp/burnlr_medium_play_0.txt`.
+
+| `burn_in_lr` | × `lr_min` | centred ratio | `\|log ratio\|` | vs τ |
+|---|---|---|---|---|
+| 2.49e-4 (`lr_min`, control) | 1.00 | 2.159 | 0.770 | 6.69× |
+| 4.98e-4 | 2.00 | 2.182 | **0.780** | 6.78× |
+| **8.72e-4 (`lr_max`)** | 3.50 | **1.466** | **0.383** | **3.32×** |
+
+**The mechanism is confirmed.** Against the burn-in *length* ladder (§4.3.89,
+all at `lr_min`): 200,000 steps reached 0.434. **20,000 steps at `lr_max`
+reaches 0.383 — better, for one tenth the burn-in compute.**
+
+The scale is right too: diffusion goes as ε², and `(lr_max/lr_min)² = 12.3`, so
+20,000 steps at `lr_max` is ~**245,000** `lr_min`-equivalent steps — which
+should just beat the 200,000-step rung, and does.
+
+> ⚠️ **The 2× rung is a genuine anomaly and I cannot explain it away.** Pure ε²
+> scaling makes 2× `lr_min` worth ~80,000 equivalent steps, which the length
+> ladder puts at `|log ratio|` ≈ 0.62. It measured **0.780** — no effect at all.
+> Either the response is strongly non-linear in ε, or the run-to-run noise is
+> larger than the 1.4% separating it from the control. **There is no replicate
+> anywhere in this ladder, so the noise floor is unknown**, and every
+> single-run comparison in §4.3.89–§4.3.93 inherits that. One replicate at a
+> different `sampling_seed` (same data, independent chains) would bound it.
+
+#### Neither lever alone reaches τ — but they may compose
+
+| best of each | `\|log ratio\|` | vs τ |
+|---|---|---|
+| `burn_in_lr = lr_max`, K = 0 | 0.383 | 3.32× |
+| `burn_in_lr = lr_min`, K = 15 | 0.233 | 2.02× |
+
+**Pre-registered prediction, written before the test is run.** The discard
+lever multiplied `|log ratio|` by **0.302** on the control (0.770 → 0.233). If
+the two levers compose multiplicatively, `lr_max` at K = 15 gives
+
+```
+0.3825 x 0.302 = 0.1157      against  tau = 0.1151
+```
+
+i.e. **essentially exactly on τ.** The test is **free** — the `lr_max` run
+already has 30 draws at `n_discarded 0`, so K can be laddered on its saved
+chains. A result near 0.116 confirms composition and hands over a recipe; a
+result near 0.383 means the discard was substituting for burn-in all along and
+the two are the same lever seen twice.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
