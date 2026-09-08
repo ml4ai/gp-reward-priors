@@ -8462,10 +8462,11 @@ one tenth the burn-in compute of the 200k rung.
 >    consistent effect; it cannot legitimately point both ways.
 >
 > Both discrepancies are ~0.1 in `|log ratio|`. **Below ~0.2 these single-run
-> measurements are not resolved**, and **the replicate is still missing** — the
-> file delivered as the noise estimate was this composition test, and no
-> `replicate_*` output exists. Every comparison in §4.3.89–§4.3.94 rests on
-> unreplicated points; this is now the binding measurement.
+> measurements are not resolved.**
+>
+> ✅ **The replicate exists — §4.3.95 measures the floor at ~0.07 and confirms
+> this suspicion. The "it stops at 1.4× τ" reading above is WITHDRAWN: the
+> recipe is within noise of τ.**
 
 > ⚠️ **A trap to name explicitly.** The achieved floor (~1.17) sits close to
 > τ = 1.122, and §4.3.88's `τ = 1 + C/√ess` gives **exactly 1.172 at an ess
@@ -8474,6 +8475,69 @@ one tenth the burn-in compute of the 200k rung.
 > is achievable — the same reactive tuning §0 prohibits and that §4.3.87
 > refused over the eligibility table.** τ stays at 1.122 unless the *downstream
 > accuracy argument* changes.
+
+### 4.3.95 The noise floor, measured — and the recipe is within noise of τ
+
+`replicate_medium_play_s7_0`: identical to the `b20000` control in every
+respect except `sampling_seed` 7 (same data, independent chains). Read from
+wandb — the run lives on the box, not in local `exp/`.
+
+| | centred ratio | `\|log ratio\|` |
+|---|---|---|
+| control (`burnin_ladder_..._b20000_0`) | 2.159 | 0.7697 |
+| replicate (`sampling_seed` 7) | 1.950 | 0.6678 |
+| **difference** | | **0.1019** |
+
+**Run-to-run σ ≈ 0.072** in `|log ratio|`. One pair means one degree of
+freedom, so the true σ is plausibly anywhere in **0.03–0.18** — enough to
+re-read the ladders, not enough to settle fine structure. **More replicates
+are the cheapest remaining measurement in this whole investigation.**
+
+#### Every between-run comparison, re-read
+
+| comparison | Δ`\|log ratio\|` | σ | verdict |
+|---|---|---|---|
+| burn-in 20k → 200k | 0.335 | 4.7 | **REAL** |
+| `burn_in_lr` `lr_min` → `lr_max` | 0.387 | 5.4 | **REAL** |
+| `lr_max` vs `lr_min` at K = 0 | 0.605 | 8.4 | **REAL** |
+| `lr_max` vs `lr_min` at K = 10 | 0.161 | 2.2 | marginal |
+| `lr_max` vs `lr_min` at K = 15 | 0.060 | 0.8 | **NOT RESOLVED** |
+| `burn_in_lr` `lr_min` → 2× | 0.011 | 0.1 | **NOT RESOLVED** |
+
+> **Note which comparisons this applies to.** The `n_discarded` and
+> `--max-draws` ladders are **within-run** — sub-windows of one chain set — so
+> they are correlated and carry a *smaller* error than σ = 0.072. The burn-in
+> length and `burn_in_lr` ladders are **between-run** and carry the full floor.
+
+#### What survives, and the headline correction
+
+**Survives, comfortably:** `burn_in_lr = lr_max` (5.4σ), the discard lever
+(within-run, 0.879 → 0.233 across many steps), and the burn-in length trend
+(4.7σ end-to-end, though its intermediate rungs are 0.5–2.6σ and its
+monotonicity is not established point by point).
+
+**Does not survive:** the claim that `lr_max` still helps *once K = 15 draws
+are discarded* (0.8σ). At large K the two levers are indistinguishable, which
+is consistent with §4.3.94's sub-multiplicative reading but means the
+composition's fine structure is unmeasured.
+
+**The 2× `lr_min` anomaly stays open but softens.** At 0.1σ it is a clean null;
+ε² scaling predicted a Δ of ~0.15, which is only ~2σ, so a single run had
+roughly even odds of resolving it. It is weak evidence against ε² scaling, not
+the anomaly §4.3.93 called it.
+
+> ⚠️ **§4.3.94's headline is WITHDRAWN.** Best achieved `|log ratio|` **0.1587**
+> against **τ = 0.1151** is a gap of **0.044 = 0.60σ**. **The recipe is within
+> noise of τ** — "it stops at 1.4× τ" was reading a difference smaller than the
+> measurement error. Equally, it is **not established that it passes**: at this
+> σ the point estimate sits on the wrong side of τ with wide uncertainty.
+> **Distinguishing "passes" from "just fails" now needs replication, not a new
+> lever.**
+
+**This is the first time in the investigation that a configuration has come
+within noise of the stationarity gate**, and it was reached with two knobs that
+cost almost nothing: `burn_in_lr = lr_max` (no extra steps, just a larger one)
+and `n_discarded ≈ 10` (10 draws of a 30-draw budget).
 
 ### 4.4 Procedure
 
