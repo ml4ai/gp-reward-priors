@@ -8526,6 +8526,11 @@ composition's fine structure is unmeasured.
 roughly even odds of resolving it. It is weak evidence against ε² scaling, not
 the anomaly §4.3.93 called it.
 
+> ⚠️ **This section's own headline was withdrawn in turn by §4.3.96** — 0.1587
+> is an offline sub-window number; the same config on real runs at the
+> operative window reads 0.3015 and fails τ by 7.3 SE. The paragraph below is
+> kept as the record of the error.
+>
 > ⚠️ **§4.3.94's headline is WITHDRAWN.** Best achieved `|log ratio|` **0.1587**
 > against **τ = 0.1151** is a gap of **0.044 = 0.60σ**. **The recipe is within
 > noise of τ** — "it stops at 1.4× τ" was reading a difference smaller than the
@@ -8538,6 +8543,75 @@ the anomaly §4.3.93 called it.
 within noise of the stationarity gate**, and it was reached with two knobs that
 cost almost nothing: `burn_in_lr = lr_max` (no extra steps, just a larger one)
 and `n_discarded ≈ 10` (10 draws of a 30-draw budget).
+
+### 4.3.96 The recipe replicated on real runs — it FAILS τ, and sub-window emulation is not a substitute
+
+Four production runs at the recipe (`burn_in_lr = lr_max`, `n_discarded 10`,
+`num_samples 30`, burn-in 20,000, 8 chains), differing only in `sampling_seed`.
+
+| seed | ratio | `\|log\|` | `scale_z` | `loc_z` | centred ess | centred rhat | `val_cvar_ce` |
+|---|---|---|---|---|---|---|---|
+| 1 | 1.360 | 0.3078 | 1.24 | 0.66 | 12.9 | 2.113 | 0.302 |
+| 2 | 1.450 | 0.3713 | 1.49 | 0.87 | 13.5 | 1.953 | 0.310 |
+| 3 | 1.311 | 0.2711 | 1.12 | 0.68 | 13.3 | 1.992 | 0.279 |
+| 4 | 1.292 | 0.2560 | 1.04 | 0.69 | 12.9 | 2.111 | 0.289 |
+
+**Mean `|log ratio|` = 0.3015, sd 0.0513 (3 dof), SE 0.0257.** Against
+τ = 0.1151 that is a gap of **+0.186 = 7.3 SE**. **The recipe FAILS the
+stationarity gate decisively** (ratio 1.352 against τ 1.122).
+
+> ⚠️ **§4.3.95's "the recipe is within noise of τ" is WITHDRAWN.** It read the
+> **offline sub-window emulation** (`--skip-draws 10 --max-draws 15`), which
+> gave 0.1587. The same configuration measured on real runs at the **full
+> retained window** gives **0.3015 — 1.90× larger.**
+>
+> **The production gate reads the whole retained window**, so window 30 is the
+> operative number and window 15 was never the quantity being gated.
+> **Sub-window emulation is valid for detecting a within-run trend and NOT for
+> any absolute claim.** §4.3.90 and §4.3.94 both noted window effects of
+> ~0.1 pointing in inconsistent directions; this is the same effect, now large
+> enough to have inverted a conclusion. **This is the second withdrawal in
+> three sections** — §4.3.94's "stops at 1.4× τ" and now §4.3.95's "within
+> noise of τ" — and both came from mixing emulated and production windows.
+
+#### What survives, on production runs at the operative window
+
+| | `\|log ratio\|` |
+|---|---|
+| `lr_min`, K = 0 (control + replicate, mean) | 0.7188 |
+| `lr_max`, K = 0 | 0.3823 |
+| `lr_max`, K = 10 (recipe, n = 4) | **0.3015 ± 0.0257** |
+
+| effect | Δ | σ | verdict |
+|---|---|---|---|
+| **`burn_in_lr` = `lr_max`** | 0.337 | **4.7** | **REAL** |
+| `n_discarded` 10 on top of it | 0.081 | 1.1 | **NOT RESOLVED** |
+
+**`burn_in_lr = lr_max` is the one durable win of §4.3.89–§4.3.96** — a 47% cut
+in the effect size, replicated, at no extra sampling budget. **The discard's
+marginal value on top of it is not resolved at the operative window**, so
+§4.3.91–92's discard ladder — measured entirely on emulated sub-windows —
+does not carry over as an independent lever.
+
+#### And these runs fail gate 3 as well
+
+Centred `ess` **12.9–13.5** against gate 3's floor of **40**, and centred
+`rhat` **1.95–2.11**. They were sized for the ratio, not for resolution: 8
+chains × 30 draws is 1.6 effective draws per chain. **Nothing here is a
+candidate configuration; they are ratio measurements only.**
+
+#### Where this leaves medium_play
+
+Closing the remaining gap needs a further **62%** cut in `|log ratio|` *and*
+roughly **3×** the effective draws. No lever found in §4.3.89–§4.3.96 comes
+close to either. The residual is the **ongoing widening of §4.3.90** — constant
+per block, not a transient, and unexplained after eight refuted mechanisms.
+
+**The next measurement should be a production-scale run, not another
+diagnostic.** Round-3 settings (32 chains, 60 draws, `cycle_length` 2000) with
+`burn_in_lr = lr_max` answers the question the relaunch actually turns on:
+*does the one durable lever make round-3 trials eligible?* One run, round-3
+cost, and both gates read at the budget they were written for.
 
 ### 4.4 Procedure
 
