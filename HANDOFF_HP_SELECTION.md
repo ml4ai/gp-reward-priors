@@ -8613,6 +8613,65 @@ diagnostic.** Round-3 settings (32 chains, 60 draws, `cycle_length` 2000) with
 *does the one durable lever make round-3 trials eligible?* One run, round-3
 cost, and both gates read at the budget they were written for.
 
+### 4.3.97 Production scale: resolution is solved, stationarity is not — and the control is missing
+
+One run at round-3 settings with the one durable lever: medium_play, **32
+chains × 60 draws × `cycle_length` 2000 = 130,000 sampling steps/chain**,
+`n_discarded` 5, burn-in 20,000, **`burn_in_lr = lr_max`**.
+
+| gate | value | threshold | verdict |
+|---|---|---|---|
+| **1 — stationarity** | centred `scale_ratio` **1.5220** (`\|log\|` 0.4201) | τ = 1.122 (0.1151) | **FAIL, by 3.65×** |
+| — legacy form | centred `scale_z` **2.888** | ≤ 2 | FAIL |
+| — location | centred `loc_z` 1.008 | ≤ 2 | pass |
+| **3 — resolution** | centred `ess` **48.7** | ≥ 40 | **PASS** |
+| 2 — degeneracy | `val_cvar_degeneracy_pass` = 1, gap 0.064 | | **PASS** |
+
+Also: `val_cvar_ce` **0.2846** (round-3 medium_play trials spanned 0.277–0.693,
+so this is at the good end), centred `rhat` 2.044,
+`gradnorm_sampling_pct_over_clip` **0**, `param_clamp_sampling_pct` **0**.
+
+**Resolution is no longer the binding problem at this budget.** 130,000 steps
+clears gate 3, and the objective and degeneracy gates both pass. **Stationarity
+is the sole failure, and it fails by a wide margin.**
+
+> ⚠️ **There is no matched control at this scale, so `burn_in_lr`'s value here
+> is UNMEASURED.** The 4.7σ effect was measured at **8 chains × 30 draws ×
+> cycle 2750**; this run differs in chains, draws *and* `cycle_length`.
+> §4.3.96 was caused by exactly this class of unmatched comparison, and
+> §4.3.90 by another. **I am not going to claim a third time that a lever
+> transfers across scales without measuring it.**
+>
+> | arm | `\|log ratio\|` | × τ |
+> |---|---|---|
+> | diagnostic `lr_min`, K = 0 (mean of 2) | 0.7188 | 6.24× |
+> | diagnostic `lr_max`, K = 0 | 0.3823 | 3.32× |
+> | diagnostic `lr_max`, K = 10 (n = 4) | 0.3015 | 2.62× |
+> | **production `lr_max`** | **0.4201** | **3.65×** |
+>
+> Production sits between the two diagnostic arms, but every axis differs. **No
+> inference is licensed from that table** — it is here to show why the control
+> is needed, not to substitute for it.
+
+**The control is one run**: the same command without `--burn_in_lr`. Until it
+exists, the defensible statement is only that *medium_play at the round-3
+budget fails gate 1 at 3.65× τ while passing gates 2 and 3.*
+
+#### The decision this forces
+
+Nine mechanisms have been proposed and refuted (§4.3.73's five, plus the
+preconditioner, the ReLU gauge, and the window and discard levers withdrawn in
+§4.3.90/96). The residual is §4.3.90's **ongoing widening** — constant per
+block, not a transient, and unexplained. **This is no longer a diagnosis
+problem; it is a scope decision**, and the options are:
+
+| option | cost | what it gives up |
+|---|---|---|
+| Accept a low eligible fraction for medium_play, disclose it | none | selects from a set whose membership is partly set by an unexplained drift (§10.2's own objection) |
+| Raise the budget toward §4.3.67's 10× (~1.3M steps/chain) | ~10× compute | nothing methodological — but §4.3.12's scale-free widening predicts it will not help |
+| Change the model for medium_play — the capacity effect (§4.3.86) is the only replicated effect on the gate with no mechanism | 4 runs | a per-variant architecture, which weakens §3.1's "identical procedure" claim |
+| Relax τ on a *restated downstream argument* | none | must be a genuine argument, not the reverse-engineering §4.3.94 already refused |
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
