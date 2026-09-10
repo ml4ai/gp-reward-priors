@@ -8796,6 +8796,78 @@ replicated predictor of gate-1 failure among round-3 trials (large_diverse
 ρ = +0.943 on `|log ratio|`, large_play +0.687), and it has no mechanism. It is
 now the most relevant open line, not a sideshow.
 
+### 4.3.100 Config audit: the mismatch starts at §4.3.84, not §4.3.89
+
+Raised by the user 2026-09-10: *none* of the 15 diagnostic runs launched since
+the sweep stop used the round-3 pins. §4.3.98 scoped the problem to
+§4.3.89–§4.3.98; **that was too narrow.** Every run since 2026-09-04 was
+enumerated from wandb against `n_meas` 256 / `map_amp2` 6626 (6611 for large)
+/ `chain_init_jitter` 1:
+
+**9 runs with the pins** — the eight final round-3 sweep trials, plus
+`r3pins_medium_play_0`. **15 without** — the two MSD probe runs, the four
+burn-in ladder rungs, the two `burn_in_lr` runs, the replicate, the four recipe
+runs, and the two production-scale runs.
+
+| section | claim | evidence | status |
+|---|---|---|---|
+| 4.3.79 | persistent spread cannot fail the gate | **simulation** | unaffected |
+| 4.3.82 | hypothesis 7, passing run | `r3_trial1` (**pinned**) | unaffected |
+| 4.3.83 | hypothesis 7, failing run | `r3_probe` (**pinned**) | unaffected |
+| **4.3.84** | **hypothesis 8 REFUTED** | MSD probe runs (not pinned) | ⚠️ **AT RISK** |
+| 4.3.85 | halves; budget; large_play `rhat` 1.040; MSD τ | MSD probe runs (not pinned) | affected |
+| 4.3.86 | capacity effect | 28 round-3 trials (**pinned**) | unaffected |
+| 4.3.87 | chain-count power curve | `r3_trial1` + `r3_probe` (**pinned**) | unaffected |
+| 4.3.88 | **τ = 1.122** | derived analytically | unaffected |
+| 4.3.89–98 | the sampler-lever campaign | not pinned | affected — **abandoned config** |
+| **4.3.95** | **noise floor sd = 0.0513** | `replicate_s7` (not pinned) | ⚠️ **AT RISK** — reused everywhere |
+| 4.3.90 | drift blocks; max-draws | `r3_trial1` (**pinned**) | unaffected |
+| 4.3.99 | the pins fix it | pinned vs control | unaffected — **the pins ARE the variable** |
+
+**Both saved-chain runs the earlier work rests on are pinned**, which is what
+keeps §4.3.82–83, §4.3.86–88 and §4.3.90 intact. τ is analytic. §4.3.99's
+treatment/control is valid *because* the pins are the manipulated variable.
+
+#### The one refutation genuinely at risk: hypothesis 8
+
+`map_amp2` does **not** touch the gauge direction — ReLU's rescaling symmetry
+is exact and `U` is flat along it whatever the prior (verified 2e-7). But it
+directly sets how hard the **invariant** direction is held. At `map_amp2`
+168,940 the functional prior is near-improper, so the invariant coordinate is
+barely constrained — and §4.3.84 measured exactly that, an invariant slope of
+**1.72–1.94**, *faster* than the gauge, which is what refuted hypothesis 8.
+
+> **Under the correct pin the prior is 25× tighter, the invariant should be
+> confined, and the contrast `slope(gauge) − slope(invariant)` could flip
+> positive — i.e. SUPPORT hypothesis 8.** The refutation may be an artefact of
+> the pathological prior.
+
+**Correction to §4.3.84 while re-reading it:** that section says the refutation
+was "strongest at depth 6". It is backwards — large_play (depth 6) gave
+contrast **−0.202** and medium_play (depth 2) **−0.685**, so depth 6 was the
+*weakest* refutation, and the closest to supporting hypothesis 8. That is mildly
+consistent with the symmetry-group argument, and it makes the depth-6 re-test
+the more informative one.
+
+#### What to re-run, and what not to
+
+**Do not re-run §4.3.89–§4.3.98.** Those levers were measured on a
+configuration round 3 does not use; re-doing them on the pinned config would
+cost ~15 runs to characterise knobs that §4.3.99 shows are worth 4.7× less than
+the pin already in place. Mark them as historical.
+
+**Do re-run two things**, and they fold into work already queued:
+
+1. **The replicates of §4.3.99 carry `--msd_window`** at no extra cost, which
+   re-tests hypothesis 8 on the pinned config *and* gives σ for the pinned
+   config, which every future significance test needs.
+2. **A large_play pinned probe run** if hypothesis 8's contrast moves — depth 6
+   gives the symmetry group its largest dimension.
+
+**Criterion 2 is unresolved rather than wrong.** §4.3.85's MSD τ and §4.3.67's
+τ were both measured on non-pinned configs, so their disagreement is internally
+consistent but describes a configuration the relaunch will not use.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
