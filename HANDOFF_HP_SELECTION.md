@@ -8734,6 +8734,68 @@ sampler levers are a sideshow.
 Only after that is it worth re-testing `burn_in_lr` — on the config the
 relaunch will actually use.
 
+### 4.3.99 The round-3 pins fix it — all three gates pass, and criterion 3 is met
+
+One run, matched to `prodscale_medium_play_control` in every config key except
+the three §3.2.1 pins. **Verified by enumerating all 19 keys** — the only
+differences are `n_meas` 35 → 256, `map_amp2` 168,940 → 6,626,
+`chain_init_jitter` 0 → 1.
+
+| run | ratio | `\|log\|` | × τ | gate 1 | centred ess | gate 3 | centred rhat | `cvar_ce` | gate 2 |
+|---|---|---|---|---|---|---|---|---|---|
+| control (settled pins) | 1.6916 | 0.5257 | 4.57× | FAIL | 58.1 | PASS | 1.664 | 0.333 | PASS |
+| + `burn_in_lr = lr_max` | 1.5220 | 0.4201 | 3.65× | FAIL | 48.7 | PASS | 2.044 | 0.285 | PASS |
+| **+ round-3 pins** | **0.9740** | **0.0263** | **0.23×** | **PASS** | **61.8** | **PASS** | **1.586** | 0.338 | **PASS** |
+
+**Δ = 0.4994 = 9.7σ** — a **20× reduction** in the effect size, and the best
+centred `rhat` of the three.
+
+| lever | Δ`\|log ratio\|` | σ |
+|---|---|---|
+| `n_discarded` 10 on top of `lr_max` | 0.081 | 1.6 |
+| `burn_in_lr = lr_max` (production) | 0.106 | 2.1 |
+| burn-in 20k → 200k (diagnostic) | 0.335 | 6.5 |
+| `burn_in_lr = lr_max` (diagnostic) | 0.337 | 6.6 |
+| **the round-3 prior pins** | **0.499** | **9.7** |
+
+**The prior pins are 4.7× the best sampler lever.** §4.3.14 identified
+`map_amp2` improperness as the root cause and §3.2.1 pinned it; this measures
+what that pin is worth, and it is worth more than every sampler knob in
+§4.3.89–§4.3.98 combined.
+
+> **§10.2 relaunch criterion 3 is SATISFIED** — "a pilot at the intended
+> settings passes its own gates, with `val_pred_centred_ess_median ≥ 40` read
+> directly rather than through the raw proxy." All three gates pass, at 130,000
+> sampling steps, **on medium_play — the worst variant in the project.**
+
+**Caveats, stated:**
+
+1. **Three parameters moved together.** The effect cannot be attributed to
+   `map_amp2` alone from this run. §4.3.14 makes it the prime suspect (25×
+   above its principled value) and §4.3.24–25 make `n_meas` 256 a genuine
+   coverage gain; `chain_init_jitter` 1 would, if anything, *hurt* (§4.3.73).
+   So `map_amp2` + `n_meas` is inference, not measurement.
+2. **n = 1**, against a run-to-run sd of 0.0513. 0.0263 sits 1.7 sd below τ, so
+   the PASS is not marginal — but 2–3 replicates belong in the amendment.
+3. **One variant.**
+
+#### What this does and does not explain
+
+**It explains this campaign**: §4.3.89–§4.3.98 measured sampler levers against
+a prior amplitude round 3 had already discarded, which is why nothing reached
+τ. §4.3.97's scope decision was priced against a failure that is not round 3's.
+
+**It does NOT explain the 36% eligibility.** The 26 round-3 trials *already
+carried these pins*. Their median centred `|log ratio|` is 0.1785 while this
+run — round-3 pins with the **settled sampler/architecture values** — reads
+**0.0263**. So within the round-3 space the *swept* dimensions still drive a
+7× spread in the effect size, and **that** is what sets eligibility.
+
+**Which promotes the capacity ladder.** §4.3.86 found capacity is the only
+replicated predictor of gate-1 failure among round-3 trials (large_diverse
+ρ = +0.943 on `|log ratio|`, large_play +0.687), and it has no mechanism. It is
+now the most relevant open line, not a sideshow.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
