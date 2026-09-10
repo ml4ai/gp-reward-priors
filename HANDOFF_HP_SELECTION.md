@@ -8672,6 +8672,68 @@ problem; it is a scope decision**, and the options are:
 | Change the model for medium_play — the capacity effect (§4.3.86) is the only replicated effect on the gate with no mechanism | 4 runs | a per-variant architecture, which weakens §3.1's "identical procedure" claim |
 | Relax τ on a *restated downstream argument* | none | must be a genuine argument, not the reverse-engineering §4.3.94 already refused |
 
+### 4.3.98 The control — and the campaign was run on the WRONG CONFIG
+
+Matched pair at production scale (32 chains × 60 draws × `cycle_length` 2000,
+`n_discarded` 5, burn-in 20,000), **only `burn_in_lr` differing**:
+
+| | `burn_in_lr` | ratio | `\|log\|` | × τ | centred ess | centred rhat | `cvar_ce` |
+|---|---|---|---|---|---|---|---|
+| control | None | 1.6916 | 0.5257 | 4.57× | 58.1 | 1.664 | 0.333 |
+| treatment | `lr_max` | 1.5220 | 0.4201 | 3.65× | 48.7 | 2.044 | 0.285 |
+
+Δ = **0.1056 = 2.1σ** against §4.3.96's sd — **marginal**, down from 4.7σ at
+diagnostic scale — and it **degrades mixing** (ess 58.1 → 48.7, rhat 1.664 →
+2.044). Both arms fail gate 1 by a wide margin.
+
+#### The finding that supersedes all of §4.3.89–§4.3.98
+
+Checking whether `r3_trial1` was comparable (it is not) exposed that **every run
+in §4.3.89–§4.3.98 used the round-2 SETTLED config**,
+`antmaze_medium_play_bnn_antmaze_eval.yaml`, which differs from the **round-3
+pins** in exactly the parameters §3.2.1 fixed:
+
+| | settled (all my runs) | round-3 pins |
+|---|---|---|
+| `n_meas` | **35** | **256** |
+| `map_amp2` | **168,940** | **6,626** |
+| `chain_init_jitter` | 0 | 1 |
+
+§3.2.1 pinned `map_amp2 = 6626` **because §4.3.14 found the selection objective
+drives it toward improperness** — the settled config carries **25× that value**,
+i.e. the pathology §3.2.1 exists to remove.
+
+And it dominates the quantity the whole campaign was chasing:
+
+| config | median centred `\|log ratio\|` | × τ |
+|---|---|---|
+| **round-3 medium_play trials** (n = 8, pins applied) | **0.1785** | **1.55×** |
+| settled-config production runs (this campaign) | 0.4201 / 0.5257 | 3.65× / 4.57× |
+
+> ⚠️ **The round-3 configuration is already ~3× better on gate 1 than the
+> configuration I spent ten sections trying to repair.** Every lever measured in
+> §4.3.89–§4.3.98 — burn-in length, `burn_in_lr`, `n_discarded`, their
+> composition — was measured against a prior amplitude that round 3 had already
+> discarded. **None of those effect sizes can be assumed to transfer**, and the
+> production-scale failure reported in §4.3.97 is a property of the settled
+> config, not of round 3.
+
+**This is the third and largest unmatched-comparison error in this stretch**
+(§4.3.90, §4.3.96, and now the config itself). The check that caught it —
+enumerating every config key across the two runs before comparing — should
+precede any cross-run claim from here on.
+
+#### What to measure
+
+One run isolates the prior's contribution: **round-3 pins** (`n_meas 256`,
+`map_amp2 6626`, `chain_init_jitter 1`) with everything else matched to
+`prodscale_medium_play_control`. If it lands near the round-3 trials' 0.1785,
+the drift this campaign chased is mostly `map_amp2`-driven improperness and the
+sampler levers are a sideshow.
+
+Only after that is it worth re-testing `burn_in_lr` — on the config the
+relaunch will actually use.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
