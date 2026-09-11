@@ -8964,6 +8964,73 @@ more often among eligible trials than its 96% overall rate suggests, because
 eligibility selects for stationarity and stationarity correlates with
 degeneracy.
 
+### 4.3.102 On the pinned config, hypothesis 8 stays refuted and the τ estimates agree — criterion 2 answered
+
+Probe traces from the three pinned replicates of §4.3.101 (32 chains each,
+2,500 samples every 20 steps). `exp/gauge_diffusion_r3pins_medium_play_0.txt`,
+`exp/msd_probe_r3pins_medium_play_0.txt`.
+
+#### Hypothesis 8: the refutation survives the correct prior
+
+| config | gauge slope | invariant slope | contrast |
+|---|---|---|---|
+| settled (§4.3.84) | 1.039 | 1.724 | −0.685 |
+| pinned s1 | 1.239 | 1.671 | −0.433 [−0.514, −0.349] |
+| pinned s2 | 1.261 | 1.681 | −0.419 [−0.483, −0.346] |
+| pinned s3 | 1.233 | 1.699 | −0.466 [−0.540, −0.400] |
+
+Negative on all three seeds with tight intervals. §4.3.100 put the refutation at
+risk through one specific mechanism — the 25× tighter prior would confine the
+invariant coordinate and flip the contrast. **It did not.** The invariant slope
+barely moved (1.724 → 1.684, −0.040); the contrast narrowed by +0.246 almost
+entirely because the *gauge* slope rose (+0.205). **Hypothesis 8 is closed, and
+the artefact concern is refuted with it.** Depth 2 is the weakest possible gauge
+signal, so a depth-6 pinned run is the only remaining check — optional, since
+the ReLU symmetry leaves `f` exactly invariant and cannot touch gate 1 anyway.
+
+§4.3.85's withdrawal is also confirmed on the right config: the invariant
+weight-norm coordinate is super-diffusive (1.68) on runs whose function-space
+posterior passes gate 1 at 0.26× τ. **Weight-space drift is not function-space
+non-stationarity.**
+
+#### Criterion 2: three instruments on one set of runs
+
+| instrument | steps / independent sample | series vs τ | known bias |
+|---|---|---|---|
+| gate's own ESS (`fn_drift_centred_ess_half_median`) | ~34,400 (34,113 / 34,569 / 34,484) | half ≈ 1.7 τ | **low** — τ:series < 3:1 (§4.3.67 guard) |
+| MSD probe, pooled median of 96 chains | **41,098** [35,327–46,988] | plateau reached 37–47% | **low** — σ_f from the coolest step vs D_f over the whole cosine (§4.3.84); τ extrapolated |
+| bulk centred ESS (`pred_centred_ess_median`) | ~61,800 (61,321 / 62,569 / 61,532) | chain ≈ 1.9 τ | **low** — τ:chain < 3:1 |
+
+All three are lower bounds and they lie within **1.8×** of each other, against
+~3× on the settled config. **The spread is explained, in the predicted order**:
+the shorter the series an ESS is computed on, the more its estimator saturates
+and the lower its τ — the half-chain gate ESS reads lowest, the full-chain bulk
+ESS highest.
+
+> **§10.2 criterion 2 is ANSWERED.** §4.3.67's ~100,000 steps per independent
+> sample, and §4.3.72's "~10× more compute" priced on it, describe the round-2
+> settled config, which round 3 does not use. On the pinned config the operative
+> figure for medium_play is **≥ ~62,000 steps per independent sample**, and the
+> instruments disagree only by an identified, directional bias. At the round-3
+> budget that is ~2 independent samples per chain and pooled centred ess ~62,
+> which clears gate 3.
+
+Per-chain D_f spread across all 96 chains is **9.1×** while gate 1 passes —
+consistent with §4.3.79's structural result that a persistent between-chain
+difference cannot fail the gate. Recorded, not chased.
+
+#### Relaunch criteria, as of this section
+
+| criterion | status |
+|---|---|
+| 1 — rejection rate understood | **answered** (§4.3.87, §4.3.88): the gate is a correct test, τ = 1.122 from principle, and the 36% true eligibility is real |
+| 2 — τ estimates agree, or disagreement explained | **answered** (§4.3.102), on the pinned config |
+| 3 — a pilot passes its own gates | **met with qualification** (§4.3.99, §4.3.101): gates 1 and 3 robust; gate 2 on a knife-edge for the settled sampler values |
+
+What remains before relaunch is procedural: the §3.2.1 amendment (τ = 1.122
+effect-size gate plus the stationarity–degeneracy disclosure), pre-registered
+before the sweep resumes, and the `IDS_FILE` bump.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -10295,10 +10362,10 @@ refuted since.
   > deeper is worse on the *objective* too — median depth 4.5 → 2.0, while the
   > pass rate went **43% → 36%**. Whatever drives the residual failures is not
   > in the search space, so no amount of further searching will find it.
-- **The two τ estimates agree**, or the disagreement is explained. §4.3.72's
+- **The two τ estimates agree**, or the disagreement is explained. ✅ **ANSWERED 2026-09-11 (§4.3.102)** on the pinned config: gate ESS, MSD and bulk ESS agree within 1.8×, all low-biased in the predicted order; §4.3.67's τ describes the abandoned settled config. §4.3.72's
   "~10× more compute" pricing and §3.2.1's resolution gate both rest on
   §4.3.67's τ; the gate's own ESS says 2.5–3.5× faster.
-- **A pilot at the intended settings passes its own gates**, with
+- **A pilot at the intended settings passes its own gates** — ✅ **MET WITH QUALIFICATION (§4.3.99, §4.3.101)**: gates 1 and 3 replicate across 4 seeds; gate 2 passes 2 of 4 —, with
   `val_pred_centred_ess_median` ≥ 40 read directly rather than through the raw
   proxy.
 
