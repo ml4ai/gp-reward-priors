@@ -8763,7 +8763,7 @@ centred `rhat` of the three.
 what that pin is worth, and it is worth more than every sampler knob in
 §4.3.89–§4.3.98 combined.
 
-> **§10.2 relaunch criterion 3 is SATISFIED** — "a pilot at the intended
+> ⚠️ **Qualified by §4.3.101: gates 1 and 3 replicate, gate 2 passes only 2 of 4.**\n>\n> **§10.2 relaunch criterion 3 is SATISFIED** — "a pilot at the intended
 > settings passes its own gates, with `val_pred_centred_ess_median ≥ 40` read
 > directly rather than through the raw proxy." All three gates pass, at 130,000
 > sampling steps, **on medium_play — the worst variant in the project.**
@@ -8867,6 +8867,100 @@ the pin already in place. Mark them as historical.
 **Criterion 2 is unresolved rather than wrong.** §4.3.85's MSD τ and §4.3.67's
 τ were both measured on non-pinned configs, so their disagreement is internally
 consistent but describes a configuration the relaunch will not use.
+
+### 4.3.101 Pinned replicates: gate 1 is robust, gate 2 is on a knife-edge — a stationarity–degeneracy trade-off
+
+Three replicates of `r3pins_medium_play_0` (`sampling_seed` 1/2/3, with
+`--msd_window 50000 --msd_every 20`). **Config audit enumerated every key**:
+the only differences from the original are `sampling_seed`, `msd_*`, `OUT_DIR`
+and `name`.
+
+| run | `\|log r\|` | × τ | g1 | centred ess | g3 | centred rhat | gap | thr | margin | g2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| original | 0.0263 | 0.23× | PASS | 61.8 | PASS | 1.586 | 0.0175 | 0.0140 | +0.0035 | PASS |
+| s1 | 0.0145 | 0.13× | PASS | 62.6 | PASS | 1.571 | 0.0116 | 0.0151 | **−0.0035** | **FAIL** |
+| s2 | 0.0621 | 0.54× | PASS | 61.4 | PASS | 1.592 | 0.0147 | 0.0147 | **−0.0000** | **FAIL** |
+| s3 | 0.0141 | 0.12× | PASS | 62.4 | PASS | 1.574 | 0.0166 | 0.0123 | +0.0043 | PASS |
+
+#### Gates 1 and 3 replicate cleanly
+
+**Gate 1: mean `|log ratio|` 0.0293, sd 0.0226 (3 dof), SE 0.0113 — 7.6 SE
+below τ**, worst replicate 0.54× τ. **Gate 3:** centred ess 61.4–62.6.
+
+> **The pinned-config noise floor is sd = 0.0226**, less than half §4.3.95's
+> settled-config 0.0513. That σ does not transfer; use 0.0226 for any
+> comparison between pinned runs.
+
+#### Gate 2 does not: two of four fail, and the configuration sits ON the threshold
+
+Margins +0.0035, −0.0035, −0.00003, +0.0043 — mean ≈ +0.001. Pass/fail is a
+coin flip by seed.
+
+> ⚠️ **§4.3.99's "criterion 3 is SATISFIED" must be qualified.** Gates 1 and 3
+> replicate; gate 2 passes only 2 of 4. **This configuration does not robustly
+> satisfy criterion 3.**
+
+#### Why: the pin that fixes stationarity narrows the posterior toward degeneracy
+
+Matched production-scale runs (32 × 60 × 2000):
+
+| run | `map_amp2` | centred pred sd | `\|log r\|` | g1 | degeneracy gap | margin | g2 |
+|---|---|---|---|---|---|---|---|
+| control | 168,940 | 5.911 | 0.5257 | FAIL | **0.1399** | +0.0947 | PASS |
+| `burn_in_lr = lr_max` | 168,940 | 3.695 | 0.4201 | FAIL | 0.0641 | +0.0360 | PASS |
+| round-3 pins (n = 4) | 6,626 | 1.37–1.52 | 0.014–0.062 | PASS | **0.012–0.018** | ≈ +0.001 | 2/4 |
+
+**Monotone on matched runs**: narrowing the posterior 4× takes the effect size
+0.53 → 0.03 *and* collapses the CVaR/mean separation 0.140 → ~0.015. This is
+§3.2.7's question — does the objective select against the paper's mechanism —
+now appearing **between gates 1 and 2**.
+
+**It holds across round-3 space too.** On all 28 round-3 trials,
+ρ(`|log ratio|`, degeneracy margin) = **+0.397** (n = 27): configurations that
+drift more separate CVaR from mean more. At trial level, **the only round-3
+gate-2 failure, `tv0aslfn`, is medium_play's most stationary trial** (`|log r|`
+0.0220), and the next two lowest margins (`dmhn3ei7`, `n1tanpjw`) also pass
+gate 1. The most stationary configurations cluster at the degeneracy edge.
+
+#### What it means for eligibility — gate 1 still binds
+
+| gate | round-3 pass rate (28 trials) |
+|---|---|
+| 1 — stationarity (τ = 1.122) | **39%** |
+| 2 — degeneracy | 96% |
+| 3 — resolution | 100% *(raw-ess proxy: centred ess was not logged in round 3, 0/28 coverage — §4.3.75)* |
+| **1 + 2 + 3 — true eligibility** | **36% (10/28)** |
+
+Gate 2 binds only in medium_play (88%) and only near stationary configs. The
+median round-3 margin is +0.0256 on a median gap of 0.0511, so **typical
+round-3 configurations are comfortably non-degenerate — the settled sampler
+values at the pins sit in the degenerate tail** (gap ~0.015). Plausibly because
+round 2 selected them on predictive CE, which §4.3.14/§4.3.51 showed rewards
+collapsed posteriors.
+
+#### Gate 2's threshold is chain-count dependent — by design, so leave it
+
+`thr = 2 × jackknife-over-chains SE` (`diagnose_sampling_tail.py:601`), which
+scales ~1/√C — the same coupling §4.3.87 found in gate 1. **But gate 2 was
+designed as a resolution criterion** ("the threshold *is* the resolution",
+§3.2.1): CVaR must be distinguishable from the mean at the objective's *own*
+precision, and that precision legitimately depends on chains. Unlike gate 1,
+the coupling is intended. **Do not raise the chain count or relax gate 2 in
+response to 2 of 4 failing — that is reactive tuning (§0).**
+
+*Flaw noted:* `k0jdgns7` — fully collapsed, `val_cvar_ce` = 0.6931 = log 2 —
+has **thr 0.0000 and passes gate 2**, because the jackknife SE is zero when every
+chain is identically constant. Gate 1 catches it (`|log r|` 27.3), so no
+eligible trial is affected, but **gate 2 alone does not detect total collapse**.
+
+#### For the amendment
+
+The pre-registered gates already handle this — gate 2 exists precisely to stop
+the objective selecting a collapsed posterior — so **no design change is
+indicated**. But record the trade-off as a disclosure, and expect gate 2 to bind
+more often among eligible trials than its 96% overall rate suggests, because
+eligibility selects for stationarity and stationarity correlates with
+degeneracy.
 
 ### 4.4 Procedure
 
