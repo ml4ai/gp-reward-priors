@@ -8763,7 +8763,9 @@ centred `rhat` of the three.
 what that pin is worth, and it is worth more than every sampler knob in
 §4.3.89–§4.3.98 combined.
 
-> ⚠️ **Qualified by §4.3.101: gates 1 and 3 replicate, gate 2 passes only 2 of 4.**\n>\n> **§10.2 relaunch criterion 3 is SATISFIED** — "a pilot at the intended
+> ⚠️ **Qualified by §4.3.101: gates 1 and 3 replicate, gate 2 passes only 2 of 4.**
+>
+> **§10.2 relaunch criterion 3 is SATISFIED** — "a pilot at the intended
 > settings passes its own gates, with `val_pred_centred_ess_median ≥ 40` read
 > directly rather than through the raw proxy." All three gates pass, at 130,000
 > sampling steps, **on medium_play — the worst variant in the project.**
