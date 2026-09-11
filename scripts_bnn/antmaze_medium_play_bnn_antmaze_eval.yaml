@@ -1,6 +1,17 @@
-# Hyperparameters selected by the ROUND-2 merged BNN sweep (seed-0 data split).
+# Hyperparameters selected by the ROUND-2 merged BNN sweep (seed-0 data split),
+# EXCEPT the three ROUND-3 prior pins marked HYBRID below.
 # See HANDOFF_HP_SELECTION.md §3 for the procedure and §3.7 for why round 1 was
 # discarded.
+#
+#   *** HYBRID since 2026-09-11 ***  n_meas, map_amp2 and chain_init_jitter
+#   below carry the ROUND-3 PINS (HANDOFF §3.2.1), not the round-2 winner's
+#   values.  Every other selected field is still the round-2 winner's, so this
+#   exact combination was never selected by any sweep as a whole.  Round-2
+#   values are recorded beside each changed field (n_meas 35,
+#   map_amp2 168939.82289052464, chain_init_jitter 0.0) and in git history,
+#   so round 2 stays reproducible.  Why: diagnostics launched from this file
+#   silently inherited the round-2 prior (§4.3.100), and the pins alone moved
+#   medium_play's centred |log scale_ratio| 0.53 -> 0.03 (§4.3.99, §4.3.101).
 #
 #   Sweep    BNN-training/9gifb8sa   metric val_predictive_cross_entropy
 #            (Wu et al. 2025 Eq. 10 posterior predictive, E[sigma(f)] — NOT the
@@ -57,11 +68,14 @@ mdecay: 0.19462287950816173             # friction; acts during burn-in as well
                          # sampling (the stage-2 confound, HANDOFF section 7)
 batch_size: 64
 max_param_step: 0.5      # safety clamp on per-element momentum (null to disable)
-n_meas: 35
+# ROUND-3 PINS (§3.2.1).  Round 2 selected n_meas and map_amp2 on predictive CE,
+# which drove map_amp2 toward improperness (§4.3.14); round 3 fixes all three.
+n_meas: 256              # round-2 winner: 35
 # Prior amplitude multiplier (K -> map_amp2*K): scales the map kernel's reward
 # amplitude while leaving its correlation structure untouched.  Absent this line
-# the field falls back to TrainConfig's 1.0, discarding the stage-1 result.
-map_amp2: 168939.82289052464
+# the field falls back to TrainConfig's 1.0.
+map_amp2: 6626           # round-2 winner: 168939.82289052464
+chain_init_jitter: 1.0   # round 2 ran the TrainConfig default, 0.0
 meas_jitter: .000001
 gp_cov_scale: 1.0
 reward_function: antmaze_task_reward_prior  # source fn in optbnn/gp/reward_functions.py

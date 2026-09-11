@@ -3,7 +3,7 @@
 > Status 2026-08-16. **Stage 1 is complete for all three families; stage 3 is
 > in progress** — medium_play's 4-chain rung is measured (§4.5, §10.2). The BNN's
 > round-2 merged sweeps have all fired and their winners are transcribed into
-> `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml`, verified field-by-field
+> `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` *(prior pins replaced by round 3's on 2026-09-11 — §10.3)*, verified field-by-field
 > against wandb. Round 1's two-tier BNN design was discarded (§3.7); its results
 > remain in §6 as the record. **Stage 3 (BNN draw budget) is under way — the
 > exact next command is in §10.2; stage 4 not started.** MR and PT are
@@ -9031,7 +9031,38 @@ What remains before relaunch is procedural: the §3.2.1 amendment (τ = 1.122
 effect-size gate plus the stationarity–degeneracy disclosure), pre-registered
 before the sweep resumes, and the `IDS_FILE` bump.
 
-### 4.4 Procedure
+### 4.3.103 Depth-6 pinned gauge run — pre-registered before the result
+
+Final check on hypothesis 8 (§4.3.81). Hypothesis 8 predicts the gauge signal
+grows with the ReLU symmetry group's dimension, i.e. with depth, and every
+pinned measurement so far is depth 2 — the weakest possible case.
+
+**Run:** large_play, width 9 / **depth 6** (7 weight matrices), round-2 sampler
+values, **round-3 pins** (`n_meas` 256, `map_amp2` 6611, `chain_init_jitter`
+1.0), round-3 budget (32 chains × 60 draws × `cycle_length` 2000,
+`n_discarded` 5, burn-in 20,000), probe `msd_window` 50,000 / `msd_every` 20.
+OUT_DIR `exp/r3pins_large_play_d6`.
+
+**Decision rule — the tool's own, unchanged:** on
+`slope(gauge) − slope(invariant)` with a bootstrap CI over chains,
+lower bound > +0.10 ⇒ SUPPORTED; upper bound < +0.10 ⇒ REFUTED; otherwise
+INCONCLUSIVE.
+
+**Prediction, written before the run.** Settled large_play (depth 6) gave
+−0.202 [−0.246, −0.163] (§4.3.84). On medium_play the settled → pinned change
+moved the contrast by **+0.246** (−0.685 → −0.439, §4.3.102). If that shift were
+additive at depth 6 the pinned contrast would be **≈ +0.04 — inside the
+inconclusive band.** So this run is a genuine test, not a formality: it can land
+on either side of the boundary.
+
+**What each outcome would mean.** REFUTED closes hypothesis 8 at the depth where
+it was strongest. SUPPORTED would reinstate the gauge diffusion as a real
+weight-space fact **but not as a gate-1 mechanism** — ReLU's symmetry leaves
+`f` exactly invariant, and the second readout on this same run is gate 1
+itself. INCONCLUSIVE ⇒ one replicate at another `sampling_seed`, not a new
+design.
+
+
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
 `scripts_bnn/`, with a distinct `OUT_DIR` per candidate so runs do not clobber
@@ -10138,7 +10169,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
 trial/trigger, predictive CE and accuracy, all three acceptance numbers, the
-rejection count, and any applicable disclosure. Verified: all nine selected
+rejection count, and any applicable disclosure. Verified *(as of 2026-08-15; two of the nine — `n_meas`, `map_amp2` — were replaced by round-3 pins on 2026-09-11, §10.3)*: all nine selected
 fields match the winning wandb run for every variant, `burn_in_lr` is absent,
 `num_samples` is 75 and `num_burn_in_steps` is 20000.
 
@@ -10385,6 +10416,30 @@ their information.
   there are results.
 
 ### 10.3 The BNN production configs — done for round 2
+
+> **Amended 2026-09-11 — these files are now HYBRID.** At the user's direction
+> the four configs carry the **round-3 prior pins** (§3.2.1): `n_meas` 256,
+> `map_amp2` 6626 (medium) / 6611 (large), and `chain_init_jitter` 1.0, now set
+> explicitly rather than left to the 0.0 default. **Seven of the nine selected
+> fields are still the round-2 winner's; `n_meas` and `map_amp2` no longer
+> are**, so the table row "all nine swept fields" and the verification paragraph
+> below describe the files as of 2026-08-15, not now. Round-2 values are
+> recorded inline beside each changed field and in each header; the exact
+> round-2 files are at commit `f85b40b`.
+>
+> **Why:** 15 diagnostic runs launched from these files silently inherited the
+> round-2 prior (§4.3.100), and the pins alone moved medium_play's centred
+> `|log scale_ratio|` 0.53 → 0.03 (§4.3.99, §4.3.101).
+>
+> **Verified:** each file parsed with `yaml.safe_load` and diffed against the
+> previous commit — exactly `n_meas`, `map_amp2` and `chain_init_jitter`
+> changed; the other 39 keys are identical. The `SUPERSEDED-ROUND1` marker was
+> not reintroduced.
+>
+> ⚠️ **This strengthens "do not run `train_rewards.sh` yet."** The hybrid
+> combination was never selected by any sweep as a whole, so evaluation rewards
+> trained from it would report numbers from an unselected configuration.
+> Regenerate these files from round 3's winners first.
 
 Completed 2026-08-15 for all four variants. Kept because it documents a **trap**
 that recurs whenever these configs are regenerated.
