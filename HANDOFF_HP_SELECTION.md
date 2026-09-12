@@ -287,11 +287,12 @@ One value deserves its own note because it looks like tuning and is not:
 
 ### 3.2.1 Round-3 BNN sweep design (supersedes §3.2's BNN block)
 
-Pre-registered here before any round-3 trial runs.
-**Amended by §3.2.12 (2026-09-11) before the relaunch** — gate 1 is restated
-as an effect size; everything else stands. Everything not listed is
+Pre-registered here before any round-3 trial runs. Everything not listed is
 unchanged from §3.1 — `run_cap: 130`, stopping rule K = 15, seed 0, and the
 report-both-winners rule.
+
+> **Amended by §3.2.12 (2026-09-11), before the relaunch** — gate 1 is
+> restated as an effect size; everything else in this section stands.
 
 #### Removed from the search: 9 dimensions → 6
 
