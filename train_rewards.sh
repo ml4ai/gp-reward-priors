@@ -71,7 +71,13 @@ export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 # Set here rather than per-command so every run in a campaign shares them.
 # Thread count changes floating-point reduction order, so selection and
 # evaluation runs must agree: do NOT override for part of a campaign.
-export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+#
+# 2, not 8, from round 3 onward -- pre-registered in section 7.3 on 2026-09-02,
+# propagated here 2026-09-12.  Section 7.3 requires round 3's selection runs and
+# the seeds 1-10 evaluation runs to share this setting, so this value must track
+# launch_hp_sweeps.sh exactly.  The -27% A/B above was measured at 8 vs
+# uncapped; 2 is a further 1.40x per GPU-hour over 8 under round-3 concurrency.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"

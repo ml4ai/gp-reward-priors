@@ -10360,12 +10360,13 @@ not as a resolved question.
 
 **Thread count changed between stages, and runs across stages are not strictly
 numerically comparable.** §10.7 established that thread count alters
-floating-point reduction order. Three environments now exist:
+floating-point reduction order. Four environments now exist:
 
 | stage | `OMP_NUM_THREADS` |
 |---|---|
 | stages 1–2 | uncapped (255 on leviathan) |
 | stage 3 | 8 |
+| §4.3.84–§4.3.104 diagnostics | 8 — unintended, see below |
 | **round 3 and everything after** | **2** |
 
 The round-3 value is forced by concurrency: four sweeps × 32 chains = 128 chain
@@ -10380,6 +10381,31 @@ setting**, per §10.7's rule against varying thread count within a campaign. The
 effect is reduction-order noise, far below the differences any selection metric
 resolves — but it should be stated rather than left implicit, exactly as the
 stage-1/2-versus-3 change already is in §7.1.
+
+**The 2 was pre-registered but never propagated to the code until 2026-09-12.**
+This section fixed 2 on 2026-09-02, but `launch_hp_sweeps.sh:55` and
+`train_rewards.sh:74` had defaulted to 8 since 2026-08-10 (`90d38a5`), and both
+training scripts since 2026-08-12 (`42b016b`, `os.environ.setdefault(_thr_var,
+"8")`). Nothing reconciled the disclosure with the code. The thread environment
+is **not recorded in wandb metadata** — only `cpu_count` 255 and `host` — so the
+setting cannot be recovered per run from the dashboard; it must be inferred from
+the launch path and date.
+
+The consequence is that every diagnostic in §4.3.84–§4.3.104 was launched as a
+bare `python …`, inherited the scripts' 8, and so ran one environment away from
+the round 3 it was characterising. **The user caught it.** All four defaults were
+changed to 2 on 2026-09-12; left alone, `./launch_hp_sweeps.sh bnn` would have
+run the relaunch at 8 and violated this section's own pre-registered value.
+
+This compounds the §4.3.98/§4.3.100 config finding: those same runs also carried
+the round-2 prior. Neither defect withdraws §4.3.84–§4.3.104's conclusions — the
+pin effect is 9.7σ and reduction-order noise is orders of magnitude below the
+differences those runs resolve — but any number quoted from them against a
+round-3 number differs in **two** environment respects, not one. Say both.
+
+**The capacity ladder must run at 2.** It exists to license a range change for
+round 3 (§3.2.13), so it has to sit in round 3's numerical environment, not the
+diagnostics'.
 
 ## 8. Tooling
 

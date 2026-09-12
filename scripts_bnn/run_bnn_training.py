@@ -56,8 +56,13 @@ from typing import Optional
 #
 # setdefault, so an explicit environment value still wins — e.g. deliberately
 # running uncapped to reproduce the section 10.7 A/B.
+#
+# 2, not 8, from round 3 onward (section 7.3, pre-registered 2026-09-02 and
+# propagated 2026-09-12).  This default is what a bare `python ...` diagnostic
+# picks up, so it has to match the launchers: the section 4.3.84-4.3.104
+# diagnostics ran at 8 precisely because this said 8 while 7.3 said 2.
 for _thr_var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-    os.environ.setdefault(_thr_var, "8")
+    os.environ.setdefault(_thr_var, "2")
 os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
 
 import matplotlib as mpl

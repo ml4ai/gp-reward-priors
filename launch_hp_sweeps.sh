@@ -52,7 +52,14 @@ export PYTHONPATH="$ROOT"
 # order, so the selection runs launched here and the seed 1-10 evaluation runs
 # have to agree; a sweep run uncapped would not be comparable to the production
 # runs that use its winner.  Capping is also simply faster (-27% measured).
-export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+#
+# 2, not 8, from round 3 onward -- pre-registered in section 7.3 on 2026-09-02,
+# propagated here 2026-09-12.  Four sweeps x 32 chains = 128 chain processes,
+# which at 8 threads each demands 1024 against 255 cores (the 4x
+# oversubscription section 10.7 measured as costing 2.8x throughput).  At 2 the
+# load is 128.1 of 255 cores (~1 per chain) and throughput is 1.40x better per
+# GPU-hour than at 8, so this is a speed-up, not a sacrifice.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"
