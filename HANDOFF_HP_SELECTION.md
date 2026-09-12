@@ -9064,6 +9064,81 @@ design.
 
 
 
+### 4.3.104 Depth-6 pinned gauge: hypothesis 8 CLOSED — and large_play fails gate 1 at the top of the capacity range
+
+The run pre-registered in §4.3.103: large_play, width 9 / depth 6 (7 weight
+matrices), round-3 pins, round-3 budget.
+`exp/gauge_diffusion_r3pins_large_play_d6_0.txt`.
+
+#### Hypothesis 8, judged by §4.3.103's rule
+
+| | gauge slope | invariant slope | contrast |
+|---|---|---|---|
+| settled large_play, depth 6 (§4.3.84) | 1.559 | 1.761 | −0.202 [−0.246, −0.163] |
+| **pinned large_play, depth 6** | 1.655 | 1.853 | **−0.198 [−0.220, −0.177]** |
+
+Upper bound **−0.177 < +0.10 ⇒ REFUTED** by the pre-registered rule.
+**Hypothesis 8 is closed** — on both configs, and now at depth 6, where its own
+argument predicted the strongest signal.
+
+> **The pre-registered prediction was wrong, and that is worth recording.**
+> §4.3.103 predicted ≈ **+0.04**, assuming the settled → pinned contrast shift
+> seen on medium_play (**+0.246**) would carry to depth 6. It did not:
+> large_play's contrast moved **+0.004**. The prior pins changed the
+> gauge/invariant balance at depth 2 and not at all at depth 6, so that shift is
+> neither additive nor a property of the pins alone.
+
+Both coordinates stay super-diffusive (1.66 / 1.85), as in every other run;
+§4.3.85's withdrawal stands.
+
+#### The second readout — the gates on the same run
+
+| gate | value | verdict |
+|---|---|---|
+| 1 — stationarity | centred ratio **0.7076**, `|log|` 0.3459 = **3.00× τ** | **FAIL** (contraction) |
+| 2 — degeneracy | gap 1.1058 vs thr 0.1419, margin **+0.9639** | **PASS**, by far the widest seen |
+| 3 — resolution | centred ess **147.4**, centred `rhat` **1.1651** | **PASS** — the best `rhat` of any run in this investigation |
+
+`val_cvar_ce` 1.3238, centred sd 4.935. **So the best-mixing run in the project
+passes gates 2 and 3 comfortably and fails gate 1.** Mixing and stationarity
+remain separate axes (§4.3.97).
+
+#### It lands where §4.3.86's capacity effect predicts
+
+At 1,333,249 parameters this is **3.9× the largest round-3 large_play trial**
+(338,945), and its `|log ratio|` **0.3459 exceeds every round-3 large_play
+trial** (max 0.3050, median 0.2165). `val_cvar_ce` 1.3238 is likewise worse than
+all of them (0.346–0.628) — capacity is bad on the objective too, as §4.3.80 and
+§4.3.86 found.
+
+| sample | ρ(`n_params`, `|log ratio|`) | exact p |
+|---|---|---|
+| round-3 large_play trials only (n = 8) | +0.687 | 0.0673 |
+| with this run (n = 9) | +0.783 | 0.0159 |
+
+> ⚠️ **Do not read that p as a significance test.** This point was chosen
+> *because* it sits above the searched capacity range, so adding it to a
+> correlation and recomputing p is selection, not sampling. The honest claim is
+> weaker and still useful: **a fresh, pinned run at 3.9× the searched capacity
+> falls exactly where the effect predicts, on both axes.** It is one point, at
+> n = 1, on a sampler/pins/budget combination no sweep selected — not a ladder.
+
+#### A config-logging trap, found by it returning `inf`
+
+`width` is logged **expanded** (512) for non-sweep runs and as the **log2
+exponent** (7/8/9) for sweep trials, because a wandb sweep records the values it
+set. `capacity_vs_drift.n_params` computed `2**512` and silently returned `inf`.
+Spearman is rank-based so no correlation was affected, but the reported capacity
+multiple was. **Guarded**: a width above 20 is treated as already expanded.
+This is the same family as §4.3.98/§4.3.100 — config fields that do not mean the
+same thing across run types.
+
+**For the to-do:** the capacity ladder should now cover **large_play as well as
+large_diverse**, at fixed sampler settings, with the pins — this run is a
+motivating point above the range, not a substitute for the ladder.
+
+### 4.4 Procedure
+
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
 `scripts_bnn/`, with a distinct `OUT_DIR` per candidate so runs do not clobber
 one another (the deterministic `{OUT_DIR}_{seed}` path has destroyed evidence
