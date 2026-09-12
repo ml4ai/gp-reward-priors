@@ -1278,15 +1278,21 @@ bias. §4.3.67's ~100,000 and **§4.3.72's "~10× more compute" describe the
 round-2 settled config and no longer apply.** The pinned pilot reached centred
 `ess` 61–63 at this budget, clearing gate 3's floor of 40 with margin.
 
-#### 5. Prior trials seed the surrogate; they are not re-gated
+#### 5. The 26 completed round-3 trials are DISCARDED, not carried in
 
-The 26 completed trials carry in via `check_sweep_convergence.py
---emit-prior-runs`, which seeds the Bayes optimiser with their `val_cvar_ce`
-observations. **They were gated under the z-form, and centred `ess` was never
-logged for them (0 of 28 — §4.3.75), so gate 3 is not computable for them.**
-Therefore, pre-registered: **a carried-over trial may seed the surrogate but may
-not be selected as the winner** unless all three gates are computable from its
-logged metrics. Winner selection runs on relaunch trials, which log everything.
+Decided 2026-09-11. The relaunch starts from an **empty surrogate**: **do not
+pass `--emit-prior-runs`.**
+
+Recorded reasons: those trials were admitted under the **z-form gate 1 that this
+amendment replaces**, and centred `ess` was never logged for them (0 of 28,
+§4.3.75), so gate 3 is not computable for them at all. Seeding the optimiser
+with them would leave one campaign whose trials entered under **two different
+gate specifications** — exactly the mixing §0 exists to prevent.
+
+**The cost is accepted, not overlooked.** Discarding them throws away 26 valid
+`val_cvar_ce` observations, and `run_cap` 130 with the K = 15 stopping rule now
+applies to a search starting from nothing, so the effective search is shorter
+than a 130-trial cap seeded with 26 points.
 
 #### 6. Disclosures §7.3 must gain
 
@@ -1296,7 +1302,10 @@ sweep ran" and editing it after the fact would destroy that guarantee.
 1. Gate 1 was restated from a z-test to an effect size **before** the relaunch,
    with both thresholds derived from the CVaR's own measurement precision; the
    z-form's tolerance had been an unintended function of the chain count.
-2. The 26 carried-over trials were gated under the z-form and seed only the
+2. The 26 completed round-3 trials were **discarded** rather than carried in:
+   they were admitted under the superseded z-form gate, and gate 3 was never
+   computable for them. The relaunch starts from an empty surrogate. Formerly
+   this line read that they seed only the
    optimiser.
 3. The stationarity/degeneracy trade-off, and gate 2's collapsed-posterior flaw.
 4. §4.3.72's compute pricing is withdrawn; the operative figure is §4.3.102's.
@@ -10369,7 +10378,7 @@ stopping rule, metric) first; everything else can be looked up as needed.
 | 3 | BNN | **halted at `c16`, by result** — medium_play `c4`/`c8`/`c16` measured (§4.3.1, §4.3.2), plus the half-split (§4.3.3), the per-chain drift (§4.3.5) and the non-cyclical control (§4.3.6). The ladder's axis is orthogonal to the binding constraint: a drift common to 14/16 chains that shrinks with neither draws nor chains. No budget selected; `c32` is not to be run. The cyclical schedule is cleared (§4.3.6) and the shared start is refuted (§4.3.8). **Closed as a negative result (§4.3.13).** The location drift is largely the likelihood-invariant offset and §4.3.2's headline does not survive correction (§4.3.11). The live defect is a widening of the identified shape that grows as `t^0.4` — scale-free, so no budget fixes it. Both levers are measured and neither works: doubling the draws gave +4% ESS and *lower* CVaR ESS (§4.3.12). **Superseded by §4.3.14: stage 3 cannot be completed until stage 1 is redone.** The paper's claim is CVaR, so the mean-based fallback is unavailable. Root cause is the selection objective, not the sampler: CE improves monotonically as the functional prior flattens, so `map_amp2` chases its cap (99.5% of range for large_play, third round running) and `n_meas` sits at 7–35 of 0–64. The resulting target has an equilibration time ~10²–10³× any feasible budget |
 | 3b | BNN | **two of four usable; large_play's reward model is SATURATED (§4.3.50).** Its mean logit has median |Δ| = 18.70 (σ = 0.99999999), so CVaR reorders 44% of pairs and is confidently wrong — CVaR CE 10.24, reproduced. The other three sit at 1.9–5.1. CVaR CE itself is reproducible across replicates. Next: large_play's own amplitude curve, since §4.3.23's was medium_play-only |
 | 3c | BNN | **closed.** Five sampler mechanisms proposed and refuted (§4.3.73). What survives is one invariant: decorrelation is set by **total sampling steps**, and steps-per-independent-sample is a per-variant constant spanning **60×** (§4.3.67). No knob moves it |
-| **R3** | BNN | **STOPPED 2026-09-04 after 26 trials**, deliberately, for three defects now fixed: `fraction_cool` was a swept dimension that does nothing (§4.3.76), the centred convergence metrics the gates specify were not logged (§4.3.75), and 16 of 17 rejections were one gate whose behaviour was not understood. Of 26 trials, 9 were eligible (36%). **Trials are not wasted** — they are valid `val_cvar_ce` measurements and carry into a relaunch via `check_sweep_convergence.py --emit-prior-runs`. **Relaunch is gated on §10.2** |
+| **R3** | BNN | **STOPPED 2026-09-04 after 26 trials**, deliberately, for three defects now fixed: `fraction_cool` was a swept dimension that does nothing (§4.3.76), the centred convergence metrics the gates specify were not logged (§4.3.75), and 16 of 17 rejections were one gate whose behaviour was not understood. Of 26 trials, 9 were eligible (36%). **Superseded 2026-09-11: the trials are DISCARDED** — admitted under the z-form gate §3.2.12 replaces, with gate 3 never computable for them (§3.2.12 item 5). **Relaunch is gated on §10.2** |
 | 4 | all | not started; blocked on R3, and on label caching (§3.2.9 — 11 chain sets/variant is up to 5 TB, cached reward labels are ~4 MB) |
 
 The BNN configs carry a round-2 provenance header recording the sweep, winner,
@@ -10605,12 +10614,24 @@ refuted since.
   `val_pred_centred_ess_median` ≥ 40 read directly rather than through the raw
   proxy.
 
+#### Order of the remaining work (decided 2026-09-11)
+
+**The capacity ladder runs BEFORE the relaunch.**
+
+> ⚠️ **Its role is fixed here, before it runs, or reading it afterwards is
+> reactive tuning (§0).** Pre-registered: **the ladder is disclosure and
+> mechanism only — it does not change the search space.** §3.2.9 set `width`
+> 6–9 and `depth` 2–6 on a **comparability** argument (MR searches 6–9, PT
+> `embd_dim` 6–8), not a performance one, so a capacity effect is not grounds to
+> narrow them — doing so would hand the BNN tuning the baselines never had,
+> which §3.1 forbids. If the ladder is ever meant to license a range change,
+> that rule must be written here *before* it is run.
+
 When those hold: relaunch with `./launch_hp_sweeps.sh bnn`, **bumping
 `IDS_FILE` to a new round tag** — the cache is keyed by entry name, so reusing
 `sweep_ids_bnn_round3.txt` would silently resume the stopped sweeps with the old
-search space. Carry the 26 completed trials in with
-`check_sweep_convergence.py --emit-prior-runs` so the Bayes optimiser keeps
-their information.
+search space. **Do NOT pass `--emit-prior-runs`**: the 26 completed trials are
+discarded and the relaunch starts from an empty surrogate (§3.2.12 item 5).
 
 #### Still queued behind the sweep
 
