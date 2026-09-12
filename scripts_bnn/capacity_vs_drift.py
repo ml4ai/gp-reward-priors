@@ -55,7 +55,12 @@ def n_params(width_log2, depth, d_in=OBS_DIM):
     """
     if not (np.isfinite(width_log2) and np.isfinite(depth)):
         return float("nan")
-    W = 2.0 ** int(width_log2)
+    # A wandb SWEEP records the values it set, so sweep trials log the log2
+    # exponent (7/8/9); a non-sweep run logs TrainConfig as expanded (512).
+    # Without this guard 2**512 silently returns inf -- it did, on
+    # r3pins_large_play_d6 (handoff 4.3.104).  Nothing in this project uses a
+    # log2 exponent above 10, so >20 can only be an already-expanded width.
+    W = float(width_log2) if width_log2 > 20 else 2.0 ** int(width_log2)
     d = int(depth)
     return W * (d_in + 1) + (d - 1) * W * (W + 1) + (W + 1)
 
