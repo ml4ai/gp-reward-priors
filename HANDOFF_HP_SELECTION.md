@@ -1304,9 +1304,7 @@ sweep ran" and editing it after the fact would destroy that guarantee.
    z-form's tolerance had been an unintended function of the chain count.
 2. The 26 completed round-3 trials were **discarded** rather than carried in:
    they were admitted under the superseded z-form gate, and gate 3 was never
-   computable for them. The relaunch starts from an empty surrogate. Formerly
-   this line read that they seed only the
-   optimiser.
+   computable for them. The relaunch starts from an empty surrogate.
 3. The stationarity/degeneracy trade-off, and gate 2's collapsed-posterior flaw.
 4. §4.3.72's compute pricing is withdrawn; the operative figure is §4.3.102's.
 5. The four production yamls carry the round-3 prior pins and are **hybrid**
