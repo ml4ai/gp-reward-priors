@@ -1312,6 +1312,75 @@ sweep ran" and editing it after the fact would destroy that guarantee.
 6. τ = 1.122 and τ_loc = 0.155 are derived, not calibrated; the eligibility
    table was available and deliberately not used.
 
+### 3.2.13 The depth floor is asymmetric; and the ladder is upgraded to LICENSING
+
+Two items, 2026-09-11, both before the relaunch.
+
+#### 1. The BNN cannot reach a one-layer model; both baselines can
+
+| family | depth-equivalent | range | minimum |
+|---|---|---|---|
+| MR | `depth` | 1–6 | **1** |
+| PT | `num_layers` | 1–4 | **1** |
+| **BNN** | `depth` | **2–6** | **2** |
+
+§3.2's own tables document this, so it is a property of the pre-registered
+design rather than drift between yaml and doc. **It cuts against §3.2.9's
+framing.** That section capped BNN `width` 6–10 → 6–9 so the BNN would "receive
+*no more* tuning than the baselines" — but on **depth** the BNN has strictly
+fewer options than MR, and is excluded from the **low-capacity end**, which
+§4.3.86 and §4.3.104 indicate is the better end on both the stationarity gate
+and the objective. On this axis §3.1's invariant is violated in the *opposite*
+direction, and nobody noticed until now.
+
+`depth = 1` is implementable — verified: MLP forward OK, 2 weight matrices,
+**2,497 parameters** at width 6.
+
+> **Recommended, pending decision: BNN `depth` 2–6 → 1–6, matching MR.**
+> Justified by §3.1's comparability doctrine **alone** — it restores symmetry
+> rather than responding to a performance number, so it is not reactive tuning,
+> and it is legitimate only because the relaunch has not happened yet. It needs
+> no ladder result and triggers no MR/PT re-run.
+
+#### 2. The ladder LICENSES a range change — rule fixed before it runs
+
+**Supersedes** the "disclosure and mechanism only" rule pre-registered in §10.2
+earlier today, at the user's direction. Written before the ladder runs, per §0.
+
+- **Statistic:** `|log(centred scale_ratio)|` and `val_cvar_ce`, per variant,
+  ranked against `n_params`.
+- **Effect must clear noise, not a p-value.** With the pinned-config
+  σ ≈ 0.0226 (§4.3.101), a monotone rise of ≥ 0.07 across the width range is
+  ~3σ. At n = 4 per variant the exact-p floor is 0.083, so **significance is
+  unattainable and is deliberately not the criterion** — direction plus effect
+  size is.
+- **Licensed change if it fires:** cap the BNN capacity range at the largest
+  width whose mean `|log ratio|` is within τ = 1.122 **and** whose `val_cvar_ce`
+  is no worse than the smallest width's by more than 2× its jackknife SE.
+  **Nothing else in the search space moves.**
+- **If it does not fire:** the range stands and the ladder is reported as a null
+  result.
+
+#### 3. Extrapolating to MR and PT requires their own measurement
+
+**MR and PT have no acceptance gate of any kind** — verified: both sweeps
+minimise `eval_loss_best`, and there is no drift, eligibility or degeneracy
+machinery anywhere in `scripts_mr/` or `scripts_pt/`. **So the BNN's gate-1
+capacity effect cannot transfer to them — they have no gate 1.** Only an effect
+on the *objective* could, and `val_cvar_ce` and `eval_loss_best` are different
+objectives over different model classes.
+
+| option | what it licenses | cost |
+|---|---|---|
+| **(i) run the same width ladder on MR and PT** — *recommended* | each family from its own evidence | 8 short runs; MR/PT trials are minutes-to-hours, not 6.4 h |
+| (ii) license only the BNN | nothing about the baselines | none |
+| (iii) license MR/PT from the BNN result | an extrapolation across model classes | must be disclosed as such |
+
+> ⚠️ **Cost warning.** Narrowing an MR or PT range means **re-running their
+> stage-1 sweeps** — 8 sweeps — and §3.2.1's "MR and PT are not re-run" would
+> have to be amended. Option (i) costs the ladder runs now and the re-runs only
+> if the rule fires.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
@@ -10616,14 +10685,12 @@ refuted since.
 
 **The capacity ladder runs BEFORE the relaunch.**
 
-> ⚠️ **Its role is fixed here, before it runs, or reading it afterwards is
-> reactive tuning (§0).** Pre-registered: **the ladder is disclosure and
-> mechanism only — it does not change the search space.** §3.2.9 set `width`
-> 6–9 and `depth` 2–6 on a **comparability** argument (MR searches 6–9, PT
-> `embd_dim` 6–8), not a performance one, so a capacity effect is not grounds to
-> narrow them — doing so would hand the BNN tuning the baselines never had,
-> which §3.1 forbids. If the ladder is ever meant to license a range change,
-> that rule must be written here *before* it is run.
+> ⚠️ **Its role is LICENSING, and the rule is pre-registered in §3.2.13**
+> (2026-09-11, before the ladder runs). The earlier "disclosure and mechanism
+> only" rule is superseded. §3.2.13 also records that the BNN's `depth` floor of
+> 2 is asymmetric against MR's 1 and PT's 1, and that MR/PT have **no acceptance
+> gate**, so the BNN's gate-1 effect cannot transfer to them without their own
+> ladder.
 
 When those hold: relaunch with `./launch_hp_sweeps.sh bnn`, **bumping
 `IDS_FILE` to a new round tag** — the cache is keyed by entry name, so reusing
