@@ -1445,6 +1445,81 @@ capacity cap at width `W*`, the same cap applies to **MR's `width`**, and to
 > **re-run** — up to 8 sweeps — and **§3.2.1's "MR and PT are not re-run" is
 > amended accordingly.**
 
+### 3.2.15 Ladder restarted at 2 threads and extended below the range — written BEFORE the runs
+
+Recorded 2026-09-12 at the user's direction, **before any restarted rung ran**,
+per §0.
+
+#### 1. Restart, and what happens to the 8-thread rungs
+
+The first ladder attempt ran two rungs at `OMP_NUM_THREADS` 8
+(`cap_ladder_large_diverse_w6_0`, 5.43 h; `_w7_0`, 5.96 h) because §7.3's
+pre-registered 2 had never been propagated into the code (§7.3's amendment).
+The ladder is **restarted in full at 2**, so all rungs share one numerical
+environment.
+
+- The two 8-thread rungs are **superseded as rungs** and are **not** to be mixed
+  with the restarted ladder. They are retained on disk under the old
+  `cap_ladder_` prefix; the restart uses **`cap_ladder2_`**, because the
+  deterministic `{OUT_DIR}_{seed}` path would otherwise overwrite them (§10.3).
+- Retained deliberately: `cap_ladder_large_diverse_w6/w7` vs
+  `cap_ladder2_large_diverse_w6/w7` is a matched 8-vs-2-thread pair at identical
+  config — the only direct measurement of reduction-order effect size this
+  campaign has. Read it as a reference, never as ladder rungs.
+
+#### 2. Rungs, and which of them license anything
+
+| variant | depth | widths | in searched range? |
+|---|---|---|---|
+| large_diverse | 4 | **4–9** (6 rungs) | w6–9 yes; **w4–5 no** |
+| large_play | 6 | **4–8** (5 rungs) | w6–8 yes; **w4–5 no** |
+
+> **w4 and w5 are EXPLORATORY ONLY and license nothing.** Round 3's `width`
+> range is 6–9 (§3.2.9), so these two rungs sit *below* it. §3.2.13's rule
+> licenses exactly one change — capping the range at the largest acceptable
+> width — and says "nothing else in the search space moves." A low-capacity
+> result may **not** be used afterwards to lower the floor: that would be
+> precisely the reactive tuning §0 forbids. §3.2.13's rule is applied to the
+> **in-range rungs only**.
+
+**Why no comparability licence exists here, unlike depth.** Verified 2026-09-12
+across all sweep yamls:
+
+| family | width field | range | floor |
+|---|---|---|---|
+| BNN | `width` | 6–9 | 6 |
+| MR | `width` | 6–9 | 6 |
+| PT | `embd_dim` | 6–8 | 6 |
+
+All three floor at **6**, so there is no asymmetry to repair — the opposite of
+§3.2.13's depth finding, and the BNN floor of 6 was set *deliberately* by
+§3.2.9 to enforce §3.1 ("the BNN's 6–10 gave it an octave the baselines never
+had"). Dropping the BNN alone to 4 would hand it two octaves no baseline has,
+violating §3.1 in the direction §3.2.9 was protecting. A legitimate floor change
+would have to lower MR's and PT's floors too, at §3.2.14's 8-sweep cost.
+
+*(PT's `head_dim` is 5–7 and is **not** the width analogue — it is a per-head
+dimension clamped to `embd_dim` in `__post_init__`. It was misread as PT's floor
+once during this analysis; it is not.)*
+
+#### 3. Consequence of large_play stopping at w8
+
+large_play's ladder no longer reaches w9, the top of the searched range, so
+**§3.2.13's rule cannot decide "cap at 9 versus 8" for that variant**.
+`r3pins_large_play_d6_0` is width 9, depth 6 and config-identical to a ladder
+rung on every non-overridden field (full key diff, 2026-09-12), but it ran at 8
+threads — a cross-environment reference, not a rung.
+
+#### 4. Pre-flight
+
+Verified before launch: `MLP(37, [16]*4)` = **1,441** parameters and
+`[16]*6` = **1,985**, `[32]*4` = 4,417, `[32]*6` = 6,529, all forward-passing
+finite; **no lower-bound validation on `width`** anywhere in the config path;
+the "astronomical CE" guard keys on large weight magnitude, not small width.
+Sampler settings are the §4.3.101 noise-floor config throughout — 32 chains ×
+60 draws × `cycle_length` 2000, `num_burn_in_steps` 20000, `n_discarded` 5 —
+with the round-3 pins, so σ = 0.0226 remains the applicable floor.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
@@ -8237,6 +8312,12 @@ entirely inside the searched range, every sampler setting at the settled
 config. **Read on `|log(scale_ratio)|`** — reading it on `scale_z` or on the
 signed ratio would repeat §4.3.74's error, which is exactly what happened in
 the first pass above.
+
+> **Superseded in scope by §3.2.15 (2026-09-12).** The ladder as actually run
+> spans width **4–9** at depth 4 (large_diverse) and **4–8** at depth 6
+> (large_play), so it is no longer entirely inside the searched range. w4 and
+> w5 are exploratory and license nothing; §3.2.13's rule applies to the
+> in-range rungs only.
 
 ### 4.3.87 The gate's tolerance was set by the chain count, not by anyone — relaunch criterion 1 answered
 
