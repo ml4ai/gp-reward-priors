@@ -402,7 +402,8 @@ case — a 28% apparent CVaR CE improvement that sat entirely inside noise.
 - **Do not gate on raw drift, `rhat_bulk`, or any raw per-point tail
   statistic** (§9, §4.3.61).
 - **MR and PT are not re-run** — §10.2 requires it only if `batch_size` or
-  `bt_pool` changes, and neither has. The §5.2 gauge is stage-4 only and stages
+  `bt_pool` changes, and neither has. **Amended by §3.2.14**: they *are* re-run
+  if §3.2.13's ladder rule fires and narrows their ranges under option (iii). The §5.2 gauge is stage-4 only and stages
   1–3 select on offset-invariant objectives, so nothing upstream moves.
 
 ### 3.2.2 De-risking the α = 0.25 choice
@@ -1311,6 +1312,14 @@ sweep ran" and editing it after the fact would destroy that guarantee.
    until round 3 selects (§10.3).
 6. τ = 1.122 and τ_loc = 0.155 are derived, not calibrated; the eligibility
    table was available and deliberately not used.
+7. The BNN's `depth` floor was 2 while MR's was 1 and PT's 1 — the BNN was the
+   only family barred from a one-layer model. Corrected to 1–6 before the
+   relaunch on comparability grounds (§3.2.14).
+8. If the capacity ladder fires, **MR and PT search spaces are narrowed on
+   evidence from a different model family** — the BNN ladder — not from their
+   own (§3.2.14, option iii). MR is the same model class as the BNN; **PT is a
+   transformer and that extrapolation is the weaker one**, and may be vacuous
+   since PT's ranges are already narrower.
 
 ### 3.2.13 The depth floor is asymmetric; and the ladder is upgraded to LICENSING
 
@@ -1380,6 +1389,57 @@ objectives over different model classes.
 > stage-1 sweeps** — 8 sweeps — and §3.2.1's "MR and PT are not re-run" would
 > have to be amended. Option (i) costs the ladder runs now and the re-runs only
 > if the rule fires.
+
+### 3.2.14 DECIDED: BNN `depth` 1–6, and MR/PT licensed from the BNN ladder
+
+Both decided 2026-09-11, before the relaunch.
+
+#### 1. BNN `depth` 2–6 → 1–6 — applied
+
+Applied to all four `scripts_bnn/sweep_*.yaml`. **Justified by §3.1
+comparability alone**: MR searches `depth` 1–6 and the BNN now matches it
+exactly (PT's `num_layers` is 1–4). It restores symmetry rather than responding
+to a performance number, so it is not reactive tuning — and it is legitimate
+only because the relaunch has not happened.
+
+**Verified**: each sweep yaml parsed and diffed against the previous commit —
+only `parameters.depth.min` changed, 2 → 1; every other key identical.
+
+> **This supersedes §3.2.1's "Ranges unchanged from §3.2" for `depth`**, as
+> §3.2.9 already did for `width`. Round 3's operative architecture ranges are
+> **`width` 6–9 (§3.2.9), `depth` 1–6 (here)**.
+
+**Expect the optimiser to propose one-layer models** — 2,497 parameters at
+width 6, an order of magnitude below anything round 3 has tried. §4.3.86 and
+§4.3.104 predict that end is better on both the gate and the objective, so the
+winner may be far smaller than round 2's.
+
+#### 2. Option (iii): MR and PT licensed from the BNN ladder
+
+Adopted at the user's direction. **This is an extrapolation across model
+classes and is disclosed as such.**
+
+Transfer rule, pre-registered: if §3.2.13's rule fires and licenses a BNN
+capacity cap at width `W*`, the same cap applies to **MR's `width`**, and to
+**PT** only where its range exceeds the cap.
+
+- **MR is the defensible case.** MR is the *same model class* — an MLP with the
+  same `width` (log2) and `depth` parameterisation — differing only in being
+  trained deterministically rather than sampled. The capacity axis is the same
+  quantity in the same units.
+- **PT is the weak case and carries the stronger disclosure.** PT is a
+  transformer: `embd_dim` is not `width`, `num_layers` is not `depth`, and its
+  capacity is not the same quantity. Its ranges (`embd_dim` 6–8, `num_layers`
+  1–4) are **already narrower than the BNN's**, so a BNN-licensed cap may well
+  be **vacuous** for PT.
+- **Only the objective half of the rule may be cited.** MR and PT have **no
+  acceptance gate** (§3.2.13), so the BNN's gate-1 evidence licenses nothing for
+  them; only `val_cvar_ce` may be invoked, and even that is a different
+  objective over a different model class.
+
+> ⚠️ **Cost, incurred if the rule fires.** MR and/or PT stage-1 sweeps must be
+> **re-run** — up to 8 sweeps — and **§3.2.1's "MR and PT are not re-run" is
+> amended accordingly.**
 
 ### 3.3 What is deliberately NOT swept
 

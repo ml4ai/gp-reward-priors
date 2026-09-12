@@ -172,9 +172,14 @@ parameters:
     distribution: int_uniform
     min: 6
     max: 9
+  # 2026-09-11 (§3.2.14): floor lowered 2 -> 1 to MATCH MR, which searches
+  # depth 1-6 (PT's num_layers is 1-4).  Comparability only (§3.1): the BNN
+  # was the only family barred from a one-layer model, and barred from the
+  # low-capacity end that §4.3.86/§4.3.104 indicate is the better one.  This
+  # restores symmetry rather than responding to a performance number.
   depth:
     distribution: int_uniform
-    min: 2
+    min: 1
     max: 6
 
   # ---- Swept: prior strength -------------------------------------------
