@@ -402,9 +402,10 @@ case — a 28% apparent CVaR CE improvement that sat entirely inside noise.
 - **Do not gate on raw drift, `rhat_bulk`, or any raw per-point tail
   statistic** (§9, §4.3.61).
 - **MR and PT are not re-run** — §10.2 requires it only if `batch_size` or
-  `bt_pool` changes, and neither has. **Amended by §3.2.14**: they *are* re-run
-  if §3.2.13's ladder rule fires and narrows their ranges under option (iii). The §5.2 gauge is stage-4 only and stages
+  `bt_pool` changes, and neither has. The §5.2 gauge is stage-4 only and stages
   1–3 select on offset-invariant objectives, so nothing upstream moves.
+  **Amended by §3.2.14**: they *are* re-run if §3.2.13's ladder rule fires and
+  narrows their ranges under option (iii).
 
 ### 3.2.2 De-risking the α = 0.25 choice
 
@@ -1386,9 +1387,12 @@ objectives over different model classes.
 | (iii) license MR/PT from the BNN result | an extrapolation across model classes | must be disclosed as such |
 
 > ⚠️ **Cost warning.** Narrowing an MR or PT range means **re-running their
-> stage-1 sweeps** — 8 sweeps — and §3.2.1's "MR and PT are not re-run" would
-> have to be amended. Option (i) costs the ladder runs now and the re-runs only
-> if the rule fires.
+> stage-1 sweeps** — 8 sweeps — and §3.2.1's "MR and PT are not re-run" is
+> amended accordingly (done — §3.2.14). Option (i) costs the ladder runs now and
+> the re-runs only if the rule fires.
+>
+> **Decided: option (iii) — see §3.2.14.** The table above is the analysis as it
+> stood before that choice; it is kept as the record of what was weighed.
 
 ### 3.2.14 DECIDED: BNN `depth` 1–6, and MR/PT licensed from the BNN ladder
 
