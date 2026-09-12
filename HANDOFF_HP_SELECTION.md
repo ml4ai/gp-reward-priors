@@ -287,7 +287,9 @@ One value deserves its own note because it looks like tuning and is not:
 
 ### 3.2.1 Round-3 BNN sweep design (supersedes §3.2's BNN block)
 
-Pre-registered here before any round-3 trial runs. Everything not listed is
+Pre-registered here before any round-3 trial runs.
+**Amended by §3.2.12 (2026-09-11) before the relaunch** — gate 1 is restated
+as an effect size; everything else stands. Everything not listed is
 unchanged from §3.1 — `run_cap: 130`, stopping rule K = 15, seed 0, and the
 report-both-winners rule.
 
@@ -1174,6 +1176,133 @@ half. At 240k it is 20k–140k / 140k–260k and both halves sit further from it
 false` the clip does not fire, so this is not tail bias — it is a chain whose
 gradients routinely exceed 100 during sampling. It is ineligible anyway, but
 counts toward the search budget.
+
+### 3.2.12 Round-3b amendment — pre-registered 2026-09-11, before the relaunch
+
+Amends §3.2.1. **Everything not listed here is unchanged**: `run_cap` 130,
+stopping rule K = 15, seed 0, the five swept dimensions and their ranges,
+`width` 6–9, `cycle_length` 2000, the `n_meas` / `map_amp2` / `fraction_cool`
+pins, 32 chains × 120k steps (§3.2.9), selection at conservatism 0.75 and
+reporting at 0.95 (§3.2.10), and §3.2.1's "unchanged, and explicitly so" list.
+
+> **One pre-existing inconsistency settled.** §3.2.1's "Decision (2026-08-31,
+> revised): α_select = 0.05 … 128 chains" was **superseded by §3.2.9 and
+> §3.2.10** (32 chains, select at 0.75). §3.2.10 governs.
+
+#### 1. Gate 1 is restated as an EFFECT SIZE (the only design change)
+
+| | before (§3.2.1) | **after** |
+|---|---|---|
+| scale | `fn_drift_centred_scale_z_median ≤ 2` | **`\|log(val_fn_drift_centred_scale_ratio_median)\| ≤ log(1.122)`** |
+| location | `fn_drift_centred_loc_z_median ≤ 2` | **`val_fn_drift_centred_loc_sd_median ≤ 0.155`** |
+
+**Why.** §4.3.87 measured that the z-form's tolerance is a function of the chain
+count — it admits a 1.333× widening at 8 chains, **1.129× at 32**, 1.055× at
+128 — because `z` divides by an MCSE that shrinks as `1/√chains`. The effect
+size is flat across that range (1.8% over 16×) while `z` tracks `√chains` (5.05×
+observed against 4.00× predicted). **32 chains was chosen for the objective's
+standard error (§3.2.5, §3.2.8), not as a drift tolerance**, so the old gate's
+severity was a side effect of an unrelated decision. The effect-size form is
+chain-count invariant.
+
+**Both thresholds come from one principle (§4.3.88), not from observed runs:**
+
+> *A systematic error must not exceed the random error the procedure already
+> accepts on the same quantity.* Rejecting a trial for a bias smaller than your
+> own noise floor is incoherent — you cannot measure it.
+
+With `CVaR = μ − kσ`, `k = φ(z_α)/α`, at the **selection** conservatism 0.75
+(tail 0.25) and gate 3's floor of `ess ≥ 40`: 10 effective tail draws, tail sd
+0.492σ, **MCSE = 0.155σ**, `k = 1.271`.
+
+- A **scale** error `r` multiplies the CVaR's deviation from the mean by exactly
+  `r` ⇒ `τ = 1 + 0.155/1.271 = 1.122`. (Reporting at 0.95 gives 1.127 —
+  essentially identical, so the answer does not depend on which level anchors it.)
+- A **location** shift of `δ·σ` moves the CVaR by `δ·σ` ⇒ `τ_loc = 0.155`.
+
+**Gates 1 and 3 are now coupled by that one principle** — `τ = 1 + C/√ess` — so
+they stop being two independent arbitrary numbers: demanding more resolution
+automatically demands less bias.
+
+> ⚠️ **Not tuned to results, and here is the evidence.** On the 28 completed
+> round-3 trials the new gate admits **39%**, *identical* to the z-form's 39%,
+> agreeing with it on 86% of trials (§4.3.88). An eligibility-vs-threshold table
+> exists (§4.3.87) and was **not** used to choose the number — 1.25× would have
+> hit §10.2's ≥60% target and was explicitly refused. The restatement buys
+> chain-count invariance and interpretability, **not** a higher pass rate.
+
+*Sanity check, after the fact, not a calibration:* `loc_sd` reads 0.092 on the
+depth-6 pinned run and 0.125–0.149 on the four pinned medium_play replicates
+(pass), against 0.284 and 0.428 on settled-config runs (fail). **The margin on
+the pinned replicates is not wide** — 0.149 against 0.155 — and that is recorded
+rather than smoothed.
+
+`z` remains **logged and reported as a diagnostic**; it is no longer a gate.
+
+#### 2. Eligibility is decided at the sweep's own budget — unchanged, now with the measurement behind it
+
+§3.2.9 already required this as a guardrail against escalation flipping a FAIL
+to a PASS. §4.3.87 supplies the measurement: **both** gate 1's z-form and gate
+2's threshold move with chain count (gate 2's is `2 × jackknife-over-chains SE`,
+scaling `1/√C`), so trials measured at different budgets are not comparable.
+The rule stands verbatim.
+
+#### 3. Gate 2 unchanged — with a disclosure and a known flaw
+
+**No change.** Gate 2 exists precisely to stop the objective selecting a
+collapsed posterior, and its chain-count dependence is *intended*: §3.2.1
+designed it as a resolution criterion, and "distinguishable at the objective's
+own precision" legitimately depends on chains.
+
+> **Disclosure — a stationarity/degeneracy trade-off (§4.3.101).** Narrowing the
+> posterior to fix stationarity collapses the CVaR/mean separation. On matched
+> production runs, centred posterior sd 5.91 → ~1.45 took `|log ratio|`
+> 0.53 → 0.03 *and* the degeneracy gap 0.140 → ~0.015. Across the 28 trials
+> ρ(`|log ratio|`, degeneracy margin) = **+0.397**, and the single gate-2 failure
+> is medium_play's **most stationary** trial. **Expect gate 2 to bind more often
+> among eligible trials than its 96% overall rate suggests**, because eligibility
+> selects for stationarity.
+
+> **Known flaw, not fixed:** a fully collapsed trial passes gate 2, because the
+> jackknife SE is 0 when every chain is identically constant (`k0jdgns7`:
+> `val_cvar_ce` = log 2, thr 0.0000). **Gate 1 rejects it**, so no eligible trial
+> is affected; changing gate 2 in response would be reactive tuning.
+
+#### 4. Budget unchanged, and §4.3.72's pricing corrected
+
+32 chains × 120k steps (§3.2.9) stands. §4.3.102: on the **pinned** config
+medium_play needs **≥ ~62,000 steps per independent sample**, and the three
+instruments agree within 1.8× with the spread explained by a known, directional
+bias. §4.3.67's ~100,000 and **§4.3.72's "~10× more compute" describe the
+round-2 settled config and no longer apply.** The pinned pilot reached centred
+`ess` 61–63 at this budget, clearing gate 3's floor of 40 with margin.
+
+#### 5. Prior trials seed the surrogate; they are not re-gated
+
+The 26 completed trials carry in via `check_sweep_convergence.py
+--emit-prior-runs`, which seeds the Bayes optimiser with their `val_cvar_ce`
+observations. **They were gated under the z-form, and centred `ess` was never
+logged for them (0 of 28 — §4.3.75), so gate 3 is not computable for them.**
+Therefore, pre-registered: **a carried-over trial may seed the surrogate but may
+not be selected as the winner** unless all three gates are computable from its
+logged metrics. Winner selection runs on relaunch trials, which log everything.
+
+#### 6. Disclosures §7.3 must gain
+
+Recorded here rather than appended to §7.3, because §7.3 is "written BEFORE the
+sweep ran" and editing it after the fact would destroy that guarantee.
+
+1. Gate 1 was restated from a z-test to an effect size **before** the relaunch,
+   with both thresholds derived from the CVaR's own measurement precision; the
+   z-form's tolerance had been an unintended function of the chain count.
+2. The 26 carried-over trials were gated under the z-form and seed only the
+   optimiser.
+3. The stationarity/degeneracy trade-off, and gate 2's collapsed-posterior flaw.
+4. §4.3.72's compute pricing is withdrawn; the operative figure is §4.3.102's.
+5. The four production yamls carry the round-3 prior pins and are **hybrid**
+   until round 3 selects (§10.3).
+6. τ = 1.122 and τ_loc = 0.155 are derived, not calibrated; the eligibility
+   table was available and deliberately not used.
 
 ### 3.3 What is deliberately NOT swept
 
@@ -9027,9 +9156,9 @@ difference cannot fail the gate. Recorded, not chased.
 | 2 — τ estimates agree, or disagreement explained | **answered** (§4.3.102), on the pinned config |
 | 3 — a pilot passes its own gates | **met with qualification** (§4.3.99, §4.3.101): gates 1 and 3 robust; gate 2 on a knife-edge for the settled sampler values |
 
-What remains before relaunch is procedural: the §3.2.1 amendment (τ = 1.122
-effect-size gate plus the stationarity–degeneracy disclosure), pre-registered
-before the sweep resumes, and the `IDS_FILE` bump.
+What remains before relaunch: ✅ the §3.2.1 amendment is written and
+pre-registered as **§3.2.12** (2026-09-11); the `IDS_FILE` bump is the only
+step left.
 
 ### 4.3.103 Depth-6 pinned gauge run — pre-registered before the result
 
