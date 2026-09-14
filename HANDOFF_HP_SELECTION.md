@@ -9537,19 +9537,36 @@ robust to seed noise even though its endpoint rise is.
 
 #### 2. What the numbers show beyond the rule
 
-- **Gates 1 and 2 pull in opposite directions along capacity.** The degeneracy
-  gap tracks posterior width (pred sd), which grows with capacity; `|log r|`
-  grows too. Small models narrow the posterior toward degeneracy (large_diverse
-  w4/w5 fail gate 2); large ones drift. All three gates pass together at
-  **large_diverse w6 only** in range, and at **no in-range width of large_play
-  at depth 6** — only exploratory w4 does. This is §4.3.101's trade-off, now
-  traced along the capacity axis.
+- **Drift rises with width, with one exception.** large_play: ρ(width,
+  `|log r|`) = +0.943 over w4–9 (w5 and w6 tie, 0.229/0.226). large_diverse:
+  **+1.000 over w5–9, but w4 drifts as badly as w9** (0.351 vs 0.362), so over
+  w4–9 ρ is only +0.429.
+- **The CVaR/mean gap shrinks as width narrows, in both variants** (ρ(width,
+  gap) +0.943 large_diverse, +1.000 large_play), and tracks posterior width
+  (ρ(pred sd, gap) +0.829, +1.000). **But failing gate 2 happens only on
+  large_diverse, and the two failures differ in kind** (threshold = 2×SE,
+  verified from the logged `val_cvar_degeneracy_thr`):
+  - **w5 is genuine narrowing**: the smallest gap of any rung (0.018) against a
+    threshold of 0.030.
+  - **w4 is a resolution failure, not narrowing**: its gap (0.035) is about
+    w6's (0.039, which passes), but its threshold is 0.067 — 3.5× w6's — because
+    its CVaR estimate is noisy (SE 0.033 vs 0.010).
+  - **large_play passes gate 2 at every width**, w4 included (margin +0.018).
+- **So the two-sided squeeze is demonstrated on large_diverse only.** There,
+  drift bounds the window from above and degeneracy from below (w5), leaving
+  **w6 the only in-range rung passing all three gates**. On large_play at depth
+  6 the lower bound is never reached within w4–9: drift is the only binding
+  constraint, no in-range width passes gate 1, and only exploratory w4 passes all
+  three. §4.3.101's stationarity–degeneracy trade-off is thus traced along the
+  capacity axis for one variant, not both. *(An earlier draft of this entry said
+  both variants showed it; corrected the same day on the user's question.)*
 - **Mean CE improves monotonically with capacity while CVaR CE does not** —
   sharply so on large_play (mean 0.341 → 0.250; CVaR 0.454 → 1.324). Bigger
   models fit the mean better and widen the posterior tail. This is the
   §3.2.7/§4.3.51 question, and the CVaR objective is what penalises them.
-- **Small is not monotonically better.** large_diverse w4 is worst on every
-  metric (mean CE 0.506, underfitting); the low end is U-shaped.
+- **Small is not monotonically better.** large_diverse w4 has the worst mean CE
+  (0.506), CVaR CE (0.477), SE (0.033) and ess (52.2), and the second-worst drift
+  — consistent with underfitting; the low end is U-shaped.
 - **Depth is confounded with the result for large_play.** The ladder held depth
   at 6, so "no in-range width passes gate 1" is a statement about d6. The round-3
   sweep searches depth 1–6, so capping width alone does not make d6 feasible.
@@ -9562,11 +9579,11 @@ sampled history rows at full precision** (2-thread runs ~1% faster). And
 `cap_ladder2_large_play_w9_0` reproduces `r3pins_large_play_d6_0` — 8 threads,
 MSD probe on — exactly (`|log r|` 0.3459, `cvar_ce` 1.3238). **The pipeline is
 bitwise deterministic at fixed seed**, and the MSD probe is output-neutral.
-Caveat: wandb does not record the thread environment, so the claim that thread
-count changed between the pairs rests on the restart procedure (§3.2.15), not on
-logged evidence. *If* it did, §7.3's reduction-order disclosure is empirically
-moot for these outputs, and so is the thread half of the §4.3.84–§4.3.104
-two-environment caveat.
+wandb does not record the thread environment; **the user confirmed that the
+§3.2.15 pull-and-grep on leviathan printed `"2"`** (reported 2026-09-14). So thread count did change between the pairs, and reduction-order
+effects are **zero on these outputs**: §7.3's disclosure is empirically moot
+for them, and so is the thread half of the §4.3.84–§4.3.104 two-environment
+caveat (the prior-pin half stands).
 
 #### 4. OPEN — three gaps in the pre-registered rules, found only now
 
