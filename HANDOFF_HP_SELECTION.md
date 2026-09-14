@@ -1504,6 +1504,10 @@ once during this analysis; it is not.)*
 
 #### 3. Consequence of large_play stopping at w8
 
+> **Moot (2026-09-14): large_play w9 was run** (`cap_ladder2_large_play_w9_0`),
+> so both variants cover w4–9 and the in-range sample is w6–9 for both. See
+> §4.3.105.
+
 large_play's ladder no longer reaches w9, the top of the searched range, so
 **§3.2.13's rule cannot decide "cap at 9 versus 8" for that variant**.
 `r3pins_large_play_d6_0` is width 9, depth 6 and config-identical to a ladder
@@ -9487,6 +9491,103 @@ same thing across run types.
 **For the to-do:** the capacity ladder should now cover **large_play as well as
 large_diverse**, at fixed sampler settings, with the pins — this run is a
 motivating point above the range, not a substitute for the ladder.
+
+### 4.3.105 Capacity ladder: the rule FIRES on both variants — and the pre-registered rules leave three gaps
+
+Twelve rungs, `cap_ladder2_<variant>_w<4..9>`, 2026-09-12 to 09-14, at the
+§3.2.15 config. Readout: `scripts_bnn/capacity_ladder_readout.py` (output
+saved locally to `exp/capacity_ladder_readout.txt`). **Config audit: 64 keys ×
+6 rungs per variant, zero unexpected differences** — only `width`, `OUT_DIR`,
+`name`. Gate 1 below = `|log r|` ≤ log 1.122 **and** centred `loc_sd` ≤ 0.155;
+gate 3 = centred ess ≥ 40.
+
+**large_diverse** (depth 4, 514 pairs):
+
+| w | n_params | `\|log r\|` | × τ | g1 | ess | g3 | `cvar_ce` | SE | mean CE | gap | g2 | pred sd |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4* | 1,441 | 0.3508 | 3.05× | FAIL | 52.2 | PASS | 0.4767 | 0.0333 | 0.5056 | 0.035 | FAIL | 1.53 |
+| 5* | 4,417 | 0.0202 | 0.18× | PASS | 64.3 | PASS | 0.3907 | 0.0151 | 0.3861 | 0.018 | FAIL | 1.25 |
+| **6** | 14,977 | **0.0500** | 0.43× | **PASS** | 76.0 | PASS | **0.3911** | 0.0096 | 0.3631 | 0.039 | PASS | 1.33 |
+| 7 | 54,529 | 0.1623 | 1.41× | FAIL | 91.2 | PASS | 0.3898 | 0.0121 | 0.3429 | 0.056 | PASS | 1.48 |
+| 8 | 207,361 | 0.2542 | 2.21× | FAIL | 128.7 | PASS | 0.4055 | 0.0109 | 0.3272 | 0.086 | PASS | 1.80 |
+| 9 | 807,937 | 0.3620 | 3.14× | FAIL | 164.1 | PASS | 0.4740 | 0.0205 | 0.3187 | 0.163 | PASS | 2.36 |
+
+**large_play** (depth 6, 254 pairs):
+
+| w | n_params | `\|log r\|` | × τ | g1 | ess | g3 | `cvar_ce` | SE | mean CE | gap | g2 | pred sd |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4* | 1,985 | 0.1082 | 0.94× | PASS | 68.5 | PASS | 0.4381 | 0.0073 | 0.4277 | 0.032 | PASS | 1.43 |
+| 5* | 6,529 | 0.2294 | 1.99× | FAIL | 79.6 | PASS | 0.4076 | 0.0102 | 0.3729 | 0.054 | PASS | 1.67 |
+| 6 | 23,297 | 0.2263 | 1.97× | FAIL | 102.7 | PASS | 0.4540 | 0.0155 | 0.3412 | 0.129 | PASS | 1.92 |
+| 7 | 87,553 | 0.2583 | 2.24× | FAIL | 122.7 | PASS | 0.6663 | 0.0355 | 0.3077 | 0.380 | PASS | 2.53 |
+| 8 | 338,945 | 0.3224 | 2.80× | FAIL | 138.2 | PASS | 0.9427 | 0.0524 | 0.2770 | 0.689 | PASS | 3.44 |
+| 9 | 1,333,249 | 0.3459 | 3.00× | FAIL | 147.4 | PASS | 1.3238 | 0.0710 | 0.2504 | 1.106 | PASS | 4.94 |
+
+\* exploratory, licenses nothing (§3.2.15).
+
+#### 1. The rule fires on both
+
+In-range `|log r|` rises monotonically on both: large_diverse 0.050 → 0.362
+(**+0.312, 13.8σ**), large_play 0.226 → 0.346 (**+0.120, 5.3σ**); threshold
++0.07. Both fire. Two caveats, disclosed rather than resolved: σ = 0.0226 is
+medium_play's seed noise (§4.3.101), with no large-variant replicate; and
+large_play's intermediate steps (+0.032, +0.064, +0.024) are each within about
+1–2 SD of a rung *difference* (√2·σ = 0.032), so its **monotonicity** is not
+robust to seed noise even though its endpoint rise is.
+
+#### 2. What the numbers show beyond the rule
+
+- **Gates 1 and 2 pull in opposite directions along capacity.** The degeneracy
+  gap tracks posterior width (pred sd), which grows with capacity; `|log r|`
+  grows too. Small models narrow the posterior toward degeneracy (large_diverse
+  w4/w5 fail gate 2); large ones drift. All three gates pass together at
+  **large_diverse w6 only** in range, and at **no in-range width of large_play
+  at depth 6** — only exploratory w4 does. This is §4.3.101's trade-off, now
+  traced along the capacity axis.
+- **Mean CE improves monotonically with capacity while CVaR CE does not** —
+  sharply so on large_play (mean 0.341 → 0.250; CVaR 0.454 → 1.324). Bigger
+  models fit the mean better and widen the posterior tail. This is the
+  §3.2.7/§4.3.51 question, and the CVaR objective is what penalises them.
+- **Small is not monotonically better.** large_diverse w4 is worst on every
+  metric (mean CE 0.506, underfitting); the low end is U-shaped.
+- **Depth is confounded with the result for large_play.** The ladder held depth
+  at 6, so "no in-range width passes gate 1" is a statement about d6. The round-3
+  sweep searches depth 1–6, so capping width alone does not make d6 feasible.
+
+#### 3. Determinism: thread count and the MSD probe change nothing
+
+The matched 8-vs-2-thread pairs (`cap_ladder_` vs `cap_ladder2_`
+large_diverse w6, w7) agree on **all 297 numeric summary keys and all 50
+sampled history rows at full precision** (2-thread runs ~1% faster). And
+`cap_ladder2_large_play_w9_0` reproduces `r3pins_large_play_d6_0` — 8 threads,
+MSD probe on — exactly (`|log r|` 0.3459, `cvar_ce` 1.3238). **The pipeline is
+bitwise deterministic at fixed seed**, and the MSD probe is output-neutral.
+Caveat: wandb does not record the thread environment, so the claim that thread
+count changed between the pairs rests on the restart procedure (§3.2.15), not on
+logged evidence. *If* it did, §7.3's reduction-order disclosure is empirically
+moot for these outputs, and so is the thread half of the §4.3.84–§4.3.104
+two-environment caveat.
+
+#### 4. OPEN — three gaps in the pre-registered rules, found only now
+
+None was foreseen when §3.2.13/§3.2.14 were written, and each changes the
+outcome. **Decisions for the user; record each as resolved AFTER the results
+were seen.**
+
+**(a) large_play: the rule fires, but its cap is the empty set.** "Cap at the
+largest width whose `|log r|` is within τ" — no in-range width is (w6 is
+1.97× τ). The CE half alone selects w6 (w7 is +0.212, against 2×SE 0.031).
+
+**(b) Scope.** The statistic is "per variant", but the rule does not say whether
+the cap is per-variant or common, and **medium_play / medium_diverse had no
+ladder**. All sweep ranges are currently identical across variants.
+
+**(c) MR/PT transfer: which cap?** §3.2.14 says "the same cap `W*` applies to
+MR" but also "only the objective half of the rule may be cited." These disagree
+on large_diverse: `W*` (both halves) = **w6**; the CE half alone = **w8** (w8 is
++0.014 vs 2×SE 0.019; w9 is +0.083). On large_play the CE half alone gives w6.
+Both SE readings of "2× its jackknife SE" (reference rung's or own) agree on
+every rung, so that ambiguity is moot.
 
 ### 4.4 Procedure
 
