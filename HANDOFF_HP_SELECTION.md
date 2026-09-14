@@ -9606,6 +9606,86 @@ on large_diverse: `W*` (both halves) = **w6**; the CE half alone = **w8** (w8 is
 Both SE readings of "2× its jackknife SE" (reference rung's or own) agree on
 every rung, so that ambiguity is moot.
 
+### 4.3.106 Existing runs: no detectable width × depth interaction (no power either); MR/PT memorise at every capacity, and their objective can disagree with test
+
+Zero compute, 2026-09-14, prompted by two user questions. Scripts:
+`scripts_bnn/capacity_interaction_r3.py`, `check_capacity_mrpt.py`.
+
+#### 1. BNN width × depth interaction — the data cannot tell
+
+The only runs varying both are the **28 round-3 sweep trials** (the ladders hold
+depth fixed; one medium_play trial, w6 d5, collapsed to CE = log 2 and is
+excluded). Pooled within variant, `y ~ width + depth + width×depth`,
+Freedman–Lane permutation p for the interaction:
+
+| outcome | b_width | b_depth | b_w×d | R² additive → with interaction | p (interaction) |
+|---|---|---|---|---|---|
+| `\|log r\|` | +0.045 | +0.056 | +0.030 | 0.29 → 0.32 | 0.258 |
+| log degeneracy gap | +0.598 | +0.419 | −0.148 | 0.58 → 0.60 | 0.281 |
+| degeneracy margin | +0.033 | +0.032 | −0.012 | 0.59 → 0.62 | 0.184 |
+| `cvar_ce` | +0.039 | +0.047 | −0.010 | 0.75 → 0.77 | 0.220 |
+
+**Both main effects are positive for every outcome; no interaction is
+detected.** But this is **absence of evidence, not evidence of absence**: ≤ 5
+distinct (depth, width) cells per variant, one trial each, chosen by the
+optimiser (large_play is almost all depth 2; medium_diverse has 3 cells), with
+`sghmc_lr` (5e-5 to 5e-4), `mdecay` (0.001 to 0.79) and `fraction_cool`
+varying across trials. The ladders cannot help — depth is fixed within each and
+confounded with variant between them. **Only a depth × width grid at fixed
+sampler settings can answer it.**
+
+#### 2. MR/PT — memorisation is universal, and capacity effects flip between val and test
+
+**Every capacity memorises.** Final training loss < 1e-3:
+
+| | smallest | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|---|
+| MR (2,497 → 1.3M params) | 71% | 82% | 82% | 85% | 92% |
+| PT (~49k → 3.1M) | 78% | 67% | 62% | 54% | 45% |
+
+Median final training accuracy is 1.000 in every quartile of both. So "too big
+for the data", read as *able to interpolate*, is true across the **entire**
+current range down to its floor; generalisation is governed by **checkpoint
+selection**, not size: `best_epoch` median 58–390 of 5000, with 54–89% of
+trials peaking before epoch 500.
+
+**The selection objective and the held-out split disagree about capacity.**
+`eval_loss_best` is the minimum validation loss over 5000 epochs, and the sweep
+then selects hyperparameters on that same split. Per variant, ρ(capacity, ·):
+
+| family | variant | vs `eval_loss_best` | vs seed-0 `test_loss` | winner's capacity percentile |
+|---|---|---|---|---|
+| MR | medium_play | **−0.862** | **+0.808** | 65% |
+| MR | medium_diverse | +0.846 | +0.679 | 30% (w6 d1 — **the floor of both axes**) |
+| MR | large_play | −0.750 | +0.059 | 91% (w9 d4, `best_epoch` **10**) |
+| MR | large_diverse | −0.256 | −0.595 | 82% |
+| PT | medium_play | +0.033 | +0.268 | 48% |
+| PT | medium_diverse | −0.039 | −0.257 | 10% (`embd_dim` 6, floor) |
+| PT | large_play | +0.419 | −0.308 | 15% (`embd_dim` 6, floor) |
+| PT | large_diverse | −0.058 | +0.143 | 68% |
+
+The two agree in direction on MR medium_diverse (both prefer small) and
+large_diverse (both prefer large), and PT's correlations are weak throughout.
+But on MR medium_play the validation objective prefers **large** models (−0.86)
+while the test split prefers **small** ones (+0.81), and on MR large_play
+validation prefers large (−0.75) where test is indifferent (+0.06) — the signature of
+optimism from using one validation split for both early stopping and selection,
+which large, fast-memorising models exploit. PT's validation/test levels diverge
+strongly too (large_play winner: val 0.057, test 0.384). Winners sit at a range
+**floor** in three of eight sweeps (MR medium_diverse; PT medium_diverse and
+large_play).
+
+> ⚠️ **§1 constraint.** §1 states the seed-0 test split "is not used for
+> selection". The test columns above are **diagnostic only**. Using them to
+> change an MR/PT range — or to change how MR/PT are scored — requires amending
+> §1 and disclosing it. Seeds 1–10 are untouched either way, so the out-of-sample
+> guarantee for reported numbers survives such an amendment.
+
+Caveats: capacity is approximate (MR assumes d_in 37; PT uses L·12·E²); sweep
+trials are optimiser-chosen, clustered near winners (MR medium_diverse's median
+capacity is 4,993); and MR/PT learning rates co-vary with capacity (MR
+large_play's winners use lr ≈ 9e-3 and peak at epoch 10).
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
