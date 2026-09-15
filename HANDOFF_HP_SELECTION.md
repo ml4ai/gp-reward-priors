@@ -9908,6 +9908,78 @@ criterion fixed before this re-score, but it was made after seeing that it
 changes baseline-vs-oracle comparisons. No BNN IQL runs exist yet, so the choice
 cannot have been steered by the paper's own method.
 
+#### Why last-10? The statistic family, and an outcome-blind window (2026-09-15)
+
+The user asked why last-10 rather than another last-n, the mean over all
+evaluations, or their median. **Last-10 had no principled basis:** it entered
+Experiment 1 as a conventional secondary. Picking n (or mean/median) by whichever
+resolves most comparisons would be a garden of forking paths.
+`iql_noise/statistic_family.py`, with its rules written before the first run,
+does two outcome-blind things.
+
+**1. How long is the end of training flat?** Uses only each run's own curve: an
+OLS slope over the last n evaluations, the change across the window against
+evaluation noise (residual SD), and the share of runs with a significant slope.
+
+| n (steps) | median \|change\| / noise, by variant | runs with \|t\| > 2 | chance rate |
+|---|---|---|---|
+| 5 (25k) | 0.79–0.97 | 7–17% | 13.9% |
+| 10 (50k) | 0.64–0.93 | 10–15% | 8.1% |
+| 20 (100k) | 0.68–0.84 | 12–21% | 6.1% |
+| 50 (250k) | 0.52–**1.23** | 15–**56%** | 5.1% |
+| 100 (500k) | 0.61–0.99 | 44–61% | 4.8% |
+| 199 (whole run) | 1.47–3.54 | 85–97% | 4.7% |
+
+The pre-stated rule (median below one noise SD and ≤ ~10% significant slopes in
+every variant) is met by **no** n. **The rule was mis-calibrated**: it allowed
+~10% regardless of n, but the chance rate is 14% at n = 5, so it could never
+pass there. Adjacent checkpoints are also autocorrelated, which inflates slope
+|t| above nominal. Read directly: **the last ~10–20 evaluations (last 5–10% of
+training) are approximately flat**. Change stays under one noise SD everywhere,
+and significant slopes run near chance at n = 10, rising above it in two variants
+by n = 20. **Trend is clear by n = 50** (medium_diverse 1.23 SD, 56%). The whole
+run rises 0.23–0.33. So curve shape supports **n ≈ 10–20**, a band rather than a
+point.
+
+**2. Do conclusions survive the choice? (Robustness, not selection.)**
+
+| statistic | Exp. 1 Δ/σ (pure noise) | seeds 1–10 pairs resolved (\|t\| > 2.1) | pairs differing in sign from last-10 |
+|---|---|---|---|
+| max | 1.12 | 5 | 6 |
+| final | 1.80 | 4 | 2 |
+| last-5 | 1.17 | 9 | 2 |
+| last-10 | 1.57 | 10 | — |
+| last-20 | 1.81 | 10 | 1 |
+| last-50 | 1.62 | 8 | 3 |
+| last-100 | 1.14 | 9 | 6 |
+| mean of all | **−0.36** | 9 | 6 |
+| median of all | **−0.45** | 9 | 6 |
+
+**Three regimes, answering three different questions:**
+- **Peak** (max): best checkpoint, which needs online evaluation to find —
+  inconsistent with a truly offline setting; spike-driven; resolves least.
+- **End of training** (last-5 to last-20): the policy training ends with. These
+  **agree with each other** (1–2 sign differences, 9–10 resolved).
+- **Whole curve** (last-100, mean, median): speed + stability + level. Resolves
+  as many pairs, but **reaches different conclusions**. In Experiment 1's cell it
+  **reverses the stage-4 pick** (idx 2 learns faster; idx 3 ends better).
+
+**The medium_diverse flips are real curve crossings, not noise.** GT vs MR best
+has t = +2.41 (max), −2.29 (last-10), −3.28 (last-20), +1.46 (last-50), +1.88
+(mean), +2.12 (median): GT learns faster and peaks higher, MR best ends higher.
+Which is "better" depends on the question.
+
+**Conclusions robust across all nine statistics** (same sign everywhere, resolved
+under most): medium_play MR ens mean beats GT, MR best and PT; large_play MR best
+beats GT; large_diverse GT beats every learned reward, and MR ens mean beats MR
+best. **Only medium_diverse's comparisons depend on the statistic.**
+
+**Implication (not yet decided):** the decision is the *question* — peak, end of
+training, or whole curve — not a noise trade-off. For offline RL, end of training
+is what's achievable without online checkpoint selection. If chosen, n ∈ [10, 20]
+is supported by curve shape alone; within that band conclusions agree, and the
+paper can state it as a robustness band.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
