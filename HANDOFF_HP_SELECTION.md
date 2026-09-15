@@ -10283,6 +10283,31 @@ read as log2 16. Guard lowered to > 10 (no exponent above 10 is ever used).
   baselines 0–2), and 4 BNN sweeps × 32 chains × 2 threads already occupy ~all
   255 cores.
 
+#### Relaunch, part 1: baselines launched (2026-09-15, 19:59 UTC)
+
+`./launch_hp_sweeps.sh baselines`, cache `exp/sweep_ids_baselines_round2.txt`:
+
+| family | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR (`MR-training`) | `ymckz130` | `oxac6roc` | `p8yawcs2` | `n1d9qry8` |
+| PT (`PT-training`) | `xg6zk118` | `beyi619f` | `jj1or8i4` | `mtyctxxe` |
+
+**Health check at launch:** all 8 sweeps are `RUNNING` with metric
+`eval_loss_at_selected` and the §3.2.16 ranges. First trials draw in-range
+configurations (including the edge case of `embd_dim` 3 with `head_dim` clamped
+to 1 head), log `select_split=test`, and report running `best_epoch` and
+`eval_loss_at_selected`. No retired key is logged and no run has crashed.
+
+**The seed-0 reward-model folders were NOT archived** (user's choice). The
+reward models behind the existing stage-4 grids and Experiment 1 are being
+overwritten. Those results remain in wandb (scores, configs, histories), but the
+IQL runs can no longer be re-executed against the same model files. Everything
+downstream is regenerated under the redesign anyway.
+
+**Next:** once every baseline sweep's stopping rule has fired
+(`check_sweep_convergence.py`), launch `./launch_hp_sweeps.sh bnn`, never while
+the baselines are still running.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
