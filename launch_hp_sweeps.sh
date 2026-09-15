@@ -22,10 +22,10 @@
 # base config that sets it would silently reinstate the mismatch that ended
 # round 1, and nothing downstream would show that it had.
 #
-# NOTE: the BNN base configs deliberately still carry a STATUS:
-# SUPERSEDED-ROUND1 marker and round-1's values.  That is correct here — the
-# sweep overrides all nine swept fields — and this launcher must NOT refuse on
-# it, unlike train_rewards.sh, which trains from those values directly.
+# NOTE: the BNN base configs hold older winners' values (hybrid; handoff 10.3).
+# That is fine here: the sweep sets every swept and pinned field it relies on,
+# and the base config supplies only the fixed remainder.  Production configs are
+# regenerated from the new winners before train_rewards.sh uses them.
 #
 # Idempotent: sweep IDs are cached per set, so a re-run reuses the existing
 # sweeps and only starts agents that are not already running (safe after a
@@ -73,7 +73,7 @@ fi
 
 # ---------------------------------------------------------------- sweep maps
 # Entries are "key|sweep_yaml|gpu".
-#   bnn:       each trial is 4 chains with chains_per_gpu=4, i.e. one
+#   bnn:       each trial is 32 chains with chains_per_gpu=32, i.e. one
 #              full GPU per sweep -> GPUs 0-3, leaving 4-5 free.
 #   baselines: MR is a small MLP (all 4 agents share GPU 0); PT fits 2/GPU.
 #

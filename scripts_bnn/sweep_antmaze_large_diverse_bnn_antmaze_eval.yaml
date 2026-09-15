@@ -12,14 +12,17 @@ metric:
   # conservatism.
   #
   # Three GATES apply at WINNER-SELECTION time, not here (a wandb sweep cannot
-  # express a gate).  A trial is INELIGIBLE unless all hold:
-  #   val_fn_drift_centred_loc_z_median   <= 2.0   (3.6.3 -- centred, NOT raw)
-  #   val_fn_drift_centred_scale_z_median <= 2.0
-  #   val_cvar_degeneracy_pass            == 1     (3.2.6)
-  #   centred ess_bulk                    >= 40    (3.2.1 resolution)
+  # express a gate).  Operative definition: selection_gates.py (handoff 3.2.12,
+  # which restated gate 1 as an effect size).  A trial is INELIGIBLE unless:
+  #   |log val_fn_drift_centred_scale_ratio_median| <= log(1.122)
+  #   val_fn_drift_centred_loc_sd_median            <= 0.155
+  #   val_cvar_degeneracy_pass                       == 1   (3.2.6)
+  #   val_pred_centred_ess_median                    >= 40  (3.2.1 resolution)
   name: val_cvar_ce
   goal: minimize
 
+# [HISTORY -- round 2b; SUPERSEDED by the round-3 metric val_cvar_ce above.
+#  Kept for the reasoning about width-blind statistics, which still applies.]
 # SELECTION METRIC (round 2b): the posterior-predictive cross-entropy of
 # Wu et al. (2025) Eq. (10) -- p(y*|x*,D) ~= (1/S) sum_j p(y*|f(x*;w_j)), i.e.
 # the LIKELIHOOD averaged over function draws, E[sigma(f)].
@@ -78,9 +81,9 @@ parameters:
     value: 0
 
   # ---- Per-trial budget -------------------------------------------------
-  # 4 chains on a single GPU, so all four variants' sweeps run concurrently
-  # on 4 of leviathan's 6 GPUs under the section 10.7 thread caps.
-  # 3.2.8/3.2.9: 32 chains at 8/GPU (4 GPUs), 120k sampling steps
+  # 32 chains on a single GPU (see chains_per_gpu), so all four variants'
+  # sweeps run concurrently on 4 of leviathan's 6 GPUs at 2 threads/process.
+  # 3.2.8/3.2.9: 32 chains, 120k sampling steps
   # (cycle_length 2000 x num_samples 60).  Spends part of 3.2.5's 4.9x SE
   # margin for ~4x throughput; SE 0.0147 stays 1.8x inside the 0.026 needed to
   # separate the top five.
@@ -93,6 +96,8 @@ parameters:
   # slower per trial than 8/GPU, but 4x the parallelism -- ~1.9x net.
   chains_per_gpu:
     value: 32
+  # 60 draws/chain x cycle_length 2000 = 120k steps (3.2.9); the round-2
+  # reasoning below argued for 75, which 3.2.9 reduced to 60.
   # 75 draws/chain, NOT round 1's 35.  Round 1's horizon was ~1/9 of
   # production, and the failure mode it missed only becomes visible in the
   # metric with length: in the round-1 pilot val CE ran 0.2953 -> 0.3036 ->

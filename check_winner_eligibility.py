@@ -1,26 +1,30 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""check_winner_eligibility.py — apply the §3.6.3 winner acceptance criteria.
+"""check_winner_eligibility.py — name the winner under the operative eligibility gates.
 
 `check_sweep_convergence.py` answers "has the stopping rule fired, and which
 trial has the best metric".  That is not the same as "which trial is the
 winner": a configuration that samples something other than the target
 function-space posterior is not a valid winner however good its score, so
-selection is a CONSTRAINED minimisation (HANDOFF_HP_SELECTION.md §3.6.3):
+selection is a CONSTRAINED minimisation:
 
-    winner = lowest val_predictive_cross_entropy among ELIGIBLE trials
+    winner = best sweep metric (round 3+: val_cvar_ce) among ELIGIBLE trials
              up to the stopping trigger
 
-Eligibility (all must hold; thresholds pre-registered before any sweep fired):
+Eligibility is defined in selection_gates.py — HANDOFF_HP_SELECTION.md §3.2.12,
+amending §3.2.1 — and shared with check_sweep_convergence.py:
 
-    val_fn_drift_loc_z_median    <= 2.0    stationary null is |N(0,1)|:
-    val_fn_drift_scale_z_median  <= 2.0      median ~0.67, 95th ~2
-    param_clamp_sampling_pct     <= 0.01%  0 is the exact null
-    convergence diagnostics       not NaN/Inf
+    |log val_fn_drift_centred_scale_ratio_median| <= log(1.122)
+    val_fn_drift_centred_loc_sd_median            <= 0.155
+    val_cvar_degeneracy_pass                       == 1
+    val_pred_centred_ess_median                    >= 40
+    convergence diagnostics not NaN/Inf, gradient clip not over its warning level
 
-`gradnorm_sampling_pct_over_clip` is REPORTED but does NOT gate — the
-sampling-phase gradient clip is disabled, so it measures a symptom rather than a
-distortion of the measure (§3.6.1).
+The thresholds are pre-registered constants, deliberately NOT command-line
+options.  *(Until 2026-09-15 this tool applied the round-2 criteria of §3.6.3 —
+RAW loc_z/scale_z <= 2 and param_clamp_sampling_pct <= 0.01% — which §3.2.12
+superseded.  `param_clamp_sampling_pct` and `gradnorm_sampling_pct_over_clip`
+are still REPORTED, not gated.)*
 
 Paired diagnostic re-runs
 -------------------------
@@ -39,10 +43,7 @@ selection bias.
 Usage
 -----
     python check_winner_eligibility.py --entity champlin-university-of-arizona \\
-        BNN-training/ojk7k4vb BNN-training/9gifb8sa
-
-    # thresholds are the pre-registered defaults; override only to explore
-    python check_winner_eligibility.py --loc-z 2.0 --scale-z 2.0 --clamp-pct 0.01 ...
+        BNN-training/<sweep_id> [BNN-training/<sweep_id> ...]
 """
 
 import argparse
@@ -51,9 +52,8 @@ import math
 import wandb
 
 from check_sweep_convergence import better, diverged_reasons, parse_path, swept_keys
+from selection_gates import gate_failures, gate_values, has_gate_keys
 
-LOC_Z = "val_fn_drift_loc_z_median"
-SCALE_Z = "val_fn_drift_scale_z_median"
 CLAMP = "param_clamp_sampling_pct"
 CLIP = "gradnorm_sampling_pct_over_clip"
 
@@ -97,24 +97,17 @@ def _match(trial_cfg, run, keys):
     return True
 
 
-def eligibility(summ, loc_z, scale_z, clamp_pct):
-    """(verdict, reasons) for one summary dict."""
-    lz, sz, cl = _num(summ, LOC_Z), _num(summ, SCALE_Z), _num(summ, CLAMP)
-    if lz != lz or sz != sz:
+def eligibility(summ):
+    """(verdict, reasons) for one summary dict, under selection_gates.py."""
+    if not has_gate_keys(summ):
         return "NO DIAGS", []
-    bad = []
-    if lz > loc_z:
-        bad.append(f"loc_z {lz:.2f} > {loc_z}")
-    if sz > scale_z:
-        bad.append(f"scale_z {sz:.2f} > {scale_z}")
-    if cl == cl and cl > clamp_pct:
-        bad.append(f"clamp {cl:.4f}% > {clamp_pct}%")
+    bad = gate_failures(summ, gated=True)
     if diverged_reasons(summ):
         bad.append("diverged: " + "; ".join(diverged_reasons(summ)))
     return ("REJECT" if bad else "ELIGIBLE"), bad
 
 
-def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, pattern):
+def report(entity, project, sweep_id, patience, pattern):
     api = wandb.Api()
     sweep = api.sweep(f"{entity}/{project}/{sweep_id}")
     cfg = sweep.config or {}
@@ -133,13 +126,13 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
     resolved = []
     for r, v in trials:
         summ = dict(r.summary or {})
-        verdict, bad = eligibility(summ, loc_z, scale_z, clamp_pct)
+        verdict, bad = eligibility(summ)
         src = ""
         if verdict == "NO DIAGS":
             for d in diag_pool:
                 if _match({k: r.config.get(k) for k in keys}, d, keys):
                     summ = dict(d.summary or {})
-                    verdict, bad = eligibility(summ, loc_z, scale_z, clamp_pct)
+                    verdict, bad = eligibility(summ)
                     src = f"  [diagnostics from re-run {d.id[:8]}]"
                     break
         resolved.append((r, v, summ, verdict, bad, src))
@@ -203,14 +196,15 @@ def report(entity, project, sweep_id, patience, loc_z, scale_z, clamp_pct, patte
     n_borrowed = sum(1 for t in ranked if t[5])
 
     winner = None
-    print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'loc_z':>6} {'scl_z':>6} "
-          f"{'clamp%':>7} {'clip%':>6}  verdict")
+    print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'|logr|':>7} {'loc_sd':>7} "
+          f"{'ess':>6} {'margin':>8} {'clamp%':>7} {'clip%':>6}  verdict")
     for rk, (r, v, summ, verdict, bad, src) in enumerate(ranked, 1):
         if winner is None and verdict == "ELIGIBLE":
             winner = (r.id, v, rk)
         if rk <= 12 or verdict == "ELIGIBLE":
-            print(f"  {rk:>2} {r.id:10s} {v:>9.4f} {_num(summ, LOC_Z):>6.2f} "
-                  f"{_num(summ, SCALE_Z):>6.2f} {_num(summ, CLAMP):>7.4f} "
+            g = gate_values(summ)
+            print(f"  {rk:>2} {r.id:10s} {v:>9.4f} {g['logr']:>7.4f} {g['loc_sd']:>7.4f} "
+                  f"{g['ess']:>6.1f} {g['margin']:>+8.4f} {_num(summ, CLAMP):>7.4f} "
                   f"{_num(summ, CLIP):>6.2f}  {verdict}{src}"
                   + (f"  ({'; '.join(bad)})" if bad else ""))
         if winner and rk > 12:
@@ -241,15 +235,12 @@ def main():
     ap.add_argument("sweeps", nargs="+", metavar="[entity/]project/sweep_id")
     ap.add_argument("--entity", default=None)
     ap.add_argument("--patience", type=int, default=15)
-    ap.add_argument("--loc-z", type=float, default=2.0)
-    ap.add_argument("--scale-z", type=float, default=2.0)
-    ap.add_argument("--clamp-pct", type=float, default=0.01)
     ap.add_argument("--diag-pattern", default="diag_rerun",
                     help="OUT_DIR substring marking a diagnostic re-run.")
     a = ap.parse_args()
     for spec in a.sweeps:
         e, p, s = parse_path(spec, a.entity)
-        report(e, p, s, a.patience, a.loc_z, a.scale_z, a.clamp_pct, a.diag_pattern)
+        report(e, p, s, a.patience, a.diag_pattern)
 
 
 if __name__ == "__main__":

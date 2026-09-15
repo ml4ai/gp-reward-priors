@@ -1326,12 +1326,14 @@ sweep ran" and editing it after the fact would destroy that guarantee.
    table was available and deliberately not used.
 7. The BNN's `depth` floor was 2 while MR's was 1 and PT's 1 — the BNN was the
    only family barred from a one-layer model. Corrected to 1–6 before the
-   relaunch on comparability grounds (§3.2.14).
+   relaunch on comparability grounds (§3.2.14). *(Superseded 2026-09-15: common
+   depth 1–4 for all families, §3.2.16 — disclose that instead.)*
 8. If the capacity ladder fires, **MR and PT search spaces are narrowed on
    evidence from a different model family** — the BNN ladder — not from their
    own (§3.2.14, option iii). MR is the same model class as the BNN; **PT is a
    transformer and that extrapolation is the weaker one**, and may be vacuous
-   since PT's ranges are already narrower.
+   since PT's ranges are already narrower. *(Superseded 2026-09-15: replaced by
+   common capacity ranges with their own disclosure and §9 amendment, §3.2.16.)*
 
 ### 3.2.13 The depth floor is asymmetric; and the ladder is upgraded to LICENSING
 
@@ -10207,6 +10209,80 @@ mean, below the seeds 1–10 SEs. **Screen-then-replicate is not adopted.** Disc
 experiment's result stands as recorded; what changed is which property the design
 must guarantee.
 
+### 4.3.108 Pre-relaunch review (2026-09-15): both selection tools applied superseded gates — fixed
+
+Read end to end before the relaunch: all 12 sweep yamls (plus diffs between
+variants within each family), both launchers' logic, the BNN base configs, and
+the tools that decide eligibility and stopping.
+
+**BLOCKER, fixed — the gate definitions in both selection tools were stale.**
+- `check_winner_eligibility.py` still applied the **round-2 §3.6.3 criteria**:
+  RAW `val_fn_drift_loc_z_median ≤ 2`, RAW `scale_z ≤ 2`,
+  `param_clamp_sampling_pct ≤ 0.01%`. No degeneracy gate, no resolution gate,
+  and not §3.2.12's effect-size form.
+- `check_sweep_convergence.py` applied the **§3.2.1 centred z-form** with
+  resolution on RAW `val_pred_ess_median` (a proxy made unnecessary when
+  §4.3.75 logged centred ess). It also **skipped absent keys**, so a BNN trial
+  that failed to log a gate was silently eligible.
+- **Fix:** new `selection_gates.py`, a single module imported by both tools,
+  implementing §3.2.12 exactly: `|log val_fn_drift_centred_scale_ratio_median|
+  ≤ log 1.122`, `val_fn_drift_centred_loc_sd_median ≤ 0.155`,
+  `val_cvar_degeneracy_pass == 1`, `val_pred_centred_ess_median ≥ 40`.
+  Thresholds are constants, not CLI options (the old `--loc-z/--scale-z/
+  --clamp-pct` flags are removed). "Gated" is decided per sweep, and in a gated
+  sweep a missing gate key makes a trial ineligible. Clamp% and clip% stay as
+  reported diagnostics.
+- **Validated:** module self-test passes. Applied to the 12 capacity-ladder rungs
+  it reproduces §4.3.105's hand-computed verdicts exactly (eligible:
+  large_diverse w6 and large_play w4 only; same failure reasons on every other
+  rung). End to end on round-3 sweep `t8byjk36`, both tools reject all 6 trials
+  with `ess=missing` (centred ess was not logged then), where the old
+  convergence tool would have admitted trials 2–3. MR sweep `70742ym5` runs
+  ungated and unchanged.
+
+**Fixed — `scripts_bnn/capacity_vs_drift.py` width guard.** It treated widths
+> 20 as already expanded; expanded widths now start at 16, which it would have
+read as log2 16. Guard lowered to > 10 (no exponent above 10 is ever used).
+
+**Fixed — stale comments, no behavioural effect:**
+- BNN sweep yamls: the metric block's gate list (the z-form) is replaced by the
+  §3.2.12 gates; the round-2b `val_predictive_cross_entropy` block is marked
+  history; the per-trial budget comment said "4 chains" (value 32) and "75
+  draws" (value 60).
+- MR/PT sweep headers cited the BNN's retired two tiers (70 + 60).
+- `launch_hp_sweeps.sh`: the "4 chains, chains_per_gpu 4" map note, and a note
+  about a `SUPERSEDED-ROUND1` marker the base configs no longer carry.
+
+**Checked and correct:**
+- **BNN:**
+  - 5 swept dimensions (width 4–7, depth 1–4, `sghmc_lr`, `sghmc_lr_max`,
+    `mdecay`).
+  - Fixed values: 32 chains on 1 GPU, 60 draws × `cycle_length` 2000 = 120k
+    steps, `n_discarded` 5, burn-in 20,000, `n_meas` 256, `map_amp2` 6626
+    (medium) / 6611 (large), `chain_init_jitter` 1.0, `fraction_cool` 0.25,
+    `samples_per_cycle` 1, `early_stop_acc_threshold` 0.0,
+    `cvar_ce_conservatism` 0.75.
+  - Metric `val_cvar_ce`; `run_cap` 130; no base config sets `burn_in_lr`; the
+    4 variant files differ only in `config_path`, `map_amp2` and history
+    comments.
+- **MR/PT:** metric `eval_loss_at_selected`, `criteria_key` loss, epochs 5000,
+  seed 0; the 4 variant files differ only in `config_path`.
+- **Launcher:** caches `sweep_ids_bnn_round4.txt` / `sweep_ids_baselines_round2.txt`,
+  2 threads, one agent per sweep run from its `scripts_*` dir, preflight for
+  data, GPUs, imports, `FILL_ME` and `burn_in_lr`.
+
+**Operational notes for the relaunch (not defects):**
+- **Deterministic output dirs get overwritten.** MR/PT sweep trials write to
+  `exp/reward_learning/antmaze_<v>_{mr,pt}_eval_0`, and BNN trials to
+  `..._bnn_eval_0`. Those hold the seed-0 reward models behind the existing
+  stage-4 grids and Experiment 1. Archive them first if those results must stay
+  reproducible. After selection, clear each reward-model dir before production
+  training, so a crashed run cannot leave stale `checkpoint_*.pt` snapshots for
+  the MR ensemble to pick up.
+- **Do not run the two sets concurrently.** The GPU maps overlap (bnn 0–3,
+  baselines 0–2), and 4 BNN sweeps × 32 chains × 2 threads already occupy ~all
+  255 cores.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -11280,8 +11356,13 @@ Note it does **not** refuse on the `SUPERSEDED-ROUND1` marker that
 every swept field of its base config, whereas `train_rewards.sh` trains from
 those values directly.
 
-**`check_winner_eligibility.py`** (repo root) — applies the §3.6.3 acceptance
-criteria and names the winner, which `check_sweep_convergence.py` does not: that
+**`selection_gates.py`** (repo root) — the BNN eligibility gates of §3.2.12, in
+one place, imported by both tools below (§4.3.108). `python selection_gates.py`
+runs its self-test.
+
+**`check_winner_eligibility.py`** (repo root) — applies the §3.2.12 gates (via
+`selection_gates.py`; until 2026-09-15 the superseded §3.6.3 criteria) and names
+the winner, which `check_sweep_convergence.py` does not: that
 script reports the best-*metric* trial, which is not the same thing. Ranks the
 trials up to the stopping trigger, applies the pre-registered thresholds, and
 reports the winner, the gap to the lowest-metric trial (disclose it) and the
@@ -11403,6 +11484,21 @@ round-1 reference values that stage 3 sets.
 > stationarity, and a burn-in too short to absorb the jitter cannot serve both.
 
 ### 10.2 Immediate next action — the road back to a relaunched sweep
+
+> ✅ **READY TO RELAUNCH (2026-09-15).** The redesign is decided and
+> implemented:
+> - statistic: last-10 mean (§4.3.107)
+> - stage 4: one IQL run per index (§5)
+> - MR/PT checkpoint selected on the test split (§4.3.107)
+> - common capacity ranges (§3.2.16)
+> - 2 threads everywhere
+>
+> The pre-relaunch review (§4.3.108) fixed both selection tools' gate
+> definitions. The capacity ladder has run (§4.3.105), and its licensing role was
+> superseded by §3.2.16. Caches are bumped (`sweep_ids_bnn_round4.txt`,
+> `sweep_ids_baselines_round2.txt`), and `--emit-prior-runs` is still not to be
+> passed. Launch the two sets **one after the other**, never together
+> (§4.3.108). The text below is the history of how this point was reached.
 
 Round 3 was **stopped after 26 trials on 2026-09-04**. This section replaces the
 stage-3 draw-budget plan that stood here until then; that ladder was closed as a

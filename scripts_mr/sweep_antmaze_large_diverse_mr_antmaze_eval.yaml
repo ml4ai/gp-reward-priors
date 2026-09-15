@@ -18,8 +18,8 @@ metric:
 # the data/antmaze/<variant>/eval/seed_0/ split.  Launch agents from this
 # scripts dir (see launch_hp_sweeps.sh): the script os.chdir("..")s to the repo
 # root at import, so config_path/data paths are repo-root-relative.
-# Trial budget: 130, MATCHED across all model families (MR, PT, and BNN's two
-# tiers at 70 + 60).  Rationale: the per-family 10*d+10 rule would give MR 40
+# Trial budget: 130, MATCHED across all model families (MR, PT and BNN; the
+# BNN's round-1 two tiers of 70 + 60 are retired).  Rationale: the per-family 10*d+10 rule would give MR 40
 # and PT 50 vs the BNN's 130, inviting the objection that the proposed method
 # was simply tuned harder than the baselines.  A single shared budget makes the
 # comparison auditable ("every family received 130 trials under the same

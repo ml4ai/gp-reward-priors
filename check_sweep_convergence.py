@@ -43,6 +43,8 @@ import sys
 
 import wandb
 
+from selection_gates import gate_failures, has_gate_keys
+
 DEFAULT_PATIENCE = 15
 
 
@@ -96,43 +98,13 @@ def diverged_reasons(summ):
     return reasons
 
 
-# --- Round-3 eligibility gates (handoff 3.2.1) ---------------------------
+# --- Eligibility gates: selection_gates.py (handoff 3.2.12) ----------------
 # A wandb sweep cannot express a gate, so the optimiser ranks and the Bayes
-# search explores INELIGIBLE trials freely.  Eligibility is applied here, when
-# the winner is read off.  Each gate is checked only when its key is present,
-# so MR/PT sweeps -- which log none of them -- are unaffected and behave exactly
-# as before.
-#
-# The resolution gate is specified on CENTRED ess but the sweep logs only raw
-# `val_pred_ess_median`; raw is a conservative proxy because centring removes a
-# shared slowly-mixing component and can only raise ESS (centred > raw in all
-# five cases measured, floor 1.42x).  See 3.2.1.
-_GATES = (
-    ("val_fn_drift_centred_loc_z_median",   "loc_z",   lambda v: v <= 2.0),
-    ("val_fn_drift_centred_scale_z_median", "scale_z", lambda v: v <= 2.0),
-    ("val_cvar_degeneracy_pass",            "degen",   lambda v: bool(v)),
-    ("val_pred_ess_median",                 "ess",     lambda v: v >= 40.0),
-)
-
-
-def gate_failures(summ):
-    """Names of the 3.2.1 gates this trial fails.  Absent keys are not checked."""
-    bad = []
-    for key, label, ok in _GATES:
-        v = summ.get(key)
-        if v is None:
-            continue
-        if isinstance(v, float) and math.isnan(v):
-            bad.append(label + "=NaN")
-            continue
-        if not ok(v):
-            bad.append(label)
-    return bad
-
-
-def has_gate_keys(summ):
-    """True if this sweep logs any gate key at all (i.e. it is a round-3 BNN sweep)."""
-    return any(summ.get(k) is not None for k, _, _ in _GATES)
+# search explores INELIGIBLE trials freely; eligibility is applied here, when the
+# winner is read off.  The gates live in selection_gates.py, shared with
+# check_winner_eligibility.py.  (Until 2026-09-15 this file held its own copy of
+# the superseded 3.2.1 z-form gates, on raw ess.)  MR/PT sweeps log no gate key
+# and are ungated.
 
 
 def frontier(trials, goal, patience, eligible_only):
@@ -174,21 +146,23 @@ def summarize(entity, project, sweep_id, patience):
     run_cap = cfg.get("run_cap")
     keys = swept_keys(cfg)
 
-    runs = sorted(sweep.runs, key=lambda r: r.created_at)
+    runs = [r for r in sorted(sweep.runs, key=lambda r: r.created_at) if r.state != "running"]
+    summaries = {r.id: (dict(r.summary) if r.summary else {}) for r in runs}
+    # Gated is a property of the SWEEP: if any trial logs a gate key, every trial
+    # must pass every gate, and a trial missing one is ineligible.
+    gated = any(has_gate_keys(s) for s in summaries.values())
     trials, unsynced, diverged = [], [], []
     for r in runs:
-        summ = dict(r.summary) if r.summary else {}
+        summ = summaries[r.id]
         val = summ.get(metric)
-        if r.state == "running":
-            continue
         # completed-but-unsynced fingerprint: metric absent on a run that was
         # NOT legitimately early-stopped (early_stopped==1 has no eval block)
         if val is None and summ.get("early_stopped") != 1:
             unsynced.append((r.id, r.state))
-        fails = gate_failures(summ)
+        fails = gate_failures(summ, gated=gated)
         trials.append((r.id, val, {k: r.config.get(k) for k in keys},
                        not fails, fails, summ.get("val_cvar_degeneracy_margin"),
-                       has_gate_keys(summ)))
+                       gated))
 
         # numerical-divergence fingerprint: the trial completed and reported the
         # metric, so it is NOT unsynced, but its chains blew up — the convergence
@@ -236,12 +210,12 @@ def summarize(entity, project, sweep_id, patience):
         print(f"  STOP FIRED  : no — {since}/{patience} non-improving trials so far")
         print(f"  ACTION      : keep running ({patience - since} more non-improving trials would trigger)")
 
-    # ---- ELIGIBLE frontier (handoff 3.2.1 / 3.2.7) ----------------------
+    # ---- ELIGIBLE frontier (handoff 3.2.12 / 3.2.7) ---------------------
     # Only meaningful for sweeps that log the gate keys; MR/PT skip this block.
-    if any(t[6] for t in trials):
+    if gated:
         e_best, e_i, e_since, e_trig = frontier(trials, goal, patience, True)
         n_el = sum(1 for t in trials if t[3])
-        print(f"\n  --- ELIGIBLE frontier (3.2.1 gates applied) ---")
+        print(f"\n  --- ELIGIBLE frontier (3.2.12 gates, selection_gates.py) ---")
         print(f"  eligible    : {n_el} of {n} trials ({100.0*n_el/max(n,1):.0f}%)")
         from collections import Counter
         fc = Counter(f for t in trials for f in t[4])
