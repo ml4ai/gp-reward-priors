@@ -9686,6 +9686,94 @@ trials are optimiser-chosen, clustered near winners (MR medium_diverse's median
 capacity is 4,993); and MR/PT learning rates co-vary with capacity (MR
 large_play's winners use lr ≈ 9e-3 and peak at epoch 10).
 
+### 4.3.107 Toward a redesign of HP selection — and Experiment 1 (IQL noise on the stage-4 statistic), pre-registered
+
+2026-09-14. The user is steering toward **redesigning HP selection for all
+families**. Framing agreed in conversation:
+
+- **Selection on IQL is not an option for stages 1–3.** One IQL run is 3–6 h, and
+  the literature selects reward models on a loss proxy. The design stays
+  *loss proxy for the reward model, IQL only for stage 4's normalization* —
+  stage 4 being this project's own addition.
+- **Proposed (user): early-stop on the seed-0 test split.** Losses are fit
+  statistics only; reward models are evaluated downstream by IQL, and test loss
+  is unlikely to be reported. The test split is read by nothing outside the
+  training scripts and is **exactly val's size** (77 / 107 / 54–55 / 110 pairs),
+  so repurposing it as a **stopping split** costs no data and lets val serve
+  selection alone, removing §4.3.106's double use. Needs §1 reworded (the
+  seed-0/1–10 invariant is untouched); must apply identically to the seeds 1–10
+  reward models; the BNN's warm-up accuracy check (`X_eval = X_val`) would move
+  too. **Not yet adopted.**
+
+#### Facts established for the redesign (zero compute)
+
+**Stage 4 is selected on a single IQL run per index.** Three MR rows per variant
+are three *methods* (`PIPELINE.md`: best-model; ensemble mean, `mr_alpha` 0;
+ensemble CVaR, `mr_alpha` 0.95), each with its own one-run-per-index grid. On
+the stage-4 statistic (max over 200 evaluation points of the 100-episode mean),
+the gap between the top two indices is **0.01–0.12, median 0.04**, across the 16
+cells. Indices 4/5 are near 0 everywhere, so bad-vs-good is resolved; the order
+among 0–3 may not be.
+
+**Upper bound on per-run noise: seeds 1–10 of the reported statistic.** SD of
+max-over-evaluations across the ten lineages (each seed also changes the data
+split and reward model, so this bounds IQL noise from above):
+
+| variant | GT | MR best | MR ens mean | PT |
+|---|---|---|---|---|
+| medium_play | 0.030 | 0.050 | 0.028 | 0.042 |
+| medium_diverse | 0.034 | 0.020 | 0.039 | 0.058 |
+| large_play | 0.066 | 0.066 | 0.055 | 0.051 |
+| large_diverse | 0.062 | 0.130 | 0.140 | 0.113 |
+
+*(Correction: an earlier in-conversation figure of "SD 0.04–0.14" used the
+summary `mean_score`, which is the **final** evaluation point, not the reported
+statistic.)* MR ensemble-CVaR has no finished seeds 1–10 set yet.
+
+**Existing data contain no pure IQL replicate.** The three MR seed-0 grids
+differ in method settings, not only RNG.
+
+**Flag, low priority:** `eval_actor` seeds its 25 eval envs `seed + i`, so the
+seeds 1–10 lineages share most eval-env seeds (seed 1: 1–25; seed 2: 2–26; …).
+Antmaze seeding sets only reset noise and the lineages differ in reward model and
+IQL RNG, so the correlation is likely small — but the lineages are not
+independent in eval envs.
+
+#### Experiment 1 — pre-registered before any run
+
+**Question:** can stage 4 at one run per index resolve a typical top-2 gap?
+
+**Cell:** large_play, MR best-model — idx 3 (stage 4: 0.60) vs idx 2 (0.56), gap
+0.04 = the median. Mid-range scores (no floor/ceiling), a large variant (the
+noisier regime), simplest reward loader.
+
+**Design:** `iql_noise/sweep_iql_noise_large_play_mr_best.yaml` — idx {2, 3} ×
+seeds {100, 200, 300, 400, 500} = **10 runs**, everything else identical to stage
+4. Validity checks done: the seed-0 reward model on disk is the one stage 4 used
+(last written 2026-07-31 by the production run, `eval_loss_best` 0.15471 = the
+winning trial); stage 4 ran at `8c3b0db`, leviathan is at `1d469ea`, and
+`algorithms/` and `configs/` are identical between them; `reward_model_path` is
+explicit with no `reward_model_root`; seeds are outside 1–10 and ≥ 25 apart. The
+stage-4 runs `yx2uryjf` (idx 3) and `sc0xntv4` (idx 2) are each arm's sixth
+replicate → **n = 6 per arm**.
+
+**Readout, fixed now:**
+- Statistic: max over 200 evaluation points (the stage-4 and reporting statistic).
+  Secondary: final point, and mean of the last 10 points.
+- **σ:** pooled within-arm SD, 10 df, with 90% CI.
+- **Δ:** mean(idx 3) − mean(idx 2), with 95% CI.
+- **P(correct pick):** Φ(Δ̂ / (σ̂√2)) — the chance one run per index picks the
+  higher-mean arm.
+- **Decision criterion:** if **σ̂ ≥ 0.028** (so σ√2 ≥ the 0.04 median top-2 gap),
+  single-run stage 4 **cannot resolve typical gaps**, and the redesign must change
+  stage 4 (replicates per index, a lower-variance statistic, or both). If
+  σ̂ < 0.028, single-run stage 4 stands, with the σ̂ disclosed.
+- Secondary: whether max-over-evaluations or last-10 has the lower σ̂ (informs the
+  statistic choice).
+- **Scope:** one cell. It speaks to large variants and MR best-model directly and
+  to other cells only by analogy; the seeds 1–10 table above is the cross-cell
+  context.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

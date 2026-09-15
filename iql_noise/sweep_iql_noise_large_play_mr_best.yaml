@@ -1,0 +1,34 @@
+# Experiment 1 (handoff 4.3.107): IQL run-to-run noise on the stage-4 statistic.
+#
+# Replicates the top two normalization indices of ONE stage-4 cell -- large_play,
+# MR best-model (stage 4: idx 3 = 0.60, idx 2 = 0.56 on max-over-evaluation-
+# points) -- with everything held fixed except IQL's RNG.
+#
+#  * reward_model_path is EXPLICIT and reward_model_root is NOT set: root would
+#    re-derive the path as {root}_{seed} and load a non-existent _100 model.
+#    This is the seed-0 reward model stage 4 used (written 2026-07-31, untouched
+#    since; stage 4 ran 2026-09-01 at commit 8c3b0db, and nothing under
+#    algorithms/ or configs/ changed between 8c3b0db and 1d469ea).
+#  * seeds are 100..500: outside the 1-10 evaluation lineages (handoff 1), and
+#    >= 25 apart because eval_actor seeds its 25 eval envs as seed + i.
+#  * the original seed-0 stage-4 runs (sc0xntv4 idx 2, yx2uryjf idx 3) are the
+#    sixth replicate of each arm.
+#
+# Launch from ~/iqlpref (program: is relative to that root):
+#   ./mr_sweeps/launch.sh gp_reward-priors/iql_noise/sweep_iql_noise_large_play_mr_best.yaml "0 1 2 3 4" 2
+project: IQL-pref
+program: algorithms/offline/iql_eval.py
+method: grid
+parameters:
+  config_path:
+    value: "configs/offline/iql/antmaze/large_play_v2.yaml"
+  reward_model_path:
+    value: "~/iqlpref/exp/reward_learning/antmaze_large_play_mr_eval_0"
+  query_length:
+    value: 1
+  group:
+    value: "iql-noise-large-play-mr-best"
+  seed:
+    values: [100, 200, 300, 400, 500]
+  normalize_reward:
+    values: [2, 3]
