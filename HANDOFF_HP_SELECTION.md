@@ -9841,6 +9841,73 @@ Derived from σ̂ = 0.0373 on the primary statistic:
   regret, on the argument that near-ties cost little.
 - (i) and (ii) combine.
 
+#### Cross-cell re-score (2026-09-15): the finding GENERALISES — and the statistic changes the paper's comparisons
+
+Zero compute: all 298 finished IQL runs re-scored on max / final / last-10.
+`iql_noise/stage4_statistic_rescore.py`, with its reading criteria written in the
+docstring **before the first run**; histories cached to `exp/iql_histories.pkl`.
+No MR ensemble-CVaR seeds 1–10 runs exist yet, so 12 evaluation cells and 24
+within-variant method pairs.
+
+**PRIMARY — resolving power in the seeds 1–10 comparisons (10 genuine replicates
+per method).** Welch |t| for every within-variant pair of reported methods:
+
+| | pairs where \|t\| beats max | sign test (one-sided) | pairs with \|t\| > 2.1 | median \|t\| |
+|---|---|---|---|---|
+| max | — | — | 5 | 1.11 |
+| **last-10** | **17 / 24** | p = 0.032 | **10** | **1.66** |
+| final | 14 / 24 | p = 0.27 | 4 | 1.20 |
+
+**Verdict on the pre-stated criterion (17/24): last-10 GENERALISES — exactly at
+the threshold** (16/24 would have been p = 0.076), and pairs share methods within
+a variant, so read it as a clear direction rather than a precise p. It doubles
+the number of resolved comparisons. The final point alone does not generalise:
+one evaluation point is too noisy.
+
+**The statistic flips headline comparisons.** Seven of 24 pairs change sign
+between max and last-10, concentrated in medium_diverse and medium_play:
+
+| variant | pair | t (max) | t (last-10) |
+|---|---|---|---|
+| medium_diverse | GT vs MR best | **+2.41** (GT better) | **−2.29** (MR better) |
+| medium_diverse | GT vs MR ens mean | +1.34 | **−3.39** (MR better) |
+| medium_play | GT vs PT | −0.68 | +0.75 |
+| medium_play | MR best vs PT | −1.55 | +0.17 |
+
+Under max the oracle reward looks best on medium_diverse; under last-10 two learned
+rewards significantly beat it. GT policies reach a high peak (max 0.81) and end
+lower (last-10 0.61). Large_diverse's conclusions (GT ≫ learned) hold under both.
+
+**A. Stage-4 selection.** The picked index changes in **6 / 16** cells under
+last-10 (7 under final). In-sample cost of selecting by max, in last-10 units:
+median 0.000, largest 0.096 (large_diverse MR best: max picks idx 0, whose seeds
+1–10 run to 0.284 on max but **0.074** on last-10 — an early spike, then
+collapse).
+
+**B. Max's lower SD is general.** Seeds 1–10 SD is larger under last-10 than max
+in 13 / 16 cells (median ratio 1.22; final 1.53). The exceptions are all
+large_diverse, where max is itself noisy.
+
+**C. Max is spike-driven, worst on large_diverse.** Per run, max − last-10 has
+median 0.12–0.14 on three variants and **0.19** on large_diverse, where **28%** of
+runs take their max in the first 10% of training (0–10% elsewhere).
+
+**Switching statistic does NOT fix single-run stage 4.** The median stage-4 top-2
+gap is 0.040 under max and 0.068 under last-10, and Experiment 1's σ is 0.037 and
+0.061 — both scale together. P(correct pick, 1 run) at the median gap is **0.78
+under either**, and 5 runs per index are needed for 0.95 under either. The
+statistic choice matters for the *paper's comparisons*; the replication question
+for stage 4 stands independently. *(Grid top-2 gaps are themselves inflated by
+noise — the winner of 8 noisy runs — so these P values are, if anything,
+optimistic.)*
+
+**Caveats.** Seeds 1–10 used the index max selected, so last-10 is scored as if
+selection had not changed; under last-10 selection 6 cells would evaluate a
+different index. **Disclosure if last-10 is adopted:** the choice follows a
+criterion fixed before this re-score, but it was made after seeing that it
+changes baseline-vs-oracle comparisons. No BNN IQL runs exist yet, so the choice
+cannot have been steered by the paper's own method.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
