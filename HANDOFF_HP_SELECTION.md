@@ -10540,6 +10540,15 @@ end to end, happens at seed 0; all evaluation happens at seeds 1–10.
 > histories can be re-scored at zero compute, but 6 of 16 stage-4 cells would
 > have picked a different index, so re-scored seeds 1–10 numbers are "as if"
 > selection had not changed.
+>
+> **Canonical implementation:** `results/iql_score.py` in the parent repo, one
+> level above this one. It computes the last-10 mean (last-20 via `--n 20`),
+> requires all 200 evaluation points, and makes the stage-4 pick with `--stage4`
+> (exact ties go to the lowest index). `results/results_table.ipynb` imports it,
+> and its Table 2 uses the success-weighted steps-to-goal over the same last-10
+> window. Validated against established numbers: large_play MR best seeds 1–10
+> gives last-10 0.4301 ± 0.0743 and legacy max 0.5640 ± 0.0660, and its stage-4
+> grid picks index 3.
 
 **Selection statistic, precisely.** One IQL run is **1,000,000 training steps**
 with an evaluation every **5,000** steps, i.e. **200 evaluation points per run**.
@@ -11380,6 +11389,10 @@ Note it does **not** refuse on the `SUPERSEDED-ROUND1` marker that
 `train_rewards.sh` blocks on. That is deliberate: the merged sweep overrides
 every swept field of its base config, whereas `train_rewards.sh` trains from
 those values directly.
+
+**`../results/iql_score.py`** (parent repo) — the canonical IQL score: the mean of
+the last 10 of 200 evaluation points, used for stage-4 selection (`--stage4`) and
+by `results_table.ipynb` for reporting (§5, §4.3.107). `--selftest` runs its tests.
 
 **`selection_gates.py`** (repo root) — the BNN eligibility gates of §3.2.12, in
 one place, imported by both tools below (§4.3.108). `python selection_gates.py`
