@@ -10304,6 +10304,32 @@ overwritten. Those results remain in wandb (scores, configs, histories), but the
 IQL runs can no longer be re-executed against the same model files. Everything
 downstream is regenerated under the redesign anyway.
 
+**Mid-sweep observation (2026-09-15, 89 finished MR trials; descriptive only, no
+action — §9).** The user noticed MR's best trials hugging the width ceiling but
+not the depth ceiling. Checked across all finished trials rather than the bests
+(2 of 4 bests are in fact at depth 4):
+
+| variant | ρ(width, loss) | ρ(depth, loss) | ρ(n_params, loss) |
+|---|---|---|---|
+| medium_play | −0.371 | −0.813 | −0.837 |
+| medium_diverse | −0.584 | −0.361 | −0.630 |
+| large_play | −0.607 | **+0.140** | −0.504 |
+| large_diverse | −0.531 | **+0.418** | −0.098 |
+
+**Width lowers the loss in every variant; depth changes sign** — it helps on
+medium_play and *hurts* on both large variants. **It is not pure capacity:**
+within-variant rank fits give width + depth R² 0.372 against log2 `n_params`
+0.348, with width weighted ~3× depth (−3.72 vs −1.23). Marginal mean ranks by
+width: +6.85, +6.38, +5.15, **−2.68** for 4→7; by depth: +1.83, +0.56, −0.40,
+−1.50 for 1→4.
+
+Caveats: the Bayes optimiser concentrated sampling (62 of 89 trials at width 7),
+so marginal means confound width with trial order and lr tuning; and the sweeps
+were still running. **Consistent with the ladders** (drift rises with both axes
+for the BNN) and with MR having **no stationarity gate**, so nothing stops its
+objective preferring the widest model available. **If the final MR winners sit at
+width 7, disclose the ceiling hit**; §3.2.16's ranges do not move for it.
+
 **Next:** once every baseline sweep's stopping rule has fired
 (`check_sweep_convergence.py`), launch `./launch_hp_sweeps.sh bnn`, never while
 the baselines are still running.
