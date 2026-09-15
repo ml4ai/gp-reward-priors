@@ -3,8 +3,13 @@ program: run_pt_training_antmaze_eval.py
 method: bayes
 run_cap: 130  # matched across model families (see comment below)
 metric:
-  name: eval_loss_best
+  name: eval_loss_at_selected
   goal: minimize
+
+# UPDATED 2026-09-15 (handoff 4.3.107): the objective is the validation loss AT
+# the checkpoint selected on the TEST split (select_split: test, the script
+# default) -- no longer the best-over-epochs validation loss.  The comment
+# below predates the change.
 
 # Post-sampler-fix HP re-selection (shared bt_pool="mean" likelihood), 
 # antmaze_eval lineage, seed 0.  Selection MINIMIZES the best-over-epochs

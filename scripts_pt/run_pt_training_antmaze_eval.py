@@ -16,6 +16,7 @@ os.chdir("..")
 
 from optbnn.utils import util
 from optbnn.bnn.nets.pref_trans import PT
+from optbnn.training.checkpoint_selection import CheckpointSelector
 from optbnn.training.training import PTTrainer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -48,9 +49,13 @@ class TrainConfig:
     # the per-seed eval directory:
     #   {data_root}/{antmaze_variant}/eval/seed_{seed}/{antmaze_variant}_pref_{train,val,test}_{seed}.hdf5
     # The same seed drives training and file selection, so the model seed and the
-    # loaded data splits always match.  Training uses the train set with the
-    # validation set for best-model selection; after training the best model is
-    # reloaded and evaluated once on the held-out test set (test_acc / test_loss).
+    # loaded data splits always match.
+    #
+    # Split roles (handoff 4.3.107, adopted 2026-09-15): the SELECTION split
+    # (select_split, default "test") picks the checkpoint saved as best_model.pt;
+    # the VALIDATION split scores that checkpoint, and eval_loss_at_selected is
+    # the stage-1 sweep objective.  select_split="val" reproduces the old rule,
+    # where validation did both and a held-out test score was logged at the end.
     antmaze_variant: str = "antmaze-medium-play-v2"
     data_root: str = "data/antmaze"
     # Derived from antmaze_variant + seed in __post_init__ when left unset.  Set
@@ -63,6 +68,7 @@ class TrainConfig:
     lr: float = 3e-4
     eval_every: int = 1  # How often (time steps) we evaluate
     criteria_key: str = "acc"
+    select_split: str = "test"  # split that picks best_model.pt: "test" (current) or "val" (pre-2026-09-15)
     num_workers: int = 4  # DataLoader worker processes
     prefetch_factor: int = 2  # Batches pre-loaded per worker (ignored when num_workers=0)
     compile_model: bool = False  # Wrap net with torch.compile for kernel fusion
@@ -72,6 +78,8 @@ class TrainConfig:
     checkpoints_path: Optional[str] = "~/busy-beeway/transformers"  # Save path
 
     def __post_init__(self):
+        if self.select_split not in ("test", "val"):
+            raise ValueError(f"select_split must be 'test' or 'val', got {self.select_split!r}")
         self.embd_dim = 2 ** self.embd_dim
         self.head_dim = 2 ** self.head_dim
         self.head_dim = min(self.head_dim, self.embd_dim)  # clamp so num_heads >= 1
@@ -145,6 +153,10 @@ def train(config: TrainConfig):
         loader_kwargs["prefetch_factor"] = config.prefetch_factor
     training_data_loader = DataLoader(train_data, shuffle=True, **loader_kwargs)
     val_data_loader = DataLoader(val_data, shuffle=False, **loader_kwargs)
+    test_data = util.Pref_H5Dataset(osp.expanduser(config.test_dataset))
+    test_data_loader = DataLoader(test_data, shuffle=False, **loader_kwargs)
+    print(f"[split roles] checkpoint selection on {config.select_split}; "
+          f"sweep objective scored on val")
 
     max_pos = config.default_max_pos
     while query_len > max_pos:
@@ -175,21 +187,13 @@ def train(config: TrainConfig):
         device=device,
         bt_pool=config.bt_pool,
     )
-    c_best_epoch = 0
-
-    best_acc = -np.inf
-    best_loss = np.inf
+    selector = CheckpointSelector(config.criteria_key)
 
     for epoch in range(config.epochs + 1):
         metrics = {
             "training_loss": [],
             "training_acc": [],
-            "best_epoch": c_best_epoch,
-            "eval_loss": [],
-            "eval_acc": [],
-            f"eval_{config.criteria_key}_best": (
-                best_acc if config.criteria_key == "acc" else best_loss
-            ),
+            **selector.log_dict(),
         }
 
         if epoch:
@@ -200,74 +204,27 @@ def train(config: TrainConfig):
         else:
             metrics["training_loss"] = np.nan
 
-        # eval phase — evaluate on the held-out validation set
+        # eval phase — the validation split is scored every eval epoch (it is the
+        # sweep objective); the selection split picks the checkpoint.
         if epoch % config.eval_every == 0:
-            for val_batch in val_data_loader:
-                val_batch = [b.to(device, non_blocking=True) for b in val_batch]
-                for key, val in model.evaluation(val_batch).items():
-                    metrics[key].append(val)
-
-            loss = np.mean(metrics["eval_loss"])
-            acc = np.mean(metrics["eval_acc"])
-
-            if config.criteria_key == "acc":
-                if acc > best_acc:
-                    c_best_epoch = epoch
-                    best_acc = acc
-                    metrics["best_epoch"] = c_best_epoch
-                    metrics["eval_acc_best"] = best_acc
-                    if config.checkpoints_path is not None:
-                        torch.save(
-                            model.state_dict(),
-                            os.path.join(config.checkpoints_path, "best_model.pt"),
-                        )
-                    if loss < best_loss:
-                        best_loss = loss
-                elif acc == best_acc:
-                    if loss < best_loss:
-                        c_best_epoch = epoch
-                        best_loss = loss
-                        metrics["best_epoch"] = c_best_epoch
-                        metrics["eval_acc_best"] = best_acc
-                        if config.checkpoints_path is not None:
-                            torch.save(
-                                model.state_dict(),
-                                os.path.join(config.checkpoints_path, "best_model.pt"),
-                            )
-                else:
-                    if loss < best_loss:
-                        best_loss = loss
+            val_loss, val_acc = _evaluate(model, val_data_loader)
+            if config.select_split == "test":
+                sel_loss, sel_acc = _evaluate(model, test_data_loader)
             else:
-                if loss < best_loss:
-                    c_best_epoch = epoch
-                    best_loss = loss
-                    metrics["best_epoch"] = c_best_epoch
-                    metrics["eval_loss_best"] = best_loss
-                    if config.checkpoints_path is not None:
-                        torch.save(
-                            model.state_dict(),
-                            os.path.join(config.checkpoints_path, "best_model.pt"),
-                        )
-                    if acc > best_acc:
-                        best_acc = acc
-                elif loss == best_loss:
-                    if acc > best_acc:
-                        c_best_epoch = epoch
-                        best_acc = acc
-                        metrics["best_epoch"] = c_best_epoch
-                        metrics["eval_loss_best"] = best_loss
-                        if config.checkpoints_path is not None:
-                            torch.save(
-                                model.state_dict(),
-                                os.path.join(config.checkpoints_path, "best_model.pt"),
-                            )
-                else:
-                    if acc > best_acc:
-                        best_acc = acc
+                sel_loss, sel_acc = val_loss, val_acc
+            metrics.update(eval_loss=val_loss, eval_acc=val_acc,
+                           select_loss=sel_loss, select_acc=sel_acc)
+
+            if selector.update(epoch, sel_loss, sel_acc, val_loss, val_acc):
+                if config.checkpoints_path is not None:
+                    torch.save(
+                        model.state_dict(),
+                        os.path.join(config.checkpoints_path, "best_model.pt"),
+                    )
+            metrics.update(selector.log_dict())
 
         # Drop metrics that weren't computed this epoch (empty lists) instead of
-        # logging them as NaN — otherwise every non-eval step writes NaN into the
-        # eval_* series (and training_acc at epoch 0).
+        # logging them as NaN — otherwise training_acc at epoch 0 logs NaN.
         metrics = {
             key: (np.mean(val) if isinstance(val, list) else val)
             for key, val in metrics.items()
@@ -275,36 +232,52 @@ def train(config: TrainConfig):
         }
         wandb.log(metrics, step=epoch)
 
-    # ------------------------------------------------------------------ #
-    # Final test-set evaluation — reload the best (validation-selected) model
-    # and evaluate it once on the held-out test set, logging preference
-    # accuracy and loss as test_acc / test_loss.
-    # ------------------------------------------------------------------ #
-    if config.checkpoints_path is not None:
-        best_path = os.path.join(config.checkpoints_path, "best_model.pt")
-        model.load_state_dict(torch.load(best_path, map_location=device))
-        print(f"[test] reloaded best model from {best_path} (best epoch {c_best_epoch})")
-    else:
-        print("[test] no checkpoints_path — evaluating the final-epoch model on test")
-
-    test_data = util.Pref_H5Dataset(osp.expanduser(config.test_dataset))
-    test_data_loader = DataLoader(test_data, shuffle=False, **loader_kwargs)
-    test_loss, test_acc = [], []
-    for test_batch in test_data_loader:
-        test_batch = [b.to(device, non_blocking=True) for b in test_batch]
-        eval_out = model.evaluation(test_batch)
-        test_loss.append(eval_out["eval_loss"])
-        test_acc.append(eval_out["eval_acc"])
-    test_metrics = {
-        "test_loss": float(np.mean(test_loss)),
-        "test_acc": float(np.mean(test_acc)),
-    }
-    print(
-        f"[test] test_acc = {test_metrics['test_acc']:.4f}, "
-        f"test_loss = {test_metrics['test_loss']:.4f}"
-    )
-    wandb.log(test_metrics)
+    _final_check(config, model, selector, val_data_loader, test_data_loader)
     sys.exit(0)
+
+
+def _evaluate(model, loader):
+    """Mean over batches of the trainer's eval loss / accuracy (as logged before)."""
+    loss, acc = [], []
+    for batch in loader:
+        batch = [b.to(device, non_blocking=True) for b in batch]
+        out = model.evaluation(batch)
+        loss.append(out["eval_loss"])
+        acc.append(out["eval_acc"])
+    return float(np.mean(loss)), float(np.mean(acc))
+
+
+def _final_check(config, model, selector, val_data_loader, test_data_loader):
+    """Reload best_model.pt and re-score it.
+
+    select_split="test": the test split chose the checkpoint, so a test score
+    would be in-sample.  Instead re-score VAL and check it equals the logged
+    eval_loss_at_selected -- this verifies best_model.pt is the selected
+    checkpoint.  select_split="val": the old behaviour, a held-out test score.
+    """
+    if selector.best_epoch is None:
+        print("[final] no evaluation produced a finite selection metric; nothing to reload")
+        wandb.log({"selection_failed": 1})
+        return
+    if config.checkpoints_path is None:
+        print("[final] no checkpoints_path -- best model was not saved; skipping reload check")
+        return
+    best_path = os.path.join(config.checkpoints_path, "best_model.pt")
+    model.load_state_dict(torch.load(best_path, map_location=device))
+    print(f"[final] reloaded {best_path} (selected epoch {selector.best_epoch}, "
+          f"on {config.select_split})")
+    if config.select_split == "test":
+        loss, acc = _evaluate(model, val_data_loader)
+        diff = abs(loss - selector.val_loss)
+        ok = diff <= 1e-5 * max(1.0, abs(selector.val_loss))
+        print(f"[final] val loss reloaded {loss:.6f} vs logged at selection "
+              f"{selector.val_loss:.6f} -> {'MATCH' if ok else 'MISMATCH'}")
+        wandb.log({"eval_loss_reloaded": loss, "eval_acc_reloaded": acc,
+                   "reload_check_abs_diff": diff, "reload_check_ok": int(ok)})
+    else:
+        loss, acc = _evaluate(model, test_data_loader)
+        print(f"[final] held-out test_acc = {acc:.4f}, test_loss = {loss:.4f}")
+        wandb.log({"test_loss": loss, "test_acc": acc})
 
 
 if __name__ == "__main__":

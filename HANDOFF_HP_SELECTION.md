@@ -54,8 +54,15 @@ evaluation run ever sees. The ten evaluation seeds each have their own disjoint
 train/val/test partition. Consequently:
 
 - No hyperparameter was ever selected on data used to produce a reported number.
-- The seed-0 *test* split exists but is **not** used for selection either; it is
-  incidental to the eval script's data loader.
+- **The test split picks the MR/PT checkpoint (since 2026-09-15, §4.3.107).** At
+  every seed, MR best-model and PT save as `best_model.pt` the checkpoint with the
+  lowest *test* loss, and the validation split scores that checkpoint; that score
+  is the stage-1 sweep objective. This is part of fitting a reward model, not
+  hyperparameter selection. The test split is never used to rank
+  hyperparameters, and no reported number is computed on it: reported results are
+  IQL returns at seeds 1–10. *(Previously: "the seed-0 test split exists but is
+  not used for selection; it is incidental to the eval script's data loader".
+  Then, validation both picked the checkpoint and ranked hyperparameters.)*
 - Reported evaluation results at seeds 1–10 are therefore out-of-sample with
   respect to the entire selection procedure, including the stage-4 normalization
   search (§5), which also runs at seed 0.
@@ -127,7 +134,7 @@ posterior-predictive quantity, so a calibrated loss is the right target.
 
 | family | metric key | notes |
 |---|---|---|
-| MR, PT | `eval_loss_best` | requires `criteria_key: loss` in the config |
+| MR, PT | `eval_loss_at_selected` | validation loss **at the checkpoint the test split selected** (`select_split: test`, `criteria_key: loss`); replaced `eval_loss_best`, the best-over-epochs validation loss, on 2026-09-15 (§4.3.107) |
 | BNN | `val_predictive_cross_entropy` | Wu et al. Eq. (10) predictive, `E[σ(f)]` — see §3.6.2 |
 
 Round 1's BNN warm-up tier selected on `warmup_final_nll`, a quantity measured
@@ -9714,7 +9721,41 @@ families**. Framing agreed in conversation:
   accuracy check would move too. **Wrong**: that gate is disabled —
   `early_stop_acc_threshold: 0.0`, and do not reinstate, §3.5, §4.3.36.)* Needs
   §1 reworded (the seed-0/1–10 invariant is untouched), and must apply identically
-  to the seeds 1–10 reward models. **Not yet adopted.**
+  to the seeds 1–10 reward models.
+
+  > ✅ **ADOPTED by the user and IMPLEMENTED, 2026-09-15.**
+  > - `optbnn/training/checkpoint_selection.py`: one `CheckpointSelector`
+  >   shared by both scripts. Self-test (`python
+  >   optbnn/training/checkpoint_selection.py`) passes. With
+  >   `select_split="val"` it reproduces the old inline rule in 4,000
+  >   randomized runs; ties now compare the secondary metric **at the selected
+  >   checkpoint** (the old code compared against the best-ever secondary, which
+  >   differs only on exact float ties).
+  > - `run_mr_training_antmaze_eval.py`, `run_pt_training_antmaze_eval.py`: new
+  >   field `select_split` (default `test`; `val` reproduces the old rule). Each
+  >   eval epoch logs `eval_loss/acc` (val) and `select_loss/acc` (selection
+  >   split). Running `best_epoch`, `eval_loss_at_selected`,
+  >   `eval_acc_at_selected`, `select_loss_at_selected` and
+  >   `select_acc_at_selected` replace `eval_loss_best`, whose meaning would
+  >   otherwise have changed silently.
+  > - **The final held-out `test_loss`/`test_acc` is gone** under
+  >   `select_split: test`, since test is now in-sample for the checkpoint.
+  >   Instead the script reloads `best_model.pt`, re-scores val and logs
+  >   `eval_loss_reloaded` and `reload_check_ok`, confirming the saved file is
+  >   the selected checkpoint. Under `val` the old test evaluation is kept.
+  > - All 8 MR/PT sweep yamls: metric `eval_loss_at_selected`, with a dated note.
+  >   All 8 production configs: `criteria_key` comment updated.
+  > - `launch_hp_sweeps.sh`: the baselines id cache is bumped
+  >   `sweep_ids_phase1.txt` → `sweep_ids_baselines_round2.txt`, so a relaunch
+  >   cannot resume the old-metric sweeps.
+  > - Cost: the test split is now also scored every eval epoch (PT every epoch,
+  >   MR every 5), a modest addition to runtime.
+  > - **Not yet run end to end**: pyrallis does not work on this Mac under
+  >   Python 3.14, so the scripts are verified by compile and by the module
+  >   self-test only. A short smoke run on leviathan is the next step.
+  > - **Consequence:** every existing MR/PT stage-1 winner, stage-4 grid and
+  >   seeds 1–10 reward model was trained under the old rule. The MR/PT pipeline
+  >   is re-run under the redesign.
 
 #### Facts established for the redesign (zero compute)
 
@@ -11124,7 +11165,8 @@ Preflights the seed-0 data splits, tuning sets, env, and GPU count; rejects any
 config sets `burn_in_lr`** — burn-in must inherit the swept `sghmc_lr`, and a
 base config that overrides it would have the sweep scoring configurations it is
 not actually running, invisibly (§3.7). Caches sweep ids per set
-(`exp/sweep_ids_bnn_round2.txt`, `exp/sweep_ids_phase1.txt`) so re-runs resume
+(`exp/sweep_ids_bnn_round3.txt`, `exp/sweep_ids_baselines_round2.txt` — the latter
+bumped from `sweep_ids_phase1.txt` on 2026-09-15 for the MR/PT metric change) so re-runs resume
 rather than duplicate, with the BNN set on a fresh file so it cannot resurrect a
 retired tier sweep. Exports the §10.7 thread caps, matching `train_rewards.sh`,
 so selection and evaluation runs share numerics. Launches exactly **one agent

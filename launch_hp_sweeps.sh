@@ -7,8 +7,9 @@
 #   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
 #
 # There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
-# running them together would oversubscribe.  The baselines are complete in any
-# case; that set exists to make them reproducible, not to be re-run.
+# running them together would oversubscribe.  The baselines' phase-1 sweeps are
+# complete, but they are RE-RUN under the 2026-09-15 split-role change (test split
+# picks the checkpoint, val scores it; handoff 4.3.107), with a new id cache.
 #
 # ROUND 2: the BNN's two-tier structure (warm-up tier -> sampling tier, launched
 # here as phase1/phase2) is retired.  Architecture, prior strength and sampler
@@ -76,10 +77,12 @@ fi
 #              full GPU per sweep -> GPUs 0-3, leaving 4-5 free.
 #   baselines: MR is a small MLP (all 4 agents share GPU 0); PT fits 2/GPU.
 #
-# Sweep-id caches are per set.  `baselines` deliberately reads the historical
-# exp/sweep_ids_phase1.txt: the MR/PT sweeps in it are complete round-1 sweeps
-# that are unaffected by the round-2 redesign, and reusing their ids is what
-# stops a re-run from creating duplicates.
+# Sweep-id caches are per set.  `baselines` used to read the historical
+# exp/sweep_ids_phase1.txt (complete round-1 MR/PT sweeps).  Bumped to
+# sweep_ids_baselines_round2.txt on 2026-09-15 (handoff 4.3.107): MR/PT now
+# select the checkpoint on the test split and the metric changed from
+# eval_loss_best to eval_loss_at_selected, so resuming the phase-1 sweeps would
+# carry the old metric.
 #
 # The BNN cache filename is versioned (now sweep_ids_bnn_round3.txt) ON PURPOSE.
 # Bumped round2 -> round3 on 2026-09-01 with the round-3 redesign: the metric
@@ -113,7 +116,7 @@ if [[ "$SET" == "bnn" ]]; then
     IDS_FILE="exp/sweep_ids_bnn_round3.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
-    IDS_FILE="exp/sweep_ids_phase1.txt"
+    IDS_FILE="exp/sweep_ids_baselines_round2.txt"
 fi
 
 # ----------------------------------------------------------------- preflight

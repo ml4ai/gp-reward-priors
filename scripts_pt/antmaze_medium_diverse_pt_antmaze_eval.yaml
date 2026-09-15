@@ -24,7 +24,7 @@ epochs: 5000
 batch_size: 64
 lr: 1.365137349484202e-05
 eval_every: 1
-criteria_key: loss   # matches the sweep selection metric (eval_loss_best)
+criteria_key: loss   # selection criterion on select_split (test); sweep metric eval_loss_at_selected
 compile_model: true
 pin_memory: true
 seed: 1
