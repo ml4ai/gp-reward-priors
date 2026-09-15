@@ -10042,6 +10042,19 @@ this outlier rule). Both fixed a threshold without checking its false-positive
 rate under the null. **Before pre-registering a threshold rule, simulate its
 behaviour on data with no effect.** It costs seconds.
 
+#### DECIDED: stage 4 stays at one IQL run per index (2026-09-15)
+
+The user set stage 4's purpose: **to avoid a bad normalization**, not to find the
+best one. It was introduced because the PT paper's single normalization was poor
+for the MR baseline and inflated the PT–MR gap (§5). Under that purpose,
+Experiment 1's firing rule — written to ask whether single runs can *resolve*
+top-2 gaps — tests a stronger property than stage 4 needs. Single runs reliably
+reject poor indices, and their errors among near-ties cost ≈ 0.015 on the last-10
+mean, below the seeds 1–10 SEs. **Screen-then-replicate is not adopted.** Disclose
+σ, P(correct) ≈ 0.78 at the median gap, and the expected cost (§5). The
+experiment's result stands as recorded; what changed is which property the design
+must guarantee.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -10326,6 +10339,24 @@ Two properties worth being aware of:
   describes index 4, but its released code implements index 7. Including both in
   the grid means the comparison does not depend on which of the two you consider
   canonical — worth one sentence in the paper.
+
+**What stage 4 is for — a fairness mechanism (user, 2026-09-15).** The PT paper
+applied a single normalization to PT and to its baselines. The user found that
+choice was poor for the MR baseline in particular, **inflating the reported
+PT–MR gap**. Stage 4 therefore exists **to avoid a bad normalization for any
+method**: no family should be handicapped by a transformation that happens to
+suit another. Its job is not to identify the single best normalization, and the
+paper should make no claim that the selected index is the best one. It belongs to
+the same comparability doctrine as §3.1's symmetric search spaces.
+
+**Consequence: one IQL run per index is sufficient (decided 2026-09-15,
+§4.3.107).** Under this purpose the guarantee needed is "never lands a method on
+a poor normalization", and single runs provide it. Clearly bad indices (4/5 score
+near 0 everywhere) are rejected far outside the noise; mistakes happen only
+between near-equivalent good indices, where they are cheap. Disclose, using
+Experiment 1's noise on the last-10 mean (σ = 0.061): at the median top-2 gap
+(0.068) a single run picks the better index with P ≈ 0.78, for an expected cost
+of ≈ 0.015, below the seeds 1–10 standard errors (≈ 0.015–0.045).
 
 **Why this stage is selected on return rather than on validation loss:** unlike
 stages 1–3, this is not a property of the preference model in isolation. A
