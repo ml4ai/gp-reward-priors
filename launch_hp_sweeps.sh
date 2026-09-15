@@ -82,9 +82,13 @@ fi
 # sweep_ids_baselines_round2.txt on 2026-09-15 (handoff 4.3.107): MR/PT now
 # select the checkpoint on the test split and the metric changed from
 # eval_loss_best to eval_loss_at_selected, so resuming the phase-1 sweeps would
-# carry the old metric.
+# carry the old metric.  The same new cache also carries the common capacity
+# ranges adopted later that day (handoff 3.2.16); it had not been used yet.
 #
-# The BNN cache filename is versioned (now sweep_ids_bnn_round3.txt) ON PURPOSE.
+# The BNN cache filename is versioned (now sweep_ids_bnn_round4.txt) ON PURPOSE.
+# Bumped round3 -> round4 on 2026-09-15 (handoff 3.2.16): common capacity ranges,
+# width 4-7 x depth 1-4 (was 6-9 x 1-6); resuming round 3 would carry the old
+# ranges.
 # Bumped round2 -> round3 on 2026-09-01 with the round-3 redesign: the metric
 # changed to val_cvar_ce, the search dropped 9 dimensions to 6, width capped at
 # 9, and the per-trial budget moved to 32 chains x 120k steps.  Reusing the
@@ -113,7 +117,7 @@ BASELINE_ENTRIES=(
 
 if [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
-    IDS_FILE="exp/sweep_ids_bnn_round3.txt"
+    IDS_FILE="exp/sweep_ids_bnn_round4.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
     IDS_FILE="exp/sweep_ids_baselines_round2.txt"

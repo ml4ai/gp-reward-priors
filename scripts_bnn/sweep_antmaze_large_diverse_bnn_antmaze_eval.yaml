@@ -157,30 +157,24 @@ parameters:
   # `sghmc_lr`.  Do not add it back.
 
   # ---- Swept: architecture ---------------------------------------------
-  # width and depth are log2 exponents (2**width).  Ranges UNCHANGED from
-  # round 1.  Round-1 tier-1 winner for this variant was width 6, depth 3 —
-  # mid-range, no ceiling reached.
-  # Ceilings reached in round 1 were reached under `warmup_final_nll`, the
-  # metric round 2 retires, so they are not evidence about the optimum under
-  # `val_mean_cross_entropy`.  Not narrowed either -- narrowing in response
-  # to observed behaviour is what section 9 prohibits.
-  # 6-9, not 6-10: MR searches width 6-9 and PT embd_dim 6-8, so 6-10 gave the
-  # BNN an octave the baselines never had.  Capping MATCHES MR and strengthens
-  # 3.1's invariant that the BNN receive no more tuning than the baselines
-  # (3.2.9).  A comparability argument, not a cost one.
+  # width is a log2 exponent (2**width): 4 -> 16 ... 7 -> 128.
+  # (History: round-1 note -- Round-1 tier-1 winner for this variant was width 6, depth 3 — mid-range, no ceiling reached.)
+  # 2026-09-15 (handoff 3.2.16): COMMON CAPACITY RANGES, identical for every
+  # variant and matched across families -- MLP width 4-7 x depth 1-4
+  # (625-54.5k params, MR and BNN); PT embd_dim 3-5 x num_layers 1-4
+  # (2.2k-57.5k).  Chosen for the 254-514 preference labels per variant, on
+  # general grounds (data size, HMC mixing vs dimension, a low-dimensional
+  # reward), with the ladders and sweeps used only in pooled form.  Replaces
+  # width 6-9 / depth 1-6.  A declared section-9 amendment: all sweeps restart
+  # from scratch under new id caches.
   width:
     distribution: int_uniform
-    min: 6
-    max: 9
-  # 2026-09-11 (§3.2.14): floor lowered 2 -> 1 to MATCH MR, which searches
-  # depth 1-6 (PT's num_layers is 1-4).  Comparability only (§3.1): the BNN
-  # was the only family barred from a one-layer model, and barred from the
-  # low-capacity end that §4.3.86/§4.3.104 indicate is the better one.  This
-  # restores symmetry rather than responding to a performance number.
+    min: 4
+    max: 7
   depth:
     distribution: int_uniform
     min: 1
-    max: 6
+    max: 4
 
   # ---- Swept: prior strength -------------------------------------------
   # n_meas = 0 disables the functional prior entirely, so the optimiser can

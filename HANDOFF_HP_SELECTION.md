@@ -159,6 +159,10 @@ the gap (§7).
 `width`, `embd_dim`, `head_dim` are **log2 exponents** — the config stores the
 exponent and `__post_init__` raises 2 to it. A sweep value of 8 means 256 units.
 
+> ⚠️ **Capacity ranges below are SUPERSEDED by §3.2.16 (2026-09-15):** MR/BNN
+> `width` 4–7 × `depth` 1–4; PT `embd_dim` 3–5 × `head_dim` 3–5 ×
+> `num_layers` 1–4. The tables record earlier rounds.
+
 **MR** (`scripts_mr/sweep_antmaze_<variant>_mr_antmaze_eval.yaml`)
 
 | param | distribution | range |
@@ -1331,6 +1335,9 @@ sweep ran" and editing it after the fact would destroy that guarantee.
 
 ### 3.2.13 The depth floor is asymmetric; and the ladder is upgraded to LICENSING
 
+> **Superseded by §3.2.16 (2026-09-15):** common capacity ranges replace this
+> section's per-variant licensing rule.
+
 Two items, 2026-09-11, both before the relaunch.
 
 #### 1. The BNN cannot reach a one-layer model; both baselines can
@@ -1403,6 +1410,9 @@ objectives over different model classes.
 
 ### 3.2.14 DECIDED: BNN `depth` 1–6, and MR/PT licensed from the BNN ladder
 
+> **Superseded by §3.2.16 (2026-09-15):** depth is 1–4 for all families; the
+> option-(iii) transfer is moot.
+
 Both decided 2026-09-11, before the relaunch.
 
 #### 1. BNN `depth` 2–6 → 1–6 — applied
@@ -1453,6 +1463,10 @@ capacity cap at width `W*`, the same cap applies to **MR's `width`**, and to
 > amended accordingly.**
 
 ### 3.2.15 Ladder restarted at 2 threads and extended below the range — written BEFORE the runs
+
+> **Superseded in part by §3.2.16 (2026-09-15):** the new width floor (4)
+> includes the rungs this section called exploratory; they informed the common
+> ranges in pooled form, and that is disclosed there.
 
 Recorded 2026-09-12 at the user's direction, **before any restarted rung ran**,
 per §0.
@@ -1530,6 +1544,84 @@ the "astronomical CE" guard keys on large weight magnitude, not small width.
 Sampler settings are the §4.3.101 noise-floor config throughout — 32 chains ×
 60 draws × `cycle_length` 2000, `num_burn_in_steps` 20000, `n_discarded` 5 —
 with the round-3 pins, so σ = 0.0226 remains the applicable floor.
+
+### 3.2.16 DECIDED: common capacity ranges for every family and variant (2026-09-15)
+
+**User decision:** search depths and widths over **smaller models suited to the
+data**, with ranges **identical across variants** and **matched across families**
+(as closely as the transformer allows for PT). The experiments are used to
+suggest the ranges **overall**, not to tailor them to any model or variant.
+
+| family | width axis | depth axis | parameters |
+|---|---|---|---|
+| **MR, BNN** | `width` log2 **4–7** (16–128) | `depth` **1–4** | **625 – 54,529** |
+| **PT** | `embd_dim` log2 **3–5** (8–32); `head_dim` log2 **3–5**, clamped (1–4 heads) | `num_layers` **1–4** | **2,169 – 57,537** |
+
+Was: MR/BNN width 6–9 × depth 1–6 (2,497 – 1,333,249); PT embd 6–8 × head 5–7
+× layers 1–4 (67,521 – 3,327,489). Counts measured by instantiating `MLP` and
+`PT` at antmaze dimensions (input 37; segment length 100). Per label, the new
+ranges span ≈ 1–215 parameters (254–514 training pairs per variant), against
+5–5,250 for MR/BNN before.
+
+**How "consistent" is defined.** PT at the same log2 width and depth is ~10–30×
+larger than an MLP (attention plus its 4× feed-forward block), so matching grid
+indices would not match capacity. The ranges match **depth** (1–4 for all) and
+the **parameter ceiling** (~55k). PT's **floor stays ~3× the MLP floor**; that is
+irreducible transformer overhead. An 8-dimensional PT embedding is unusually
+small, but valid.
+
+**Grounds — general, order of magnitude (none transfers exactly to a few hundred
+preference labels):**
+- *Events per variable* (classical logistic regression, which Bradley–Terry is):
+  ~1 parameter per 10 labels → 25–50. Far too strict for neural networks, but it
+  shows how little supervision there is.
+- *Interpolation threshold / double descent* (Belkin et al. 2019; Nakkiran et al.
+  2019): every model in both the old and the new ranges is past it — consistent
+  with MR memorising even at 2.5k parameters (§4.3.106). The aim is not to avoid
+  interpolation, but to stay where regularisation, and for the BNN mixing, work.
+- *Chinchilla* (~20 data units per parameter; Hoffmann et al. 2022), a
+  compute-optimal pretraining result and so only loosely applicable: counting
+  state-action inputs (51k–103k) gives ~2.5k–5k parameters.
+- *HMC scaling* (Neal 2011; Beskos et al. 2013): for well-behaved targets,
+  gradient steps per independent sample grow roughly as d^(5/4). At a fixed
+  sampling budget, larger BNNs mix worse.
+- *Task structure*: the antmaze reward depends essentially on position relative
+  to the goal (2 of 29 state dimensions), a smooth low-dimensional function.
+
+**Pooled empirical suggestions (not tailored):**
+- **Good BNN region ≈ 2k–50k parameters.** CVaR CE is best at widths 5–6 in both
+  ladders (§4.3.105), and gate-1 passes become rare above ~50–80k in ladders and
+  round-3 sweep trials alike (§4.3.106). Depth moves drift, gap and CVaR CE in the
+  same direction as width.
+- **Floors were too high.** Winners sit at a range floor in 3 of 8 baseline
+  sweeps (MR medium_diverse w6 d1; PT `embd_dim` 6 twice), and BNN width 5 was
+  among the best rungs.
+- **Too small exists.** large_diverse width 4 at depth 4 underfits (worst mean CE).
+  The range brackets the good region with ~an octave of margin each side.
+- **Weak spot:** MR's apparent preference for large models came from the old
+  validation-only checkpoint selection (§4.3.106), which favoured large models.
+  The new MR ceiling rests on consistency and the general grounds, not on MR data.
+
+**Supersedes:** §3.2.9's width 6–9; §3.2.14's BNN depth 1–6 (the comparability
+argument survives — all families now share depth 1–4); §3.2.13's per-variant
+licensing rule and §4.3.105's open gaps (a)/(b)/(c), which are **moot**; §3.2.14's
+option (iii) MR/PT transfer; §3.2.15's "w4/w5 exploratory only".
+
+**Section 9 amendment — declared, not silent.** §9 forbids changing a search
+range "in response to observed sweep behaviour", with the remedy "restart the
+affected sweeps from scratch and say so". This change **was informed by observed
+behaviour**, so it is a deviation in letter. It follows the remedy: every sweep
+(BNN, MR, PT) restarts from scratch under new id caches, the ranges are uniform
+across families and variants, and the grounds are general. **Disclose** that the
+ranges were chosen after the capacity ladders, round-3 trials and stage-1
+baselines were seen, and that those results informed them in pooled form only.
+
+**Implemented (2026-09-15):** all 12 sweep yamls (4 BNN, 4 MR, 4 PT) set to the
+ranges above, with a dated comment; the per-variant round-1 winner notes are kept
+as history. `launch_hp_sweeps.sh`: BNN cache bumped `sweep_ids_bnn_round3.txt` →
+`sweep_ids_bnn_round4.txt`; the baselines cache was already new and unused
+(`sweep_ids_baselines_round2.txt`). The production configs still hold old winners
+and are regenerated after the new sweeps select (§10.3).
 
 ### 3.3 What is deliberately NOT swept
 
@@ -9594,6 +9686,9 @@ caveat (the prior-pin half stands).
 
 #### 4. OPEN — three gaps in the pre-registered rules, found only now
 
+> **MOOT (2026-09-15):** the per-variant rule these gaps belong to was replaced
+> by common capacity ranges (§3.2.16), so (a), (b) and (c) need no resolution.
+
 None was foreseen when §3.2.13/§3.2.14 were written, and each changes the
 outcome. **Decisions for the user; record each as resolved AFTER the results
 were seen.**
@@ -11170,8 +11265,9 @@ Preflights the seed-0 data splits, tuning sets, env, and GPU count; rejects any
 config sets `burn_in_lr`** — burn-in must inherit the swept `sghmc_lr`, and a
 base config that overrides it would have the sweep scoring configurations it is
 not actually running, invisibly (§3.7). Caches sweep ids per set
-(`exp/sweep_ids_bnn_round3.txt`, `exp/sweep_ids_baselines_round2.txt` — the latter
-bumped from `sweep_ids_phase1.txt` on 2026-09-15 for the MR/PT metric change) so re-runs resume
+(`exp/sweep_ids_bnn_round4.txt`, `exp/sweep_ids_baselines_round2.txt` — BNN bumped
+from round3 and baselines from `sweep_ids_phase1.txt` on 2026-09-15, for the common
+capacity ranges and the MR/PT metric change) so re-runs resume
 rather than duplicate, with the BNN set on a fresh file so it cannot resurrect a
 retired tier sweep. Exports the §10.7 thread caps, matching `train_rewards.sh`,
 so selection and evaluation runs share numerics. Launches exactly **one agent
@@ -11241,7 +11337,10 @@ slot is wasted. Ground truth from the box is `wandb sync --sync-all --dry-run`.
 - Do not select any hyperparameter on evaluation seeds 1–10, at any stage.
 - Do not change a search range, gate, or fixed value in response to observed
   sweep behaviour. If something is genuinely broken, restart the affected
-  sweeps from scratch and say so.
+  sweeps from scratch and say so. *(Declared amendment, 2026-09-15: the common
+  capacity ranges of §3.2.16 were informed by observed behaviour. They apply
+  uniformly to every family and variant, and all sweeps restart from scratch
+  under new id caches; the disclosure is in §3.2.16.)*
 - Do not stop a sweep before its rule fires; do not read a winner from a sweep
   that has not fired.
 - Do not select on accuracy anywhere in stages 1–3.

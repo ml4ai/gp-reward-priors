@@ -44,16 +44,24 @@ parameters:
     value: 5000
 
   # ---- Swept (identical ranges across all antmaze variants) ----
-  # embd_dim / head_dim are log2 exponents: 2**6=64 ... 2**8=256 and
-  # 2**5=32 ... 2**7=128 (head_dim is clamped to embd_dim in __post_init__).
+  # embd_dim / head_dim are log2 exponents: 2**3=8 ... 2**5=32 for both
+  # (head_dim is clamped to embd_dim in __post_init__, so 1-4 heads).
+  # 2026-09-15 (handoff 3.2.16): COMMON CAPACITY RANGES, identical for every
+  # variant and matched across families -- MLP width 4-7 x depth 1-4
+  # (625-54.5k params, MR and BNN); PT embd_dim 3-5 x num_layers 1-4
+  # (2.2k-57.5k).  Chosen for the 254-514 preference labels per variant, on
+  # general grounds (data size, HMC mixing vs dimension, a low-dimensional
+  # reward), with the ladders and sweeps used only in pooled form.  Replaces
+  # width 6-9 / depth 1-6.  A declared section-9 amendment: all sweeps restart
+  # from scratch under new id caches.
   embd_dim:
     distribution: int_uniform
-    min: 6
-    max: 8
+    min: 3
+    max: 5
   head_dim:
     distribution: int_uniform
-    min: 5
-    max: 7
+    min: 3
+    max: 5
   num_layers:
     distribution: int_uniform
     min: 1

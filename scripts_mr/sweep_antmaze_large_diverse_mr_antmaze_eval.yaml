@@ -45,15 +45,23 @@ parameters:
     value: 5000
 
   # ---- Swept (identical ranges across all antmaze variants) ----
-  # width is a log2 exponent: actual width = 2**width (6 -> 64 ... 9 -> 512).
+  # width is a log2 exponent: actual width = 2**width (4 -> 16 ... 7 -> 128).
+  # 2026-09-15 (handoff 3.2.16): COMMON CAPACITY RANGES, identical for every
+  # variant and matched across families -- MLP width 4-7 x depth 1-4
+  # (625-54.5k params, MR and BNN); PT embd_dim 3-5 x num_layers 1-4
+  # (2.2k-57.5k).  Chosen for the 254-514 preference labels per variant, on
+  # general grounds (data size, HMC mixing vs dimension, a low-dimensional
+  # reward), with the ladders and sweeps used only in pooled form.  Replaces
+  # width 6-9 / depth 1-6.  A declared section-9 amendment: all sweeps restart
+  # from scratch under new id caches.
   width:
     distribution: int_uniform
-    min: 6
-    max: 9
+    min: 4
+    max: 7
   depth:
     distribution: int_uniform
     min: 1
-    max: 6
+    max: 4
   lr:
     distribution: log_uniform_values
     min: 1e-5
