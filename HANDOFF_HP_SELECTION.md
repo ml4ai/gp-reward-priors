@@ -10330,6 +10330,46 @@ for the BNN) and with MR having **no stationarity gate**, so nothing stops its
 objective preferring the widest model available. **If the final MR winners sit at
 width 7, disclose the ceiling hit**; §3.2.16's ranges do not move for it.
 
+**Overfitting under the new split roles (2026-09-15, 143 finished trials;
+descriptive, no action — §9).** The user asked whether overfitting persists.
+
+1. **Memorisation persists at about half the old rate.** Final training loss
+   < 1e-3 in **52%** of MR and 52% of PT trials (median training accuracy 1.000),
+   against **82–92%** under the old ranges (§4.3.106). The smaller ranges of
+   §3.2.16 reduced it; they did not remove it, which is expected at 5,000 epochs
+   on 254–514 pairs. Checkpoint selection is what contains it.
+   `best_epoch` median is now **565** (MR) and 290 (PT) of 5,000, against 58–390
+   before, so the selected checkpoint sits later in training than under the old
+   val-only rule.
+2. **The val−test gap at the selected checkpoint is mostly SPLIT DIFFICULTY,
+   not selection optimism.** Raw gap medians are +0.049 (MR) and +0.151 (PT), but
+   compared with each run's own mean gap across all epochs, the gap *at* the
+   selected checkpoint is **smaller** for MR (medium_play −0.006, large_play
+   −0.345) and for PT large_play (−0.032). Only **PT medium_play** shows genuine
+   optimism there (+0.101). An earlier reading of the raw gap as optimism was
+   wrong and is corrected here.
+3. **What the split-role change bought** — the OLD objective (min val over
+   epochs) vs the NEW one (val at the test-selected checkpoint), on the same runs:
+
+| sweep | old | new (honest) | optimism removed | pair-order flips |
+|---|---|---|---|---|
+| MR medium_play | 0.1503 | 0.1612 | +0.0114 | 10/45 |
+| MR large_play | 0.2297 | 0.2495 | +0.0074 | 13/45 |
+| MR medium_diverse | 0.2586 | 0.2671 | +0.0047 | 18/45 |
+| MR large_diverse | 0.2226 | 0.2278 | +0.0011 | 17/45 |
+| PT medium_play | 0.2692 | 0.2941 | +0.0279 | 18/45 |
+| **PT large_play** | 0.2100 | **0.4039** | **+0.1244** | 22/45 |
+
+   **PT was flattered most** — on large_play the old objective reported 0.21
+   against an honest 0.40 — consistent with §4.3.106's PT val/test divergence.
+   **22–49% of trial pairs change order**, so the change alters which
+   configuration wins, not only the reported level.
+
+> **For a future redesign, not now:** MR exposes **no regularisation at all** (no
+> weight decay, no dropout) and PT only a fixed `dropout 0.1`. Regularisation
+> strength is a search dimension neither family currently has, and it — not the
+> capacity range — is the direct lever on memorisation.
+
 **Next:** once every baseline sweep's stopping rule has fired
 (`check_sweep_convergence.py`), launch `./launch_hp_sweeps.sh bnn`, never while
 the baselines are still running.
