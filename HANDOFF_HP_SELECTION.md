@@ -9750,9 +9750,14 @@ families**. Framing agreed in conversation:
   >   cannot resume the old-metric sweeps.
   > - Cost: the test split is now also scored every eval epoch (PT every epoch,
   >   MR every 5), a modest addition to runtime.
-  > - **Not yet run end to end**: pyrallis does not work on this Mac under
-  >   Python 3.14, so the scripts are verified by compile and by the module
-  >   self-test only. A short smoke run on leviathan is the next step.
+  > - **Smoke-tested end to end on leviathan, 2026-09-15** (group
+  >   `smoke-select-split`, scratch dirs under `exp/smoke/`, large_play seed 0).
+  >   MR: 20 epochs, 5 evaluations, selected epoch 15; val at selection 0.225931,
+  >   re-scored after reload 0.225931. PT: 5 epochs, 6 evaluations, selected
+  >   epoch 5; 0.490476 both. `reload_check_ok = 1` and `reload_check_abs_diff =
+  >   0` for both. `eval_loss_at_selected` is present in both wandb summaries,
+  >   which is where the sweep reads it. No retired key (`eval_loss_best`,
+  >   `test_loss`) was logged.
   > - **Consequence:** every existing MR/PT stage-1 winner, stage-4 grid and
   >   seeds 1–10 reward model was trained under the old rule. The MR/PT pipeline
   >   is re-run under the redesign.
