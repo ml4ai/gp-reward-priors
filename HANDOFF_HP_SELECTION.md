@@ -9774,6 +9774,73 @@ replicate → **n = 6 per arm**.
   to other cells only by analogy; the seeds 1–10 table above is the cross-cell
   context.
 
+#### Experiment 1 — RESULT (2026-09-15): the rule FIRES
+
+All 12 runs finished with 200 evaluation points; **config audit clean** (only
+seed, name, group and `reward_model_root` differ from each arm's original; every
+run loads the same reward model) and wandb-recorded commits as expected
+(`8c3b0db` originals, `1d469ea` replicates). Readout:
+`iql_noise/iql_noise_readout.py`.
+
+| statistic | idx 2 mean (sd) | idx 3 mean (sd) | pooled σ (90% CI) | Δ idx3−idx2 (95% CI) | Δ/σ | P(correct, 1 run) |
+|---|---|---|---|---|---|---|
+| **max over evals (primary)** | 0.513 (0.033) | 0.555 (0.041) | **0.0373** (0.0275–0.0594) | +0.042 (−0.006 to +0.090) | 1.12 | **0.79** |
+| final point | 0.342 (0.064) | 0.453 (0.060) | 0.0620 (0.0458–0.0987) | **+0.112 (+0.032 to +0.191)** | 1.80 | 0.90 |
+| mean of last 10 | 0.338 (0.054) | 0.434 (0.067) | 0.0611 (0.0452–0.0973) | **+0.096 (+0.017 to +0.175)** | 1.57 | 0.87 |
+
+**Decision, as pre-registered: σ̂ = 0.0373 ≥ 0.028 — FIRES.** Single-run stage
+4 cannot reliably resolve a typical top-2 gap. The 90% CI's lower bound (0.0275)
+sits just under the threshold, so the firing rests on the point estimate as the
+rule specified, not on the whole interval.
+
+Derived from σ̂ = 0.0373 on the primary statistic:
+
+| top-2 gap | P(correct, 1 run per index) | expected regret | runs per index for P ≥ 0.95 |
+|---|---|---|---|
+| 0.01 | 0.58 | 0.004 | 76 |
+| 0.02 | 0.65 | 0.007 | 19 |
+| 0.04 (median) | 0.78 | 0.009 | 5 |
+| 0.06 | 0.87 | 0.008 | 3 |
+| 0.12 | 0.99 | 0.001 | 1 |
+
+**Observations beyond the pre-registered decision** (post hoc, one cell):
+
+1. **Wrong picks are cheap.** Expected regret is ≤ 0.009 at every gap — a wrong
+   pick among near-ties costs little because the ties are near. Stage 4's
+   single-run choices are unreliable but *low-regret*; the redesign decides
+   whether reliability or only regret matters.
+2. **The max statistic has the lowest σ but the worst signal-to-noise.** The
+   pre-registered secondary ("which statistic has the lower σ") answers *max* —
+   but the decision-relevant quantity is Δ/σ, and there max is worst (1.12 vs
+   1.80 final, 1.57 last-10). idx 2 peaks near evaluation 100 and decays; idx 3
+   peaks later (~160) and holds. The max hides that; the end of training shows
+   it, and both late statistics separate the arms at 95%.
+3. **Why max compresses differences (mechanism, consistent with the data).** A
+   100-episode mean has binomial SD ≈ 0.05 at p ≈ 0.5, and the maximum of 200
+   such points rides ~2.6 SD above the level it fluctuates around. Per-run max
+   exceeds last-10 by **0.09–0.24**, and idx 3 seed 200 took its max (0.51) at
+   **evaluation 1** (10k steps) before settling at 0.32–0.36. Max partly
+   measures evaluation-noise extremes and transient spikes.
+4. **IQL noise is about a third of the seeds 1–10 spread** for this cell:
+   (0.037 / 0.066)² ≈ 0.32. The rest comes from the data split and reward model
+   that change with each evaluation seed.
+5. Both original seed-0 runs sit at the top of their arms (idx 2: 0.56, highest;
+   idx 3: 0.60, second-highest). With n = 1 each this is not evidence of anything,
+   but stage 4's recorded values (0.56/0.60) overstate the replicate means by
+   ~0.045.
+
+**Implication for the redesign — options, not yet decided:**
+- **(i) Replicate finalists:** screen all 8 indices with one run (bad-vs-good is
+  resolved), then ~5 runs for the top 2–3. ≈ 16–23 runs per cell vs 8 now.
+- **(ii) Change the statistic** to final or last-10 for both selection and
+  reporting: no extra compute, better Δ/σ here, and less optimistic than max
+  (§5 already flags max as optimistic). A paper-level convention choice; the
+  one-cell evidence can be checked across all 16 cells at zero compute by
+  re-scoring the existing stage-4 and seeds 1–10 histories.
+- **(iii) Keep single-run stage 4** and disclose σ̂, P(correct) and expected
+  regret, on the argument that near-ties cost little.
+- (i) and (ii) combine.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
