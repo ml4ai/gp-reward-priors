@@ -10024,7 +10024,13 @@ mis-calibrated, and the choice makes no measurable difference.**
   seeds 1–10 pairs resolved 10 (mean) vs 9 (median); **zero** sign differences;
   Experiment 1 Δ/σ 1.57 vs 1.52.
 
-**Recommended: the mean** (pending user decision), on principle rather than data,
+> ✅ **DECIDED by the user, 2026-09-15: the last-10 MEAN is the stage-4
+> selection statistic and the reporting statistic; the last-20 mean is the
+> robustness check.** Supersedes max-over-evaluations in §5 and §7.1 for every
+> round run from here on. §5's identical-statistic principle is kept: selection
+> and reporting use the same statistic.
+
+**Why the mean** (recommended, then adopted) — on principle rather than data,
 since the data do not distinguish them. The mean of 10 evaluation points is the
 success rate pooled over 1,000 episodes — a direct estimate of how often the
 end-of-training policy reaches the goal — and it is the efficient estimator for
@@ -10257,6 +10263,17 @@ score**.
 
 **Seed: 0** — the same selection lineage as every other stage. All selection,
 end to end, happens at seed 0; all evaluation happens at seeds 1–10.
+
+> ⚠️ **SUPERSEDED 2026-09-15 (§4.3.107): the statistic is now the MEAN OF THE
+> LAST 10 evaluation points** (the last 50,000 training steps, 1,000 episodes),
+> for selection and reporting alike, with the **last-20 mean** as the
+> robustness check. The max-over-evaluations text below describes how every
+> stage-4 grid and seeds 1–10 run *to date* was selected and scored. It resolved
+> fewer method comparisons (5 vs 10 of 24), was spike-driven, and needs online
+> checkpoint selection, which a truly offline setting does not allow. Existing
+> histories can be re-scored at zero compute, but 6 of 16 stage-4 cells would
+> have picked a different index, so re-scored seeds 1–10 numbers are "as if"
+> selection had not changed.
 
 **Selection statistic, precisely.** One IQL run is **1,000,000 training steps**
 with an evaluation every **5,000** steps, i.e. **200 evaluation points per run**.
@@ -10824,6 +10841,14 @@ pre-registered before it ran.
 **Stage 4's statistic is a max over 200 checkpoints** (§5) — optimistic relative
 to final-checkpoint reporting, applied identically to every method, and worth
 naming rather than leaving implicit.
+
+> **Superseded for the redesign (§4.3.107, 2026-09-15):** the statistic is now
+> the **last-10 mean** (last-20 as robustness check). If any results under max
+> are reported, disclose both statistics. **Disclose also** that the choice
+> followed a criterion fixed before the cross-cell re-score, but was confirmed
+> after seeing that the statistic flips medium_diverse oracle-vs-learned
+> comparisons; no BNN IQL runs existed at the time, so it could not have been
+> steered by the paper's own method.
 
 ### 7.2 Round-2 BNN results — settled
 
