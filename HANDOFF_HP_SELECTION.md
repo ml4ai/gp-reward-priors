@@ -9846,8 +9846,9 @@ Derived from σ̂ = 0.0373 on the primary statistic:
 Zero compute: all 298 finished IQL runs re-scored on max / final / last-10.
 `iql_noise/stage4_statistic_rescore.py`, with its reading criteria written in the
 docstring **before the first run**; histories cached to `exp/iql_histories.pkl`.
-No MR ensemble-CVaR seeds 1–10 runs exist yet, so 12 evaluation cells and 24
-within-variant method pairs.
+No MR ensemble-CVaR seeds 1–10 runs exist yet, so 16 evaluation cells (12
+learned-reward, 4 ground truth) and 24 within-variant method pairs. *(Corrected
+from "12 evaluation cells" the same day.)*
 
 **PRIMARY — resolving power in the seeds 1–10 comparisons (10 genuine replicates
 per method).** Welch |t| for every within-variant pair of reported methods:
@@ -9933,8 +9934,11 @@ evaluation noise (residual SD), and the share of runs with a significant slope.
 The pre-stated rule (median below one noise SD and ≤ ~10% significant slopes in
 every variant) is met by **no** n. **The rule was mis-calibrated**: it allowed
 ~10% regardless of n, but the chance rate is 14% at n = 5, so it could never
-pass there. Adjacent checkpoints are also autocorrelated, which inflates slope
-|t| above nominal. Read directly: **the last ~10–20 evaluations (last 5–10% of
+pass there. *(An earlier version added that adjacent checkpoints are
+autocorrelated, inflating slope |t|. **That was wrong**: the within-window lag-1
+autocorrelation of detrended scores is −0.13 to +0.05, median ≈ −0.05, measured
+the same day — so the excess significant slopes at n = 20 are real drift.)* Read
+directly: **the last ~10–20 evaluations (last 5–10% of
 training) are approximately flat**. Change stays under one noise SD everywhere,
 and significant slopes run near chance at n = 10, rising above it in two variants
 by n = 20. **Trend is clear by n = 50** (medium_diverse 1.23 SD, 56%). The whole
@@ -9979,6 +9983,58 @@ training, or whole curve — not a noise trade-off. For offline RL, end of train
 is what's achievable without online checkpoint selection. If chosen, n ∈ [10, 20]
 is supported by curve shape alone; within that band conclusions agree, and the
 paper can state it as a robustness band.
+
+#### DECIDED: end of training. Fixing n and mean vs median (2026-09-15)
+
+**User decision:** the selection and reporting statistic is **end of training,
+last-n with n ∈ [10, 20]** — for stage 4 and for reported results alike (§5's
+identical-statistic principle).
+
+**"Set by curve shape" means:** n is chosen from the curves' own properties —
+how long the end of training stays flat, and how much of the score's variance is
+evaluation noise a longer window would average away — never from which n makes
+method comparisons come out cleaner.
+
+`iql_noise/window_and_location.py`, rules written before the first run, using
+only noise, drift and outliers:
+
+**n: rule gives n = 10.** Rule: n = 10 unless a longer window cuts between-run
+variance of the last-n mean by ≥ 10% (median over the 16 seeds 1–10 cells).
+- n = 15 cuts it **5.3%**, n = 20 **5.4%**. The window barely matters because
+  **evaluation noise is a small share of between-run variance**: σ_w ≈ 0.05 per
+  evaluation point (the binomial SD of a 100-episode mean), no autocorrelation,
+  so at n = 10 it contributes a median ~6% (1–19%) of the variance. The rest is
+  genuine run-to-run difference, which no window averages away.
+- **Drift grows with n.** Cells with systematic drift beyond 2 SE: 1 at n = 10
+  (medium_play MR ens mean, −0.041 ± 0.013) vs 3 at n = 20 (large_play GT
+  +0.046 ± 0.019, MR ens mean −0.032 ± 0.012, PT −0.031 ± 0.012).
+- So a longer window buys ~5% variance and adds drift: **n = 10**, with n = 20 as
+  the robustness check (§ above: conclusions agree within last-5 to last-20).
+
+**Mean vs median: the pre-stated rule said median — but the rule is
+mis-calibrated, and the choice makes no measurable difference.**
+- Rule: median if ≥ 10% of runs have a point > 3 robust SDs (1.4826·MAD) from the
+  window median. Observed **21.8%**, so it fired.
+- **Its null rate is ~19–20%**: simulated on windows with no outliers, it fires
+  on 18.8% (iid normal, n = 10) and 19.5% (binomial(100, p)/100 at each run's own
+  last-10 level). A MAD from 10 points is too noisy for a 3-SD cutoff. **The
+  observed 21.8% is what no outliers looks like**, so the verdict is an artefact.
+- Mean and median are indistinguishable in every respect: window |mean − median|
+  median **0.005** (90th pct 0.014); between-run SD ratio median/mean **1.01**;
+  seeds 1–10 pairs resolved 10 (mean) vs 9 (median); **zero** sign differences;
+  Experiment 1 Δ/σ 1.57 vs 1.52.
+
+**Recommended: the mean** (pending user decision), on principle rather than data,
+since the data do not distinguish them. The mean of 10 evaluation points is the
+success rate pooled over 1,000 episodes — a direct estimate of how often the
+end-of-training policy reaches the goal — and it is the efficient estimator for
+the near-normal evaluation noise measured here. The median has no robustness
+advantage to buy, because outliers are not in excess of chance.
+
+**Process note — two mis-calibrated rules in one session** (the flatness rule and
+this outlier rule). Both fixed a threshold without checking its false-positive
+rate under the null. **Before pre-registering a threshold rule, simulate its
+behaviour on data with no effect.** It costs seconds.
 
 ### 4.4 Procedure
 
