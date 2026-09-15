@@ -9695,15 +9695,26 @@ families**. Framing agreed in conversation:
   the literature selects reward models on a loss proxy. The design stays
   *loss proxy for the reward model, IQL only for stage 4's normalization* —
   stage 4 being this project's own addition.
-- **Proposed (user): early-stop on the seed-0 test split.** Losses are fit
-  statistics only; reward models are evaluated downstream by IQL, and test loss
-  is unlikely to be reported. The test split is read by nothing outside the
-  training scripts and is **exactly val's size** (77 / 107 / 54–55 / 110 pairs),
-  so repurposing it as a **stopping split** costs no data and lets val serve
-  selection alone, removing §4.3.106's double use. Needs §1 reworded (the
-  seed-0/1–10 invariant is untouched); must apply identically to the seeds 1–10
-  reward models; the BNN's warm-up accuracy check (`X_eval = X_val`) would move
-  too. **Not yet adopted.**
+- **Proposed (user): use the test split for checkpoint selection within MR/PT
+  training.** *(Clarified 2026-09-15: this is **within-run checkpoint selection**,
+  not the sweep's stopping rule. An earlier draft called it "early stopping",
+  but training is not cut short.)* Today an MR/PT run trains all 5,000 epochs,
+  scores **val** every `eval_every` epochs, and saves `best_model.pt` at the
+  lowest val loss. That checkpoint is what IQL loads, and the same minimum,
+  `eval_loss_best`, is the sweep's objective — so val both picks the checkpoint
+  and ranks the hyperparameters (§4.3.106's double use). The proposal: **test
+  picks the checkpoint; val scores that checkpoint for the sweep.** Losses are fit
+  statistics only; reward models are evaluated downstream by IQL, and test loss is
+  unlikely to be reported. The test split is read by nothing outside the training
+  scripts and is **exactly val's size** (77 / 107 / 54–55 / 110 pairs), so this
+  costs no data. **Scope:** MR best-model and PT (they load `best_model.pt`); MR
+  ensemble's IQL reward averages every snapshot past `mr_burn_in` and is
+  unaffected, though it shares the MR sweep's objective; **the BNN selects no
+  checkpoint and is unaffected.** *(An earlier draft said the BNN's warm-up
+  accuracy check would move too. **Wrong**: that gate is disabled —
+  `early_stop_acc_threshold: 0.0`, and do not reinstate, §3.5, §4.3.36.)* Needs
+  §1 reworded (the seed-0/1–10 invariant is untouched), and must apply identically
+  to the seeds 1–10 reward models. **Not yet adopted.**
 
 #### Facts established for the redesign (zero compute)
 
