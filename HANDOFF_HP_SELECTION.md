@@ -10323,6 +10323,15 @@ within-variant rank fits give width + depth R² 0.372 against log2 `n_params`
 width: +6.85, +6.38, +5.15, **−2.68** for 4→7; by depth: +1.83, +0.56, −0.40,
 −1.50 for 1→4.
 
+> ⚠️ **Partly reversed later the same day, as predicted by the caveats below.**
+> At 40 trials medium_diverse's correlations collapsed — ρ(width) −0.202 (was
+> −0.584), ρ(`n_params`) −0.163 (was −0.630) — and its **leader became w4 d1, the
+> SMALLEST architecture in the range** (625 parameters, 0.2508 against the
+> previous w7 d3's 0.2575). The width preference still holds on large_play
+> (ρ −0.653) and medium_play remains capacity-driven (ρ(`n_params`) −0.805), but
+> it is **variant-dependent, not universal**, and it weakens as the optimiser
+> explores. Re-run this on the completed sweeps before drawing any conclusion.
+
 Caveats: the Bayes optimiser concentrated sampling (62 of 89 trials at width 7),
 so marginal means confound width with trial order and lr tuning; and the sweeps
 were still running. **Consistent with the ladders** (drift rises with both axes
