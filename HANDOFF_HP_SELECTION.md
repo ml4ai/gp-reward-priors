@@ -10405,9 +10405,45 @@ architectures?
   families and both stages, so this does not favour one family — MR is affected,
   PT is not.
 
-**Next:** once every baseline sweep's stopping rule has fired
-(`check_sweep_convergence.py`), launch `./launch_hp_sweeps.sh bnn`, never while
-the baselines are still running.
+#### Baselines COMPLETE (2026-09-16): all 8 fired, winners below
+
+Every sweep's stopping-rule winner is **also the best of all trials**, so there is
+no rule-vs-best regret to disclose for any of them.
+
+| variant | MR winner | MR config | trials | PT winner | PT config | trials |
+|---|---|---|---|---|---|---|
+| medium_play | **0.1474** (`a4qo4g4i`) | w7 d4, lr 4.1e-4 | 27 | **0.1740** (`giab551o`) | embd 5, head 3, L4, lr 2.0e-5 | 65 |
+| medium_diverse | **0.2508** (`p2f7p8dv`) | **w4 d1**, lr 1.3e-3 | 63 | **0.3524** (`rupj57fq`) | embd 3, head 5, L2, lr 8.9e-3 | 28 |
+| large_play | **0.2273** (`c898c0xe`) | w7 d4, lr 6.4e-5 | 34 | **0.2413** (`cyrngs49`) | embd 5, head 3, L2, lr 1.7e-5 | 20 |
+| large_diverse | **0.2221** (`s8nbeehf`) | w7 d2, lr 5.6e-4 | 26 | **0.2400** (`xokkypz7`) | embd 5, head 5, L3, lr 1.3e-3 | 17 |
+
+**Disclosures to carry:**
+- **Three of four MR winners sit at the width ceiling (7)**; the fourth sits at
+  the **floor** (w4 d1, 625 parameters). PT's winners span `embd_dim` 3–5. The
+  capacity preference is **variant-dependent**, not a uniform pull upward — see
+  the reversal note above.
+- **Trial counts vary 17–65.** Two sweeps kept improving late: MR medium_diverse
+  (improvements at trials 23, 35, 39, 40 — the last worth 2.6%) and PT
+  medium_play (0.2228 → 0.2064 → 0.1837 → 0.1740, 22% over its last three).
+- No unsynced or diverged trials in any sweep.
+
+#### Relaunch, part 2: BNN sweeps launched (2026-09-16)
+
+`./launch_hp_sweeps.sh bnn`, cache `exp/sweep_ids_bnn_round4.txt`:
+medium_play `2falo587`, medium_diverse `vzd1zwim`, large_play `23ezwbbo`,
+large_diverse `i6xhta53`.
+
+**Health check at launch:** all four `RUNNING` with metric `val_cvar_ce`, ranges
+width 4–7 × depth 1–4 (§3.2.16), and the round-3 pins intact — `n_meas` 256,
+`map_amp2` 6611 (large) / 6626 (medium), `chain_init_jitter` 1.0, 32 chains at
+`chains_per_gpu` 32, 60 draws × `cycle_length` 2000, `num_burn_in_steps` 20,000,
+`cvar_ce_conservatism` 0.75. **`burn_in_lr` is absent from every sweep**, the
+precondition whose violation ended round 1 (§3.7). First trials drew w7 d2,
+w5 d2, w5 d3 and w4 d1 — spanning the new range.
+
+**Eligibility is applied at winner-selection time** by `selection_gates.py`
+(§3.2.12, §4.3.108), not by the sweep. Centred `ess` is logged now (§4.3.75), so
+gate 3 is computable for these trials — unlike round 3's, which are discarded.
 
 ### 4.4 Procedure
 
