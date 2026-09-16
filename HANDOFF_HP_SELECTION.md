@@ -10370,6 +10370,32 @@ descriptive, no action — §9).** The user asked whether overfitting persists.
 > strength is a search dimension neither family currently has, and it — not the
 > capacity range — is the direct lever on memorisation.
 
+**Runs still improving at the epoch ceiling (asked 2026-09-15; descriptive, no
+action — §9).** Which trials were still improving at `epochs: 5000`, and at what
+architectures?
+
+- **MR: 33 of 106 trials (31%) select the LAST checkpoint** (`best_epoch` 5000;
+  37 at ≥ 4500). **PT: none** — 0 of 49 reach 5000, only 4 pass 2500.
+- **It is the learning rate, not the architecture.** ρ(`best_epoch`, log lr) =
+  **−0.909** (MR) and −0.940 (PT), against −0.119 / −0.028 for width / depth (MR).
+  All 37 late MR trials have **lr ≤ 1.1e-4** — the bottom decade of the swept
+  1e-5–1e-2 — with quartiles 1.4e-5 / 1.7e-5 / 2.9e-5. Their architectures span
+  the whole grid (w4 d1, w4 d4, w5 d3, w6 d3, w6 d4, w7 d1…w7 d4).
+- **They are under-trained, not overfit:** **0%** reach training loss < 1e-3
+  (against 52% overall), and their val loss at selection is slightly worse
+  (median 0.2645 vs 0.2425).
+- **Verified as a real trend, not a noisy tail.** Slope over the last 500 epochs,
+  12 runs per group: the late group falls at **−0.0100** per 1,000 epochs on the
+  selection split (11 of 12 significant at t < −2); the rest *rise* at +0.0577
+  (1 of 12). **But their val slope is only −0.0007** — essentially flat. More
+  epochs would keep moving the chosen checkpoint without materially improving the
+  honest score.
+- **Disclosure candidate:** the bottom decade of the lr range is evaluated under a
+  **binding epoch budget**, so those configurations are scored partly on being
+  truncated. The flat val slope bounds the harm. `epochs: 5000` is fixed for all
+  families and both stages, so this does not favour one family — MR is affected,
+  PT is not.
+
 **Next:** once every baseline sweep's stopping rule has fired
 (`check_sweep_convergence.py`), launch `./launch_hp_sweeps.sh bnn`, never while
 the baselines are still running.
