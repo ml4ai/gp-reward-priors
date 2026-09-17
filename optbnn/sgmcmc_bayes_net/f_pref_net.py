@@ -627,6 +627,7 @@ class FPrefNet:
         samples_per_cycle=1,
         resample_momentum=True,
         fix_meas_set=False,
+        meas_sampling="random",
         max_param_step=None,
         v_hat_min=None,
         log_every=0,
@@ -758,6 +759,57 @@ class FPrefNet:
         # so chains still get DIFFERENT fixed sets: the pooled prior is not
         # collapsed onto a single subset, only each chain's own gradient is
         # made deterministic.
+        # ---- Stratified-by-cell measurement sampling (handoff 4.3.109) ---
+        # The map prior's kernel is CELL-based, so a random draw of n_meas pool
+        # points is mostly redundant: measured on the real pools, 91% of a
+        # 256-draw lands in a cell already represented, and 231 of 256
+        # eigenvalues sit at the nugget (4.3.43) -- those are the within-cell
+        # difference directions, where the prior asserts f is equal at all
+        # points sharing a maze cell with weight 1/sig_n2.  That assertion is an
+        # artefact of the grid, not a modelling intent: the state carries
+        # velocities and joint angles that vary within a cell.
+        #
+        # "stratified_cell" draws ONE point from EVERY occupied cell each step.
+        # Against the random draw this (a) removes the duplicate rows, so the
+        # stiff directions disappear, and (b) covers 100% of occupied cells
+        # instead of 84-85%, removing the per-step flicker in which ~15% of
+        # cells are unconstrained and a different 15% each step.  The
+        # representative still varies per step, so the time-average remains the
+        # full-pool prior -- the property 4.3.24 identified as the reason
+        # resampling works, and the one a FIXED set destroys.
+        #
+        # This CHANGES THE PRIOR (the within-cell equality constraints are
+        # gone), so a stratified run is a DIAGNOSTIC, not a selection run: it
+        # needs its own stage-1 re-selection before any reported number rests
+        # on it.  n_meas is ignored in this mode; the effective count is the
+        # number of occupied cells.
+        _strat_starts = _strat_counts = None
+        if meas_sampling not in ("random", "stratified_cell"):
+            raise ValueError(
+                f"meas_sampling must be 'random' or 'stratified_cell', got {meas_sampling!r}"
+            )
+        if meas_sampling == "stratified_cell" and n_meas_actual > 0:
+            if not hasattr(self._gp_prior, "cell_of"):
+                raise ValueError(
+                    "meas_sampling='stratified_cell' needs a cell-based prior "
+                    f"exposing cell_of(); {type(self._gp_prior).__name__} does not."
+                )
+            _cells = np.asarray(
+                self._gp_prior.cell_of(self._x_meas, self._aux_meas)
+            ).ravel()
+            _order = np.argsort(_cells, kind="stable")
+            _sorted = _cells[_order]
+            _uniq, _first, _cnt = np.unique(_sorted, return_index=True, return_counts=True)
+            _strat_pool = _order                      # pool indices, grouped by cell
+            _strat_starts = _first.astype(np.int64)   # group offsets
+            _strat_counts = _cnt.astype(np.int64)     # group sizes
+            n_meas_actual = len(_uniq)
+            self.print_info(
+                f"[fSGHMC] Measurement sampling STRATIFIED BY CELL: one point per "
+                f"occupied cell, {n_meas_actual} cells of {len(self._x_meas)} pool "
+                f"points (n_meas={self._n_meas} ignored).  Duplicate cells per step: 0."
+            )
+
         _fixed_meas = None
         if fix_meas_set and n_meas_actual > 0:
             _fi = np.random.choice(len(self._x_meas), n_meas_actual,
@@ -919,10 +971,17 @@ class FPrefNet:
                 if _fixed_meas is not None:
                     x_meas_t, aux_meas_t = _fixed_meas
                 else:
-                    # Sample n_meas points from the measurement pool
-                    meas_idx = np.random.choice(
-                        len(self._x_meas), n_meas_actual, replace=False
-                    )
+                    if _strat_starts is not None:
+                        # One uniform draw within each cell's group of pool rows.
+                        meas_idx = _strat_pool[
+                            _strat_starts
+                            + (np.random.random(len(_strat_counts)) * _strat_counts).astype(np.int64)
+                        ]
+                    else:
+                        # Sample n_meas points from the measurement pool
+                        meas_idx = np.random.choice(
+                            len(self._x_meas), n_meas_actual, replace=False
+                        )
                     x_meas_t = torch.from_numpy(self._x_meas[meas_idx]).float().to(self.device)
                     aux_meas_t = (
                         torch.from_numpy(self._aux_meas[meas_idx]).to(self.device)
@@ -1145,6 +1204,7 @@ class FPrefNet:
         samples_per_cycle=1,
         resample_momentum=True,
         fix_meas_set=False,
+        meas_sampling="random",
         max_param_step=None,
         v_hat_min=None,
         chains_per_gpu=1,
@@ -1218,6 +1278,7 @@ class FPrefNet:
             samples_per_cycle=samples_per_cycle,
             resample_momentum=resample_momentum,
             fix_meas_set=fix_meas_set,
+            meas_sampling=meas_sampling,
             max_param_step=max_param_step,
             v_hat_min=v_hat_min,
             msd_points=msd_points,

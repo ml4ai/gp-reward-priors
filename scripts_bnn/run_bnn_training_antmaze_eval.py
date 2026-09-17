@@ -310,6 +310,16 @@ class TrainConfig:
     # Each chain draws its own set (seeded by seed + chain_idx), so the pooled
     # prior still covers the pool.  False = legacy per-step resampling.
     fix_meas_set: bool = False
+    # Measurement-point sampling (handoff 4.3.109).  "random" = the historical
+    # per-step uniform draw of n_meas pool points.  "stratified_cell" = one
+    # point from EVERY occupied maze cell each step: no duplicate cells (a
+    # random 256-draw is 91% duplicates, and 231 of its 256 Gram eigenvalues
+    # sit at the nugget, 4.3.43) and 100% cell coverage against 84-85%, while
+    # the representative still varies per step so the time-average is still the
+    # full-pool prior (4.3.24).  It CHANGES THE PRIOR -- the within-cell
+    # equality constraints are gone -- so it is a DIAGNOSTIC, not a selection
+    # run, and n_meas is ignored in that mode.
+    meas_sampling: str = "random"
     n_meas: int = 256
     # Diagonal jitter added to K_{X_M} before the Cholesky solve.
     meas_jitter: float = 1e-6
@@ -835,6 +845,7 @@ def train(config: TrainConfig):
         samples_per_cycle=config.samples_per_cycle,
         resample_momentum=config.resample_momentum,
         fix_meas_set=config.fix_meas_set,
+        meas_sampling=config.meas_sampling,
         max_param_step=config.max_param_step,
         v_hat_min=config.v_hat_min,
         chains_per_gpu=config.chains_per_gpu,
