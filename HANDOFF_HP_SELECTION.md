@@ -10444,6 +10444,34 @@ w5 d2, w5 d3 and w4 d1 — spanning the new range.
 **Eligibility is applied at winner-selection time** by `selection_gates.py`
 (§3.2.12, §4.3.108), not by the sweep. Centred `ess` is logged now (§4.3.75), so
 gate 3 is computable for these trials — unlike round 3's, which are discarded.
+**Verified on the first finished trial of each sweep: no gate key missing.**
+
+**Early eligibility, 22 trials (2026-09-17; descriptive, no action — §9).**
+
+- **4 of 22 eligible (18%)**, against round 3's 9 of 26 (36%) under the z-form and
+  the 39% §3.2.12 predicted for the new gate on those trials. **Eligibility has
+  roughly halved.**
+- **Gate 2 binds hardest:** 15 degeneracy failures vs 10 scale, 3 location, and
+  **7 trials fail gate 2 ALONE** — otherwise-clean configurations rejected for a
+  CVaR/mean separation below 2× its jackknife SE.
+- **The gates pull in opposite directions along capacity**, now measured inside
+  this campaign: ρ(`n_params`, degeneracy margin) = **+0.591** (larger models
+  separate more easily), ρ(`n_params`, `|log r|`) = **+0.286** (larger models
+  drift more). **§3.2.16's smaller ranges bought gate-1 passes at the price of
+  gate-2 failures.** The four eligible trials thread the needle at 897–10,817
+  parameters.
+- **Eligible trials hug the gate-2 boundary** — margins +0.0001, +0.0040, +0.0092,
+  +0.0099 — which is exactly §3.2.7's warning that the gate rather than the
+  objective is carrying the selection.
+- **The search is chasing ineligible configurations.** In 2 of 4 sweeps the
+  ungated best is ineligible and selecting the eligible best costs **17.6%** and
+  **12.4%** on `val_cvar_ce` — §7.2's round-2 failure mode recurring.
+
+Caveat: 5–6 trials per sweep, with the Bayes optimiser still exploring; the
+eligible fraction may rise as it learns the feasible region. **Watch the gate-2
+rate.** If it holds, §3.2.9's clause applies — "no eligible configuration at this
+budget" is itself a result to disclose, not to escalate around — and the
+capacity-range/gate-2 tension is the first thing a future round should revisit.
 
 ### 4.4 Procedure
 
