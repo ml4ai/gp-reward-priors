@@ -10473,6 +10473,124 @@ rate.** If it holds, §3.2.9's clause applies — "no eligible configuration at 
 budget" is itself a result to disclose, not to escalate around — and the
 capacity-range/gate-2 tension is the first thing a future round should revisit.
 
+### 4.3.109 Stratified-by-cell measurement sampling — flag built, diagnostics pending (2026-09-17)
+
+An independent AI-assisted diagnostic report (user-supplied, two revisions)
+proposed six fixes for the drift/degeneracy window. Five are already refuted or
+bounded by earlier work; the sixth is a genuine gap, and this section records it.
+
+#### The report's fixes, matched against this document
+
+| report fix | status here |
+|---|---|
+| lower `sig_c2` | **refuted by direct experiment (§4.3.43)**: 1.0 → 0.01 moved centred ratio 0.004 against a 0.0327 floor. It moves λ_max only; the stiffness is the 231 directions at λ_min |
+| friction γ | **refuted in both directions (§4.3.20, §4.3.21, §4.3.26)** and `mdecay` is already swept 1e-3–1.0. Raising it makes the chain *hotter* (injected noise ∝ `mdecay`); lowering it does nothing, as exact SGHMC requires |
+| bounded output / de-saturation | **the target was refuted as the cause (§4.3.51)**: at `map_amp2` 1.69e2 the model is unsaturated and *nothing about the ordering improved*. Also costs MR/PT re-runs |
+| shrink `n_meas` to 32–48 | **refuted (§4.3.16–19)**: `n_meas` 35 was worse than 256 on centred ratio (1.3200 vs 1.2297) |
+| recalibrate `amp2` for the 1/T dilution | **already done and derived, not tuned (§4.3.16)** — `map_amp2` ≈ 1e4 *is* the mean-pooling correction. Making it architecture-dependent would tune a pinned prior parameter |
+| localized / core-set sampling | **the route is open** — see below |
+
+Three premises in the report are wrong for this codebase and were corrected: the
+likelihood is **mean**-pooled, not an unconstrained sum (`bt_pool="mean"`); the
+measurement pool is **999,000** points, not ~100,000; the pairs are 254–514.
+
+#### The measurement that reopens the core-set route
+
+§4.3.24–25 killed *fixed* measurement sets, but those were **randomly chosen**.
+The user's point — that a coverage-designed core is a different proposal — is
+correct, and the numbers say why. Measured with the real `cell_of` on the real
+pools:
+
+| | medium | large |
+|---|---|---|
+| free cells | 26 | 33 (29 ever occupied) |
+| **duplicate cells in a random 256-draw** | **234 (91%)** | **232 (91%)** |
+| occupied cells covered by that draw | 22 of 26 (85%) | 24.2 of 29 (84%) |
+| random points needed to touch every occupied cell | **~2,900** | **~1,800** |
+| pool concentration | top cell 13%, top 5 = 46% | top cell 14%, top 5 = 50% |
+
+The 91% duplication is the same fact §4.3.43 saw from the spectrum side (231 of
+256 eigenvalues at the nugget). **§4.3.25's `n^-0.55` freezing bound was driven by
+coverage deficit, and a designed set removes that deficit by construction** —
+26–29 points cover every occupied cell, where random sampling needs ~2,000. So
+the bound does not close this route.
+
+#### The synthesis, and the flag
+
+Because the kernel is cell-based, the report's Fix 1.1 (de-duplicate) and Fix 2.2
+(static core) both reduce to *one representative per cell*. De-duplication keeps
+dynamic representatives but only the ~24 cells drawn; a static core covers all
+cells but freezes the representative — the property §4.3.24 identified as fatal,
+since resampling works because its time-average is the full-pool prior.
+
+**`meas_sampling="stratified_cell"`** (2026-09-17, `f_pref_net.py`) takes both:
+one point drawn from **every** occupied cell each step. No duplicates, 100%
+coverage, representative still varying per step. Default remains `"random"`.
+
+**Validated offline on both mazes** before any run: every draw hits every cell
+exactly once, 200 of 200 draws distinct, each point inside its assigned cell, and
+
+| | random 256-draw | stratified |
+|---|---|---|
+| Gram | 256×256 | 26×26 / 29×29 |
+| cond(K) | 2.7e5 | **198 / 206** |
+| eigenvalues at the nugget | 231 | **0** |
+
+> ⚠️ **This CHANGES THE PRIOR** — the within-cell equality constraints are gone —
+> so a stratified run is a **DIAGNOSTIC, not a selection run**, exactly like a
+> `tanh` run (§4.3.81). Adopting it requires stage-1 re-selection. `n_meas` is
+> ignored in that mode. **Known confound:** it also changes the batch from 256 to
+> 26–29 points, which changes effective prior strength; the fourth arm below
+> isolates that.
+
+#### The diagnostic pairs (designed 2026-09-17, not yet run)
+
+Each stratified arm **matches an existing BNN trial exactly**, changing only
+`meas_sampling`; the pipeline is bitwise deterministic at fixed seed (§4.3.105),
+so those trials are the baseline arms and only the new arms cost compute. The
+three baselines cover the three observed failure modes.
+
+| arm | baseline run | config | what it tests |
+|---|---|---|---|
+| medium_play stratified | `wc4nkymc` (gate-2 fail, margin −0.0125) | w5 d2 | does it fix degeneracy? |
+| large_play stratified | `eeil9cq2` (gate-1 scale fail, \|log r\| 0.190) | w7 d2 | does it fix drift at the top of the range? |
+| large_diverse stratified | `o7g6texk` (near-miss, margin −0.0012) | w5 d3 | does it flip a near-miss to eligible? |
+| medium_play `n_meas` 26, random | `wc4nkymc` | w5 d2 | **control**: is any effect just the batch size? |
+
+Run from `scripts_bnn/`, one GPU each, ~4–5 h:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && git pull && cd scripts_bnn && CUDA_VISIBLE_DEVICES=0 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml --width 5 --depth 2 --sghmc_lr 0.0004083124057799998 --sghmc_lr_max 0.0018176817194168644 --mdecay 0.21994810265784875 --map_amp2 6626 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --meas_sampling stratified_cell --OUT_DIR ./exp/strat_medium_play > ../exp/strat_medium_play.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=1 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml --width 7 --depth 2 --sghmc_lr 0.0001431411106119603 --sghmc_lr_max 0.002335089840112285 --mdecay 0.00782288509627689 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --meas_sampling stratified_cell --OUT_DIR ./exp/strat_large_play > ../exp/strat_large_play.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=2 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_diverse_bnn_antmaze_eval.yaml --width 5 --depth 3 --sghmc_lr 0.0001466529878102612 --sghmc_lr_max 0.00366585969624689 --mdecay 0.06039630227675143 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --meas_sampling stratified_cell --OUT_DIR ./exp/strat_large_diverse > ../exp/strat_large_diverse.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=3 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml --width 5 --depth 2 --sghmc_lr 0.0004083124057799998 --sghmc_lr_max 0.0018176817194168644 --mdecay 0.21994810265784875 --n_meas 26 --map_amp2 6626 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/n26_medium_play > ../exp/n26_medium_play.log 2>&1 &
+```
+
+Expect the stratified logs to print `Measurement sampling STRATIFIED BY CELL: one
+point per occupied cell, 26 cells` (29 for large) and `[prior] Gram cond(K) ≈
+2e2` against 2.7e5.
+
+**Read on** `|log(centred scale_ratio)|`, centred `loc_sd`, centred `ess`,
+`val_cvar_degeneracy_margin` and `val_cvar_ce`, against each baseline:
+
+- **stationarity improves and degeneracy does not worsen** → worth a sweep restart;
+- **gate 2 worsens** → stratification only trades one failure mode for the other;
+- **the `n_meas` 26 control matches the stratified arm** → the effect is batch
+  size, and changing `n_meas` is far cheaper than changing the prior.
+
+**Caveat that survives any outcome:** §4.3.45 measured two mazes with identical
+cond(K) to three figures and *opposite* responses, so a conditioning-only account
+is already known to be incomplete.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -11687,6 +11805,80 @@ round-1 reference values that stage 3 sets.
 > stationarity, and a burn-in too short to absorb the jitter cannot serve both.
 
 ### 10.2 Immediate next action — the road back to a relaunched sweep
+
+#### TO-DO as of 2026-09-17 — read this first
+
+**IN FLIGHT / IMMEDIATE**
+
+1. **BNN sweeps are PAUSED** (`2falo587` medium_play, `vzd1zwim` medium_diverse,
+   `23ezwbbo` large_play, `i6xhta53` large_diverse; cache
+   `exp/sweep_ids_bnn_round4.txt`). 22 trials finished, none near firing, and
+   **4 of 22 eligible (18%)** with gate 2 binding — see §4.3.108's early
+   eligibility block. Paused to free GPUs for item 2.
+2. **Run the four §4.3.109 diagnostics** (3 stratified arms + 1 `n_meas` 26
+   control, commands in that section, ~4–5 h on 4 GPUs). Their baselines are
+   existing trials `wc4nkymc`, `eeil9cq2`, `o7g6texk` — no baseline re-runs
+   needed, the pipeline is bitwise deterministic at fixed seed.
+3. **Read the diagnostics out** on `|log r|`, centred `loc_sd`, centred `ess`,
+   degeneracy margin and `val_cvar_ce`, and record the verdict in §4.3.109.
+
+**DECISIONS WAITING ON ITEM 3**
+
+4. **Adopt stratified sampling, or not.** It changes the prior, so adoption means
+   stage-1 re-selection: discard the 22 trials, bump the cache to
+   `sweep_ids_bnn_round5.txt`, relaunch. Pre-register before relaunching (§0).
+   If the `n_meas` control explains the effect, change `n_meas` instead — far
+   cheaper, and it is already a pinned value rather than a code path.
+5. **Penalised exploration, or not** (user's proposal). The measured problem: in
+   2 of 4 sweeps the ungated best is ineligible and choosing the eligible best
+   costs 17.6% / 12.4% on `val_cvar_ce` — §7.2's failure mode. Recommended form:
+   **penalise the metric the OPTIMISER sees, keep the hard gates at selection**,
+   so validity stays non-tradeable and the winner rule is unchanged. The penalty
+   weight must be derived from the gate thresholds and the objective's own SE,
+   not tuned. Also requires a restart, so **batch it with item 4 — one restart,
+   not two.**
+
+**AFTER THE BNN SWEEPS FIRE**
+
+6. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
+   gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
+   applies: that is a result to disclose, not to escalate around.
+7. **Regenerate the four production configs** from the new winners (§10.3); they
+   are currently HYBRID and must not be used for production training as they
+   stand.
+8. **Clear the reward-model directories** before production training, so a
+   crashed run cannot leave stale `checkpoint_*.pt` snapshots for the MR
+   ensemble to pick up.
+9. **Train reward models at seeds 0–10** for all families (`train_rewards.sh`,
+   2 threads), then **stage 4** with `python results/iql_score.py --stage4`
+   (last-10 mean, one IQL run per index, §5), then the **seeds 1–10 IQL
+   evaluations**, then register the new sweep ids in
+   `results/results_table.ipynb`.
+
+**ANALYSIS DEBT (no compute)**
+
+10. **Re-run the width/depth analysis on the completed baseline sweeps.** The
+    mid-sweep version in §4.3.108 is known to be unstable — medium_diverse
+    reversed from a width preference to a w4 d1 winner between 19 and 40 trials.
+11. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
+    winners at the width ceiling, one at the floor, and the two sweeps that kept
+    improving late.
+
+**FUTURE-ROUND CANDIDATES (do not act mid-campaign — §9)**
+
+12. **Regularisation as a search dimension.** MR exposes none at all (no weight
+    decay, no dropout) and PT only a fixed `dropout 0.1`. That, not the capacity
+    range, is the direct lever on the memorisation measured in §4.3.108.
+13. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
+    range is evaluated under a binding 5,000-epoch budget (31% of trials select
+    the last checkpoint, all at lr ≤ 1.1e-4).
+14. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
+    gain resets patience; and the longest observed non-improving streak before a
+    later improvement was 13 against K = 15.
+15. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
+    so the seeds 1–10 lineages share most eval-env seeds. Low priority.
+
+---
 
 > ✅ **READY TO RELAUNCH (2026-09-15).** The redesign is decided and
 > implemented:
