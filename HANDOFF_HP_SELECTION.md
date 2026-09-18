@@ -11448,6 +11448,68 @@ widening helps gate 2 and the objective, and enough of it destroys the tail —
 6.66 at deployment. **The most likely outcome is that the rule does NOT fire,
 because (2) binds before (1) is satisfied.**
 
+#### Centred-metric audit (asked for 2026-09-18) — and a confound it exposes
+
+§9 forbids reading a drift verdict, `rhat_bulk` or any per-point tail statistic
+off **raw** `f`. Every key this ladder reads, audited:
+
+| quantity | key | class | status |
+|---|---|---|---|
+| gate 1 scale | `val_fn_drift_centred_scale_ratio_median` | centred | ✅ |
+| gate 1 location | `val_fn_drift_centred_loc_sd_median` | centred | ✅ |
+| gate 3 resolution | `val_pred_centred_ess_median` | centred | ✅ |
+| posterior width | `val_pred_centred_sd_median` | centred | ✅ |
+| CVaR accuracy | `val_cvar_acc` | **Class A** — exactly offset-invariant (§4.3.61) | ✅ |
+| **objective** | `val_cvar_ce`, `val_cvar_ce_c0p95` | **Class B — RAW `f`** | ⚠️ |
+| **gate 2** | `val_cvar_degeneracy_{gap,thr,margin}` | **Class B — RAW `f`** | ⚠️ |
+
+`diagnose_sampling_tail.cvar_ce` computes the offset-removed reduction and
+**prints** it with a robustness banner (§4.3.61), but **returns the raw value** —
+so every logged `val_cvar_ce` and every degeneracy number in this project is
+computed on raw `f`.
+
+> ⚠️ **And the contamination is NOT comparable across the rungs.** Measured as
+> `val_pred_sd_median / val_pred_centred_sd_median`, the share of `f`'s spread
+> that is the unidentified offset:
+>
+> | run | offset/shape sd | degeneracy gap |
+> |---|---|---|
+> | medium_play `n_meas` 256 | **7.6×** | 0.0002 |
+> | medium_play `n_meas` 26 | **3.5×** | 0.0243 |
+> | large_diverse 256 | **20.6×** | 0.0041 |
+> | large_play 256 | **25.0×** | 0.0522 |
+> | (the §4.3.109 stratified arms) | **1.3–2.1×** | 0.06–2.15 |
+>
+> §4.3.61 established the direction: offset contamination **SUPPRESSES** the
+> width term, never manufactures it — when offset variance dominates, every point
+> selects the same lowest-offset draws and `depth_i` goes near-constant. **So the
+> high-offset runs have artificially small degeneracy gaps**, and the 256
+> baselines are the high-offset ones by a factor of 2–19× against the arms.
+>
+> **Part of "lowering `n_meas` improves gate 2" may therefore be the offset
+> shrinking rather than conservatism genuinely improving** — and the same
+> question hangs over §4.3.109's stratified margins (+1.68, +0.63 at
+> offset/shape 1.3–1.9× against baselines at 25× and 20.6×). This is a confound
+> nothing in this document has considered, and it bears on gate 2's 37%
+> alone-rejection rate campaign-wide.
+
+**Consequence for the ladder: the 256 baselines need their own saved chains.**
+The centred CVaR CE can only be recomputed from saved chains, and the three
+baselines are **sweep trials, whose chains were overwritten** (§4.3). So three
+extra runs at `n_meas` 256 with their own `OUT_DIR` are added — at fixed seed the
+pipeline is bitwise deterministic (§4.3.105), so each reproduces its sweep trial
+exactly *and* leaves the chains needed to compute the centred column.
+
+**Nine runs, two waves** (9 × 32 chains ≈ 288 cores exceeds leviathan's 255):
+wave 1 the six rungs, wave 2 the three baselines.
+
+**Readout rule, amended before the runs:** rule (1)'s primary readout stays
+`val_cvar_ce_c0p95`, but it is read on the **centred** column from
+`diagnose_sampling_tail.py --cvar-ce --offset-shape-split` where available, with
+the raw wandb value reported beside it. **If the two disagree by more than the
+tool's ±15% robustness band on any rung, the raw column is not used at all** and
+the ladder is decided on centred only.
+
 #### Commands
 
 Run from `scripts_bnn/`, one GPU each. Everything except `n_meas` matches that
@@ -11475,6 +11537,30 @@ cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=4 nohup python
 
 ```bash
 cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=5 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml --width 7 --depth 2 --sghmc_lr 0.0001431411106119603 --sghmc_lr_max 0.002335089840112285 --mdecay 0.00782288509627689 --n_meas 92 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_play_n92 > ../exp/nmeas_large_play_n92.log 2>&1 &
+```
+
+**Wave 2 — the three 256 baselines with saved chains**, so the centred CVaR CE is
+computable for the whole ladder. Each reproduces its sweep trial bit-for-bit at
+fixed seed (§4.3.105). Run after wave 1 finishes.
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=0 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml --width 5 --depth 2 --sghmc_lr 0.0004083124057799998 --sghmc_lr_max 0.0018176817194168644 --mdecay 0.21994810265784875 --n_meas 256 --map_amp2 6626 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_medium_play_n256 > ../exp/nmeas_medium_play_n256.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=1 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_diverse_bnn_antmaze_eval.yaml --width 5 --depth 3 --sghmc_lr 0.0001466529878102612 --sghmc_lr_max 0.00366585969624689 --mdecay 0.06039630227675143 --n_meas 256 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_diverse_n256 > ../exp/nmeas_large_diverse_n256.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=2 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml --width 7 --depth 2 --sghmc_lr 0.0001431411106119603 --sghmc_lr_max 0.002335089840112285 --mdecay 0.00782288509627689 --n_meas 256 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_play_n256 > ../exp/nmeas_large_play_n256.log 2>&1 &
+```
+
+**Free check, runnable NOW on the §4.3.109 arms' saved chains** — it decides
+whether the offset confound above is material, before the ladder is read. On the
+box, in the `pt` env (§10.6.1):
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for R in n26_medium_play strat_medium_play strat_large_play strat_large_diverse; do echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --offset-shape-split --device cuda 2>&1 | grep -A 12 "Offset-robustness"; done | tee exp/cvar_offset_robustness.txt
 ```
 
 **Readout:** `scripts_bnn/nmeas_ladder_readout.py` (§8) — config audit, validity,
