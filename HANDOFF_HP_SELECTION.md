@@ -1,14 +1,23 @@
 # Hand-off: hyperparameter selection procedure (antmaze, all model families)
 
-> Status 2026-08-16. **Stage 1 is complete for all three families; stage 3 is
-> in progress** — medium_play's 4-chain rung is measured (§4.5, §10.2). The BNN's
-> round-2 merged sweeps have all fired and their winners are transcribed into
-> `scripts_bnn/antmaze_<v>_bnn_antmaze_eval.yaml` *(prior pins replaced by round 3's on 2026-09-11 — §10.3)*, verified field-by-field
-> against wandb. Round 1's two-tier BNN design was discarded (§3.7); its results
-> remain in §6 as the record. **Stage 3 (BNN draw budget) is under way — the
-> exact next command is in §10.2; stage 4 not started.** MR and PT are
-> unaffected throughout.
-> Start at §10 if you are picking this up cold.
+> **Status 2026-09-17 — the to-do list is §10.2 and it is the only current thing
+> in this document. Start there.** Everything else is either settled procedure
+> (§1–§3, §5, §9) or the historical record of how it was arrived at (§4.3, §6,
+> §7), and much of §4 describes designs that have since been superseded.
+>
+> Where things stand: the **MR and PT stage-1 sweeps are complete** under the
+> 2026-09-15 redesign — last-10 mean statistic, test-split checkpoint selection,
+> common capacity ranges (§4.3.107, §3.2.16) — and their eight winners are in
+> §4.3.108. The **BNN round-4 sweeps are PAUSED** at 25 finished trials with
+> 4 eligible (16%), gate 2 binding hardest and gate 3 no longer binding at all;
+> the GPUs were freed to run §4.3.109's four stratified-measurement diagnostics,
+> which are the immediate next action. **Stage 4 has not started** and is blocked
+> on the BNN sweeps firing.
+>
+> Superseded designs, so they are not mistaken for plans: round 1's two-tier BNN
+> search (§3.7), stage 3's draw-budget ladder (§4.3.13, §10.4), and round 3,
+> whose 26 trials were discarded (§3.2.12). MR/PT results predating 2026-09-15
+> were produced under the old checkpoint-selection rule and are being regenerated.
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
 > `fsghmc_sampler_fixes_handoff.md` (the external review those fixes came from).
@@ -11804,6 +11813,16 @@ by `results_table.ipynb` for reporting (§5, §4.3.107). `--selftest` runs its t
 one place, imported by both tools below (§4.3.108). `python selection_gates.py`
 runs its self-test.
 
+**`scripts_bnn/strat_readout.py`** — reads out §4.3.109's four stratified-measurement
+diagnostics against their pre-registered rule. Pairs each arm with its baseline
+sweep trial, audits **every** config key (only `meas_sampling` / `n_meas` /
+`OUT_DIR` / `name` may differ), checks the momentum clamp before reading any tail
+number, applies `selection_gates`, and prints the paired deltas **in units of
+§4.3.101's measured between-run sd** rather than as pass/fail flips. Runs locally
+against the wandb API. `--selftest` checks the gate wiring against the three
+baselines' hand-computed verdicts and needs no network. It degrades cleanly
+before the arms exist — it prints the baselines and says which arms are missing.
+
 **`check_winner_eligibility.py`** (repo root) — applies the §3.2.12 gates (via
 `selection_gates.py`; until 2026-09-15 the superseded §3.6.3 criteria) and names
 the winner, which `check_sweep_convergence.py` does not: that
@@ -11976,59 +11995,85 @@ round-1 reference values that stage 3 sets.
 
 **DECISIONS WAITING ON ITEM 4**
 
-4. **Adopt stratified sampling, or not.** It changes the prior, so adoption means
-   stage-1 re-selection: discard the 22 trials, bump the cache to
+5. **Adopt stratified sampling, or not.** It changes the prior, so adoption means
+   stage-1 re-selection: discard the 25 trials, bump the cache to
    `sweep_ids_bnn_round5.txt`, relaunch. Pre-register before relaunching (§0).
    If the `n_meas` control explains the effect, change `n_meas` instead — far
    cheaper, and it is already a pinned value rather than a code path.
-5. **Penalised exploration, or not** (user's proposal). The measured problem: in
-   2 of 4 sweeps the ungated best is ineligible and choosing the eligible best
-   costs 17.6% / 12.4% on `val_cvar_ce` — §7.2's failure mode. Recommended form:
-   **penalise the metric the OPTIMISER sees, keep the hard gates at selection**,
-   so validity stays non-tradeable and the winner rule is unchanged. The penalty
-   weight must be derived from the gate thresholds and the objective's own SE,
-   not tuned. Also requires a restart, so **batch it with item 4 — one restart,
-   not two.**
+6. **Penalised exploration, or not** (user's proposal). The measured problem, now
+   worse than when this item was written: **all four** sweeps' ungated best is
+   ineligible, and choosing the eligible best costs **17.6% / 12.4% / 3.7%** on
+   `val_cvar_ce` — with **large_diverse having no eligible trial at all** in 5
+   (§4.3.108's 25-trial re-read). That is §7.2's failure mode, unanimous.
+   Recommended form: **penalise the metric the OPTIMISER sees, keep the hard
+   gates at selection**, so validity stays non-tradeable and the winner rule is
+   unchanged. The penalty weight must be derived from the gate thresholds and the
+   objective's own SE, not tuned. Also requires a restart, so **batch it with
+   item 5 — one restart, not two.**
+   > **Design note for whoever writes it.** Gate 3 no longer binds (0 of 25
+   > failures) and gates 1 and 2 pull in *opposite* directions along capacity, so
+   > a penalty that simply adds both gate distances will push the optimiser into
+   > the middle of a frontier rather than toward a feasible point. Penalise the
+   > **binding** gate per trial, or penalise the pair jointly — and check the
+   > proposed form against the 25 existing trials before launching, since that
+   > re-scoring is free.
 
 **AFTER THE BNN SWEEPS FIRE**
 
-6. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
+7. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
    gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
-   applies: that is a result to disclose, not to escalate around.
-7. **Regenerate the four production configs** from the new winners (§10.3); they
+   applies: that is a result to disclose, not to escalate around. **If a winner
+   lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
+   its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
+   band.
+8. **Regenerate the four production configs** from the new winners (§10.3); they
    are currently HYBRID and must not be used for production training as they
    stand.
-8. **Clear the reward-model directories** before production training, so a
+9. **Clear the reward-model directories** before production training, so a
    crashed run cannot leave stale `checkpoint_*.pt` snapshots for the MR
    ensemble to pick up.
-9. **Train reward models at seeds 0–10** for all families (`train_rewards.sh`,
-   2 threads), then **stage 4** with `python results/iql_score.py --stage4`
-   (last-10 mean, one IQL run per index, §5), then the **seeds 1–10 IQL
-   evaluations**, then register the new sweep ids in
-   `results/results_table.ipynb`.
+10. **Train reward models at seeds 0–10** for all families (`train_rewards.sh`,
+    2 threads), then **stage 4** with `python results/iql_score.py --stage4`
+    (last-10 mean, one IQL run per index, §5), then the **seeds 1–10 IQL
+    evaluations**, then register the new sweep ids in
+    `results/results_table.ipynb`.
 
-**ANALYSIS DEBT (no compute)**
+**QUEUED — ANALYSIS DEBT (no compute, can be done while the diagnostics run)**
 
-10. **Re-run the width/depth analysis on the completed baseline sweeps.** The
+11. **Re-run the width/depth analysis on the completed baseline sweeps.** The
     mid-sweep version in §4.3.108 is known to be unstable — medium_diverse
     reversed from a width preference to a w4 d1 winner between 19 and 40 trials.
-11. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
+12. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
     winners at the width ceiling, one at the floor, and the two sweeps that kept
     improving late.
+13. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
+    5 TB; cached reward labels are ~4 MB, and caching also removes the
+    re-labelling cost from each of stage 4's 8 normalization indices. This is a
+    prerequisite for item 10, not an optional tidy-up.
+14. **§7.4 (round-4 results)** cannot be written until there are results, but
+    §3.2.16's declared §9 amendment, the MR/PT split-role change and the
+    last-10 statistic all already owe disclosure text.
 
-**FUTURE-ROUND CANDIDATES (do not act mid-campaign — §9)**
+**QUEUED — FUTURE-ROUND CANDIDATES (do not act mid-campaign — §9)**
 
-12. **Regularisation as a search dimension.** MR exposes none at all (no weight
+15. **Regularisation as a search dimension.** MR exposes none at all (no weight
     decay, no dropout) and PT only a fixed `dropout 0.1`. That, not the capacity
     range, is the direct lever on the memorisation measured in §4.3.108.
-13. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
+16. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
     range is evaluated under a binding 5,000-epoch budget (31% of trials select
     the last checkpoint, all at lr ≤ 1.1e-4).
-14. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
+17. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
     gain resets patience; and the longest observed non-improving streak before a
     later improvement was 13 against K = 15.
-15. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
+18. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
     so the seeds 1–10 lineages share most eval-env seeds. Low priority.
+19. **Replicates as standing practice at the sweep budget.** §4.3.35 made
+    replication standing practice for load-bearing configurations and the
+    campaign has drifted away from it: every round-4 trial is n = 1, and
+    §4.3.108's 25-trial re-read shows 15 of 25 verdicts inside one seed-sd of a
+    gate. A future round should either replicate the top few trials before naming
+    a winner, or state the eligible fraction as an estimate with its own
+    uncertainty.
 
 ---
 
@@ -12274,6 +12319,9 @@ search space. **Do NOT pass `--emit-prior-runs`**: the 26 completed trials are
 discarded and the relaunch starts from an empty surrogate (§3.2.12 item 5).
 
 #### Still queued behind the sweep
+
+*(Both are now items 13–14 of the to-do at the head of this section; kept here
+because the surrounding text is the historical account.)*
 
 - **Label caching before stage 4** (§3.2.9): 11 chain sets per variant is up to
   5 TB; cached reward labels are ~4 MB and also remove the re-labelling cost
