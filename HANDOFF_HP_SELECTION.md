@@ -11140,6 +11140,59 @@ dimension. **A per-unit-norm force is not an effect size until it is weighted by
 the dimension it acts on** — the same class of error as §4.3.42 aiming `sig_c2`
 at λ_max while the stiffness sat at λ_min, and it is now twice in this document.
 
+#### RESULT (2026-09-18): the rule does NOT fire — `n_meas` stays at 256
+
+All six rungs finished, clamp 0 everywhere, **config audit clean on every rung**.
+
+| medium_play (c=26) | `\|log r\|` | `loc_sd` | margin | ce@0.95 | acc | pred sd |
+|---|---|---|---|---|---|---|
+| 26 (1c) | 0.0766 | **0.1530** | −0.0021 | 0.2451 | 0.870 | 3.62 |
+| **52 (2c)** | 0.0552 | 0.1311 | −0.0115 | **0.2426** | 0.896 | 2.74 |
+| 104 (4c) | 0.0052 | 0.1125 | −0.0038 | 0.2811 | 0.857 | 2.01 |
+| 256 | 0.0444 | 0.1186 | −0.0125 | 0.3217 | 0.870 | 1.46 |
+
+| large_diverse (c=46) | | | | | | |
+|---|---|---|---|---|---|---|
+| **46 (1c)** | **0.0025** | 0.0917 | **+0.0034** | **0.2743** | 0.891 | 3.42 |
+| 92 (2c) | 0.0793 | 0.0796 | −0.0045 | 0.2786 | 0.900 | 2.25 |
+| 256 | 0.1112 | 0.0875 | −0.0012 | 0.3355 | 0.873 | 1.31 |
+
+| large_play (c=46) | | | | | | |
+|---|---|---|---|---|---|---|
+| 46 (1c) | 0.1750 | 0.0878 | +0.2562 | **1.0327** | 0.833 | 6.59 |
+| 92 (2c) | 0.1898 | 0.0952 | +0.1029 | **0.6098** | 0.815 | 4.05 |
+| 256 | 0.1897 | 0.0974 | +0.0337 | **0.3896** | 0.833 | 2.16 |
+
+**Verdict: DOES NOT FIRE.** (1) monotone improvement fails in two of three
+variants; (2) loc headroom fails at medium_play's 1c rung (0.1530 > 0.1433).
+**`n_meas` stays pinned at 256.** No partial adoption.
+
+**The prediction was right on both counts it named.** medium_play U-shapes with
+an interior optimum at **2c**, and its `loc_sd` rises monotonically as `n_meas`
+falls (0.1125 → 0.1311 → 0.1530). What it got wrong is *which* condition binds
+first: gate-1 location does bind on medium_play, but the decisive failure is
+large_play.
+
+> ⚠️ **Including large_play is what stopped this licensing a bad change.**
+> It runs the **opposite** way: `ce@0.95` **0.390 → 0.610 → 1.033** as `n_meas`
+> falls, while its degeneracy margin *inflates* **+0.034 → +0.103 → +0.256**.
+> That is §4.3.109's width-blowup signature — gate 2 "passing" harder while the
+> objective collapses — on the variant holding **the most eligible trials of any
+> variant**. Without it the rule would have fired on two of three and licensed a
+> change that wrecks large_play. §4.3.112 put it in the ladder for exactly this
+> reason, and it earned its GPU.
+
+> **One result that does not license anything but should not be buried:**
+> **large_diverse at `n_meas` 46 is ELIGIBLE** — `|log r|` 0.0025 (0.02× τ),
+> `loc_sd` 0.0917, centred ess 122, margin **+0.0034**, `ce@0.95` 0.2743, acc
+> 0.891. That is **the first eligible configuration large_diverse has ever
+> produced** (0 of 6 in round 4). It is n = 1, it does not satisfy the
+> pre-registered rule, and adopting a *variant-specific* `n_meas` on the strength
+> of it would be precisely the reactive tuning §9 forbids. **Record it; do not
+> act on it.** If large_diverse still produces nothing eligible after the
+> restart, this is the first thing a future round should design a proper
+> experiment around.
+
 ### 4.3.113 Offset robustness measured: RAW is the deployed quantity, and the control's advantage is suppression
 
 Run 2026-09-18 on the four §4.3.109 arms' saved chains, at conservatism 0.95.
@@ -11225,6 +11278,82 @@ terciles), but the *threshold* moves with it, so the **margin** does not.
    sampler's unidentified offset rather than by per-state posterior width. That
    is a limitation of the deployed mechanism, not of the metric, and it should be
    stated rather than discovered by a reader.
+
+### 4.3.114 Should centring be in the deployment and selection path? — the argument, and why the gauge is what makes it
+
+Asked 2026-09-18. The user's recollection — *"`iql_eval.py` and `iql.py` already
+rescale reward-model output to account for the offset"* — is **correct about what
+the gauge does**, and the distinction it misses is the whole of the question.
+
+#### What the pipeline actually does, in order
+
+| line (`iql_eval.py`) | step |
+|---|---|
+| 1477 → 1082 | `qlearning_dataset_bnn` → `partitioned[:n_tail].mean(axis=0)` — **CVaR over the RAW posterior draws, per transition** |
+| 1507 | `gauge_reward` — subtracts **one scalar** (`r.max()`) from the finished field |
+| 1518 | `modify_reward` — the §5 normalization index |
+
+So yes: the offset *is* pinned, §5.2 verified all eight `modify_reward` indices
+become **exactly** offset-invariant because of it, and two reward fields differing
+by a constant reach IQL identically. **But the gauge acts on the finished field,
+after the CVaR, and it is a single scalar.**
+
+#### Why that cannot undo the contamination
+
+Write `f_j(s,a) = g_j(s,a) + c_j` — `g` the identified shape, `c_j` draw *j*'s
+global offset. `empirical_cvar` sorts the S draws **at each (s,a)** and averages
+the lowest `n_tail`. When `var(c)` dominates the per-point spread of `g`, the sort
+is driven by `c_j` and **selects the same draws everywhere**, so
+
+    r_cvar(s,a)  ≈  (a mean-like functional of g at that point)  +  constant
+
+and the gauge then removes the constant — leaving `r_cvar_gauged ≈ r_mean_gauged`.
+**The conservatism cancels, and no downstream rescaling can restore it, because
+the per-state information was destroyed at the sort.** §4.3.113 measured exactly
+this on all four arms it tested.
+
+#### The argument FOR centring, and it is the gauge's own logic
+
+> **The gauge overwrites the reward's level with a deterministic choice. So the
+> CVaR is currently spending its conservatism budget on uncertainty about a
+> quantity the pipeline then discards.**
+
+That is incoherent in the same way §3.6.3's amendment was: the offset is
+unidentified by the BT likelihood (§4.3.10), so the posterior's spread along it
+is prior-and-sampler, not data — and §5.2 already *decided* the level is a gauge
+choice rather than an inference. Having made that decision, the coherent
+companion is to take CVaR over the identified component only. **§5.2 and centring
+are two halves of one position; the project currently holds only the first half.**
+
+#### What it would cost, and why it should NOT go in the round-5 restart
+
+1. **It changes the method**, not a hyperparameter. `cvar_ce`,
+   `qlearning_dataset_bnn`, `empirical_cvar` and gate 2 all move together —
+   §3.2.1's selection-matches-deployment property must be preserved, so selection
+   and deployment change in one step or not at all. Pre-registration required.
+2. **The objective's scale and behaviour change a lot.** §4.3.113's centred CVaR
+   CEs are 0.693 / 2.12 / 7.93 / 10.92 against raw 0.245 / 0.373 / 6.66 / 4.73.
+   Gate 2 would pass far more easily (the gap stops being suppressed) — arguably
+   correctly, but the 37%-rejection problem would change character rather than
+   being solved, and the objective might become dominated by a few wide points
+   (§4.3.50's saturation mode).
+3. **The evidence base is four runs**, all from the §4.3.109 campaign, none at a
+   configuration anyone would ship.
+4. **Bundling it with A + C + E would confound the restart.** Round 5's job is to
+   select under a known objective; changing the objective in the same step means
+   a disappointing round 5 cannot be attributed.
+
+**Recommendation: not in round 5. Measure it first, which is nearly free.**
+`--cvar-ce` already computes both columns from saved chains, so every archived
+run can be re-scored on centred `f` at zero training compute — enough to see
+whether centred CVaR CE is a well-behaved objective before anything depends on
+it. What is *not* free is how IQL behaves on a centred-CVaR reward; that needs a
+stage-4 grid and belongs to a future round.
+
+**This is the most substantive open methodological question in the project**, and
+§7 should carry it either way: the deployed conservative reward's tail selection
+is currently driven substantially by an unidentified direction that the gauge
+then discards.
 
 ### 4.3.110 The geometry diagnostic read the WRONG maze — §7.3's coverage disclosure is withdrawn
 
@@ -12977,6 +13106,20 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **The `n_meas` ladder ran and is read out** (§4.3.112 RESULT): **DOES NOT
+  FIRE**, `n_meas` stays at 256. medium_play U-shapes with an interior optimum at
+  2c and its `loc_sd` rises as `n_meas` falls — both predicted — but **large_play
+  runs the opposite way** (`ce@0.95` 0.390 → 0.610 → 1.033 with the margin
+  inflating), which is what stopped a change that would have wrecked the variant
+  holding the most eligible trials. Recorded but not acted on: **large_diverse at
+  `n_meas` 46 is eligible**, the first eligible configuration that variant has
+  produced.
+- **Answered: should centring be in the deployment path?** (§4.3.114) The gauge
+  does pin the offset, but on the *finished field*, after the CVaR — so it cannot
+  undo the per-draw offset's effect on tail selection. The argument for centring
+  is the gauge's own logic (it overwrites the level, so CVaR should not be spent
+  on it), but it is a **method change** and the recommendation is **not in
+  round 5** — re-score archived runs on centred `f` first, which is free.
 - **Offset robustness measured on all four arms** (§4.3.113). Verified in
   `iql_eval.py` that deployment takes CVaR of **raw** draws, so **raw is the
   correct selection quantity** and §4.3.112's centred-readout amendment is
@@ -13020,7 +13163,9 @@ round-1 reference values that stage 3 sets.
 1. ✅ **DONE — the four §4.3.109 diagnostics ran and are read out.** Verdict
    **NULL**; stratification refuted; bundle item B dropped (§4.3.109 RESULT).
 2. ✅ **DONE — all 27 round-4 trials finished and read out** (§4.3.108).
-3. **Run the `n_meas` ladder — designed and pre-registered as §4.3.112.** Six
+3. ✅ **DONE — the `n_meas` ladder ran and did not fire** (§4.3.112 RESULT).
+   `n_meas` stays at 256; nothing is added to the bundle.
+   *(superseded text)* **Run the `n_meas` ladder — §4.3.112.** Six
    runs, one GPU each, ~4–5 h, one wave on leviathan's 6: medium_play {52, 104},
    large_diverse {46, 92}, large_play {46, 92}, in multiples of each maze's
    occupied-cell count. Commands are in §4.3.112. Then read out with
