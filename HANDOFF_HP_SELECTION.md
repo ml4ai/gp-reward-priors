@@ -11055,6 +11055,84 @@ pass/fail flip.
 cond(K) to three figures and *opposite* responses, so a conditioning-only account
 is already known to be incomplete.
 
+#### RESULT (2026-09-18): NULL by the pre-registered rule — stratification is REFUTED
+
+All four arms finished. **Validity first**: `param_clamp_sampling_pct` = 0 on all
+four and `gradnorm_..._pct_over_clip` ≤ 0.0003%, so the tail numbers are usable.
+**Config audit: clean on every key** for all four pairs.
+
+**Verdict by §4.3.109's pre-registered rule: NULL.** medium_play's gate-2 margin
+moved +0.6σ against the ≥ 2σ required; gate 1 worsened by **+10.2σ** and **+7.7σ**
+on two arms against the ≤ 1σ allowed. **Bundle item B is not adopted.**
+
+#### What actually happened: the posterior exploded
+
+| | medium_play | large_play | large_diverse | **control** (`n_meas` 26) |
+|---|---|---|---|---|
+| centred posterior **sd** | 1.46 → **9.45** (6.5×) | 2.16 → **69.63** (32×) | 1.31 → **18.58** (14×) | 1.46 → **3.62** (2.5×) |
+| `\|log r\|` | 0.044 → 0.372 | 0.190 → **0.100** | 0.111 → 0.356 | 0.044 → 0.077 |
+| degeneracy margin | −0.0125 → −0.0094 | +0.034 → **+1.684** | −0.0012 → **+0.630** | −0.0125 → **−0.0021** |
+| `cvar_ce` @ 0.75 (selection) | 0.318 → **0.244** | 0.357 → **3.341** | 0.331 → **1.272** | 0.318 → **0.229** |
+| `cvar_ce` @ 0.95 (deployment) | 0.322 → **0.373** | 0.390 → **6.658** | 0.336 → **4.726** | 0.322 → **0.245** |
+| CVaR accuracy | 0.870 → 0.896 | 0.833 → **0.722** | 0.873 → **0.736** | 0.870 → 0.870 |
+
+`log 2` = 0.6931. **Two of three stratified arms produce a CVaR reward far worse
+than chance**, and their CVaR *ordering* collapses (accuracy 0.72–0.74 against
+0.83–0.87). Stratification removes the within-cell equality constraints and the
+posterior simply runs away.
+
+> ⚠️ **`large_play stratified` passes ALL THREE GATES with `cvar_ce` = 3.34.**
+> That is §4.3.30 and §4.3.47's lesson recurring — *stationarity is necessary,
+> not sufficient* — and it exposes a **second flaw in gate 2**, the mirror of
+> §3.2.12's known one. Gate 2 was designed to catch a **collapsed** posterior
+> (CVaR ≈ mean). It cannot catch the opposite: a posterior so wide that CVaR and
+> mean differ enormously *and meaninglessly*. Its threshold is `2 × SE`, and SE
+> grows with width — but here the **gap grew faster** (2.147 against a threshold
+> of 0.463), so the gate reads PASS by a factor of 4.6.
+>
+> **Nothing is broken in the procedure**: `val_cvar_ce` = 3.34 is being
+> *minimised*, so such a trial could never win. But record it — the gate set
+> detects neither end of the width axis, and only the objective does.
+
+#### The control is the real finding, and it points the other way
+
+`n_meas` 26 with **random** sampling — the cheap arm — beats its baseline on the
+objective at **both** conservatism levels (0.318 → 0.229 selection, 0.322 → 0.245
+deployment), moves the gate-2 margin **+2.1σ** (−0.0125 → −0.0021, the closest
+medium_play has come to passing), holds CVaR accuracy exactly flat at 0.870, and
+keeps gate 1 (`|log r|` 0.077). It widens the posterior only 2.5×, against
+stratification's 6.5×.
+
+**So the lever is the measurement COUNT, not the cell structure** — and less of
+it, not more. §4.3.43 already argued this from the spectrum, before any of these
+runs: *"`n_meas` is not a free 'more is better' knob; it should be set relative to
+the free-cell count"*, noting 256 points reach only 25 of 26 cells while putting
+231 of 256 eigenvalues on the nugget.
+
+> ⚠️ **Two reasons not to act on it yet.** Its `loc_sd` is **0.1530** against the
+> 0.155 threshold — gate 1's location criterion is nearly binding at `n_meas` 26,
+> so lowering `n_meas` project-wide could push other variants over. And it is
+> **n = 1 on one variant**, the sample size this document has been burned by nine
+> times (§4.3.64). See §10.2 for the decision.
+
+#### My prediction was right the first time, and the amendment was wrong
+
+§4.3.109 pre-registered **TRADE** (gate 2 up, gate 1 down), then **amended** to
+"no directional prediction" on the strength of the prior-force measurement, which
+showed stratification *deleting* the within-cell force while *raising* the
+across-cell force 7.6×. **The original prediction was correct**: gate 2 up
+massively, gate 1 down on two of three.
+
+**The amendment's error is specific and worth naming.** The prior-force table
+measured `‖K⁻¹f‖/‖f‖` for a unit-norm `f` in each component **separately**, and
+compared the two numbers — without weighting by **how many directions each
+component spans**. At `n_meas` 256 over 22 cells, the within-cell space has
+dimension **234** and the cell-mean space **22**. Deleting a force across 234
+directions dominates strengthening one across 22, by an order of magnitude in
+dimension. **A per-unit-norm force is not an effect size until it is weighted by
+the dimension it acts on** — the same class of error as §4.3.42 aiming `sig_c2`
+at λ_max while the stiffness sat at λ_min, and it is now twice in this document.
+
 ### 4.3.110 The geometry diagnostic read the WRONG maze — §7.3's coverage disclosure is withdrawn
 
 Found 2026-09-17 while running §4.3.109's layout check on the box. Two
@@ -12530,7 +12608,7 @@ round-1 reference values that stage 3 sets.
 
 ### 10.2 Immediate next action — the road back to a relaunched sweep
 
-#### TO-DO as of 2026-09-17 — read this first
+#### TO-DO as of 2026-09-18 — read this first
 
 **JUST ACCOMPLISHED (no compute)**
 
@@ -12550,6 +12628,12 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **The four stratified diagnostics ran and are read out** (§4.3.109 RESULT):
+  **NULL** by the pre-registered rule, so **stratification is refuted and bundle
+  item B is dropped**. The posterior explodes 6.5–32× and two of three arms give
+  a CVaR reward worse than chance; `large_play` passes all three gates at
+  `cvar_ce` 3.34, exposing a second gate-2 flaw. **The `n_meas` 26 control is the
+  unexpected positive** and is now the only open bundle question.
 - **All 27 round-4 trials are finished** and read out (§4.3.108): **4 eligible
   (15%)**, gate 2 alone rejects 37%, gate 3 never binds, 0 unsynced, and no sweep
   was close to firing (6 / 2 / 0 / 4 against K = 15). **Width is the gate-2
@@ -12576,23 +12660,19 @@ round-1 reference values that stage 3 sets.
 
 **NEXT — in this order**
 
-1. **Wait for the two in-flight trials to finish**, then confirm the GPUs are
-   actually free. `vdg14jin` (medium_play w7 d4) and `1xiicp4z` (large_diverse
-   w6 d4) were still running at the pause. **Killing a sweep agent does not kill
-   its trainer** (§10.6) — check for orphans before launching, or the diagnostics
-   will contend for GPU *and* CPU with a run nobody is watching.
-2. **`git pull` on leviathan.** The `meas_sampling` flag is `9157f32`; without it
-   the stratified arms fall back to `"random"` and silently measure nothing. The
-   first command below does the pull; the other three assume it has happened.
-3. **Run the four §4.3.109 diagnostics** — 3 stratified arms + the `n_meas` 26
-   control, one GPU each, ~4–5 h. Baselines are the existing trials `wc4nkymc`,
-   `eeil9cq2`, `o7g6texk`; no baseline re-runs, the pipeline is bitwise
-   deterministic at fixed seed (§4.3.105). GPUs 0–3 in the commands; use 4–5 if
-   0–3 are still busy.
-4. **Read them out** with `scripts_bnn/strat_readout.py` (run `--selftest`
-   first), against §4.3.109's pre-registered rule. Record the verdict there.
-   **Check validity before anything else**: clamp ≈ 0, and the log must print the
-   expected cell count and `cond(K)` ≈ 2e2.
+1. ✅ **DONE — the four §4.3.109 diagnostics ran and are read out.** Verdict
+   **NULL**; stratification refuted; bundle item B dropped (§4.3.109 RESULT).
+2. ✅ **DONE — all 27 round-4 trials finished and read out** (§4.3.108).
+3. **DECIDE the `n_meas` question** — the one thing the diagnostics opened and
+   the only open item in the bundle. Recommended: a short pre-registered ladder
+   (26 / 64 / 128 vs the pinned 256, medium_play + one large variant, ~5 h wall
+   on 4 GPUs) before the restart. See item 5.
+4. **Assemble and launch the restart** once item 3 is settled: **A** (`map_amp2`
+   → 6848 / 6838), **C** (wire §3.2.17's penalised objective — 3-line insert plus
+   `metric.name` in the four sweep yamls), **E** (cache →
+   `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`**). B and D are
+   closed. Pre-register anything not already pre-registered, then
+   `./launch_hp_sweeps.sh bnn`.
 
 #### THE RESTART BUNDLE — decided 2026-09-17: round 4 will be restarted
 
@@ -12605,7 +12685,7 @@ carries its own justification class, because §9 treats them differently.
 | # | change | justification class | §9 cost |
 |---|---|---|---|
 | A | `map_amp2` **6626 / 6611 → 6848 / 6838** | **arithmetic correction** to a derivation (§4.3.55 slip, confirmed §4.3.109) | none — not a response to observed behaviour |
-| B | `meas_sampling: stratified_cell` | **conditional on item 4's verdict**; changes the prior, so it needs stage-1 re-selection — which the restart provides | pre-register before relaunch (§0) |
+| ~~B~~ | ~~`meas_sampling: stratified_cell`~~ | **REFUTED 2026-09-18 (§4.3.109 RESULT): NULL by the pre-registered rule; the posterior explodes 6.5–32× and two of three arms give a CVaR reward worse than chance** | none — dropped |
 | C | penalised exploration | **new design** — ✅ drafted, validated and pre-registered as **§3.2.17** | done: `penalised_objective.py`, no free parameter |
 | ~~D~~ | ~~capacity ranges~~ | **DECIDED 2026-09-17: NO CHANGE (§4.3.111)** | none — dropped |
 | E | cache bump → `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`** | mechanical | none — but §10.5's warning is the failure hardest to notice |
@@ -12651,12 +12731,25 @@ blind. Record it as a future-round candidate.
 
 **DECISIONS WAITING ON ITEM 4**
 
-5. **Adopt stratified sampling, or not** (bundle item B). If item 4 returns
-   ADOPT-CANDIDATE, set `meas_sampling: stratified_cell` in the four BNN configs
-   and pre-register it before relaunching (§0). If the `n_meas` control explains
-   the effect, change **`n_meas`** instead — far cheaper, and it is already a
-   pinned value rather than a code path. If NULL or TRADE, change neither and
-   restart on A + C + D alone.
+5. ✅ **RESOLVED 2026-09-18: stratification is NOT adopted** (§4.3.109 RESULT).
+   NULL by the pre-registered rule. `meas_sampling` stays `"random"`; the flag
+   remains in the code as an instrument, default off, like `fix_meas_set`
+   (§4.3.24).
+   > **But the control raised a NEW question that is now the open decision.**
+   > `n_meas` 26 random beat its baseline on the objective at **both**
+   > conservatism levels and moved the gate-2 margin **+2.1σ** — the closest
+   > medium_play has come to passing — with CVaR accuracy flat. §4.3.43 argued
+   > for `n_meas` ≈ the free-cell count **before** any of these runs. Against
+   > that: it is n = 1 on one variant, and its `loc_sd` is 0.1530 against a
+   > 0.155 threshold, so gate 1's location criterion is nearly binding there.
+   >
+   > **Recommend: a short pre-registered `n_meas` ladder before the restart** —
+   > 26 / 64 / 128 against the pinned 256, medium_play plus one large variant,
+   > ~5 h wall on 4 GPUs. That tests §4.3.43's standing principle across
+   > variants instead of reacting to one number, and the restart has not
+   > launched, so it costs only time. Changing the pin on the control alone
+   > would be the n = 1 reactive tuning §9 forbids and §4.3.64 has punished
+   > nine times.
 6. **Penalised exploration — ✅ DRAFTED AND PRE-REGISTERED (§3.2.17).** Form:
    `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`, with `P` the probability that
    every gate genuinely passes, each slack in units of its own measured
