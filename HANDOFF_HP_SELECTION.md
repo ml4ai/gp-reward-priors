@@ -11336,6 +11336,151 @@ designed ladders, which are fixed-depth and single-axis; the **interior-ness**
 rests on the round-4 trials, where it is a statement about *where the passes are*
 rather than a causal claim.
 
+### 4.3.112 The `n_meas` ladder — designed and PRE-REGISTERED 2026-09-18, before the runs
+
+§4.3.109's control was the one positive result of that campaign: `n_meas` 26
+random beat its baseline on the objective at **both** conservatism levels and
+moved the gate-2 margin +2.1σ, with CVaR accuracy flat. This ladder decides
+whether the `n_meas` pin should move, **across variants**, rather than acting on
+one control run — which would be the n = 1 reactive tuning §9 forbids and
+§4.3.64 has punished nine times.
+
+It also tests a **standing** principle rather than a new one: §4.3.43 concluded,
+from the Gram spectrum and before any of these runs, that *"`n_meas` is not a
+free 'more is better' knob; it should be set relative to the free-cell count"* —
+256 points reach only 25 of 26 cells while putting 231 of 256 eigenvalues on the
+nugget.
+
+#### Design — rungs in units of the occupied-cell count
+
+`c` = occupied cells (**26** medium, **46** large — §4.3.110). Rungs at
+`n_meas` = 1c, 2c, 4c, against the pinned **256**. Stating rungs as multiples of
+`c` is what makes the two mazes comparable and is the form §4.3.43's principle
+takes.
+
+| variant | baseline (256) | new rungs | existing |
+|---|---|---|---|
+| medium_play | `wc4nkymc` | **52, 104** | 26 = `n26_medium_play` |
+| large_diverse | `o7g6texk` | **46, 92** | — |
+| large_play | `eeil9cq2` | **46, 92** | — |
+
+**6 new runs, one GPU each, ~4–5 h — one wave on leviathan's 6.** CPU load is
+6 × 32 × 2 = 192 of 255 cores at the measured ~1 core/chain (§3.2.4).
+
+> **Why large_play is in the ladder even though it is not the variant in need.**
+> large_diverse has 0 eligible trials in 6 and is the one to fix; **large_play is
+> where the RISK is.** It is gate-1-bound already (`|log r|` 0.190) and has the
+> *most* eligible trials of any variant (2 of 7). Lowering `n_meas` widens the
+> posterior, which helps gate 2 and hurts gate 1 — so large_play is the variant a
+> global `n_meas` change is most likely to break, and a ladder that did not test
+> it could license a change that makes the campaign worse overall.
+
+#### Power, computed BEFORE the runs — no single rung is decisive
+
+From the one `n_meas` pair that exists (medium_play 256 → 26), in units of the sd
+of a between-run difference (§4.3.101, §3.2.12):
+
+| statistic | 256 → 26 | in σ of a difference |
+|---|---|---|
+| `loc_sd` | 0.1186 → 0.1530 | **+2.1σ** |
+| `\|log r\|` | 0.0444 → 0.0766 | +1.0σ |
+| degeneracy margin | −0.0125 → −0.0021 | **+2.1σ** |
+
+**The extreme rung moves things by only ~2σ, so the intermediate rungs will move
+less and no pairwise comparison is decisive.** The rule therefore reads the
+**trend across rungs**, which is §4.3.105's logic and the only honest option at
+this effect size.
+
+> ⚠️ **Gate 1's LOCATION criterion is the binding risk, and it is already
+> nearly binding.** At `n_meas` 26 medium_play reads `loc_sd` **0.1530** against
+> a threshold of 0.155 — **0.17σ from failing**. Adopting a value that sits there
+> would make gate-1 eligibility a coin flip campaign-wide. This is the number the
+> ladder exists to protect, and it is why the rule below carries a headroom
+> requirement rather than a bare pass/fail.
+
+#### Reading rule — PRE-REGISTERED
+
+**Primary readout: `val_cvar_ce_c0p95`, the DEPLOYMENT level** — not the
+selection level. §4.3.109 measured the two disagreeing in sign on medium_play
+(0.318 → 0.244 at 0.75 while 0.322 → 0.373 at 0.95), and 0.95 is what the paper
+reports.
+
+**The rule FIRES — licensing a change to the pin — only if ALL of:**
+
+1. **Monotone improvement** in `val_cvar_ce_c0p95` as `n_meas` falls, in **all
+   three** variants, with the endpoint improvement exceeding the combined 2·SE.
+2. **Gate-1 location holds with ≥ 1σ headroom at every rung, in every variant**:
+   `loc_sd ≤ 0.1433` (= 0.155 − 0.0117). **A rung at 0.1530, where the existing
+   control sits, does NOT count as holding.**
+3. **Gate-1 scale is not BROKEN by the change** — a *no-breaking* test, not an
+   absolute one: a rung must satisfy `|log r| ≤ 0.1151` where that variant's 256
+   baseline already passes, and `|log r| ≤ baseline + 1σ` where it already fails.
+   > **Caught in the readout's dry run, before any rung ran.** An absolute test
+   > would have made the rule **unfireable**: large_play's 256 baseline is
+   > already at `|log r|` 0.1897, so it fails gate-1 scale before `n_meas` is
+   > touched, and vetoing the change on a failure `n_meas` did not cause would be
+   > wrong. Running the readout against the existing rows *before* the ladder is
+   > what exposed it — the same practice that caught `strat_readout.py`'s width
+   > bug (§4.3.109).
+4. **CVaR accuracy does not fall** more than **0.03** below that variant's
+   baseline at any rung. (§4.3.109's stratified arms fell 0.11 and 0.14 while
+   their CE at 0.75 still looked fine — accuracy is what caught them.)
+
+**If it fires, the licensed change is:** pin `n_meas` at the **largest** rung
+satisfying (2)–(4) whose `val_cvar_ce_c0p95` is within 2·SE of the best rung's.
+**Largest, not best** — §4.3.24–25 established coverage is a real gain, so where
+the objective cannot resolve a difference, prefer more measurement points. Pin it
+as a **multiple of `c`**, so it stays variant-appropriate, and disclose that the
+pin became variant-dependent.
+
+**If it does not fire**, `n_meas` stays at **256** and the ladder is reported as
+a null result. **No partial adoption** — "it worked on two of three" is the
+cross-variant story this document has refuted nine times.
+
+#### Prediction, recorded before the runs
+
+**A U-shape in `val_cvar_ce_c0p95` with an interior optimum between 1c and 256,
+and `loc_sd` rising monotonically as `n_meas` falls — with gate-1 location, not
+the objective, as the binding constraint.** Mechanism: fewer measurement points
+means fewer prior constraint directions, so the posterior widens; moderate
+widening helps gate 2 and the objective, and enough of it destroys the tail —
+§4.3.109's stratified arms are that limit, at 6.5–32× width and `cvar_ce` up to
+6.66 at deployment. **The most likely outcome is that the rule does NOT fire,
+because (2) binds before (1) is satisfied.**
+
+#### Commands
+
+Run from `scripts_bnn/`, one GPU each. Everything except `n_meas` matches that
+variant's baseline trial exactly — verified field-by-field, as §4.3.109's were.
+
+```bash
+cd ~/iqlpref/gp_reward-priors && git pull && cd scripts_bnn && CUDA_VISIBLE_DEVICES=0 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml --width 5 --depth 2 --sghmc_lr 0.0004083124057799998 --sghmc_lr_max 0.0018176817194168644 --mdecay 0.21994810265784875 --n_meas 52 --map_amp2 6626 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_medium_play_n52 > ../exp/nmeas_medium_play_n52.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=1 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_medium_play_bnn_antmaze_eval.yaml --width 5 --depth 2 --sghmc_lr 0.0004083124057799998 --sghmc_lr_max 0.0018176817194168644 --mdecay 0.21994810265784875 --n_meas 104 --map_amp2 6626 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_medium_play_n104 > ../exp/nmeas_medium_play_n104.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=2 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_diverse_bnn_antmaze_eval.yaml --width 5 --depth 3 --sghmc_lr 0.0001466529878102612 --sghmc_lr_max 0.00366585969624689 --mdecay 0.06039630227675143 --n_meas 46 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_diverse_n46 > ../exp/nmeas_large_diverse_n46.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=3 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_diverse_bnn_antmaze_eval.yaml --width 5 --depth 3 --sghmc_lr 0.0001466529878102612 --sghmc_lr_max 0.00366585969624689 --mdecay 0.06039630227675143 --n_meas 92 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_diverse_n92 > ../exp/nmeas_large_diverse_n92.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=4 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml --width 7 --depth 2 --sghmc_lr 0.0001431411106119603 --sghmc_lr_max 0.002335089840112285 --mdecay 0.00782288509627689 --n_meas 46 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_play_n46 > ../exp/nmeas_large_play_n46.log 2>&1 &
+```
+
+```bash
+cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=5 nohup python run_bnn_training_antmaze_eval.py --config_path scripts_bnn/antmaze_large_play_bnn_antmaze_eval.yaml --width 7 --depth 2 --sghmc_lr 0.0001431411106119603 --sghmc_lr_max 0.002335089840112285 --mdecay 0.00782288509627689 --n_meas 92 --map_amp2 6611 --chain_init_jitter 1 --num_chains 32 --chains_per_gpu 32 --num_samples 60 --n_discarded 5 --cycle_length 2000 --num_burn_in_steps 20000 --fraction_cool 0.25 --samples_per_cycle 1 --use_cyclical_lr True --cvar_ce_conservatism 0.75 --early_stop_acc_threshold 0 --warmup_log_every 250 --seed 0 --OUT_DIR ./exp/nmeas_large_play_n92 > ../exp/nmeas_large_play_n92.log 2>&1 &
+```
+
+**Readout:** `scripts_bnn/nmeas_ladder_readout.py` (§8) — config audit, validity,
+the per-variant rung table, and the four-part rule above applied mechanically.
+Run `--selftest` first.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -12459,6 +12604,12 @@ under §3.2.17, `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`. Imports
 bounds, the on-threshold coin flip, never-flatter, missing-key → P = 0,
 monotonicity, and that the shared thresholds match).
 
+**`scripts_bnn/nmeas_ladder_readout.py`** — reads out §4.3.112's `n_meas` ladder
+against its pre-registered four-part rule: config audit against each variant's
+256 baseline, clamp validity, the per-variant rung table in multiples of the
+occupied-cell count, and the verdict. Flags any rung inside 1σ of gate 1's
+location threshold. `--selftest` needs no network. Local, wandb only.
+
 **`scripts_bnn/capacity_range_decision.py`** — the §4.3.111 capacity-range
 decision: where the eligible region sits in the searched range, whether gate-2
 failure is capacity-shaped, and what §4.3.105's ladders say above the ceiling.
@@ -12663,10 +12814,14 @@ round-1 reference values that stage 3 sets.
 1. ✅ **DONE — the four §4.3.109 diagnostics ran and are read out.** Verdict
    **NULL**; stratification refuted; bundle item B dropped (§4.3.109 RESULT).
 2. ✅ **DONE — all 27 round-4 trials finished and read out** (§4.3.108).
-3. **DECIDE the `n_meas` question** — the one thing the diagnostics opened and
-   the only open item in the bundle. Recommended: a short pre-registered ladder
-   (26 / 64 / 128 vs the pinned 256, medium_play + one large variant, ~5 h wall
-   on 4 GPUs) before the restart. See item 5.
+3. **Run the `n_meas` ladder — designed and pre-registered as §4.3.112.** Six
+   runs, one GPU each, ~4–5 h, one wave on leviathan's 6: medium_play {52, 104},
+   large_diverse {46, 92}, large_play {46, 92}, in multiples of each maze's
+   occupied-cell count. Commands are in §4.3.112. Then read out with
+   `scripts_bnn/nmeas_ladder_readout.py` (`--selftest` first). **The prediction,
+   recorded before the runs, is that the rule does NOT fire** — gate 1's location
+   criterion is expected to bind before the objective's improvement is
+   established.
 4. **Assemble and launch the restart** once item 3 is settled: **A** (`map_amp2`
    → 6848 / 6838), **C** (wire §3.2.17's penalised objective — 3-line insert plus
    `metric.name` in the four sweep yamls), **E** (cache →
