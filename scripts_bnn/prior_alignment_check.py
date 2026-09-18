@@ -41,6 +41,92 @@ POOL = {
     "large": "data/antmaze/antmaze-large-play-v2/antmaze-large-play-v2_tuning_set.hdf5",
 }
 AMP2 = {"medium": 6626.0, "large": 6611.0}
+ENV = {"medium": "antmaze-medium-play-v2", "large": "antmaze-large-play-v2"}
+
+# 4.3.55's quoted figures, for the cross-check below.  That section states
+# diag(K_geo) ~ 0.463 at eta=1 AND a multiplier of 1.5092/1.5126 -- but
+# 1 + 0.463 + 0.001 = 1.464, not 1.509.  Only one of the two can be right, and
+# which one decides whether the pinned 6626/6611 is the correct derivation.
+S455_DIAG = 0.463
+S455_MULT = {"medium": 1.5092, "large": 1.5126}
+
+
+def multiplier_of(free_mask, scaling, offset, size):
+    """(mean diag(K_geo), multiplier, derived map_amp2) for a given layout."""
+    p = MapInformedGPPrior(
+        free_mask=free_mask, scaling=scaling, offset=offset,
+        eta=1.0, sig_c2=1.0, sig_g2=1.0, sig_n2=0.001,
+        amp2=1.0, xy_source="obs", device="cpu",
+    )
+    kg = None
+    for attr in ("_Kgeo", "K_geo", "_K_geo", "Kgeo"):
+        if hasattr(p, attr):
+            kg = np.asarray(getattr(p, attr).cpu() if hasattr(getattr(p, attr), "cpu")
+                            else getattr(p, attr))
+            break
+    dg = np.diag(kg)
+    mult = 1.0 + float(dg.mean()) + 0.001
+    return float(dg.mean()), mult, T ** 2 / mult
+
+
+def layout_check():
+    """Hardcoded vs live-D4RL layout, and which one 4.3.55's numbers came from.
+
+    Needs gym + d4rl, so it is a no-op (with a clear note) off the GPU box.
+    """
+    print("#" * 92)
+    print("LAYOUT CHECK -- hardcoded fallback vs the live D4RL env (authoritative)")
+    print("#" * 92)
+    try:
+        from optbnn.gp.maze_layouts import extract_maze_from_env  # noqa: F401
+        import gym  # noqa: F401
+        import d4rl  # noqa: F401
+        have_live = True
+    except Exception as e:
+        have_live = False
+        print(f"\nlive env NOT available here ({type(e).__name__}: {e}).")
+        print("Run this on leviathan to settle it; the hardcoded column still prints.\n")
+
+    for size in ("medium", "large"):
+        print(f"\n--- {size} ---")
+        hm, hs, ho = get_antmaze_layout(size)
+        hd, hmult, hamp = multiplier_of(hm, hs, ho, size)
+        print(f"  hardcoded : {int(hm.sum()):2d} free cells, scaling {hs}, offset {ho}")
+        print(f"              mean diag(K_geo) {hd:.4f}  multiplier {hmult:.4f}  "
+              f"derived map_amp2 {hamp:.0f}")
+        if not have_live:
+            continue
+        try:
+            lm, ls, lo = get_antmaze_layout(size, env_name=ENV[size])
+        except Exception as e:
+            print(f"  live      : FAILED ({type(e).__name__}: {e})")
+            continue
+        ld, lmult, lamp = multiplier_of(lm, ls, lo, size)
+        same = (hm.shape == lm.shape) and bool((hm == lm).all())
+        print(f"  live      : {int(lm.sum()):2d} free cells, scaling {ls}, offset {lo}")
+        print(f"              mean diag(K_geo) {ld:.4f}  multiplier {lmult:.4f}  "
+              f"derived map_amp2 {lamp:.0f}")
+        print(f"  free_mask identical: {same}"
+              f"{'' if same else '   <-- THE LAYOUTS DIFFER'}")
+
+        # Which of 4.3.55's two mutually inconsistent figures does this support?
+        print(f"  4.3.55 quotes diag(K_geo) ~ {S455_DIAG} and multiplier "
+              f"{S455_MULT[size]} (pinned map_amp2 {AMP2[size]:.0f})")
+        d_ok = abs(ld - S455_DIAG) < 0.01
+        m_ok = abs(lmult - S455_MULT[size]) < 0.01
+        if d_ok and not m_ok:
+            print(f"  >> live diag matches 4.3.55's 0.463 but its MULTIPLIER does not "
+                  f"({lmult:.4f} vs {S455_MULT[size]}).")
+            print(f"     4.3.55's multiplier looks like an ARITHMETIC SLIP; the derived "
+                  f"map_amp2 should be ~{lamp:.0f}, not {AMP2[size]:.0f} "
+                  f"({100*(lamp/AMP2[size]-1):+.1f}%).")
+        elif m_ok:
+            print(f"  >> live multiplier matches 4.3.55; the pinned "
+                  f"{AMP2[size]:.0f} is correct and the hardcoded layout is the odd "
+                  f"one out.")
+        else:
+            print(f"  >> matches NEITHER of 4.3.55's figures -- report both columns.")
+    print()
 
 
 def load_pool(path):
@@ -53,11 +139,19 @@ def load_pool(path):
         raise KeyError(keys)
 
 
+layout_check()
+
 for size in ("medium", "large"):
     print("=" * 92)
     print(f"{size.upper()}")
     print("=" * 92)
-    free_mask, scaling, offset = get_antmaze_layout(size)
+    try:
+        free_mask, scaling, offset = get_antmaze_layout(size, env_name=ENV[size])
+        src = "live D4RL env"
+    except Exception:
+        free_mask, scaling, offset = get_antmaze_layout(size)
+        src = "HARDCODED fallback (no gym/d4rl here)"
+    print(f"layout source: {src}")
     ncell = int(free_mask.sum())
     print(f"layout: {free_mask.shape} grid, {ncell} free cells, "
           f"scaling={scaling}, offset={offset}")

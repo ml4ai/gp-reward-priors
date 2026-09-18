@@ -10779,16 +10779,28 @@ at λ_max while the stiffness sat at λ_min.
   is doing the work. §4.3.109's original "is any effect just the batch size?" is
   the right instinct stated imprecisely.
 
-> **One discrepancy to check on the box, not a blocker.** Computed from the
-> *hardcoded* layout (no `gym` locally) the multiplier is 1.4628 / 1.4635,
-> giving a derived `map_amp2` of **6836 / 6833** against §4.3.55's **6626 /
-> 6611** — a **3% disagreement**. Free-cell counts match exactly (26 / 33), so
-> the graph is right; the likely cause is that §4.3.55 used the live-D4RL-env
-> layout, which `get_antmaze_layout` calls authoritative. 3% is far inside the
-> ~4× residual §7.3 already discloses and changes nothing here — **the
-> random-vs-stratified shift of 0.2% is computed from the same `diag(K_geo)` on
-> both sides and is unaffected either way.** Worth one `get_antmaze_layout`
-> call on leviathan to confirm which layout the pinned values came from.
+> **One discrepancy to check on the box, not a blocker — and §4.3.55 may be
+> internally inconsistent.** Computed from the *hardcoded* layout (no `gym`
+> locally) the multiplier is 1.4628 / 1.4636, giving a derived `map_amp2` of
+> **6836 / 6832** against §4.3.55's **6626 / 6611** — a **3% disagreement**.
+> Free-cell counts match exactly (26 / 33), so the graph is right.
+>
+> **The suspicion is not a layout difference but arithmetic.** §4.3.55 states
+> `diag(K_geo)` ≈ **0.463** at η = 1 *and* a multiplier of **1.5092 / 1.5126**.
+> Those two cannot both hold: `1 + 0.463 + 0.001 = 1.464`, which is what the
+> hardcoded layout gives (0.4592 / 0.4626, i.e. §4.3.55's own quoted diag to
+> within 1%) and which implies `map_amp2` ≈ **6830**. A multiplier of 1.509
+> would need `diag(K_geo)` ≈ 0.508 — above the hardcoded layout's *maximum*
+> across cells (0.5157 medium / 0.4984 large, so impossible for large).
+>
+> **`scripts_bnn/prior_alignment_check.py` settles it on the box**, where the
+> live D4RL layout is available: it prints both layouts side by side and says
+> which of §4.3.55's two figures the authoritative layout supports. Either way
+> 3% is far inside the ~4× residual §7.3 already discloses and **changes nothing
+> about the diagnostics** — the random-vs-stratified shift of 0.2% is computed
+> from the same `diag(K_geo)` on both sides. But it decides whether §7.3 is
+> reporting a *derivation that disagrees with an empirical optimum* or a
+> *derivation with a slip in it*, which are different disclosures.
 
 **Readout:** `scripts_bnn/strat_readout.py` (§8) does all of the above
 mechanically — config audit, validity, the gate table, paired deltas in sd units,
