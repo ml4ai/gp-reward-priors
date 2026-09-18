@@ -10628,6 +10628,59 @@ Two things this table shows that the arm design did not anticipate:
 - **`o7g6texk` sits at 0.97× τ on gate 1 as well.** It is a near-miss on *both*
   gates, so an arm that improves its margin can still fail on scale.
 
+#### Does stratification need `map_amp2` — or anything else — recalibrated?
+
+Asked by the user before the runs: *could these arms return a false verdict
+simply because another pinned setting should have moved with them?* Measured on
+the real layouts and the real 999,000-point pools, locally, no GPU.
+
+**1. No, on `map_amp2`'s own derivation.** The derived value is
+`T² / multiplier`, where the multiplier is the marginal prior variance per point,
+`sig_c2 + sig_g2·diag(K_geo)[cell] + sig_n2` (§4.3.55). Stratification changes
+only the *cell weighting* of that average — pool-weighted becomes
+uniform-over-occupied-cells — and `diag(K_geo)` barely varies across cells:
+
+| | `diag(K_geo)` spread | multiplier, random | multiplier, stratified | derived `map_amp2` shift |
+|---|---|---|---|---|
+| medium | 1.19× (0.432–0.516) | 1.4628 | 1.4602 | **+0.18%** |
+| large | 1.15× (0.433–0.498) | 1.4635 | 1.4643 | **−0.05%** |
+
+**Leave `map_amp2` exactly where it is.** A 0.2% shift is nothing against the
+~4× residual disagreement §7.3 already discloses, and moving a pinned prior
+parameter would break the matched comparison these arms exist for (§3.3, §9).
+
+**2. And `map_amp2` could not align them even if you wanted it to.** It
+multiplies the whole Gram including the nugget, so `K → amp2·K` and
+`K⁻¹ → K⁻¹/amp2` — a **uniform rescale** of the prior gradient
+(`map_informed_prior.py:160–176`, and §4.3.42 relies on exactly this). What
+stratification changes is the **shape** of the spectrum, not its scale. No
+scalar multiplier undoes that. This is §4.3.46's structural finding again: *no
+single scalar in this kernel moves conditioning and prior strength
+independently.*
+
+**3. What does change, measured.** Split `f` into its across-cell (cell-mean)
+and within-cell components and measure the prior force `‖K⁻¹f‖/‖f‖` on each:
+
+| mode | n | cells hit | dup | cond(K) | at nugget | force on **cell-mean** | force on **within-cell** |
+|---|---|---|---|---|---|---|---|
+| random `n_meas` 256 | 256 | 22 of 26 | 91% | 2.7e5 | 234 | 7.0e−05 | **0.151** |
+| random `n_meas` 26 (control) | 26 | 13.7 of 26 | 50% | 2.8e4 | 13 | 1.8e−04 | **0.151** |
+| **stratified** | 26 | **26 of 26** | **0%** | **198** | **0** | **5.3e−04** | **— none exists** |
+
+*(medium; large is the same picture — 29 cells, 0.9e−04 → 6.9e−04, 231 → 0.)*
+
+Two facts fall out, and they point in **opposite** directions:
+
+- **The prior's dominant job today is forcing `f` equal within cells.** That
+  force is **~2,000× the force on the across-cell profile** — the nugget gives
+  `K⁻¹` an eigenvalue of `1/sig_n2` = 1000 along each of 234 duplicate
+  directions. Stratification **deletes that component entirely**, which *frees*
+  `f` to vary within a cell → **wider** posterior → gate 2 better, gate 1 worse.
+- **The force on the across-cell profile rises 7.6×** (7.0e−05 → 5.3e−04),
+  because removing the near-singular directions conditions the operator. That
+  grips the identified profile *harder* → **narrower** posterior → gate 1
+  better, gate 2 worse.
+
 #### Reading rule — PRE-REGISTERED 2026-09-17, before the runs
 
 **Read on the effect size, never on the pass/fail flip.** The gates are
@@ -10677,15 +10730,65 @@ only measurement available.)*
    frontier rather than off it. Do not adopt.
 5. **NULL** — anything else. Record it, resume the paused sweeps, do not restart.
 
-**Prediction, recorded before the runs so it cannot be fitted afterwards:**
-**outcome 4 (TRADE) is the most likely.** Stratification removes the 231
-within-cell equality directions that sit at the nugget, which is a *weakening* of
-the prior along exactly the directions that were pinning `f` — mechanically the
-same move as §4.3.45's `sig_n2` increase, which on medium_play gave better CE and
-**worse** stationarity. §4.3.101 measured ρ(`|log r|`, margin) = **+0.397** across
-round-3 trials, so a wider posterior buys gate 2 and costs gate 1 by default.
-An outcome that beats this prediction — gate 2 up with gate 1 flat — is the one
-that would make stratification worth a restart.
+**Prediction — AMENDED 2026-09-17, still before any arm ran.** The first version
+of this paragraph predicted **TRADE** (gate 2 up, gate 1 down) on the ground that
+stratification weakens the prior by deleting the 231 nugget directions. The
+prior-force measurement above shows that was **one-sided**: deleting those
+directions does weaken the prior *within* cells, but it simultaneously
+strengthens it **7.6× on the across-cell profile**, which pushes the other way.
+The two effects oppose each other and their net is not predictable from the
+spectrum alone.
+
+**So the honest pre-registration is: no directional prediction.** What *is*
+predicted, and is falsifiable:
+
+1. The two gates will not both improve by ≥ 2σ. §4.3.101 measured
+   ρ(`|log r|`, margin) = +0.397 and §4.3.105 traced the same frontier along
+   capacity; a lever that steps off it would be the first found in this project.
+2. The medium_play arm and the `n_meas` 26 control will **not** agree, because
+   the control keeps 13 nugget directions and reaches only 13.7 of 26 cells
+   (measured above) — it is not a clean stand-in for the stratified prior.
+
+Recording the superseded prediction rather than quietly replacing it, because
+the reason it was wrong — reading half a mechanism off a spectrum instead of
+measuring the operator — is the same error §4.3.42 made when it aimed `sig_c2`
+at λ_max while the stiffness sat at λ_min.
+
+**Three interpretation caveats, all fixed before the runs:**
+
+- **A null on gate 1 is conditional on ε.** `cond(K)` falls 2.7e5 → 198, and
+  §4.3.41–44 tied the step-size ceiling to exactly that conditioning. The arms
+  hold `sghmc_lr` / `sghmc_lr_max` at their baselines — correctly, since the
+  comparison must be matched — so a stratified run may now be **under-stepping**
+  by a wide margin. **A NULL therefore rules out "stratification alone at the
+  baseline ε", not "stratification".** If it looks promising on any axis, the
+  follow-up is an ε ladder on the stratified prior, not a restart.
+- **`sig_n2` stops being load-bearing.** Under random sampling 231 of 256
+  eigenvalues sit at the nugget and §4.3.43–44 identified it as *the* stiffness
+  knob. Under stratification **zero** do: `sig_n2` reverts to the pure numerical
+  jitter its config comment always claimed it was. It stays at 0.001 and needs no
+  change — but §4.3.44's large_play `sig_n2` 0.05 fix would be **inert** under a
+  stratified prior, so that finding does not transfer. *(All four round-4 configs
+  carry 0.001, so nothing in flight is affected.)*
+- **The control isolates coverage, not "batch size".** Measured over 2,000 draws,
+  a random `n_meas` 26 hits only **13.7 of 26** occupied cells (large: 15.0 of
+  29) and keeps 13 nugget directions. So it matches the stratified arm on point
+  count and *partly* on de-duplication, and differs from it mainly in
+  **coverage**. Read it that way: control ≈ stratified ⇒ the effect is the point
+  count and losing the within-cell constraints; stratified ≫ control ⇒ coverage
+  is doing the work. §4.3.109's original "is any effect just the batch size?" is
+  the right instinct stated imprecisely.
+
+> **One discrepancy to check on the box, not a blocker.** Computed from the
+> *hardcoded* layout (no `gym` locally) the multiplier is 1.4628 / 1.4635,
+> giving a derived `map_amp2` of **6836 / 6833** against §4.3.55's **6626 /
+> 6611** — a **3% disagreement**. Free-cell counts match exactly (26 / 33), so
+> the graph is right; the likely cause is that §4.3.55 used the live-D4RL-env
+> layout, which `get_antmaze_layout` calls authoritative. 3% is far inside the
+> ~4× residual §7.3 already discloses and changes nothing here — **the
+> random-vs-stratified shift of 0.2% is computed from the same `diag(K_geo)` on
+> both sides and is unaffected either way.** Worth one `get_antmaze_layout`
+> call on leviathan to confirm which layout the pinned values came from.
 
 **Readout:** `scripts_bnn/strat_readout.py` (§8) does all of the above
 mechanically — config audit, validity, the gate table, paired deltas in sd units,
@@ -11812,6 +11915,15 @@ by `results_table.ipynb` for reporting (§5, §4.3.107). `--selftest` runs its t
 **`selection_gates.py`** (repo root) — the BNN eligibility gates of §3.2.12, in
 one place, imported by both tools below (§4.3.108). `python selection_gates.py`
 runs its self-test.
+
+**`scripts_bnn/prior_alignment_check.py`** — answers "does changing the
+measurement sampling require recalibrating `map_amp2` or another pinned
+parameter?" from the maze layout and the real 999,000-point pools. Reports the
+marginal-variance multiplier under each sampling mode (hence the derived
+`map_amp2`), the prior force `‖K⁻¹f‖/‖f‖` split into across-cell and within-cell
+components, and how many distinct cells each draw actually reaches. Local, no
+GPU, ~30 s. Produces the tables in §4.3.109. Note it falls back to the
+**hardcoded** layout when `gym` is absent — see the discrepancy note there.
 
 **`scripts_bnn/strat_readout.py`** — reads out §4.3.109's four stratified-measurement
 diagnostics against their pre-registered rule. Pairs each arm with its baseline
