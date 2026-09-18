@@ -11560,8 +11560,13 @@ whether the offset confound above is material, before the ladder is read. On the
 box, in the `pt` env (§10.6.1):
 
 ```bash
-cd ~/iqlpref/gp_reward-priors && for R in n26_medium_play strat_medium_play strat_large_play strat_large_diverse; do echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --offset-shape-split --device cuda 2>&1 | grep -A 12 "Offset-robustness"; done | tee exp/cvar_offset_robustness.txt
+cd ~/iqlpref/gp_reward-priors && for R in n26_medium_play strat_medium_play strat_large_play strat_large_diverse; do echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --offset-shape-split --device cuda > exp/cvarrobust_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/cvarrobust_${R}.txt || echo "  (banner not found -- full output in exp/cvarrobust_${R}.txt)"; done | tee exp/cvar_offset_robustness.txt
 ```
+
+*(The banner is `--- OFFSET ROBUSTNESS of the CVaR rows ---`. A first version of
+this command grepped for the **code comment** above that block rather than the
+printed text and returned four empty sections; the form here saves each run's
+full output first, so a wrong anchor cannot lose the data.)*
 
 **Readout:** `scripts_bnn/nmeas_ladder_readout.py` (§8) — config audit, validity,
 the per-variant rung table, and the four-part rule above applied mechanically.
