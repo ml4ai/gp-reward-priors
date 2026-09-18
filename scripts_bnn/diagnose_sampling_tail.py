@@ -1843,10 +1843,31 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     from optbnn.gp.maze_layouts import get_antmaze_layout, build_maze_graph, heat_kernel
     from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
 
-    lay = get_antmaze_layout(cfg.get("map_size", "medium"))
-    fm = np.asarray(lay[0] if isinstance(lay, tuple) else lay, dtype=bool)
+    # Build the prior EXACTLY as run_bnn_training_antmaze_eval.py does: from the
+    # live D4RL env when the config names one, and with that layout's own
+    # scaling/offset.  Both mattered (handoff 4.3.110):
+    #   * offset is ADDED TO THE GRID INDEX (map_informed_prior.cell_of), so the
+    #     (0.0, 0.0) hardcoded here shifted every point a whole row and column --
+    #     0.1% of pool points landed in the right cell.
+    #   * the hardcoded LARGE fallback is a different maze from the live one
+    #     ((9,9)/33 free cells vs (9,12)/46), so large runs were read against a
+    #     prior basis the run never used.
+    _env = cfg.get("map_env_name")
+    _size = cfg.get("map_size", "medium")
+    try:
+        fm, scaling, offset = get_antmaze_layout(_size, env_name=_env)
+        _src = f"live env {_env!r}" if _env else f"hardcoded {_size!r}"
+    except Exception as _e:
+        fm, scaling, offset = get_antmaze_layout(_size)
+        _src = f"HARDCODED {_size!r} FALLBACK"
+        print(f"  !! could not load the live layout ({type(_e).__name__}: {_e}).")
+        print(f"  !! Falling back to the hardcoded {_size!r} map.  For LARGE this is a "
+              f"DIFFERENT MAZE and the result is not comparable to the run.")
+    fm = np.asarray(fm, dtype=bool)
+    print(f"  prior basis: {_src} -- {int(fm.sum())} free cells, "
+          f"scaling {scaling}, offset {offset}")
     prior = MapInformedGPPrior(
-        free_mask=fm, scaling=4.0, offset=(0.0, 0.0),
+        free_mask=fm, scaling=float(scaling), offset=offset,
         eta=float(cfg.get("map_eta", 1.0)), sig_c2=float(cfg.get("map_sig_c2", 1.0)),
         sig_g2=float(cfg.get("map_sig_g2", 1.0)), sig_n2=float(cfg.get("map_sig_n2", 1e-3)),
         amp2=float(cfg.get("map_amp2", 1.0)))

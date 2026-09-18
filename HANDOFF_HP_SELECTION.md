@@ -10550,16 +10550,27 @@ pools:
 
 | | medium | large |
 |---|---|---|
-| free cells | 26 | 33 (29 ever occupied) |
-| **duplicate cells in a random 256-draw** | **234 (91%)** | **232 (91%)** |
-| occupied cells covered by that draw | 22 of 26 (85%) | 24.2 of 29 (84%) |
-| random points needed to touch every occupied cell | **~2,900** | **~1,800** |
-| pool concentration | top cell 13%, top 5 = 46% | top cell 14%, top 5 = 50% |
+| free cells | 26 | ~~33 (29 ever occupied)~~ **46 (all 46 occupied)** |
+| **duplicate cells in a random 256-draw** | **234 (91%)** | ~~232 (91%)~~ **216 (84%)** |
+| occupied cells covered by that draw | 22 of 26 (85%) | ~~24.2 of 29 (84%)~~ **37.3 of 46 (81%)** |
+| random points needed to touch every occupied cell | **~2,900** | ~~~1,800~~ *(not recomputed)* |
+| pool concentration | top cell 13%, top 5 = 46% | ~~top cell 14%, top 5 = 50%~~ **top cell 9.3%, top 5 = 33%** |
+
+> ⚠️ **The large column was computed on the WRONG MAZE and is corrected here
+> (§4.3.110).** `get_antmaze_layout` without `env_name` returns a hardcoded
+> (9,9)/33-cell map; the live D4RL large maze the runs actually use is
+> (9,12)/**46** cells. Medium is unaffected — the two layouts are identical
+> there, and every medium figure above was reproduced exactly on the box.
+>
+> **The conclusion is unchanged and if anything stronger**: duplication is still
+> 84%, coverage is still incomplete, and stratification still removes both. What
+> changes is the *size* of the stratified set for large — **46 points, not 29**.
 
 The 91% duplication is the same fact §4.3.43 saw from the spectrum side (231 of
 256 eigenvalues at the nugget). **§4.3.25's `n^-0.55` freezing bound was driven by
 coverage deficit, and a designed set removes that deficit by construction** —
-26–29 points cover every occupied cell, where random sampling needs ~2,000. So
+26 points (medium) / 46 (large) cover every occupied cell, where random sampling
+needs thousands. So
 the bound does not close this route.
 
 #### The synthesis, and the flag
@@ -10587,7 +10598,8 @@ exactly once, 200 of 200 draws distinct, each point inside its assigned cell, an
 > so a stratified run is a **DIAGNOSTIC, not a selection run**, exactly like a
 > `tanh` run (§4.3.81). Adopting it requires stage-1 re-selection. `n_meas` is
 > ignored in that mode. **Known confound:** it also changes the batch from 256 to
-> 26–29 points, which changes effective prior strength; the fourth arm below
+> 26 (medium) / 46 (large) points, which changes effective prior strength; the
+> fourth arm below
 > isolates that.
 
 #### The diagnostic pairs (designed 2026-09-17, not yet run)
@@ -10643,7 +10655,7 @@ uniform-over-occupied-cells — and `diag(K_geo)` barely varies across cells:
 | | `diag(K_geo)` spread | multiplier, random | multiplier, stratified | derived `map_amp2` shift |
 |---|---|---|---|---|
 | medium | 1.19× (0.432–0.516) | 1.4628 | 1.4602 | **+0.18%** |
-| large | 1.15× (0.433–0.498) | 1.4635 | 1.4643 | **−0.05%** |
+| large | 1.19× (0.433–0.516) | 1.4603 | 1.4624 | **−0.14%** |
 
 **Leave `map_amp2` exactly where it is.** A 0.2% shift is nothing against the
 ~4× residual disagreement §7.3 already discloses, and moving a pinned prior
@@ -10667,7 +10679,10 @@ and within-cell components and measure the prior force `‖K⁻¹f‖/‖f‖` o
 | random `n_meas` 26 (control) | 26 | 13.7 of 26 | 50% | 2.8e4 | 13 | 1.8e−04 | **0.151** |
 | **stratified** | 26 | **26 of 26** | **0%** | **198** | **0** | **5.3e−04** | **— none exists** |
 
-*(medium; large is the same picture — 29 cells, 0.9e−04 → 6.9e−04, 231 → 0.)*
+*(medium. Large, on the **live** 46-cell maze (§4.3.110): random 256 hits 40 of
+46 cells at 84% duplication, cond 2.65e5, 216 at the nugget, cell-mean force
+1.1e−04; stratified is 46 points, cond **344**, **0** at the nugget, cell-mean
+force **6.0e−04** — the same picture, 5.4× rather than 7.6×.)*
 
 Two facts fall out, and they point in **opposite** directions:
 
@@ -10779,28 +10794,32 @@ at λ_max while the stiffness sat at λ_min.
   is doing the work. §4.3.109's original "is any effect just the batch size?" is
   the right instinct stated imprecisely.
 
-> **One discrepancy to check on the box, not a blocker — and §4.3.55 may be
-> internally inconsistent.** Computed from the *hardcoded* layout (no `gym`
-> locally) the multiplier is 1.4628 / 1.4636, giving a derived `map_amp2` of
-> **6836 / 6832** against §4.3.55's **6626 / 6611** — a **3% disagreement**.
-> Free-cell counts match exactly (26 / 33), so the graph is right.
+> ✅ **SETTLED on the box 2026-09-17: §4.3.55's multiplier is an arithmetic
+> slip, and the pinned `map_amp2` is ~3.4% low.** Run against the **live** D4RL
+> layouts, `diag(K_geo)` is **0.4592** (medium) / **0.4614** (large) — §4.3.55's
+> own quoted **0.463**, to within 1%. But `1 + 0.463 + 0.001 = 1.464`, not the
+> **1.5092 / 1.5126** that section uses. A multiplier of 1.509 would need
+> `diag(K_geo)` ≈ 0.508, which is above the measured *maximum across cells*
+> (0.5157 medium, 0.5157 large) and so cannot be a mean.
 >
-> **The suspicion is not a layout difference but arithmetic.** §4.3.55 states
-> `diag(K_geo)` ≈ **0.463** at η = 1 *and* a multiplier of **1.5092 / 1.5126**.
-> Those two cannot both hold: `1 + 0.463 + 0.001 = 1.464`, which is what the
-> hardcoded layout gives (0.4592 / 0.4626, i.e. §4.3.55's own quoted diag to
-> within 1%) and which implies `map_amp2` ≈ **6830**. A multiplier of 1.509
-> would need `diag(K_geo)` ≈ 0.508 — above the hardcoded layout's *maximum*
-> across cells (0.5157 medium / 0.4984 large, so impossible for large).
+> | | live multiplier | derived `map_amp2` | pinned | error |
+> |---|---|---|---|---|
+> | medium | 1.4602 | **6848** | 6626 | **−3.4%** |
+> | large | 1.4624 | **6838** | 6611 | **−3.4%** |
 >
-> **`scripts_bnn/prior_alignment_check.py` settles it on the box**, where the
-> live D4RL layout is available: it prints both layouts side by side and says
-> which of §4.3.55's two figures the authoritative layout supports. Either way
-> 3% is far inside the ~4× residual §7.3 already discloses and **changes nothing
-> about the diagnostics** — the random-vs-stratified shift of 0.2% is computed
-> from the same `diag(K_geo)` on both sides. But it decides whether §7.3 is
-> reporting a *derivation that disagrees with an empirical optimum* or a
-> *derivation with a slip in it*, which are different disclosures.
+> **Do NOT re-pin mid-campaign.** All 25 round-4 trials and all four diagnostic
+> arms carry 6626 / 6611; changing it now would fork the campaign (§9). 3.4% is
+> far inside the ~4× residual §7.3 already discloses, and the
+> random-vs-stratified shift of 0.2% is computed from the same `diag(K_geo)` on
+> both sides, so **nothing about the diagnostics moves**.
+>
+> **What it changes is the disclosure.** §7.3 reports `map_amp2` as "fixed on a
+> derivation" whose residual ~4× disagreement with medium_play's empirical
+> optimum is an open question. That derivation has an arithmetic error in it.
+> Report the corrected derived value (**6848 / 6838**), state that the pinned
+> value is 3.4% below it, and carry the corrected figure into the next round's
+> pins. *(The residual disagreement with the empirical 1.69e3 is 4.05× rather
+> than 3.9× — unchanged in substance.)*
 
 **Readout:** `scripts_bnn/strat_readout.py` (§8) does all of the above
 mechanically — config audit, validity, the gate table, paired deltas in sd units,
@@ -10826,8 +10845,8 @@ cd ~/iqlpref/gp_reward-priors/scripts_bnn && CUDA_VISIBLE_DEVICES=3 nohup python
 ```
 
 Expect the stratified logs to print `Measurement sampling STRATIFIED BY CELL: one
-point per occupied cell, 26 cells` (29 for large) and `[prior] Gram cond(K) ≈
-2e2` against 2.7e5.
+point per occupied cell, 26 cells` — **46 for large, not 29** (§4.3.110) — and
+`[prior] Gram cond(K) ≈ 2e2` (medium) / **≈ 3.4e2** (large) against 2.7e5.
 
 **Read on** `|log(centred scale_ratio)|`, centred `loc_sd`, centred `ess`,
 `val_cvar_degeneracy_margin` and `val_cvar_ce`, against each baseline — under the
@@ -10837,6 +10856,105 @@ pass/fail flip.
 **Caveat that survives any outcome:** §4.3.45 measured two mazes with identical
 cond(K) to three figures and *opposite* responses, so a conditioning-only account
 is already known to be incomplete.
+
+### 4.3.110 The geometry diagnostic read the WRONG maze — §7.3's coverage disclosure is withdrawn
+
+Found 2026-09-17 while running §4.3.109's layout check on the box. Two
+independent bugs in one call site, `diagnose_sampling_tail.py`'s
+`--geometry-prior` path, which is where §4.3.69 and §4.3.70 come from.
+
+#### Bug 1 — the offset was hardcoded to (0, 0), and it is a GRID-INDEX offset
+
+`map_informed_prior.cell_of` computes `col = rint(x/scaling + col_off)`, so the
+offset is added to the **grid index**, not to the coordinate. The real layouts
+carry `offset = (1.0, 1.0)`; the diagnostic hardcoded `(0.0, 0.0)`. Every point
+was therefore shifted a **whole row and a whole column** before being assigned to
+a cell.
+
+Measured on medium (999,000 pool points, where the hardcoded and live layouts are
+**identical**, so this isolates the offset alone):
+
+| | |
+|---|---|
+| pool points assigned to the **same** cell either way | **0.1%** |
+| distinct cells occupied, correct offset | **26 of 26** |
+| distinct cells occupied, diagnostic's offset | **13 of 26** |
+
+#### Bug 2 — the hardcoded LARGE fallback is a different maze
+
+`get_antmaze_layout(size)` without `env_name` returns the hardcoded map; the
+training script always passes `map_env_name`, so **every run used the live one**.
+They do not agree:
+
+| | hardcoded | **live D4RL** |
+|---|---|---|
+| medium | (8,8), 26 free cells | (8,8), 26 free cells — **identical** |
+| **large** | (9,9), **33** free cells | **(9,12), 46** free cells — **different maze** |
+
+So every large-variant number in this document that came from an analysis script
+using the fallback describes a maze the runs never saw.
+
+#### What this invalidates
+
+> ⚠️ **§7.3's coverage disclosure is WITHDRAWN.** It states: *"Every CVaR number
+> describes the visited sub-maze, not the whole maze — the evaluation set
+> occupies 13 of 26 free cells on medium (50%) and 18 of 33 on large (55%)…
+> roughly half of each maze carries no validation signal at all."*
+>
+> Recomputed with the correct offset on the real `x_rhat` construction
+> (first 64 val trajectories, segment 0, non-padded — 6,400 points):
+> **medium coverage is 21 of 26 cells = 81%**, not 50%. The large figure is
+> doubly wrong (wrong offset *and* wrong maze, against 46 cells not 33) and is
+> **not yet recomputed**.
+>
+> **This cuts against the project, not for it.** §7.3 used the low coverage to
+> *support* the coverage-limited reading of large_play's width/signal ratio of
+> 3.92 (§4.3.53) — "a reward model whose posterior is widest exactly where
+> preference data is thin will look worse". With coverage at 81% on medium that
+> support is much weaker, and large_play's ratio has correspondingly **less
+> excuse**. Recompute large before leaning on the coverage argument again.
+
+**Also affected — re-run before quoting:** §4.3.69's "13 of 26 (50%) / 18 of 33
+(55%)" and the bug-fix note that introduced them; §4.3.70's per-variant
+`τ wide / τ stiff` table, whose *basis* was wrong for all four variants (offset)
+and doubly wrong for the two large ones (maze).
+
+**What is NOT affected**, and it is most of the document:
+
+- **Every training run.** All four configs set `map_env_name`, so the sampler
+  always built the live prior. No run used a wrong maze.
+- **All the gates and the objective.** `|log r|`, `loc_sd`, centred `ess`,
+  degeneracy and `val_cvar_ce` are computed from `f` and the chains, never from
+  the maze graph.
+- **§4.3.67's steps-per-independent-sample** — pooled τ, no prior basis.
+- **§4.3.43–44's nugget result.** Those used the prior the *run* built
+  (`[prior] Gram cond(K)` is logged by the training process), not this call site.
+- The capacity ladders, the eligibility counts, and §4.3.109's medium numbers.
+
+> **§4.3.70's conclusion probably survives, but is no longer supported.** It
+> concluded "τ is FLAT across the prior's whole stiffness spectrum, so
+> preconditioning cannot help", and cross-validated the per-direction τ against
+> §4.3.67's pooled τ — which is basis-independent and agreed on all four
+> variants. That agreement is what kept the conclusion plausible. But a flat
+> profile read in a **wrong** basis is weak evidence for flatness in the right
+> one, so **re-run it before citing it**. The preconditioner is independently
+> closed out by §4.3.72's `v_hat_min` ladder, which used no maze basis at all, so
+> nothing downstream depends on §4.3.70 alone.
+
+#### Fixed
+
+`diagnose_sampling_tail.py` now builds the prior exactly as the training script
+does — live layout from `cfg["map_env_name"]`, with that layout's own `scaling`
+and `offset` — prints the basis it used, and warns loudly if it has to fall back.
+`prior_alignment_check.py` prefers the live layout and reports both.
+
+**Method note.** Both bugs are the §3.4 failure mode — *"read values from the
+config, never from a dataclass default"* — applied to a **function argument**
+rather than a config field: a diagnostic silently reconstructed an object the run
+had already built, and got it wrong. §4.3.104 caught the same family (`width`
+logged expanded vs as a log2 exponent). **A diagnostic that rebuilds a run's
+object should assert it matches**, and the cheapest assertion is the one now
+printed: state the basis and let it be read.
 
 ### 4.4 Procedure
 
@@ -11798,18 +11916,34 @@ conservatism convention throughout.
 
 ---
 
-**Every CVaR number describes the visited sub-maze, not the whole maze.** The
+> ⚠️ **WITHDRAWN 2026-09-17 — the numbers below are artefacts of two bugs in the
+> geometry diagnostic (§4.3.110), not measurements.** The diagnostic hardcoded a
+> grid offset of (0,0) against the real (1,1), shifting every point a whole row
+> and column — 0.1% of points landed in the right cell — and for **large** it
+> read the hardcoded 33-cell fallback instead of the live 46-cell maze the runs
+> actually use. **Recomputed correctly, medium coverage is 21 of 26 = 81%, not
+> 50%**; large is not yet recomputed. Do not report the paragraph below.
+>
+> The correction is **unfavourable**: this disclosure was used to *support* the
+> coverage-limited reading of large_play, and at 81% that support largely
+> evaporates. Re-derive the argument, or drop it.
+
+~~**Every CVaR number describes the visited sub-maze, not the whole maze.** The
 evaluation set occupies **13 of 26 free cells on medium (50%)** and **18 of 33 on
 large (55%)** — discovered while building the prior-basis geometry diagnostic
 (§4.3.69). Roughly half of each maze carries no validation signal at all, so
 every CVaR CE, accuracy and width/signal ratio in §4.3.47–53 is conditional on
-the visited region.
+the visited region.~~
 
-This **strengthens** the coverage-limited reading of large_play rather than
+~~This **strengthens** the coverage-limited reading of large_play rather than
 weakening it: a reward model whose posterior is widest exactly where preference
 data is thin will look worse on a validation set that never visits those cells,
 not better. It should be reported as a limit on what the validation metrics can
-certify, not as a defect in the models.
+certify, not as a defect in the models.~~
+
+**What §7.4 should say instead, once large is recomputed:** state the true
+per-variant coverage, and note that it was mis-measured at first by a diagnostic
+that rebuilt the prior basis instead of reading the one the run used (§4.3.110).
 
 ---
 
@@ -11821,6 +11955,14 @@ whatever ceiling it is given (round-1 cap 1e3 → winners 313–773; round-2 cap
 convention and the segment length T = 100: **6626 (medium) / 6611 (large)**,
 after §4.3.55's correction for the prior's marginal-variance multiplier, which
 the original "~1e4" figure had dropped.
+
+> ⚠️ **§4.3.55's multiplier is itself wrong by 3.4%, measured 2026-09-17
+> (§4.3.109).** Against the live D4RL layouts the multiplier is **1.4602 /
+> 1.4624**, not 1.5092 / 1.5126, giving a derived `map_amp2` of **6848 / 6838**.
+> §4.3.55 is internally inconsistent: it quotes `diag(K_geo)` ≈ 0.463 — which is
+> right — but `1 + 0.463 + 0.001 = 1.464`, not 1.509. **Report the corrected
+> derived value and state that the pinned 6626 / 6611 sits 3.4% below it.** The
+> pins are NOT changed mid-campaign (§9); the correction is a next-round item.
 
 medium_play's empirically CVaR-optimal amplitude is **1.69e3** — a **3.9×**
 disagreement, inside the spacing of §4.3.17's decade ladder but real. §4.3.23
@@ -12092,6 +12234,15 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **The layout check ran on the box and found two bugs** (§4.3.110). The
+  geometry diagnostic hardcoded a grid offset of (0,0) against the real (1,1) —
+  0.1% of points landed in the right cell — and for **large** it read a
+  hardcoded 33-cell maze instead of the live **46**-cell one. **§7.3's
+  coverage disclosure is withdrawn**: true medium coverage is **21 of 26 =
+  81%**, not 50%. No training run is affected. Fixed at source.
+- **§4.3.55's multiplier is confirmed an arithmetic slip** — the derived
+  `map_amp2` is **6848 / 6838**, so the pinned 6626 / 6611 is **3.4% low**.
+  Not re-pinned mid-campaign; it is a disclosure fix and a next-round item.
 - **Eligibility re-read at 25 trials** (§4.3.108): still **4 eligible (16%)**,
   **gate 2 alone now rejects 40%**, **gate 3 no longer binds at all**, all four
   sweeps' ungated best is ineligible, and **15 of 25 verdicts sit within one seed-sd
@@ -12170,28 +12321,36 @@ round-1 reference values that stage 3 sets.
 12. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
     winners at the width ceiling, one at the floor, and the two sweeps that kept
     improving late.
-13. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
+13. **Recompute large's cell coverage and re-run §4.3.70's geometry table**
+    under the fixed basis (§4.3.110), then write §7.4's corrected coverage
+    disclosure. `--geometry-prior` runs on saved chains, so it is compute-free
+    if the four `stage3_*` final run dirs still exist on the box; otherwise
+    record the coverage number alone, which needs only the val split.
+14. **Carry the corrected derived `map_amp2` (6848 / 6838) into §7.3's
+    disclosure** and into the next round's pins. Do not change the running
+    pins (§9).
+15. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
     5 TB; cached reward labels are ~4 MB, and caching also removes the
     re-labelling cost from each of stage 4's 8 normalization indices. This is a
     prerequisite for item 10, not an optional tidy-up.
-14. **§7.4 (round-4 results)** cannot be written until there are results, but
+16. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
 
 **QUEUED — FUTURE-ROUND CANDIDATES (do not act mid-campaign — §9)**
 
-15. **Regularisation as a search dimension.** MR exposes none at all (no weight
+17. **Regularisation as a search dimension.** MR exposes none at all (no weight
     decay, no dropout) and PT only a fixed `dropout 0.1`. That, not the capacity
     range, is the direct lever on the memorisation measured in §4.3.108.
-16. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
+18. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
     range is evaluated under a binding 5,000-epoch budget (31% of trials select
     the last checkpoint, all at lr ≤ 1.1e-4).
-17. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
+19. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
     gain resets patience; and the longest observed non-improving streak before a
     later improvement was 13 against K = 15.
-18. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
+20. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
     so the seeds 1–10 lineages share most eval-env seeds. Low priority.
-19. **Replicates as standing practice at the sweep budget.** §4.3.35 made
+21. **Replicates as standing practice at the sweep budget.** §4.3.35 made
     replication standing practice for load-bearing configurations and the
     campaign has drifted away from it: every round-4 trial is n = 1, and
     §4.3.108's 25-trial re-read shows 15 of 25 verdicts inside one seed-sd of a
