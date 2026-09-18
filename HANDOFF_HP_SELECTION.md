@@ -10962,6 +10962,102 @@ logged expanded vs as a log2 exponent). **A diagnostic that rebuilds a run's
 object should assert it matches**, and the cheapest assertion is the one now
 printed: state the basis and let it be read.
 
+### 4.3.111 DECIDED: the capacity ranges do NOT widen — the feasible region is interior
+
+Bundle item D, settled 2026-09-17 at the user's request, before the restart.
+`scripts_bnn/capacity_range_decision.py`, on the 26 finished round-4 trials plus
+§4.3.105's designed ladders. Zero compute.
+
+**Verdict: §3.2.16's ranges stand — width 4–7 × depth 1–4, for every family and
+variant. Do not widen. Do not narrow either.**
+
+#### 1. The eligible region is INTERIOR, so no boundary is binding
+
+| | |
+|---|---|
+| searched range | 625 – 54,529 params (**87×**) |
+| eligible trials | **897, 1,169, 4,993, 10,817** |
+| position | **1.4× above the floor, 5.0× below the ceiling** |
+
+Nothing is pressed against a boundary. Widening adds search volume in regions
+where trials already fail — it does not enlarge the feasible set.
+
+#### 2. Gate-2 failure is NOT capacity-shaped — which kills D's premise
+
+D was on the table because ρ(`n_params`, margin) = **+0.53**: bigger models
+separate CVaR from mean more easily. True as a correlation, and irrelevant as a
+lever, because gate 1 takes over at the top:
+
+| tercile | n | params | eligible | **gate 1 fails** | **gate 2 fails** | median `cvar_ce` |
+|---|---|---|---|---|---|---|
+| small | 8 | 625 – 1,169 | 2 | 3 | **6** | 0.3766 |
+| mid | 8 | 1,249 – 4,993 | 1 | 1 | **7** | 0.3344 |
+| large | 10 | 4,993 – 54,529 | 1 | **8** | **6** | 0.3467 |
+
+**Gate 2 fails at every capacity — 6 / 7 / 6 of 8 / 8 / 10.** There is no region
+of the axis where it is reliably satisfied, so no amount of moving the endpoints
+creates one. Meanwhile gate-1 failures concentrate at the top (8 of 10), which
+is what widening upward would buy more of.
+
+#### 3. Above the ceiling, both gates AND the objective degrade
+
+§4.3.105's ladders are the only **designed, fixed-depth, single-axis** evidence
+about capacity, and they already cover w8–w9:
+
+| | w7 (ceiling) | w8 | w9 |
+|---|---|---|---|
+| large_diverse `\|log r\|` | 0.1623 | 0.2542 | **0.3620** |
+| large_diverse `cvar_ce` | 0.3898 | 0.4055 | **0.4740** |
+| large_play `\|log r\|` | 0.2583 | 0.3224 | **0.3459** |
+| large_play `cvar_ce` | 0.6663 | 0.9427 | **1.3238** |
+
+Monotone the wrong way on both axes, on both variants. §3.2.16 set the ceiling on
+exactly this evidence and nothing since has weakened it.
+
+#### 4. Below the floor is underfitting, already confirmed in-campaign
+
+All three 625-parameter (w4 d1) trials fail, two of them badly — `|log r|` 0.2610
+and 0.3089 with margins −0.0837 and −0.0496. That is §4.3.105's U-shape
+("large_diverse w4 has the worst mean CE, CVaR CE, SE and ess — consistent with
+underfitting") reproduced inside round 4.
+
+#### Consequences
+
+> ✅ **D drops out of the restart bundle, and MR/PT do NOT need re-running.**
+> §3.2.16's cross-family commonality is preserved, §3.1's comparability argument
+> is untouched, and the 8-sweep baseline re-run is avoided. The bundle is
+> A + B + C + E.
+
+**It also redirects the eligibility problem.** Eligibility is bound by gate 2,
+gate 2 is not capacity-shaped, so the levers are the two already queued:
+**B (stratification)**, which changes the prior's grip and therefore the
+posterior width that *sets* the CVaR/mean separation, and **C (penalised
+exploration)**, which helps the optimiser find an interior feasible region rather
+than widening the box around it. The plan is unchanged; this just removes the
+most expensive item from it.
+
+> **Considered and REFUSED: raising the chain count.** Gate 2's threshold is
+> `2 × jackknife-over-chains SE`, which scales `1/√C`, so more chains mechanically
+> loosen it — doubling to 64 would flip near-misses like `o7g6texk` (margin
+> −0.0012). **§4.3.101 pre-registered the prohibition**: *"Do not raise the chain
+> count or relax gate 2 in response to 2 of 4 failing — that is reactive tuning
+> (§0)."* And there is no independent argument for more: §3.2.8/§3.2.9 set 32
+> chains for the objective's SE target of ≤ 0.026, and the observed
+> `val_cvar_ce_se` is **0.0026–0.0092**, comfortably inside. **Chains stay at 32.**
+
+> **Observation, not acted on: no depth-4 trial is eligible (0 of 4).** Consistent
+> with §4.3.78's ρ(depth, `scale_z`) = +0.44 to +0.85 and §4.3.106's positive
+> depth main effect on `|log r|`. Narrowing depth on this basis is exactly the
+> reactive tuning refused above, and n = 4 is the sample size this project has
+> been burned by nine times (§4.3.64). **Record it; do not act on it.**
+
+**Caveat on the evidence.** The 26 round-4 trials are optimiser-chosen, not a
+designed grid, so capacity is confounded with whatever else the optimiser moved
+(§4.3.106 makes this point). The **upper bound** therefore rests on §4.3.105's
+designed ladders, which are fixed-depth and single-axis; the **interior-ness**
+rests on the round-4 trials, where it is a statement about *where the passes are*
+rather than a causal claim.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -12241,6 +12337,11 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **Bundle item D decided: the capacity ranges do NOT widen** (§4.3.111). The
+  eligible region is interior (897–10,817 of a 625–54,529 range) and gate-2
+  failure is not capacity-shaped (6 / 7 / 6 of 8 / 8 / 10 by tercile), so no
+  endpoint move creates a feasible region. **MR and PT are not re-run** — 8
+  sweeps avoided and §3.2.16's cross-family commonality preserved.
 - **The layout check ran on the box and found two bugs** (§4.3.110). The
   geometry diagnostic hardcoded a grid offset of (0,0) against the real (1,1) —
   0.1% of points landed in the right cell — and for **large** it read a
@@ -12288,23 +12389,27 @@ carries its own justification class, because §9 treats them differently.
 | A | `map_amp2` **6626 / 6611 → 6848 / 6838** | **arithmetic correction** to a derivation (§4.3.55 slip, confirmed §4.3.109) | none — not a response to observed behaviour |
 | B | `meas_sampling: stratified_cell` | **conditional on item 4's verdict**; changes the prior, so it needs stage-1 re-selection — which the restart provides | pre-register before relaunch (§0) |
 | C | penalised exploration (item 6) | **new design**, derived from the gate thresholds and the objective's SE | pre-register the form and the weight |
-| D | capacity ranges (see below) | **informed by observed behaviour** | declared §9 amendment, as §3.2.16 already paid once |
+| ~~D~~ | ~~capacity ranges~~ | **DECIDED 2026-09-17: NO CHANGE (§4.3.111)** | none — dropped |
 | E | cache bump → `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`** | mechanical | none — but §10.5's warning is the failure hardest to notice |
 
-> ⚠️ **D has a hidden cost that must be decided, not discovered.** §3.2.16 made
-> the capacity ranges **common across families** on comparability grounds (§3.1).
-> Widening the BNN's range therefore either **breaks that commonality** — which
-> needs its own argument, since §3.2.9 capped BNN `width` precisely so it got no
-> more room than the baselines — or **re-runs MR and PT too, 8 more sweeps**.
-> The baselines only just finished (§4.3.108). Decide this before relaunching.
-
-> **Why D is even on the table.** §4.3.108's 25-trial re-read: gate 2 alone
-> rejects **40%**, gate 3 never binds (0 of 25, min ess 41.5 against a floor of
-> 40), and the two live gates pull in **opposite** directions along capacity —
-> ρ(`n_params`, margin) = **+0.591**, ρ(`n_params`, `|log r|`) = **+0.286**.
-> §3.2.16 shrank the ranges and bought gate-1 passes at the price of gate-2
-> failures. Capacity is the largest single lever on the 16% eligibility, and a
-> restart is the only time it can be moved.
+> ✅ **D is CLOSED — §4.3.111. The ranges do not move, and MR/PT are not
+> re-run.** The eligible trials sit at 897–10,817 parameters inside a
+> 625–54,529 range (1.4× above the floor, 5× below the ceiling), so no boundary
+> binds; gate 2 fails at **every** capacity (6 / 7 / 6 of 8 / 8 / 10 by tercile),
+> so it is not capacity-shaped and no endpoint move creates a feasible region;
+> and §4.3.105's designed ladders show both gate 1 and the objective degrading
+> monotonically above the ceiling on both variants.
+>
+> **This is the expensive item, and dropping it is worth the most.** §3.2.16 made
+> the ranges common across families, so widening the BNN's would have either
+> broken that commonality — needing its own argument against §3.2.9, which capped
+> BNN `width` precisely so it got no more room than the baselines — or re-run MR
+> and PT, **8 sweeps that only just finished**. Neither is now needed.
+>
+> It also redirects the eligibility problem onto **B and C**, which is where the
+> work already was: gate 2 binds, gate 2 is not capacity-shaped, and B changes the
+> prior's grip on posterior width while C helps the optimiser find the interior
+> feasible region.
 
 **Two further questions the restart should answer explicitly, not by default:**
 
