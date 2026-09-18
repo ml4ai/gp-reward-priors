@@ -10807,11 +10807,17 @@ at λ_max while the stiffness sat at λ_min.
 > | medium | 1.4602 | **6848** | 6626 | **−3.4%** |
 > | large | 1.4624 | **6838** | 6611 | **−3.4%** |
 >
-> **Do NOT re-pin mid-campaign.** All 25 round-4 trials and all four diagnostic
-> arms carry 6626 / 6611; changing it now would fork the campaign (§9). 3.4% is
-> far inside the ~4× residual §7.3 already discloses, and the
-> random-vs-stratified shift of 0.2% is computed from the same `diag(K_geo)` on
-> both sides, so **nothing about the diagnostics moves**.
+> ✅ **FIX IT IN THE RESTART (user decision, 2026-09-17): the corrected pins are
+> 6848 (medium) / 6838 (large).** A restart is going ahead regardless, so the
+> round-4 trials are discarded and there is no campaign to fork — see §10.2's
+> restart bundle.
+>
+> **Leave the four diagnostic arms at 6626 / 6611**, which is what they and their
+> baselines already carry. That is not caution about §9, it is what keeps the
+> pairs matched — and the verdict transfers to the corrected amplitude anyway:
+> a 3.4% amplitude change moves `|log r|` by **0.001 (0.03σ)** and the degeneracy
+> margin by **≤0.0001 (≤0.02σ)**, calibrated on §4.3.17/§4.3.23's amplitude
+> ladder and §4.3.101's matched pair.
 >
 > **What it changes is the disclosure.** §7.3 reports `map_amp2` as "fixed on a
 > derivation" whose residual ~4× disagreement with medium_play's empirical
@@ -11961,8 +11967,9 @@ the original "~1e4" figure had dropped.
 > 1.4624**, not 1.5092 / 1.5126, giving a derived `map_amp2` of **6848 / 6838**.
 > §4.3.55 is internally inconsistent: it quotes `diag(K_geo)` ≈ 0.463 — which is
 > right — but `1 + 0.463 + 0.001 = 1.464`, not 1.509. **Report the corrected
-> derived value and state that the pinned 6626 / 6611 sits 3.4% below it.** The
-> pins are NOT changed mid-campaign (§9); the correction is a next-round item.
+> derived value.** The pins are corrected to **6848 / 6838** in the restart
+> (§10.2's restart bundle); the round-4 trials that carried 6626 / 6611 are
+> discarded with the rest.
 
 medium_play's empirically CVaR-optimal amplitude is **1.69e3** — a **3.9×**
 disagreement, inside the spacing of §4.3.17's decade ladder but real. §4.3.23
@@ -12242,7 +12249,7 @@ round-1 reference values that stage 3 sets.
   81%**, not 50%. No training run is affected. Fixed at source.
 - **§4.3.55's multiplier is confirmed an arithmetic slip** — the derived
   `map_amp2` is **6848 / 6838**, so the pinned 6626 / 6611 is **3.4% low**.
-  Not re-pinned mid-campaign; it is a disclosure fix and a next-round item.
+  Corrected in the restart (see the restart bundle below).
 - **Eligibility re-read at 25 trials** (§4.3.108): still **4 eligible (16%)**,
   **gate 2 alone now rejects 40%**, **gate 3 no longer binds at all**, all four
   sweeps' ungated best is ineligible, and **15 of 25 verdicts sit within one seed-sd
@@ -12268,13 +12275,65 @@ round-1 reference values that stage 3 sets.
    **Check validity before anything else**: clamp ≈ 0, and the log must print the
    expected cell count and `cond(K)` ≈ 2e2.
 
+#### THE RESTART BUNDLE — decided 2026-09-17: round 4 will be restarted
+
+**User decision: the standing issues are all fixed and the sweeps relaunched.**
+So "don't change it mid-campaign" no longer applies to anything below — the 25
+round-4 trials are discarded either way, as round 3's 26 were (§3.2.12 item 5).
+What matters now is that **everything lands in ONE restart**, and that each item
+carries its own justification class, because §9 treats them differently.
+
+| # | change | justification class | §9 cost |
+|---|---|---|---|
+| A | `map_amp2` **6626 / 6611 → 6848 / 6838** | **arithmetic correction** to a derivation (§4.3.55 slip, confirmed §4.3.109) | none — not a response to observed behaviour |
+| B | `meas_sampling: stratified_cell` | **conditional on item 4's verdict**; changes the prior, so it needs stage-1 re-selection — which the restart provides | pre-register before relaunch (§0) |
+| C | penalised exploration (item 6) | **new design**, derived from the gate thresholds and the objective's SE | pre-register the form and the weight |
+| D | capacity ranges (see below) | **informed by observed behaviour** | declared §9 amendment, as §3.2.16 already paid once |
+| E | cache bump → `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`** | mechanical | none — but §10.5's warning is the failure hardest to notice |
+
+> ⚠️ **D has a hidden cost that must be decided, not discovered.** §3.2.16 made
+> the capacity ranges **common across families** on comparability grounds (§3.1).
+> Widening the BNN's range therefore either **breaks that commonality** — which
+> needs its own argument, since §3.2.9 capped BNN `width` precisely so it got no
+> more room than the baselines — or **re-runs MR and PT too, 8 more sweeps**.
+> The baselines only just finished (§4.3.108). Decide this before relaunching.
+
+> **Why D is even on the table.** §4.3.108's 25-trial re-read: gate 2 alone
+> rejects **40%**, gate 3 never binds (0 of 25, min ess 41.5 against a floor of
+> 40), and the two live gates pull in **opposite** directions along capacity —
+> ρ(`n_params`, margin) = **+0.591**, ρ(`n_params`, `|log r|`) = **+0.286**.
+> §3.2.16 shrank the ranges and bought gate-1 passes at the price of gate-2
+> failures. Capacity is the largest single lever on the 16% eligibility, and a
+> restart is the only time it can be moved.
+
+**Two further questions the restart should answer explicitly, not by default:**
+
+- **Replicates before naming a winner.** §4.3.35 made replication standing
+  practice and the campaign has drifted: every round-4 trial is n = 1, and 15 of
+  25 verdicts sit within one seed-sd of a gate (§4.3.108). Either replicate the
+  top few trials before selecting, or state the eligible fraction as an estimate
+  with its own uncertainty. Costs a handful of runs, not a redesign.
+- **Leave gate 3's floor at 40.** It no longer binds, and §4.3.88's coupling
+  `τ = 1 + C/√ess` means a *higher* floor would make gate 1 **tighter** — the
+  wrong direction when gate 1 is already binding. Raising it to match observed
+  ess would also be calibrating a pre-registered threshold on results, which
+  §4.3.87 and §4.3.94 both refused. **Recommend: no change.**
+
+**Not in the bundle, deliberately:** `map_eta`. §4.3.60 reverted η = 4 because it
+broke the centred gate on three of four variants, and §4.3.54's correlation-length
+limitation stands. Stratification drops `cond(K)` ~1000×, which is the cost that
+made η = 4 unaffordable — so a longer correlation length may become reachable —
+but that is a **new question needing its own diagnostic**, not a fix to bundle in
+blind. Record it as a future-round candidate.
+
 **DECISIONS WAITING ON ITEM 4**
 
-5. **Adopt stratified sampling, or not.** It changes the prior, so adoption means
-   stage-1 re-selection: discard the 25 trials, bump the cache to
-   `sweep_ids_bnn_round5.txt`, relaunch. Pre-register before relaunching (§0).
-   If the `n_meas` control explains the effect, change `n_meas` instead — far
-   cheaper, and it is already a pinned value rather than a code path.
+5. **Adopt stratified sampling, or not** (bundle item B). If item 4 returns
+   ADOPT-CANDIDATE, set `meas_sampling: stratified_cell` in the four BNN configs
+   and pre-register it before relaunching (§0). If the `n_meas` control explains
+   the effect, change **`n_meas`** instead — far cheaper, and it is already a
+   pinned value rather than a code path. If NULL or TRADE, change neither and
+   restart on A + C + D alone.
 6. **Penalised exploration, or not** (user's proposal). The measured problem, now
    worse than when this item was written: **all four** sweeps' ungated best is
    ineligible, and choosing the eligible best costs **17.6% / 12.4% / 3.7%** on
@@ -12283,8 +12342,8 @@ round-1 reference values that stage 3 sets.
    Recommended form: **penalise the metric the OPTIMISER sees, keep the hard
    gates at selection**, so validity stays non-tradeable and the winner rule is
    unchanged. The penalty weight must be derived from the gate thresholds and the
-   objective's own SE, not tuned. Also requires a restart, so **batch it with
-   item 5 — one restart, not two.**
+   objective's own SE, not tuned. Bundle item C — it goes in the same restart as
+   everything else.
    > **Design note for whoever writes it.** Gate 3 no longer binds (0 of 25
    > failures) and gates 1 and 2 pull in *opposite* directions along capacity, so
    > a penalty that simply adds both gate distances will push the optimiser into
@@ -12337,7 +12396,7 @@ round-1 reference values that stage 3 sets.
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
 
-**QUEUED — FUTURE-ROUND CANDIDATES (do not act mid-campaign — §9)**
+**QUEUED — FUTURE-ROUND CANDIDATES (after the restart, not in it)**
 
 17. **Regularisation as a search dimension.** MR exposes none at all (no weight
     decay, no dropout) and PT only a fixed `dropout 0.1`. That, not the capacity
@@ -12350,13 +12409,14 @@ round-1 reference values that stage 3 sets.
     later improvement was 13 against K = 15.
 20. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
     so the seeds 1–10 lineages share most eval-env seeds. Low priority.
-21. **Replicates as standing practice at the sweep budget.** §4.3.35 made
-    replication standing practice for load-bearing configurations and the
-    campaign has drifted away from it: every round-4 trial is n = 1, and
-    §4.3.108's 25-trial re-read shows 15 of 25 verdicts inside one seed-sd of a
-    gate. A future round should either replicate the top few trials before naming
-    a winner, or state the eligible fraction as an estimate with its own
-    uncertainty.
+21. **`map_eta` / the prior's correlation length.** §4.3.60 reverted η = 4
+    because it broke the centred gate on three of four variants, and §4.3.54's
+    finding stands: η = 1 delivers ~1 cell, not the 2–4 every config comment
+    once claimed. **Stratification drops `cond(K)` ~1000×, which is exactly the
+    cost that made η = 4 unaffordable**, so a longer correlation length may
+    become reachable. Needs its own diagnostic; do not bundle it blind.
+    *(Replication before naming a winner has moved INTO the restart bundle — see
+    §10.2's "two further questions".)*
 
 ---
 
