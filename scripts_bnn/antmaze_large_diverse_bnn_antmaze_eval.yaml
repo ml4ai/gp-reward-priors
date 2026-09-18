@@ -122,3 +122,16 @@ early_stop_acc_threshold: 0.0  # skip chains if warm-up acc below this (null = o
 print_every_n_samples: 10
 seed: 1
 OUT_DIR: ./exp/reward_learning/antmaze_large_diverse_bnn_eval
+
+# ---- Item F (handoff 4.3.114), round 5 ---------------------------------------
+# Centre each posterior draw before the CVaR reduction, so the per-point tail
+# selection is driven by the IDENTIFIED reward shape rather than by the draw's
+# unidentified additive constant -- which 5.2's gauge overwrites downstream
+# anyway.  Measured on ten runs (4.3.113/4.3.114): left raw, the same draws are
+# selected at every (s,a), the penalty depth goes near-constant and the CVaR
+# reward collapses to `mean - constant`.  Raw CVaR accuracy sat at 0.80-0.92,
+# indistinguishable from the mean reward's.
+#
+# The DEPLOYMENT side must match (iql_eval.py / iql.py, centre_draws), or
+# 3.2.1's selection-matches-deployment property breaks.
+centre_draws: true

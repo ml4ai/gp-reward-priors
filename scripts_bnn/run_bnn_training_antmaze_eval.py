@@ -256,6 +256,25 @@ class TrainConfig:
     # sort so the extra ones are free, and recording them means a wrong choice
     # of selection level costs a re-scoring rather than a re-run (3.2.2).
     cvar_ce_conservatism_levels: str = "0.0,0.5,0.75,0.9,0.95"
+    # ---- Item F (handoff 4.3.114): centre each draw before the CVaR ---------
+    # f_j = g_j + c_j, with c_j the draw's unidentified additive constant.  The
+    # BT likelihood is exactly invariant to it (4.3.10) and 5.2's gauge
+    # overwrites the reward's level downstream, so leaving it in lets it dominate
+    # the per-point tail selection: the SAME draws are chosen at every (s,a),
+    # depth_i goes near-constant, and the CVaR reward collapses to
+    # `mean - constant` whose conservatism the gauge then cancels.  Measured on
+    # ten runs (4.3.113, 4.3.114): raw CVaR accuracy sat at 0.80-0.92, i.e.
+    # indistinguishable from the mean reward's.
+    #
+    # DEFAULT FALSE so every archived run reproduces bit-identically.  The
+    # round-5 configs set it True, and launch_hp_sweeps.sh REFUSES to launch the
+    # BNN sweeps unless they do -- the same guard pattern as `burn_in_lr` (3.7),
+    # because a silently-unset flag here would select on the wrong quantity.
+    #
+    # MUST move together with the DEPLOYMENT side (iql_eval.py / iql.py,
+    # qlearning_dataset_bnn and qlearning_dataset_mr_ensemble), or 3.2.1's
+    # selection-matches-deployment property breaks.
+    centre_draws: bool = False
     # Gradient-clip scope (Issue 3): clip in burn-in always, in sampling only if
     # clip_during_sampling.  With bt_pool="mean" the logits are bounded, so the
     # sampling-phase clip should be unnecessary (default off).
@@ -1296,6 +1315,7 @@ def train(config: TrainConfig):
                 list(range(config.num_chains)),
                 device=str(device), bt_pool=config.bt_pool,
                 alpha=1.0 - config.cvar_ce_conservatism, alpha_sweep=_alphas,
+                centre_draws=config.centre_draws,
             )
             # Degeneracy gate (3.2.6), logged so the winner-selection step can
             # filter on it -- wandb sweeps cannot express a gate, so it is

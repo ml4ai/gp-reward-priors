@@ -470,7 +470,7 @@ def weight_f_coupling(run_dir, chain_ids, pred_chains, device="cpu",
 def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
             bt_pool="mean", alpha=0.05, alpha_sweep=None, per_chain=False,
             max_pairs=None, max_draws=None,
-            chunk_pairs=64):
+            chunk_pairs=64, centre_draws=False):
     """Validation CE computed from the CVaR reward -- a selection objective.
 
     Section 4.3.14 showed that selecting on the posterior-MEAN predictive CE
@@ -571,9 +571,34 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
         p1 = 1.0 / (1.0 + np.exp(-d))
         return _ce_acc(p1) + (S, k, d)
 
-    def _sorted_over(idx):
-        return (np.sort(P1[idx].reshape(-1, B, T).astype(np.float64), axis=0),
-                np.sort(P2[idx].reshape(-1, B, T).astype(np.float64), axis=0))
+    def _stack(idx):
+        return (P1[idx].reshape(-1, B, T).astype(np.float64),
+                P2[idx].reshape(-1, B, T).astype(np.float64))
+
+    def _centre(o1, o2):
+        """Remove each DRAW's global offset before the per-point tail selection.
+
+        Handoff item F (section 4.3.114).  f_j = g_j + c_j, with c_j the draw's
+        unidentified additive constant: the BT likelihood is exactly invariant to
+        it (4.3.10) and section 5.2's gauge overwrites the reward's level
+        downstream anyway.  Left in, c_j dominates the per-point sort, the SAME
+        draws are selected at every (s,a), depth_i goes near-constant and the
+        CVaR reward collapses to `mean - constant` -- the conservatism cancels
+        against the gauge.  Measured on ten runs in 4.3.113/4.3.114.
+
+        The offset is the draw's mean over ALL points of BOTH segments, i.e. the
+        set the reduction is computed over.  It is a per-draw quantity, so it
+        does not depend on which chains a jackknife subset holds.
+        """
+        off = ((o1.sum(axis=(1, 2)) + o2.sum(axis=(1, 2)))
+               / (o1[0].size + o2[0].size))
+        return o1 - off[:, None, None], o2 - off[:, None, None]
+
+    def _sorted_over(idx, centred=None):
+        o1, o2 = _stack(idx)
+        if centre_draws if centred is None else centred:
+            o1, o2 = _centre(o1, o2)
+        return np.sort(o1, axis=0), np.sort(o2, axis=0)
 
     def _cvar_over(idx, a=alpha):
         """CVaR CE using only the chains in `idx`.  Pools their draws."""
@@ -718,22 +743,25 @@ def cvar_ce(run_dir, dataset, width, depth, chain_ids, device="cpu",
     # manufacturing it, and a large ratio cannot be an offset artefact.  This
     # block measures it instead of arguing it: re-run the whole reduction on f
     # with each draw's offset removed, and compare.
-    _o1 = P1.reshape(-1, B, T).astype(np.float64)
-    _o2 = P2.reshape(-1, B, T).astype(np.float64)
-    _n1, _n2 = _o1[0].size, _o2[0].size
-    _off = (_o1.sum(axis=(1, 2)) + _o2.sum(axis=(1, 2))) / (_n1 + _n2)
-    _c1 = np.sort(_o1 - _off[:, None, None], axis=0)
-    _c2 = np.sort(_o2 - _off[:, None, None], axis=0)
-    ce_c, acc_c, _, _, d_c = _from_sorted(_c1, _c2, alpha)
-    g1c = bt_pool_logit_np((_o1 - _off[:, None, None]).mean(axis=0) * am1, am1, bt_pool)
-    g2c = bt_pool_logit_np((_o2 - _off[:, None, None]).mean(axis=0) * am2, am2, bt_pool)
+    # The block always reports BOTH conventions, whichever one is primary, so
+    # the comparison is never centred-against-centred (item F, section 4.3.114).
+    _a1, _a2 = _sorted_over(allc, centred=not centre_draws)
+    ce_c, acc_c, _, _, d_c = _from_sorted(_a1, _a2, alpha)
+    _m1o, _m2o = _stack(allc)
+    if not centre_draws:
+        _m1o, _m2o = _centre(_m1o, _m2o)
+    g1c = bt_pool_logit_np(_m1o.mean(axis=0) * am1, am1, bt_pool)
+    g2c = bt_pool_logit_np(_m2o.mean(axis=0) * am2, am2, bt_pool)
     dm_c = g1c - g2c
     dp_c = dm_c - d_c
     _sdm_c, _sdp_c = float(np.std(dm_c)), float(np.std(dp_c))
+    _prim = "centred f" if centre_draws else "raw f"
+    _altl = "raw f" if centre_draws else "centred f"
     print("\n  --- OFFSET ROBUSTNESS of the CVaR rows (section 4.3.61) ---")
-    print("  Same reduction on f with each draw's offset removed.  The")
-    print("  mean-based rows are EXACTLY invariant and are not re-listed.")
-    print(f"  {'':26}{'raw f':>12}{'centred f':>12}")
+    print(f"  The same reduction under both conventions.  PRIMARY = {_prim}")
+    print(f"  (centre_draws={centre_draws}).  The mean-based rows are EXACTLY")
+    print("  invariant and are not re-listed.")
+    print(f"  {'':26}{_prim:>12}{_altl:>12}")
     print(f"  {'CVaR CE':<26}{cvar_ce_v:>12.4f}{ce_c:>12.4f}")
     print(f"  {'CVaR acc':<26}{cvar_acc:>12.4f}{acc_c:>12.4f}")
     print(f"  {'sd(d_mean)':<26}{_sd_m:>12.4f}{_sdm_c:>12.4f}")
@@ -2349,6 +2377,14 @@ def main():
                          "PCA basis is estimated from the same autocorrelated "
                          "draws it measures and misclassified all three "
                          "synthetic controls. Section 4.3.69.")
+    ap.add_argument("--centre-draws", action="store_true",
+                    help="Item F (handoff 4.3.114): remove each DRAW's global "
+                         "offset before the per-point CVaR tail selection.  The "
+                         "offset is unidentified by the BT likelihood and 5.2's "
+                         "gauge overwrites the level downstream, so leaving it in "
+                         "spends the conservatism budget on a quantity the "
+                         "pipeline discards.  Default OFF so archived runs "
+                         "reproduce bit-identically; the round-5 configs set it.")
     ap.add_argument("--cvar-ce-per-chain", action="store_true",
                     help="Also run the whole CVaR reduction inside each chain "
                          "separately. Separates a posterior that is genuinely "
@@ -2478,7 +2514,8 @@ def main():
                 device=args.device, bt_pool=cfg.get("bt_pool", "mean"),
                 alpha=_a, alpha_sweep=sweep,
                 per_chain=args.cvar_ce_per_chain,
-                max_pairs=args.ce_pairs, max_draws=args.max_draws)
+                max_pairs=args.ce_pairs, max_draws=args.max_draws,
+                centre_draws=args.centre_draws)
 
     if args.ce_ladder:
         levels = []

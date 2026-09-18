@@ -11473,7 +11473,38 @@ where the tail is shallower and the centred objective will sit closer to the
 mean — so the criterion is met a fortiori. The 0.75 values arrive automatically
 once F is wired, since `val_cvar_ce` is logged at the selection level.*
 
-**Round-5 bundle gains item F: centre in both paths** —
+#### WIRED 2026-09-18
+
+| file | change |
+|---|---|
+| `scripts_bnn/diagnose_sampling_tail.py` | `cvar_ce(..., centre_draws=False)`; the centring lives in `_sorted_over`, the **single** place draws are stacked and sorted, so the objective, the **jackknife SE** and therefore **gate 2's threshold** all inherit it consistently. `--centre-draws` on the CLI. The offset-robustness block now always reports **both** conventions, labelled by which is primary, so it is never centred-against-centred. |
+| `scripts_bnn/run_bnn_training_antmaze_eval.py` | `centre_draws: bool = False` in `TrainConfig`, threaded to the CVaR call. |
+| `algorithms/offline/iql_eval.py`, `iql.py` (parent repo) | `centre_draws: bool = False` in both configs; the transform `all_preds -= all_preds.mean(axis=1, keepdims=True)` at **all four** CVaR sites — `qlearning_dataset_bnn` *and* `qlearning_dataset_mr_ensemble` in each file, so MR-ensemble-CVaR moves with the BNN and §3.1 comparability holds. |
+| the four `antmaze_*_bnn_antmaze_eval.yaml` | `centre_draws: true` |
+| `launch_hp_sweeps.sh` | **refuses to launch the BNN sweeps** unless the base config sets `centre_draws: true` — the same guard pattern as `burn_in_lr` (§3.7), verified to fire. |
+
+**The field DEFAULTS FALSE** so every archived run reproduces bit-identically
+(§4.3.81's `transfer_fn` convention); round 5 sets it explicitly and the
+launcher enforces that.
+
+**`scripts_bnn/test_centre_draws.py`** — self-test, passes. It checks the
+load-bearing property first: **centring shifts the posterior MEAN reward by a
+constant only** (spread 1.3e−14), so `gauge_reward` removes it and the
+mean-reward baseline and the MR/PT comparison are untouched. Also: centring is
+idempotent; a dominant offset drives the **raw** penalty depth to near-constant
+across states (CV 0.0015 — the mechanism inert) while the **centred** depth stays
+state-dependent (37× that); selection and deployment centre identically to
+1.4e−14; and the two deployment files carry matching blocks (§5.2's discipline).
+
+> **One thing the test corrected.** Its first version asserted that centring is a
+> no-op when no offset is injected. That is **false**: with finite N each draw's
+> *empirical* mean over states fluctuates as ~sd/√N, centring removes that too,
+> and removing it perturbs the tail selection slightly. That is intended — the
+> draw's empirical global level is the unidentified direction whether it came
+> from drift or from sampling noise. The exact invariant is **idempotence**, and
+> that is what the test now asserts.
+
+**Round-5 bundle item F: centre in both paths** —
 `cvar_ce` (selection), `qlearning_dataset_bnn` and
 `qlearning_dataset_mr_ensemble` (deployment), with gate 2 inheriting the change.
 Selection and deployment move together, so §3.2.1's matching property is

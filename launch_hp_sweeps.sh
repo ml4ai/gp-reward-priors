@@ -17,7 +17,8 @@
 # are — see HANDOFF_HP_SELECTION.md sections 3 and 3.7.  The set names replace
 # the old phase numbers because those numbers encoded the retired tiering.
 #
-# The BNN sweeps require their base config NOT to set `burn_in_lr`, so
+# The BNN sweeps require their base config NOT to set `burn_in_lr`, and TO set
+# `centre_draws: true` (item F, handoff 4.3.114), so
 # that burn-in inherits the swept `sghmc_lr`.  The preflight enforces this: a
 # base config that sets it would silently reinstate the mismatch that ended
 # round 1, and nothing downstream would show that it had.
@@ -186,6 +187,17 @@ for entry in "${ENTRIES[@]}"; do
             echo "PREFLIGHT: $base sets burn_in_lr — remove it." >&2
             echo "  The merged sweep needs burn-in to inherit the swept sghmc_lr;" >&2
             echo "  setting it here reinstates the round-1 mismatch invisibly." >&2
+            fail=1
+        elif ! grep -qE '^[[:space:]]*centre_draws[[:space:]]*:[[:space:]]*(true|True)[[:space:]]*$' "$base"; then
+            echo "PREFLIGHT: $base does not set centre_draws: true — add it." >&2
+            echo "  Item F (handoff 4.3.114): the CVaR reduction must run on" >&2
+            echo "  offset-removed draws, or the tail selection is driven by the" >&2
+            echo "  unidentified constant that 5.2's gauge then discards, the" >&2
+            echo "  penalty depth goes near-constant, and the sweep selects on a" >&2
+            echo "  quantity whose conservatism has already cancelled." >&2
+            echo "  The field DEFAULTS FALSE so archived runs reproduce; round 5" >&2
+            echo "  must set it explicitly, and the DEPLOYMENT side (iql_eval.py /" >&2
+            echo "  iql.py, centre_draws) must be set to match." >&2
             fail=1
         fi
     fi
