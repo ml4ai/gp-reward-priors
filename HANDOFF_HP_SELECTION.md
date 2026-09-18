@@ -10520,6 +10520,61 @@ eligible**, so the picture is worse, not better:
 > configuration. **Quote the fraction with its trial count, and if a winner ends
 > up within ~1σ of a gate, disclose that its eligibility is seed-dependent.**
 
+**Final state at the pause — 27 trials, all finished (2026-09-17).** The last two
+completed and neither is eligible:
+
+| trial | variant | w/d | params | `\|log r\|` | margin | `cvar_ce` | verdict |
+|---|---|---|---|---|---|---|---|
+| `vdg14jin` | medium_play | 7/4 | **54,529** (range ceiling) | **0.5254** = 4.6× τ | **+0.0337** | 0.3277 | gate 1 |
+| `1xiicp4z` | large_diverse | 6/4 | 14,977 | **0.9886** = 8.6× τ | −0.0224 | 0.4233 | gates 1 + 2 |
+
+**`vdg14jin` is the frontier in a single trial**: the largest model in the search,
+the **best gate-2 margin of the whole campaign** (+0.0337), and the second-worst
+gate-1 failure. Final tallies: **4 of 27 eligible (15%)**, gate 2 alone rejects
+**37%**, gate 3 never binds (min centred ess **41.5**), 0 unsynced.
+
+> **The two gates load on DIFFERENT architecture axes**, which no earlier read
+> separated — §4.3.106 looked for a width×depth *interaction* and had no power
+> for it, but the **main effects** come apart cleanly:
+>
+> | depth | n | eligible | median `\|log r\|` | | width | n | eligible | median margin |
+> |---|---|---|---|---|---|---|---|---|
+> | 1 | 7 | 1 | 0.0864 | | 4 | 9 | 2 | **−0.0138** |
+> | 2 | 6 | 1 | 0.0363 | | 5 | 5 | 0 | −0.0086 |
+> | 3 | 8 | 2 | 0.1035 | | 6 | 7 | 1 | −0.0015 |
+> | **4** | **6** | **0** | **0.3418** | | **7** | 6 | 1 | **+0.0146** |
+>
+> **Width is the gate-2 lever; depth is the gate-1 poison.** Every eligible trial
+> is depth ≤ 3, at widths 4, 4, 6 and 7 — the feasible region is *wide and
+> shallow*, not "mid-capacity". Depth 4 is 0 for 6 with a median `|log r|` of
+> **3× τ**, three times the next-worst depth.
+>
+> **Recorded, still not acted on.** Narrowing `depth` to 1–3 would be reactive
+> range-tuning (§9) and would break §3.2.16's cross-family commonality or force
+> the MR/PT re-run §4.3.111 just avoided. **But it sharpens the case for bundle
+> item C**: ~22% of the search budget (6 of 27 trials) went to a depth that has
+> never produced an eligible trial, and a gate-aware optimiser metric would walk
+> away from it **without any range change at all**. That is the cheapest fix for
+> the same problem, and it needs no §9 amendment.
+
+**Per variant, and large_diverse is the outlier:**
+
+| variant | finished | eligible | fails gate 1 only | gate 2 only | **both** |
+|---|---|---|---|---|---|
+| medium_play | 7 | 1 | 2 | 2 | 2 |
+| medium_diverse | 7 | 1 | 1 | 3 | 2 |
+| large_play | 7 | **2** | 1 | 3 | 1 |
+| **large_diverse** | 6 | **0** | 0 | 2 | **4** |
+
+large_diverse fails **both** gates in 4 of 6 and has produced nothing eligible.
+If that persists after the restart, §3.2.9's clause is the honest outcome for it:
+*"no eligible configuration at this budget"* is a result to disclose, not to
+escalate around.
+
+**Stopping-rule state at the pause** — none was close to firing, so the restart
+discards little search progress: trials since the ungated best last improved are
+**6 / 2 / 0 / 4** against K = 15, at 6–7 trials each against a cap of 130.
+
 ### 4.3.109 Stratified-by-cell measurement sampling — flag built, diagnostics pending (2026-09-17)
 
 An independent AI-assisted diagnostic report (user-supplied, two revisions)
@@ -11051,7 +11106,15 @@ most expensive item from it.
 > reactive tuning refused above, and n = 4 is the sample size this project has
 > been burned by nine times (§4.3.64). **Record it; do not act on it.**
 
-**Caveat on the evidence.** The 26 round-4 trials are optimiser-chosen, not a
+> ✅ **Re-checked at 27 trials (2026-09-17), and the decision STRENGTHENS.** The
+> last two to finish were both large-and-deep and both failed gate 1 hard —
+> `vdg14jin` at the range ceiling (54,529p, `|log r|` 0.5254 = 4.6× τ) and
+> `1xiicp4z` (14,977p, 0.9886 = 8.6× τ). ρ(`n_params`, `|log r|`) rose
+> **+0.340 → +0.396**, gate-1 failures in the top tercile are now **8 of 9**, and
+> gate 2 still fails at every capacity (7 / 7 / 5 of 9 / 9 / 9). The eligible
+> region is unchanged and still interior. **Nothing here argues for widening.**
+
+**Caveat on the evidence.** The 27 round-4 trials are optimiser-chosen, not a
 designed grid, so capacity is confounded with whatever else the optimiser moved
 (§4.3.106 makes this point). The **upper bound** therefore rests on §4.3.105's
 designed ladders, which are fixed-depth and single-axis; the **interior-ness**
@@ -12337,6 +12400,11 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **All 27 round-4 trials are finished** and read out (§4.3.108): **4 eligible
+  (15%)**, gate 2 alone rejects 37%, gate 3 never binds, 0 unsynced, and no sweep
+  was close to firing (6 / 2 / 0 / 4 against K = 15). **Width is the gate-2
+  lever, depth is the gate-1 poison** — 0 of 6 depth-4 trials eligible, median
+  `|log r|` 3× τ — which is the sharpest argument yet for bundle item C.
 - **Bundle item D decided: the capacity ranges do NOT widen** (§4.3.111). The
   eligible region is interior (897–10,817 of a 625–54,529 range) and gate-2
   failure is not capacity-shaped (6 / 7 / 6 of 8 / 8 / 10 by tercile), so no
@@ -12454,8 +12522,17 @@ blind. Record it as a future-round candidate.
    > a penalty that simply adds both gate distances will push the optimiser into
    > the middle of a frontier rather than toward a feasible point. Penalise the
    > **binding** gate per trial, or penalise the pair jointly — and check the
-   > proposed form against the 25 existing trials before launching, since that
+   > proposed form against the 27 existing trials before launching, since that
    > re-scoring is free.
+   >
+   > **The strongest single argument for C, measured at the pause:** the two
+   > gates load on **different architecture axes** — width helps gate 2 (median
+   > margin −0.0138 at w4 → **+0.0146** at w7), depth destroys gate 1 (median
+   > `|log r|` 0.0364 at d2 → **0.3418** at d4, and **0 of 6** depth-4 trials
+   > eligible). **~22% of the search budget went to a depth that has never
+   > produced an eligible trial.** A gate-aware metric walks the optimiser off
+   > that region with **no range change and no §9 amendment** — which is exactly
+   > the fix §4.3.111 declined to buy by moving the endpoints.
 
 **AFTER THE BNN SWEEPS FIRE**
 
