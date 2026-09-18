@@ -11094,7 +11094,14 @@ posterior simply runs away.
 > *minimised*, so such a trial could never win. But record it — the gate set
 > detects neither end of the width axis, and only the objective does.
 
-#### The control is the real finding, and it points the other way
+#### The control looked like the real finding — SOFTENED by §4.3.113
+
+> ⚠️ **Read this subsection with §4.3.113.** The control's improvement is real
+> *as a deployed number*, but the offset-robustness measurement shows how it was
+> bought: on centred `f` its CVaR CE is **0.6928 ≈ log 2**, i.e. its CVaR reward
+> is ≈ `mean − constant` and §5.2's gauge removes most of it. It improves the
+> objective by being **less conservative** — §3.2.7's warning — and it still
+> fails gate 2. **It is not the promising lead this subsection calls it.**
 
 `n_meas` 26 with **random** sampling — the cheap arm — beats its baseline on the
 objective at **both** conservatism levels (0.318 → 0.229 selection, 0.322 → 0.245
@@ -11132,6 +11139,92 @@ directions dominates strengthening one across 22, by an order of magnitude in
 dimension. **A per-unit-norm force is not an effect size until it is weighted by
 the dimension it acts on** — the same class of error as §4.3.42 aiming `sig_c2`
 at λ_max while the stiffness sat at λ_min, and it is now twice in this document.
+
+### 4.3.113 Offset robustness measured: RAW is the deployed quantity, and the control's advantage is suppression
+
+Run 2026-09-18 on the four §4.3.109 arms' saved chains, at conservatism 0.95.
+`exp/cvar_offset_robustness.txt`.
+
+#### The measurement
+
+**All four arms report "the offset is materially involved in the tail selection;
+quote the centred column"** — the width/preference ratio moves **+37% to +235%**
+under centring. None is ROBUST.
+
+| arm | CVaR CE raw → centred | CVaR acc raw → centred | ratio moves |
+|---|---|---|---|
+| `n26_medium_play` | 0.2451 → **0.6928** | 0.883 → 0.727 | +235% |
+| `strat_medium_play` | 0.3732 → **2.1182** | 0.844 → 0.649 | +215% |
+| `strat_large_play` | 6.6579 → **7.9331** | 0.685 → 0.593 | +37% |
+| `strat_large_diverse` | 4.7259 → **10.9209** | 0.509 → **0.318** | +68% |
+
+`log 2` = 0.6931. **The `n_meas` 26 control lands on log 2 almost exactly under
+centring.**
+
+#### RAW is the right selection quantity — verified in the deployment code
+
+`algorithms/offline/iql_eval.py` builds the deployed reward as
+`partitioned[:n_tail].mean(axis=0)` over the **raw** posterior draws per
+transition. **There is no centring anywhere in the deployment path.** So raw CVaR
+CE *is* the quantity IQL consumes, §3.2.1's objective correctly matches
+deployment, and **selection stays on raw.**
+
+> ⚠️ **§4.3.112's amendment to read rule (1) on the centred column is therefore
+> WITHDRAWN**, before any rung ran. Selecting on centred would optimise a
+> quantity the pipeline never computes. **Wave 2's three baseline re-runs become
+> optional** — the rule needs only wandb's raw values, which the baselines
+> already have. The ladder is back to **six runs, one wave**.
+
+#### What the centred column *does* tell you, and it is not nothing
+
+The mechanism is §4.3.61's, now quantified: when offset variance dominates, every
+point selects the **same** lowest-offset draws, so `depth_i` goes near-constant
+and `r_cvar ≈ r_mean − c` with `c` common across states. **§5.2's gauge then
+subtracts a constant anyway** (max → 0), so for such a run the deployed
+conservative reward is **nearly the deployed mean reward**. That is not a
+measurement artefact — it is the method's mechanism being weak in that run, and
+it is exactly what gate 2 exists to detect.
+
+> **So §4.3.109's "the control is the real finding" must be softened, and is.**
+> The `n_meas` 26 control's raw improvement (0.3217 → 0.2451 at deployment) is
+> real *as a deployed number*, but the centred column shows how it was bought:
+> its CVaR reward is ≈ mean − constant, so it improves the objective by being
+> **less conservative**. It still fails gate 2 (margin −0.0021). This is §3.2.7's
+> warning materialising — *"minimising CVaR CE pushes selection toward
+> configurations where CVaR ≈ mean"* — and it means the control is **not** the
+> promising lead §4.3.109 called it.
+
+#### But offset does NOT explain gate 2's rejection rate — tested and null
+
+The obvious next inference — that gate 2's 37% alone-rejection rate is offset
+suppression — **is not supported.** Across all 27 round-4 trials, with
+offset/shape = `val_pred_sd_median / val_pred_centred_sd_median`:
+
+| | |
+|---|---|
+| ρ(offset/shape, degeneracy **gap**) | −0.258 (weak, right direction) |
+| ρ(offset/shape, degeneracy **margin**) | **+0.234 — wrong direction** |
+| median offset/shape, gate 2 PASS vs FAIL | 10.22× vs 12.13× |
+| gate-2 pass rate by offset/shape tercile | **2/9, 4/9, 2/9 — no trend** |
+
+The *gap* does shrink with offset (median 0.0361 → 0.0126 → 0.0085 across
+terciles), but the *threshold* moves with it, so the **margin** does not.
+**Gate 2's rejections are not an offset artefact**, and the worry raised in
+§4.3.112 is withdrawn.
+
+#### What to carry forward
+
+1. **Selection stays on raw.** No change to §3.2.1, gate 2, or `cvar_ce`'s return
+   value. The §4.3.112 amendment is withdrawn and wave 2 is optional.
+2. **Report the centred CVaR CE as a conservatism diagnostic** beside the raw
+   value for any configuration that is reported — it says how much of the
+   apparent conservatism survives the gauge. A run whose centred CE sits at
+   `log 2` has a CVaR reward that is a global shift, not per-state conservatism.
+3. **§7 owes a disclosure.** On every configuration measured this way, the
+   deployed conservative reward's tail selection is substantially driven by the
+   sampler's unidentified offset rather than by per-state posterior width. That
+   is a limitation of the deployed mechanism, not of the metric, and it should be
+   stated rather than discovered by a reader.
 
 ### 4.3.110 The geometry diagnostic read the WRONG maze — §7.3's coverage disclosure is withdrawn
 
@@ -11488,12 +11581,19 @@ computed on raw `f`.
 >
 > **Part of "lowering `n_meas` improves gate 2" may therefore be the offset
 > shrinking rather than conservatism genuinely improving** — and the same
-> question hangs over §4.3.109's stratified margins (+1.68, +0.63 at
-> offset/shape 1.3–1.9× against baselines at 25× and 20.6×). This is a confound
-> nothing in this document has considered, and it bears on gate 2's 37%
-> alone-rejection rate campaign-wide.
+> question hangs over §4.3.109's stratified margins.
+>
+> ⚠️ **TESTED AND PARTLY REFUTED, §4.3.113.** The *campaign-wide* version of this
+> worry is **null**: across all 27 round-4 trials ρ(offset/shape, degeneracy
+> margin) = **+0.234**, the wrong direction, and the gate-2 pass rate by
+> offset/shape tercile is **2/9, 4/9, 2/9** — no trend. **Gate 2's rejection rate
+> is NOT an offset artefact.** What survives is narrower and still important: on
+> the four measured arms the offset *is* materially involved in tail selection
+> (+37% to +235%), which means their CVaR reward is close to `mean − constant`
+> and the §5.2 gauge removes most of what looked like conservatism.
 
-**Consequence for the ladder: the 256 baselines need their own saved chains.**
+**Consequence for the ladder (SUPERSEDED — see the withdrawal below): the 256
+baselines would need their own saved chains.**
 The centred CVaR CE can only be recomputed from saved chains, and the three
 baselines are **sweep trials, whose chains were overwritten** (§4.3). So three
 extra runs at `n_meas` 256 with their own `OUT_DIR` are added — at fixed seed the
@@ -11503,12 +11603,19 @@ exactly *and* leaves the chains needed to compute the centred column.
 **Nine runs, two waves** (9 × 32 chains ≈ 288 cores exceeds leviathan's 255):
 wave 1 the six rungs, wave 2 the three baselines.
 
-**Readout rule, amended before the runs:** rule (1)'s primary readout stays
-`val_cvar_ce_c0p95`, but it is read on the **centred** column from
-`diagnose_sampling_tail.py --cvar-ce --offset-shape-split` where available, with
-the raw wandb value reported beside it. **If the two disagree by more than the
-tool's ±15% robustness band on any rung, the raw column is not used at all** and
-the ladder is decided on centred only.
+> ⚠️ **WITHDRAWN 2026-09-18, before any rung ran — see §4.3.113.** This block
+> amended rule (1) to read `val_cvar_ce_c0p95` on the **centred** column. That is
+> wrong: `iql_eval.py` builds the deployed reward from the **raw** posterior
+> draws with no centring anywhere, so raw CVaR CE *is* what IQL consumes and
+> selecting on centred would optimise a quantity the pipeline never computes.
+> **Rule (1) reads RAW, as originally written.** The centred column is reported
+> beside it as a *conservatism diagnostic* (§4.3.113), never as the selection
+> quantity.
+>
+> **Wave 2's three baseline re-runs are therefore OPTIONAL** — the rule needs only
+> wandb's raw values, which the baselines already carry. The ladder is **six
+> runs, one wave**. Wave 2 is worth running only if the centred diagnostic is
+> wanted for the 256 column too.
 
 #### Commands
 
@@ -12870,6 +12977,14 @@ round-1 reference values that stage 3 sets.
   is not decision-bearing**, and a recorded prediction (TRADE).
 - **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
   validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **Offset robustness measured on all four arms** (§4.3.113). Verified in
+  `iql_eval.py` that deployment takes CVaR of **raw** draws, so **raw is the
+  correct selection quantity** and §4.3.112's centred-readout amendment is
+  withdrawn (ladder back to six runs, one wave). The `n_meas` 26 control's
+  apparent win is **suppression**: centred CVaR CE 0.6928 ≈ log 2, so it improves
+  the objective by being less conservative. And the campaign-wide worry that
+  gate 2's rejections are an offset artefact is **tested and null** (ρ = +0.234,
+  tercile pass rates 2/9, 4/9, 2/9).
 - **The four stratified diagnostics ran and are read out** (§4.3.109 RESULT):
   **NULL** by the pre-registered rule, so **stratification is refuted and bundle
   item B is dropped**. The posterior explodes 6.5–32× and two of three arms give
