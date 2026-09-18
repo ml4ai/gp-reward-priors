@@ -10473,6 +10473,44 @@ rate.** If it holds, §3.2.9's clause applies — "no eligible configuration at 
 budget" is itself a result to disclose, not to escalate around — and the
 capacity-range/gate-2 tension is the first thing a future round should revisit.
 
+**Re-read at 25 finished trials (2026-09-17, at the pause; descriptive, no
+action — §9).** Three more trials finished after the block above and **none was
+eligible**, so the picture is worse, not better:
+
+| | at 22 trials | **at 25 trials** |
+|---|---|---|
+| eligible | 4 (18%) | **4 (16%)** |
+| fail gate 2 **alone** | 7 (32%) | **10 (40%)** |
+| fail gate 3 (resolution) | 0 | **0** — min centred ess **41.5** |
+| sweeps whose ungated best is ineligible | 2 of 4 | **4 of 4** |
+
+- **Gate 3 has stopped binding entirely.** Every one of the 25 trials clears
+  centred ess ≥ 40, across the whole width 4–7 × depth 1–4 range. §3.2.16's
+  smaller models solved resolution outright; **eligibility is now a two-gate
+  problem**, and the two gates oppose each other (§4.3.101).
+- **The cost of eligibility has spread to every sweep.** medium_play **+17.6%**,
+  medium_diverse **+12.4%**, large_play **+3.7%** on `val_cvar_ce` — and
+  **large_diverse has no eligible trial at all in 5** (its ungated best,
+  `qno0ufwe`, fails both gates). §7.2's round-2 failure mode is now unanimous.
+- **The optimiser is being pulled toward the ineligible region**, since the
+  metric it sees is ungated. That is exactly what §10.2 item 5's penalised
+  exploration is for, and this strengthens the case for it.
+
+> ⚠️ **Most of these verdicts are inside the measured noise.** Against
+> §4.3.101's sds (`|log r|` 0.0226, margin 0.00358), **15 of the 25 trials sit
+> within one sd of some threshold**. The extremes: `qno0ufwe` fails gate 1 by
+> **0.0002** in `|log r|` (0.01σ) and `knz3vh5n` *passes* gate 2 by **+0.00013**
+> (0.04σ). At one run per configuration, membership of the eligible set is
+> substantially decided by the sampling seed.
+>
+> **This does not mean the gates are wrong** — §4.3.87 and §4.3.74 established
+> gate 1 is a correct test that does not false-positive, and §3.2.12 derived both
+> thresholds from principle. It means the *eligible fraction* is a noisy estimate
+> and the *identity* of the eligible trials is noisier still. Do not read "16%"
+> as precise, and do not read a single trial's verdict as a property of its
+> configuration. **Quote the fraction with its trial count, and if a winner ends
+> up within ~1σ of a gate, disclose that its eligibility is seed-dependent.**
+
 ### 4.3.109 Stratified-by-cell measurement sampling — flag built, diagnostics pending (2026-09-17)
 
 An independent AI-assisted diagnostic report (user-supplied, two revisions)
@@ -10557,6 +10595,94 @@ three baselines cover the three observed failure modes.
 | large_diverse stratified | `o7g6texk` (near-miss, margin −0.0012) | w5 d3 | does it flip a near-miss to eligible? |
 | medium_play `n_meas` 26, random | `wc4nkymc` | w5 d2 | **control**: is any effect just the batch size? |
 
+#### The baselines, verified against wandb before launch (2026-09-17)
+
+Every swept and pinned field in the four commands below was checked against the
+three baseline trials' own logged configs. **All three match exactly** — `width`,
+`depth`, `sghmc_lr`, `sghmc_lr_max`, `mdecay`, `map_amp2`, `n_meas`,
+`chain_init_jitter`, 32 chains, 60 draws, `n_discarded` 5, `cycle_length` 2000,
+burn-in 20,000, `fraction_cool` 0.25, `cvar_ce_conservatism` 0.75, seed 0. This
+check is done *before* the runs because an unmatched comparison is how §4.3.90,
+§4.3.96 and §4.3.98 each produced a wrong conclusion.
+
+| baseline | variant | w/d | `\|log r\|` | ×τ | `loc_sd` | centred ess | margin | gap / thr | `cvar_ce` | fails |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `wc4nkymc` | medium_play | 5/2 | 0.0444 | 0.39× | 0.1186 | 66.1 | **−0.01246** | 0.00020 / 0.01266 | 0.3181 | gate 2 |
+| `eeil9cq2` | large_play | 7/2 | **0.1897** | 1.65× | 0.0974 | 332.8 | +0.03369 | 0.05219 / 0.01850 | 0.3567 | gate 1 |
+| `o7g6texk` | large_diverse | 5/3 | 0.1112 | **0.97×** | 0.0875 | 120.6 | **−0.00118** | 0.00405 / 0.00523 | 0.3308 | gate 2 |
+
+Two things this table shows that the arm design did not anticipate:
+
+- **`wc4nkymc`'s degeneracy gap is 0.0002** — the CVaR and mean rewards are
+  essentially identical, not merely under-resolved. That is §4.3.51's collapse
+  mode, and it is the cleanest gate-2 arm of the three.
+- **`o7g6texk` sits at 0.97× τ on gate 1 as well.** It is a near-miss on *both*
+  gates, so an arm that improves its margin can still fail on scale.
+
+#### Reading rule — PRE-REGISTERED 2026-09-17, before the runs
+
+**Read on the effect size, never on the pass/fail flip.** The gates are
+thresholds on noisy statistics, and §4.3.101's four pinned replicates give the
+only noise floor measured at this budget:
+
+| statistic | run-to-run sd | sd of a between-run **difference** |
+|---|---|---|
+| `\|log(centred scale_ratio)\|` | 0.0226 | **0.0320** |
+| `val_cvar_degeneracy_margin` | 0.00358 | **0.00506** |
+
+*(Assumption, stated not hidden: those sds were measured on medium_play at its
+settled sampler values, not at each arm's architecture. §4.3.101 licenses the
+transfer — "use 0.0226 for any comparison between pinned runs" — and it is the
+only measurement available.)*
+
+**Power, computed before the runs — and one arm is under-powered:**
+
+| arm | what must move to flip its verdict | in sd of a difference |
+|---|---|---|
+| medium_play (gate 2) | margin −0.01246 → ≥ 0, i.e. Δ ≥ **0.0125** | **2.5σ — adequate** |
+| large_play (gate 1) | `\|log r\|` 0.1897 → ≤ 0.1151, i.e. Δ ≥ **0.0746** | **2.3σ — adequate** |
+| large_diverse (gate 2) | margin −0.00118 → ≥ 0, i.e. Δ ≥ **0.0012** | **0.23σ — NOT decision-bearing** |
+
+> ⚠️ **large_diverse cannot answer its question at n = 1.** Its baseline margin is
+> a quarter of a standard deviation from zero, so it flips on seed noise alone.
+> It is retained as a **direction check only**; "it became eligible" is not
+> evidence and must not be reported as though it were. This is the §4.3.35 lesson
+> — size the experiment against the statistic's own variability — applied before
+> the run rather than after.
+
+**Decision, in order:**
+
+1. **Validity first.** `param_clamp_sampling_pct` ≈ 0 and the log must print the
+   expected cell count and `cond(K)`. A firing clamp is not measure-preserving
+   (§3.3, §4.3.71) and invalidates the tail numbers whatever they say.
+2. **BATCH SIZE** — if the `n_meas` 26 control reproduces the medium_play
+   stratified effect to within 1σ of a difference, the mechanism is the
+   measurement-batch size, not the cell structure. **Change `n_meas`, which is a
+   pinned value, rather than the prior**; no restart on this basis.
+3. **ADOPT-CANDIDATE** — medium_play's margin improves by ≥ 2σ (0.0101), **and**
+   no stratified arm's `|log r|` worsens by more than 1σ (0.0320), **and** the
+   control does not explain it. Then pre-register and restart, batched with
+   §10.2 item 5.
+4. **TRADE** — margin improves by ≥ 2σ while some arm's `|log r|` worsens by
+   ≥ 2σ. Stratification is moving *along* §4.3.101's stationarity/degeneracy
+   frontier rather than off it. Do not adopt.
+5. **NULL** — anything else. Record it, resume the paused sweeps, do not restart.
+
+**Prediction, recorded before the runs so it cannot be fitted afterwards:**
+**outcome 4 (TRADE) is the most likely.** Stratification removes the 231
+within-cell equality directions that sit at the nugget, which is a *weakening* of
+the prior along exactly the directions that were pinning `f` — mechanically the
+same move as §4.3.45's `sig_n2` increase, which on medium_play gave better CE and
+**worse** stationarity. §4.3.101 measured ρ(`|log r|`, margin) = **+0.397** across
+round-3 trials, so a wider posterior buys gate 2 and costs gate 1 by default.
+An outcome that beats this prediction — gate 2 up with gate 1 flat — is the one
+that would make stratification worth a restart.
+
+**Readout:** `scripts_bnn/strat_readout.py` (§8) does all of the above
+mechanically — config audit, validity, the gate table, paired deltas in sd units,
+and the verdict above. Run `--selftest` first; it checks the gate wiring against
+the three baselines' hand-computed verdicts.
+
 Run from `scripts_bnn/`, one GPU each, ~4–5 h:
 
 ```bash
@@ -10580,12 +10706,9 @@ point per occupied cell, 26 cells` (29 for large) and `[prior] Gram cond(K) ≈
 2e2` against 2.7e5.
 
 **Read on** `|log(centred scale_ratio)|`, centred `loc_sd`, centred `ess`,
-`val_cvar_degeneracy_margin` and `val_cvar_ce`, against each baseline:
-
-- **stationarity improves and degeneracy does not worsen** → worth a sweep restart;
-- **gate 2 worsens** → stratification only trades one failure mode for the other;
-- **the `n_meas` 26 control matches the stratified arm** → the effect is batch
-  size, and changing `n_meas` is far cheaper than changing the prior.
+`val_cvar_degeneracy_margin` and `val_cvar_ce`, against each baseline — under the
+pre-registered rule above, in units of the measured between-run sd, not on the
+pass/fail flip.
 
 **Caveat that survives any outcome:** §4.3.45 measured two mazes with identical
 cond(K) to three figures and *opposite* responses, so a conditioning-only account
@@ -11808,21 +11931,50 @@ round-1 reference values that stage 3 sets.
 
 #### TO-DO as of 2026-09-17 — read this first
 
-**IN FLIGHT / IMMEDIATE**
+**JUST ACCOMPLISHED (no compute)**
 
-1. **BNN sweeps are PAUSED** (`2falo587` medium_play, `vzd1zwim` medium_diverse,
-   `23ezwbbo` large_play, `i6xhta53` large_diverse; cache
-   `exp/sweep_ids_bnn_round4.txt`). 22 trials finished, none near firing, and
-   **4 of 22 eligible (18%)** with gate 2 binding — see §4.3.108's early
-   eligibility block. Paused to free GPUs for item 2.
-2. **Run the four §4.3.109 diagnostics** (3 stratified arms + 1 `n_meas` 26
-   control, commands in that section, ~4–5 h on 4 GPUs). Their baselines are
-   existing trials `wc4nkymc`, `eeil9cq2`, `o7g6texk` — no baseline re-runs
-   needed, the pipeline is bitwise deterministic at fixed seed.
-3. **Read the diagnostics out** on `|log r|`, centred `loc_sd`, centred `ess`,
-   degeneracy margin and `val_cvar_ce`, and record the verdict in §4.3.109.
+- **The MR/PT baselines are complete** — all 8 sweeps fired, every stopping-rule
+  winner is also the best of all trials, so there is no rule-vs-best regret to
+  disclose (§4.3.108).
+- **The BNN round-4 sweeps launched and were paused** at 25 finished trials, to
+  free GPUs for the diagnostics.
+- **`meas_sampling="stratified_cell"` built and validated offline** on both
+  mazes: every occupied cell hit exactly once per step, `cond(K)` 2.7e5 → ~200,
+  zero eigenvalues at the nugget (§4.3.109). Committed, `9157f32`.
+- **The four diagnostic arms were designed and their baselines verified** against
+  wandb, field by field — all three match their commands exactly (§4.3.109). This
+  is the check whose absence caused §4.3.90, §4.3.96 and §4.3.98.
+- **A pre-registered reading rule for the diagnostics is written** (§4.3.109),
+  with the noise floors, a power calculation that shows **the large_diverse arm
+  is not decision-bearing**, and a recorded prediction (TRADE).
+- **`scripts_bnn/strat_readout.py` built and self-tested** — config audit,
+  validity check, gate table, paired deltas in sd units, pre-registered verdict.
+- **Eligibility re-read at 25 trials** (§4.3.108): still **4 eligible (16%)**,
+  **gate 2 alone now rejects 40%**, **gate 3 no longer binds at all**, all four
+  sweeps' ungated best is ineligible, and **15 of 25 verdicts sit within one seed-sd
+  of a threshold**.
 
-**DECISIONS WAITING ON ITEM 3**
+**NEXT — in this order**
+
+1. **Wait for the two in-flight trials to finish**, then confirm the GPUs are
+   actually free. `vdg14jin` (medium_play w7 d4) and `1xiicp4z` (large_diverse
+   w6 d4) were still running at the pause. **Killing a sweep agent does not kill
+   its trainer** (§10.6) — check for orphans before launching, or the diagnostics
+   will contend for GPU *and* CPU with a run nobody is watching.
+2. **`git pull` on leviathan.** The `meas_sampling` flag is `9157f32`; without it
+   the stratified arms fall back to `"random"` and silently measure nothing. The
+   first command below does the pull; the other three assume it has happened.
+3. **Run the four §4.3.109 diagnostics** — 3 stratified arms + the `n_meas` 26
+   control, one GPU each, ~4–5 h. Baselines are the existing trials `wc4nkymc`,
+   `eeil9cq2`, `o7g6texk`; no baseline re-runs, the pipeline is bitwise
+   deterministic at fixed seed (§4.3.105). GPUs 0–3 in the commands; use 4–5 if
+   0–3 are still busy.
+4. **Read them out** with `scripts_bnn/strat_readout.py` (run `--selftest`
+   first), against §4.3.109's pre-registered rule. Record the verdict there.
+   **Check validity before anything else**: clamp ≈ 0, and the log must print the
+   expected cell count and `cond(K)` ≈ 2e2.
+
+**DECISIONS WAITING ON ITEM 4**
 
 4. **Adopt stratified sampling, or not.** It changes the prior, so adoption means
    stage-1 re-selection: discard the 22 trials, bump the cache to
