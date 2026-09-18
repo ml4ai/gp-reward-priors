@@ -614,6 +614,25 @@ def train(config: TrainConfig):
             device=device,
         )
         gp_prior_args = gp_prior.to_args()
+
+        # Record the EFFECTIVE measurement-set size.  Under
+        # meas_sampling="stratified_cell" the config's n_meas is IGNORED and the
+        # per-step set is one point per occupied cell (f_pref_net.py), so wandb's
+        # `n_meas` is inert and the record does not say what the run did.  That
+        # is the 4.3.110 failure mode -- a run's effective configuration not being
+        # recoverable from wandb -- so log it rather than leave it in stdout only.
+        if config.meas_sampling == "stratified_cell":
+            _occ = int(np.unique(np.asarray(gp_prior.cell_of(
+                torch.from_numpy(x_meas).to(device),
+                torch.from_numpy(aux_meas).to(device)
+                if aux_meas is not None else None)).ravel()).size)
+            wandb.summary["n_meas_effective"] = _occ
+            wandb.summary["meas_sampling_effective"] = "stratified_cell"
+            print(f"[fSGHMC] n_meas_effective = {_occ} occupied cells "
+                  f"(config n_meas={config.n_meas} is IGNORED in this mode)")
+        else:
+            wandb.summary["n_meas_effective"] = int(config.n_meas)
+            wandb.summary["meas_sampling_effective"] = str(config.meas_sampling)
     else:
         # ---- Infer n_concepts from a dummy forward pass through the source fn ----
         if config.n_concepts is not None:

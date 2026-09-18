@@ -64,7 +64,8 @@ ARMS = {
 }
 
 # Always expected to differ between a hand-launched arm and a sweep trial.
-ALWAYS_DIFF = {"OUT_DIR", "name", "group", "wandb_project", "checkpoints_path"}
+ALWAYS_DIFF = {"OUT_DIR", "name", "group", "wandb_project", "checkpoints_path",
+               "config_path"}
 
 K_RATIO = G.K_RATIO
 K_LOCSD = G.K_LOC_SD
@@ -115,13 +116,26 @@ def fetch():
     return base, arms
 
 
+def _norm(key, val):
+    """Normalise a config value before comparing arm against baseline.
+
+    `width` is logged EXPANDED by a hand-launched run and as the log2 EXPONENT by
+    a sweep trial (4.3.104), so an unnormalised compare flags every arm as
+    mismatched.  check_winner_eligibility.py normalises it for the same reason.
+    """
+    if key == "width" and isinstance(val, (int, float)) and val > 10:
+        return int(math.log2(val))
+    return val
+
+
 def audit(arm_cfg, base_cfg, allowed):
     """Every config key, arm vs baseline.  Returns the unexpected differences."""
     bad = []
     for k in sorted(set(arm_cfg) | set(base_cfg)):
         if k in allowed or k in ALWAYS_DIFF:
             continue
-        a, b = arm_cfg.get(k, "<absent>"), base_cfg.get(k, "<absent>")
+        a = _norm(k, arm_cfg.get(k, "<absent>"))
+        b = _norm(k, base_cfg.get(k, "<absent>"))
         if repr(a) != repr(b):
             bad.append((k, b, a))
     return bad

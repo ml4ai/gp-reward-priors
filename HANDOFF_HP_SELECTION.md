@@ -11021,6 +11021,31 @@ Expect the stratified logs to print `Measurement sampling STRATIFIED BY CELL: on
 point per occupied cell, 26 cells` — **46 for large, not 29** (§4.3.110) — and
 `[prior] Gram cond(K) ≈ 2e2` (medium) / **≈ 3.4e2** (large) against 2.7e5.
 
+#### Launch check (2026-09-17): all four arms are correctly configured
+
+| arm | `meas_sampling` | config `n_meas` | **EFFECTIVE measurement points** |
+|---|---|---|---|
+| strat_medium_play | `stratified_cell` | 256 *(inert)* | **26** — one per occupied cell |
+| strat_large_play | `stratified_cell` | 256 *(inert)* | **46** — §4.3.110 |
+| strat_large_diverse | `stratified_cell` | 256 *(inert)* | **46** — §4.3.110 |
+| n26_medium_play | `random` | **26** | 26 |
+
+**Only the control sets `n_meas`, and that is by design** — in
+`stratified_cell` mode `f_pref_net.py` overwrites `n_meas_actual` with the
+occupied-cell count and says so in the log, so the config value is ignored. Full
+config audit against the three baselines: **clean on every key** once `width` is
+normalised (a hand-launched run logs the expanded width, a sweep trial the log2
+exponent — §4.3.104's trap, which made the audit's first pass flag all four
+spuriously).
+
+> ⚠️ **But wandb records `n_meas: 256` for the stratified arms, which is not what
+> they ran.** That is §4.3.110's failure mode in miniature: a run's *effective*
+> configuration not being recoverable from the record. **Fixed** —
+> `run_bnn_training_antmaze_eval.py` now logs `n_meas_effective` and
+> `meas_sampling_effective` at setup. The four in-flight arms predate the fix, so
+> their effective counts are the table above; read them from there, not from
+> wandb's `n_meas`.
+
 **Read on** `|log(centred scale_ratio)|`, centred `loc_sd`, centred `ess`,
 `val_cvar_degeneracy_margin` and `val_cvar_ce`, against each baseline — under the
 pre-registered rule above, in units of the measured between-run sd, not on the
