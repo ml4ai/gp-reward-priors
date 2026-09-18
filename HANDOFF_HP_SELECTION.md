@@ -11343,17 +11343,93 @@ are two halves of one position; the project currently holds only the first half.
    select under a known objective; changing the objective in the same step means
    a disappointing round 5 cannot be attributed.
 
-**Recommendation: not in round 5. Measure it first, which is nearly free.**
-`--cvar-ce` already computes both columns from saved chains, so every archived
-run can be re-scored on centred `f` at zero training compute — enough to see
-whether centred CVaR CE is a well-behaved objective before anything depends on
-it. What is *not* free is how IQL behaves on a centred-CVaR reward; that needs a
-stage-4 grid and belongs to a future round.
+#### DECISION (2026-09-18, at the user's direction): CENTRE, in both paths
 
-**This is the most substantive open methodological question in the project**, and
-§7 should carry it either way: the deployed conservative reward's tail selection
-is currently driven substantially by an unidentified direction that the gauge
-then discards.
+An earlier draft of this section recommended deferring to a future round. **That
+was wrong and is withdrawn.** Deferring does not avoid the risk, it picks the
+`raw` branch by default and without deciding — and if raw turns out to be wrong,
+round 5 has to be re-run anyway. The question is decidable now, on the evidence
+and the argument already in hand.
+
+**It is not a metric preference. It is a question about whether the method's
+mechanism is real**, and that has to be settled *before* a round whose entire
+purpose is to select a configuration that delivers the mechanism.
+
+**The argument, in three steps:**
+
+1. **The paper's mechanism requires a STATE-DEPENDENT penalty.** CVaR helps
+   because it penalises poorly-determined states more. Write
+   `depth(s,a) = mean_j f_j(s,a) − CVaR_j f(s,a)`. If the per-draw offset
+   dominates the sort, the same draws are selected everywhere, `depth` goes
+   near-constant, and **the mechanism is inert** — the reward is
+   `mean − constant`.
+2. **§4.3.113 measured that the offset DOES dominate**, on every run tested
+   (ratio shifts +37% to +235%; the `n_meas` 26 control's CVaR reward reads
+   `log 2` under centring). So raw CVaR is currently *not* delivering the
+   mechanism.
+3. **The offset should not be penalised anyway, and this is a proof rather than
+   a preference.** It is unidentified by the likelihood (§4.3.10) — §3.6.3
+   already excluded it from the stationarity gate on that ground — **and
+   §5.2's gauge overwrites the level deterministically downstream.** You cannot
+   be conservative about a quantity you then set by fiat.
+
+**What centring does NOT disturb** — checked, not assumed:
+
+| | effect of centring |
+|---|---|
+| the posterior **mean** reward | changes by a constant only (`mean_j c_j`), which the gauge removes — **the mean-reward baseline and the MR/PT comparison are untouched** |
+| mean CE, predictive CE, accuracy | Class A, **exactly** invariant (§4.3.61) |
+| gate 1 | already centred — for the first time it becomes *consistent* with the objective |
+| gate 2 | the gap stops being suppressed, so it passes more often — **this is gate 2 finally measuring what §3.2.6 designed it to measure**, not a loosening |
+
+**Comparability requirement.** `qlearning_dataset_mr_ensemble` takes CVaR over
+snapshots with the identical `partitioned[:n_tail].mean(axis=0)` structure, so
+**MR-ensemble-CVaR must be centred too**, or §3.1's cross-family comparability
+breaks. Same one-line operation, applied in both places.
+
+#### The one free check before it is wired — and it can overturn more than this
+
+`--cvar-ce` computes the centred column from saved chains at zero training
+compute, and **ten runs now have chains**: the four §4.3.109 arms and the six
+§4.3.112 ladder rungs, spanning sensible configurations to blown-up ones.
+
+> ⚠️ **The check can produce a result far more serious than "use raw instead".**
+> §4.3.113 measured the `n_meas` 26 control — one of the better configurations on
+> the raw objective — at centred CVaR CE **0.6928 ≈ log 2**. If that holds across
+> the ten runs, it says **the conservative reward has no predictive content on
+> the identified component at all**: the whole apparent conservatism is a global
+> shift the gauge discards. That is a finding about the **method**, not the
+> metric, and it would be far better known before round 5 than after.
+
+**Pre-registered reading, fixed before the check runs:**
+
+- **At least one configuration's centred CVaR CE below `log 2` by more than its
+  2·SE** ⇒ the centred objective has predictive content. **Wire centring into
+  both paths and proceed with round 5.**
+- **Every run at or above `log 2`** ⇒ do **not** quietly fall back to raw, whose
+  advantage §4.3.113 showed to be the suppression artefact. **Stop and report**:
+  the mechanism is not demonstrable at any configuration reached so far, and
+  round 5 cannot select for something that is not there. That is a §3.2.9-style
+  disclosure, not a reason to re-tune.
+- Also record whether the centred objective **discriminates** — spread across the
+  ten runs against their jackknife SEs — since an objective that cannot separate
+  configurations cannot drive a sweep (§3.2.3's problem).
+
+Run on the box, `pt` env:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for R in n26_medium_play strat_medium_play strat_large_play strat_large_diverse nmeas_medium_play_n52 nmeas_medium_play_n104 nmeas_large_diverse_n46 nmeas_large_diverse_n92 nmeas_large_play_n46 nmeas_large_play_n92; do echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --offset-shape-split --device cuda > exp/cen_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/cen_${R}.txt || echo "  (see exp/cen_${R}.txt)"; done | tee exp/centred_objective_check.txt
+```
+
+**If it passes, the round-5 bundle gains item F: centre in both paths** —
+`cvar_ce` (selection), `qlearning_dataset_bnn` and
+`qlearning_dataset_mr_ensemble` (deployment), with gate 2 inheriting the change.
+Selection and deployment move together, so §3.2.1's matching property is
+preserved.
+
+**§7 carries this either way**: the deployed conservative reward's tail selection
+was driven substantially by an unidentified direction that the gauge discards,
+and the method was corrected before the reported round.
 
 ### 4.3.110 The geometry diagnostic read the WRONG maze — §7.3's coverage disclosure is withdrawn
 
@@ -13114,12 +13190,14 @@ round-1 reference values that stage 3 sets.
   holding the most eligible trials. Recorded but not acted on: **large_diverse at
   `n_meas` 46 is eligible**, the first eligible configuration that variant has
   produced.
-- **Answered: should centring be in the deployment path?** (§4.3.114) The gauge
-  does pin the offset, but on the *finished field*, after the CVaR — so it cannot
-  undo the per-draw offset's effect on tail selection. The argument for centring
-  is the gauge's own logic (it overwrites the level, so CVaR should not be spent
-  on it), but it is a **method change** and the recommendation is **not in
-  round 5** — re-score archived runs on centred `f` first, which is free.
+- **DECIDED: centring goes into BOTH paths — bundle item F** (§4.3.114). The
+  gauge pins the offset, but on the *finished field*, after the CVaR, so it
+  cannot undo the per-draw offset's effect on tail selection. Centring is the
+  gauge's own logic taken to its conclusion: you cannot be conservative about a
+  level you then set by fiat. Conditional on one **free** check on the ten runs
+  that have saved chains — which can also reveal something worse, that the
+  conservative reward has no predictive content on the identified component at
+  all.
 - **Offset robustness measured on all four arms** (§4.3.113). Verified in
   `iql_eval.py` that deployment takes CVaR of **raw** draws, so **raw is the
   correct selection quantity** and §4.3.112's centred-readout amendment is
@@ -13173,7 +13251,11 @@ round-1 reference values that stage 3 sets.
    recorded before the runs, is that the rule does NOT fire** — gate 1's location
    criterion is expected to bind before the objective's improvement is
    established.
-4. **Assemble and launch the restart** once item 3 is settled: **A** (`map_amp2`
+4. **Run the free centred-objective check** (§4.3.114) — ten runs with saved
+   chains, no training compute, command in that section. Its pre-registered
+   reading decides bundle item F, and it can also surface a method-level problem
+   that must be known before round 5 selects.
+5. **Assemble and launch the restart** once item 4 is read: **A** (`map_amp2`
    → 6848 / 6838), **C** (wire §3.2.17's penalised objective — 3-line insert plus
    `metric.name` in the four sweep yamls), **E** (cache →
    `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`**). B and D are
@@ -13194,6 +13276,7 @@ carries its own justification class, because §9 treats them differently.
 | ~~B~~ | ~~`meas_sampling: stratified_cell`~~ | **REFUTED 2026-09-18 (§4.3.109 RESULT): NULL by the pre-registered rule; the posterior explodes 6.5–32× and two of three arms give a CVaR reward worse than chance** | none — dropped |
 | C | penalised exploration | **new design** — ✅ drafted, validated and pre-registered as **§3.2.17** | done: `penalised_objective.py`, no free parameter |
 | ~~D~~ | ~~capacity ranges~~ | **DECIDED 2026-09-17: NO CHANGE (§4.3.111)** | none — dropped |
+| **F** | **centre `f` per draw before CVaR, in BOTH selection and deployment** | **DECIDED 2026-09-18 (§4.3.114)** — the gauge overwrites the level, so CVaR must not be spent on it; conditional on the free centred-objective check | method change: pre-register, and MR-ensemble-CVaR moves with it for §3.1 comparability |
 | E | cache bump → `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`** | mechanical | none — but §10.5's warning is the failure hardest to notice |
 
 > ✅ **D is CLOSED — §4.3.111. The ranges do not move, and MR/PT are not
@@ -13237,7 +13320,7 @@ blind. Record it as a future-round candidate.
 
 **DECISIONS WAITING ON ITEM 4**
 
-5. ✅ **RESOLVED 2026-09-18: stratification is NOT adopted** (§4.3.109 RESULT).
+6. ✅ **RESOLVED 2026-09-18: stratification is NOT adopted** (§4.3.109 RESULT).
    NULL by the pre-registered rule. `meas_sampling` stays `"random"`; the flag
    remains in the code as an instrument, default off, like `fix_meas_set`
    (§4.3.24).
@@ -13256,7 +13339,7 @@ blind. Record it as a future-round candidate.
    > launched, so it costs only time. Changing the pin on the control alone
    > would be the n = 1 reactive tuning §9 forbids and §4.3.64 has punished
    > nine times.
-6. **Penalised exploration — ✅ DRAFTED AND PRE-REGISTERED (§3.2.17).** Form:
+7. **Penalised exploration — ✅ DRAFTED AND PRE-REGISTERED (§3.2.17).** Form:
    `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`, with `P` the probability that
    every gate genuinely passes, each slack in units of its own measured
    run-to-run sd. No free parameter — the exchange rate is fixed by `log 2` and
@@ -13294,19 +13377,19 @@ blind. Record it as a future-round candidate.
 
 **AFTER THE BNN SWEEPS FIRE**
 
-7. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
+8. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
    gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
    applies: that is a result to disclose, not to escalate around. **If a winner
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
-8. **Regenerate the four production configs** from the new winners (§10.3); they
+9. **Regenerate the four production configs** from the new winners (§10.3); they
    are currently HYBRID and must not be used for production training as they
    stand.
-9. **Clear the reward-model directories** before production training, so a
+10. **Clear the reward-model directories** before production training, so a
    crashed run cannot leave stale `checkpoint_*.pt` snapshots for the MR
    ensemble to pick up.
-10. **Train reward models at seeds 0–10** for all families (`train_rewards.sh`,
+11. **Train reward models at seeds 0–10** for all families (`train_rewards.sh`,
     2 threads), then **stage 4** with `python results/iql_score.py --stage4`
     (last-10 mean, one IQL run per index, §5), then the **seeds 1–10 IQL
     evaluations**, then register the new sweep ids in
@@ -13314,42 +13397,42 @@ blind. Record it as a future-round candidate.
 
 **QUEUED — ANALYSIS DEBT (no compute, can be done while the diagnostics run)**
 
-11. **Re-run the width/depth analysis on the completed baseline sweeps.** The
+12. **Re-run the width/depth analysis on the completed baseline sweeps.** The
     mid-sweep version in §4.3.108 is known to be unstable — medium_diverse
     reversed from a width preference to a w4 d1 winner between 19 and 40 trials.
-12. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
+13. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
     winners at the width ceiling, one at the floor, and the two sweeps that kept
     improving late.
-13. **Recompute large's cell coverage and re-run §4.3.70's geometry table**
+14. **Recompute large's cell coverage and re-run §4.3.70's geometry table**
     under the fixed basis (§4.3.110), then write §7.4's corrected coverage
     disclosure. `--geometry-prior` runs on saved chains, so it is compute-free
     if the four `stage3_*` final run dirs still exist on the box; otherwise
     record the coverage number alone, which needs only the val split.
-14. **Carry the corrected derived `map_amp2` (6848 / 6838) into §7.3's
+15. **Carry the corrected derived `map_amp2` (6848 / 6838) into §7.3's
     disclosure** and into the next round's pins. Do not change the running
     pins (§9).
-15. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
+16. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
     5 TB; cached reward labels are ~4 MB, and caching also removes the
     re-labelling cost from each of stage 4's 8 normalization indices. This is a
     prerequisite for item 10, not an optional tidy-up.
-16. **§7.4 (round-4 results)** cannot be written until there are results, but
+17. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
 
 **QUEUED — FUTURE-ROUND CANDIDATES (after the restart, not in it)**
 
-17. **Regularisation as a search dimension.** MR exposes none at all (no weight
+18. **Regularisation as a search dimension.** MR exposes none at all (no weight
     decay, no dropout) and PT only a fixed `dropout 0.1`. That, not the capacity
     range, is the direct lever on the memorisation measured in §4.3.108.
-18. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
+19. **The lr-range/epoch-budget interaction.** The bottom decade of the MR lr
     range is evaluated under a binding 5,000-epoch budget (31% of trials select
     the last checkpoint, all at lr ≤ 1.1e-4).
-19. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
+20. **Stopping-rule refinements.** No minimum-improvement threshold, so a 0.04%
     gain resets patience; and the longest observed non-improving streak before a
     later improvement was 13 against K = 15.
-20. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
+21. **Eval-environment seed overlap.** `eval_actor` seeds its 25 envs `seed + i`,
     so the seeds 1–10 lineages share most eval-env seeds. Low priority.
-21. **`map_eta` / the prior's correlation length.** §4.3.60 reverted η = 4
+22. **`map_eta` / the prior's correlation length.** §4.3.60 reverted η = 4
     because it broke the centred gate on three of four variants, and §4.3.54's
     finding stands: η = 1 delivers ~1 cell, not the 2–4 every config comment
     once claimed. **Stratification drops `cond(K)` ~1000×, which is exactly the
