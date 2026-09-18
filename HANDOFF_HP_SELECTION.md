@@ -1634,6 +1634,118 @@ as history. `launch_hp_sweeps.sh`: BNN cache bumped `sweep_ids_bnn_round3.txt` �
 (`sweep_ids_baselines_round2.txt`). The production configs still hold old winners
 and are regenerated after the new sweeps select (§10.3).
 
+### 3.2.17 Round-5 amendment: PENALISED EXPLORATION — pre-registered 2026-09-17
+
+Restart-bundle item C (§10.2). Amends what the **optimiser** minimises. **The
+hard gates of §3.2.12 and the winner rule of §3.6.3 are unchanged**, so validity
+stays non-tradeable and nothing about who may win moves.
+
+#### The problem, measured
+
+The sweep's metric was raw `val_cvar_ce`, which is ungated — and §3.2.7 measured
+ρ(`val_cvar_ce`, degeneracy margin) = **+0.670**: the configurations that score
+best on the objective are the ones least distinguishable from the mean. The
+search is therefore pulled *toward* the ineligible region, which is §7.2's round-2
+failure mode. At the round-4 pause it was unanimous (§4.3.108): **all four**
+sweeps' ungated best was ineligible, and taking the eligible best instead cost
+**+17.6% / +12.4% / +3.7%** on the objective, with large_diverse having no
+eligible trial at all. Separately, **~22% of the trial budget went to depth 4**,
+which has never produced an eligible trial.
+
+#### The form
+
+    J  =  cvar_ce  +  (1 − P) · max(0, log 2 − cvar_ce)
+
+    P  =  Π_g  Φ( slack_g / sd_g )
+
+**A trial forfeits the part of its advantage over chance that it probably cannot
+keep.** `P` is the probability that every gate genuinely passes, each gate's
+slack measured in units of that gate's own **run-to-run sd**; `log 2` is the
+cross-entropy of an uninformative predictor, which this document already uses
+throughout as the reference for a useless reward model (§3.6, §4.3.22, §4.3.40,
+§4.3.47).
+
+| gate | slack | sd | provenance |
+|---|---|---|---|
+| 1 scale | `log(1.122) − \|log r\|` | **0.0226** | §4.3.101, four pinned replicates |
+| 1 location | `0.155 − loc_sd` | **0.0117** | §3.2.12's four replicates — from a **range**, not an sd ⚠️ |
+| 2 degeneracy | `margin` (already gap − thr) | **0.00358** | §4.3.101, four pinned replicates |
+| 3 resolution | `ess − 40` | **0.58** | §4.3.101, four pinned replicates |
+
+**There is no free parameter.** The exchange rate between objective and gate
+violation is fixed by `log 2` and the measured sds; there is no weight to choose,
+so §10.2's "derived, not tuned" constraint is met by construction rather than by
+argument.
+
+#### What was rejected, and why
+
+A **hinge** penalty, `J = cvar_ce + λ · max_g z_g`, was the obvious alternative.
+At the derived `λ = 2·SE(cvar_ce)` — the document's own resolvability convention
+— it fixed only **1 of 3** sweeps. The `λ` that fixed all three is ≈ 10·SE, which
+is **a tuned number with no derivation**, and adopting it would be exactly what
+§10.2 forbids. A **hard rejection** (report a large constant for ineligible
+trials) was also rejected: it gives the surrogate no gradient, so the optimiser
+cannot learn where the boundary is, and it treats a 0.1σ near-miss identically to
+an 8σ failure.
+
+#### Properties
+
+- **Bounded and never flattering.** `J ∈ [cvar_ce, log 2]`, and the `max(0, ·)`
+  means a trial already worse than chance is left exactly where it is — so the
+  historical `val_cvar_ce` = 10.24 catastrophes cannot be laundered into
+  looking merely mediocre.
+- **Noise-calibrated.** A trial 0.1 sd inside a threshold is treated as the coin
+  flip it is. §4.3.108 measured **15 of 27** round-4 verdicts within one sd of
+  some threshold, so this is not a hypothetical.
+- **A missing or NaN gate key gives `P = 0`**, matching §4.3.108's rule that an
+  unmeasured gate cannot be passed.
+
+#### Validated on the 27 discarded round-4 trials
+
+| | raw `val_cvar_ce` | **J** |
+|---|---|---|
+| ranks of the 4 eligible trials | 3, 8, 14, 20 of 27 | **1, 2, 3, 4 — perfect separation** |
+| sweeps whose argmin is eligible | **0** of 3 possible | **3** of 3 |
+| depth-4 trials beating the median trial | 4 of 6 | **2 of 6** |
+
+Its argmin on large_diverse is `o7g6texk`, the most-likely-feasible trial in a
+sweep that contains no eligible one (P = 0.21) — the right answer there.
+
+#### Costs and approximations, disclosed
+
+1. **Among eligible trials `J` is not monotone in `cvar_ce`.** It prefers
+   *robust* eligibility: on the round-4 data it ranks `kr07ke05` (CE 0.3740,
+   P = 0.77) above `45dvccz9` (CE 0.3165, P = 0.53). This is a deliberate second
+   benefit — §4.3.108 showed winners can be eligible by seed luck — but it biases
+   exploration away from the best-CE corner of the feasible region. **The winner
+   rule does not use `J`**, so the winner is still the lowest `val_cvar_ce` among
+   hard-gate-eligible trials.
+2. **The gates are treated as independent, and they are not.** §4.3.101 measured
+   ρ(`|log r|`, margin) = +0.397, i.e. gates 1 and 2 are *negatively* associated
+   as passes, so the product **over**-estimates `P` and the penalty is if
+   anything too small. Correcting it needs a joint model there is no basis for;
+   stated rather than fudged.
+3. **`sd_loc = 0.0117` is the weakest input** — computed from the range of four
+   values in §3.2.12, not a proper sd, and it does real work (it is what holds
+   `kr07ke05`'s P at 0.77). **Measure it properly from the restart's replicates**
+   and re-derive.
+4. **The form was chosen after seeing the 27 round-4 trials.** §10.2 licensed
+   exactly that check, and those trials are **discarded**, so nothing selected on
+   them carries forward — but it is a disclosure, not a free action.
+
+#### Implementation
+
+`penalised_objective.py` (repo root), importing `selection_gates.py` so the
+thresholds cannot drift apart; `python penalised_objective.py` runs its
+self-test. To wire it: compute `J` from `summary` immediately before the final
+`wandb.log(summary)` in `run_bnn_training_antmaze_eval.py` — every input is in
+`summary` by that point — log it as **`val_cvar_ce_penalised`**, and set each BNN
+sweep yaml's `metric.name` to that key. `val_cvar_ce` continues to be logged
+unchanged and remains the reported objective and the winner rule's input.
+
+**Land it with the rest of the restart bundle, not before** — the §4.3.109
+diagnostic arms are in flight against the current code.
+
 ### 3.3 What is deliberately NOT swept
 
 - **Map-prior geometry: `map_eta`, `map_sig_c2`, `map_sig_g2`, `map_sig_n2`.**
@@ -12236,6 +12348,19 @@ by `results_table.ipynb` for reporting (§5, §4.3.107). `--selftest` runs its t
 one place, imported by both tools below (§4.3.108). `python selection_gates.py`
 runs its self-test.
 
+**`penalised_objective.py`** (repo root) — the metric the OPTIMISER minimises
+under §3.2.17, `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`. Imports
+`selection_gates.py` so the thresholds cannot drift from the hard gates. It does
+**not** decide eligibility and is not used by the winner rule.
+`python penalised_objective.py` runs its self-test (11 known-answer checks:
+bounds, the on-threshold coin flip, never-flatter, missing-key → P = 0,
+monotonicity, and that the shared thresholds match).
+
+**`scripts_bnn/capacity_range_decision.py`** — the §4.3.111 capacity-range
+decision: where the eligible region sits in the searched range, whether gate-2
+failure is capacity-shaped, and what §4.3.105's ladders say above the ceiling.
+Local, wandb only.
+
 **`scripts_bnn/prior_alignment_check.py`** — answers "does changing the
 measurement sampling require recalibrating `map_amp2` or another pinned
 parameter?" from the maze layout and the real 999,000-point pools. Reports the
@@ -12456,7 +12581,7 @@ carries its own justification class, because §9 treats them differently.
 |---|---|---|---|
 | A | `map_amp2` **6626 / 6611 → 6848 / 6838** | **arithmetic correction** to a derivation (§4.3.55 slip, confirmed §4.3.109) | none — not a response to observed behaviour |
 | B | `meas_sampling: stratified_cell` | **conditional on item 4's verdict**; changes the prior, so it needs stage-1 re-selection — which the restart provides | pre-register before relaunch (§0) |
-| C | penalised exploration (item 6) | **new design**, derived from the gate thresholds and the objective's SE | pre-register the form and the weight |
+| C | penalised exploration | **new design** — ✅ drafted, validated and pre-registered as **§3.2.17** | done: `penalised_objective.py`, no free parameter |
 | ~~D~~ | ~~capacity ranges~~ | **DECIDED 2026-09-17: NO CHANGE (§4.3.111)** | none — dropped |
 | E | cache bump → `sweep_ids_bnn_round5.txt`, and **no `--emit-prior-runs`** | mechanical | none — but §10.5's warning is the failure hardest to notice |
 
@@ -12507,7 +12632,16 @@ blind. Record it as a future-round candidate.
    the effect, change **`n_meas`** instead — far cheaper, and it is already a
    pinned value rather than a code path. If NULL or TRADE, change neither and
    restart on A + C + D alone.
-6. **Penalised exploration, or not** (user's proposal). The measured problem, now
+6. **Penalised exploration — ✅ DRAFTED AND PRE-REGISTERED (§3.2.17).** Form:
+   `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`, with `P` the probability that
+   every gate genuinely passes, each slack in units of its own measured
+   run-to-run sd. No free parameter — the exchange rate is fixed by `log 2` and
+   the sds. Validated on the 27 discarded trials: the four eligible ones rank
+   **1–4 of 27**, and the argmin becomes eligible in all three sweeps that have
+   one. `penalised_objective.py` + self-test; wiring is a 3-line insert plus a
+   `metric.name` change in the four sweep yamls. **Land it with the bundle, not
+   before** — the diagnostic arms are running against the current code.
+   The measured problem it fixes, now
    worse than when this item was written: **all four** sweeps' ungated best is
    ineligible, and choosing the eligible best costs **17.6% / 12.4% / 3.7%** on
    `val_cvar_ce` — with **large_diverse having no eligible trial at all** in 5
