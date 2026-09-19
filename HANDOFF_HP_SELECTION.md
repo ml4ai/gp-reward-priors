@@ -12889,6 +12889,20 @@ Disclose the expansions: they were decided from round-1 results, which is
 legitimate only because round 1 was discarded wholesale and round 2 was
 pre-registered before it ran.
 
+**The common capacity range binds the BASELINES and not the BNN — and the
+direction is unfavourable (§4.3.115).** §3.2.16 imposed one capacity range across
+all three families on comparability grounds. On the completed baseline sweeps MR
+and PT press against its ceiling in **6 of 8** sweeps, with the objective still
+improving there (penultimate-to-top gain +0.015 to +0.19), controlled for the
+optimiser's sampling concentration by a best-of-k resample at matched k. The BNN
+**cannot use the top of that range at all** — §4.3.111 measured its eligible
+region at 897–10,817 parameters inside a 625–54,529 box, with gate-1 failures
+concentrated in the top tercile. **If the baselines' optima lie above the
+ceiling, they are handicapped by a limit the BNN was never going to reach, and
+the comparison flatters the proposed method.** Report this plainly. §9 forbids
+widening the range in response; a future round wanting to settle it must search
+wider *by design*.
+
 **Stage 4's statistic is a max over 200 checkpoints** (§5) — optimistic relative
 to final-checkpoint reporting, applied identically to every method, and worth
 naming rather than leaving implicit.
@@ -13071,9 +13085,11 @@ the original "~1e4" figure had dropped.
 > 1.4624**, not 1.5092 / 1.5126, giving a derived `map_amp2` of **6848 / 6838**.
 > §4.3.55 is internally inconsistent: it quotes `diag(K_geo)` ≈ 0.463 — which is
 > right — but `1 + 0.463 + 0.001 = 1.464`, not 1.509. **Report the corrected
-> derived value.** The pins are corrected to **6848 / 6838** in the restart
-> (§10.2's restart bundle); the round-4 trials that carried 6626 / 6611 are
-> discarded with the rest.
+> derived value.** ✅ **APPLIED 2026-09-18** — the pins are **6848 / 6838** in
+> all four sweep yamls and all four base configs, and round 5 is running on them
+> (verified in its launch check). The round-4 trials that carried 6626 / 6611 are
+> discarded with the rest. **§7 should report the corrected derived value and
+> state that rounds 1–4 ran 3.4% below it.**
 
 medium_play's empirically CVaR-optimal amplitude is **1.69e3** — a **3.9×**
 disagreement, inside the spacing of §4.3.17's decade ladder but real. §4.3.23
@@ -13660,12 +13676,15 @@ blind. Record it as a future-round candidate.
 
 **QUEUED — ANALYSIS DEBT (no compute, can be done while the diagnostics run)**
 
-13. **Re-run the width/depth analysis on the completed baseline sweeps.** The
-    mid-sweep version in §4.3.108 is known to be unstable — medium_diverse
-    reversed from a width preference to a w4 d1 winner between 19 and 40 trials.
-14. **Record the MR/PT winners' disclosures** (§4.3.108): three of four MR
-    winners at the width ceiling, one at the floor, and the two sweeps that kept
-    improving late.
+13. ✅ **DONE (§4.3.115)** — width/depth re-analysed on the completed sweeps.
+    The broad width preference does not survive completion; mid-sweep capacity
+    correlations move a median 0.116 with 2 sign flips in 7 sweeps; and the
+    §3.2.16 **ceiling binds the baselines in 6 of 8 sweeps** while the BNN cannot
+    reach it — an **unfavourable** comparability disclosure, now in §7.
+14. ✅ **DONE (§4.3.115)** — MR/PT winner disclosures settled: 6 of 8 winners at
+    the width ceiling (2 at the floor), every stopping-rule winner also the best
+    of all trials, trial counts 17–66, two sweeps improving late, and no
+    cross-variant depth story.
 15. **Recompute large's cell coverage and re-run §4.3.70's geometry table**
     under the fixed basis (§4.3.110), then write §7.4's corrected coverage
     disclosure. `--geometry-prior` runs on saved chains, so it is compute-free
