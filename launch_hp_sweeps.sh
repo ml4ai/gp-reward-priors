@@ -86,7 +86,7 @@ fi
 # carry the old metric.  The same new cache also carries the common capacity
 # ranges adopted later that day (handoff 3.2.16); it had not been used yet.
 #
-# The BNN cache filename is versioned (now sweep_ids_bnn_round4.txt) ON PURPOSE.
+# The BNN cache filename is versioned (now sweep_ids_bnn_round5.txt) ON PURPOSE.
 # Bumped round3 -> round4 on 2026-09-15 (handoff 3.2.16): common capacity ranges,
 # width 4-7 x depth 1-4 (was 6-9 x 1-6); resuming round 3 would carry the old
 # ranges.
@@ -118,7 +118,12 @@ BASELINE_ENTRIES=(
 
 if [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
-    IDS_FILE="exp/sweep_ids_bnn_round4.txt"
+    # ROUND 5 (bumped 2026-09-18).  The cache is keyed by ENTRY NAME, so reusing
+    # a previous round's filename silently RESUMES those sweeps with the old
+    # search space and the old metric -- the failure handoff 10.5 calls the
+    # hardest to notice.  Round 5 changes map_amp2 (item A), the optimiser's
+    # metric (item C) and the CVaR convention (item F), so it must start clean.
+    IDS_FILE="exp/sweep_ids_bnn_round5.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
     IDS_FILE="exp/sweep_ids_baselines_round2.txt"

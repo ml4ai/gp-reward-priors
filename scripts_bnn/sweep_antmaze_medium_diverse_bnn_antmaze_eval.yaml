@@ -18,7 +18,29 @@ metric:
   #   val_fn_drift_centred_loc_sd_median            <= 0.155
   #   val_cvar_degeneracy_pass                       == 1   (3.2.6)
   #   val_pred_centred_ess_median                    >= 40  (3.2.1 resolution)
-  name: val_cvar_ce
+  #
+  # ROUND 5 (handoff 3.2.17, item C): the OPTIMISER now minimises the PENALISED
+  # objective, while the gates above still decide who may WIN and the winner is
+  # still the lowest val_cvar_ce among eligible trials.  Raw val_cvar_ce is
+  # ungated, and 3.2.7 measured rho(val_cvar_ce, degeneracy margin) = +0.670 --
+  # the best-scoring configurations are the least distinguishable from the mean
+  # -- so the search was being pulled toward the ineligible region.  At the
+  # round-4 pause ALL FOUR sweeps' ungated best was ineligible, costing 17.6% /
+  # 12.4% / 3.7% to take the eligible best, with large_diverse having none.
+  #
+  #   J = cvar_ce + (1 - P) * max(0, log 2 - cvar_ce)
+  #   P = prod_g Phi(slack_g / sd_g)
+  #
+  # A trial forfeits the part of its advantage over chance it probably cannot
+  # keep.  NO FREE PARAMETER: the exchange rate is fixed by log 2 and the
+  # measured run-to-run sds.  Validated on the 27 discarded round-4 trials --
+  # the four eligible ones rank 1-4 of 27, against 3/8/14/20 on raw.
+  # Implementation: penalised_objective.py (imports selection_gates.py, so the
+  # thresholds cannot drift from the hard gates).
+  #
+  # val_cvar_ce is still logged unchanged and is still the REPORTED objective
+  # and the winner rule's input.
+  name: val_cvar_ce_penalised
   goal: minimize
 
 # [HISTORY -- round 2b; SUPERSEDED by the round-3 metric val_cvar_ce above.
@@ -207,8 +229,13 @@ parameters:
   # with 4.3.55's marginal-variance correction.  4.3.16 established it must stop
   # being swept on CE.  The residual ~4x disagreement with medium_play's
   # empirical optimum is disclosed in section 7, not tuned away (4.3.23).
+  # CORRECTED 2026-09-18 (4.3.109/4.3.110): 4.3.55's multiplier was an
+  # arithmetic slip -- it quotes diag(K_geo) ~ 0.463 but uses 1.5092/1.5126,
+  # and 1 + 0.463 + 0.001 = 1.464.  Measured on the LIVE D4RL layouts the
+  # multiplier is 1.4602/1.4624, giving T^2/multiplier = 6848.  Round 4 and
+  # earlier ran 6626, which is 3.4% low.
   map_amp2:
-    value: 6626
+    value: 6848
 
   # ---- Swept: sampler schedule -----------------------------------------
   # Cool-phase / minimum step size (lr_min), and in round 2 also the BURN-IN

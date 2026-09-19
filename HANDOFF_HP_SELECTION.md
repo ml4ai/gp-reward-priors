@@ -13319,6 +13319,33 @@ round-1 reference values that stage 3 sets.
   sweeps' ungated best is ineligible, and **15 of 25 verdicts sit within one seed-sd
   of a threshold**.
 
+#### BUNDLE STATUS — all wired and verified 2026-09-18
+
+| item | change | where |
+|---|---|---|
+| **A** | `map_amp2` **6626 → 6848** (medium), **6611 → 6838** (large) | 4 sweep yamls + 4 base configs |
+| **C** | optimiser metric → **`val_cvar_ce_penalised`** (§3.2.17) | 4 sweep yamls (`metric.name`); computed in `run_bnn_training_antmaze_eval.py` at the one point every input is in `summary` |
+| **E** | cache → **`sweep_ids_bnn_round5.txt`**, no `--emit-prior-runs` | `launch_hp_sweeps.sh` |
+| **F** | centre each draw before the CVaR, **selection and deployment** (§4.3.114) | `diagnose_sampling_tail.cvar_ce`, `run_bnn_training_antmaze_eval.py`, 4 base configs, launcher preflight; parent repo `iql_eval.py` + `iql.py` at all four CVaR sites |
+| ~~B~~, ~~D~~ | dropped — refuted (§4.3.109) and decided against (§4.3.111) | — |
+
+**Verified before launch**, mechanically: all eight files carry the corrected
+`map_amp2`; all four sweeps point at the penalised metric; the training script
+logs it *before* the final `wandb.log(summary)`; the round-5 cache does not yet
+exist, so nothing can resume; `centre_draws: true` in all four base configs with
+the launcher refusing to start without it; and the things that must **not** have
+moved are unmoved — `burn_in_lr` absent, `n_meas` 256, five swept dimensions,
+`run_cap` 130.
+
+**Two interactions worth knowing.** `check_sweep_convergence.py` reads the metric
+name from the sweep config, so **the K = 15 stopping rule now runs on `J`** — the
+quantity the sweep actually optimises, which is what that rule has always
+tracked. A side effect: §3.6.3's disclosed cost, *"a sweep can fire while the
+eligible frontier is still improving"* (§7.2's round-2 failure), is substantially
+mitigated, because `J` already accounts for eligibility. And `val_cvar_ce` is
+still logged unchanged — it remains the **reported** objective and the winner
+rule's input.
+
 **NEXT — in this order**
 
 1. ✅ **DONE — the four §4.3.109 diagnostics ran and are read out.** Verdict
@@ -13360,6 +13387,7 @@ carries its own justification class, because §9 treats them differently.
 | # | change | justification class | §9 cost |
 |---|---|---|---|
 | A | `map_amp2` **6626 / 6611 → 6848 / 6838** | **arithmetic correction** to a derivation (§4.3.55 slip, confirmed §4.3.109) | none — not a response to observed behaviour |
+| **ALL WIRED 2026-09-18** | A + C + E + F are implemented and pre-launch-verified; see §10.2's bundle-status block | | |
 | ~~B~~ | ~~`meas_sampling: stratified_cell`~~ | **REFUTED 2026-09-18 (§4.3.109 RESULT): NULL by the pre-registered rule; the posterior explodes 6.5–32× and two of three arms give a CVaR reward worse than chance** | none — dropped |
 | C | penalised exploration | **new design** — ✅ drafted, validated and pre-registered as **§3.2.17** | done: `penalised_objective.py`, no free parameter |
 | ~~D~~ | ~~capacity ranges~~ | **DECIDED 2026-09-17: NO CHANGE (§4.3.111)** | none — dropped |

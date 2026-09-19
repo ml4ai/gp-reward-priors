@@ -1361,6 +1361,37 @@ def train(config: TrainConfig):
             summary["val_cvar_ce"] = float("nan")
             wandb.log({"val_cvar_ce": float("nan")})
 
+    # ---- Item C (handoff 3.2.17): the metric the OPTIMISER minimises --------
+    # The hard gates (selection_gates.py) still decide who may WIN; this is the
+    # separate question of what the Bayes optimiser should chase while it
+    # searches.  Raw val_cvar_ce is ungated, and 3.2.7 measured
+    # rho(val_cvar_ce, degeneracy margin) = +0.670 -- the best-scoring
+    # configurations are the least distinguishable from the mean -- so the search
+    # is pulled toward the ineligible region.  At the round-4 pause ALL FOUR
+    # sweeps' ungated best was ineligible.
+    #
+    #   J = cvar_ce + (1 - P) * max(0, log 2 - cvar_ce)
+    #
+    # with P the probability every gate genuinely passes, each slack in units of
+    # its own measured run-to-run sd.  No free parameter.  Computed here because
+    # this is the one point where every input is already in `summary`.
+    try:
+        import penalised_objective as _pen
+        summary["val_cvar_ce_penalised"] = _pen.penalised_objective(summary)
+        summary["val_p_eligible"] = _pen.p_eligible(summary)
+        print(f"[penalised] val_cvar_ce_penalised="
+              f"{summary['val_cvar_ce_penalised']:.4f} "
+              f"(P(eligible)={summary['val_p_eligible']:.3f}, "
+              f"val_cvar_ce={summary.get('val_cvar_ce', float('nan')):.4f})")
+    except Exception as e:  # noqa: BLE001 — never lose a finished run
+        warnings.warn(
+            f"penalised objective failed ({type(e).__name__}: {e}); logging NaN. "
+            "The run is intact but the SWEEP CANNOT RANK IT -- 3.2.17's metric is "
+            "missing for this trial.",
+            RuntimeWarning,
+        )
+        summary["val_cvar_ce_penalised"] = float("nan")
+
     wandb.log(summary)
 
 

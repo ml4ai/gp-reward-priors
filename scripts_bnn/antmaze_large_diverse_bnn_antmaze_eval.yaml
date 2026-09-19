@@ -64,7 +64,9 @@ n_meas: 256              # round-2 winner: 7
 # Prior amplitude multiplier (K -> map_amp2*K): scales the map kernel's reward
 # amplitude while leaving its correlation structure untouched.  Absent this line
 # the field falls back to TrainConfig's 1.0.
-map_amp2: 6611           # round-2 winner: 94945.16517045192
+map_amp2: 6838           # CORRECTED 2026-09-18 (4.3.109): was 6611, 3.4% low -- 4.3.55's
+                         # multiplier was an arithmetic slip; the live-layout value is
+                         # 1.4602/1.4624, so T^2/multiplier = 6838. # round-2 winner: 94945.16517045192
 chain_init_jitter: 1.0   # round 2 ran the TrainConfig default, 0.0
 meas_jitter: .000001
 gp_cov_scale: 1.0
