@@ -13346,6 +13346,55 @@ mitigated, because `J` already accounts for eligibility. And `val_cvar_ce` is
 still logged unchanged — it remains the **reported** objective and the winner
 rule's input.
 
+#### ROUND 5 LAUNCHED AND CHECKED (2026-09-19)
+
+Sweep ids — **new, so nothing resumed**: medium_play `37wlya3i`, medium_diverse
+`03iccldi`, large_play `obt9bwtz`, large_diverse `3svmvmle`. Cache
+`exp/sweep_ids_bnn_round5.txt`. All four RUNNING on metric
+**`val_cvar_ce_penalised`**.
+
+**Launch check, 12 runs / 8 finished: clean.** Zero config violations —
+`map_amp2` **6848 / 6838** (item A live), `centre_draws` **True** (item F live),
+`n_meas` 256, 32 chains × 60 draws × `cycle_length` 2000, `burn_in_lr` absent,
+width 4–7 × depth 1–4. `val_cvar_ce_penalised` and `val_p_eligible` present and
+finite on every finished trial (item C live). **No unsynced, no diverged.**
+
+> **F is visibly active in the NUMBERS, not just in the flag.** `val_cvar_ce` at
+> the selection level now spans **0.457–0.781** against round 4's 0.305–0.734 at
+> the same conservatism — the objective has moved up because centring removed the
+> offset suppression, exactly as §4.3.113 measured. Centred posterior sd is
+> **1.47–2.17**, in line with round 4's baselines, so nothing has blown up.
+
+**Gate 2 is transformed, precisely as §4.3.114 predicted.**
+
+| | round 4 (27 trials) | **round 5 (8 trials)** |
+|---|---|---|
+| eligible | 4 (15%) | **4 (50%)** |
+| fail gate 2 **alone** | 10 (37%) | **0** |
+| degeneracy margin | −0.137 … +0.034 | **+0.049 … +0.425** |
+| sweeps whose ungated best is ineligible | 4 of 4 | **1 of 4** |
+| failures remaining | scale 12, loc 3, degen 19 | **scale 4, loc 1, degen 0** |
+
+**The binding constraint has moved from degeneracy to stationarity.** Every
+round-5 rejection so far is gate 1. That is a cleaner problem, and it is the one
+§4.3.108's width/depth decomposition speaks to — width bought gate 2, which no
+longer binds; depth is what breaks gate 1, which now does.
+
+**Item C is doing its job**: 3 of 4 sweeps have their *ungated* best trial
+eligible, against **0 of 4** in round 4 — §7.2's failure mode, which C was built
+to fix.
+
+> ⚠️ **n = 2 per sweep, and the optimiser is still in its random phase.** Round
+> 4's early read was 18% at 22 trials and fell to **15%** by 27. Do not quote
+> 50%. The numbers to watch are the gate-2 margin staying positive and the gate-1
+> failure rate, and §10.6's convergence tool is the way to watch them.
+
+*A mis-specified check of mine, recorded so it is not re-raised: a first pass
+asserted `J == val_cvar_ce` for every eligible trial and flagged a mismatch. That
+assertion is only true when `P ≈ 1`. `vh9j04wh` has `P` 0.871, and
+`0.5134 + (1−0.871)·(log 2 − 0.5134) = 0.5366` against the logged 0.5367 — the
+implementation is exactly right; the check was wrong.*
+
 **NEXT — in this order**
 
 1. ✅ **DONE — the four §4.3.109 diagnostics ran and are read out.** Verdict
