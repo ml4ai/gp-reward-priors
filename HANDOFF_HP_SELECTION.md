@@ -12034,24 +12034,49 @@ winners sit at the floor.
 
 #### The disclosure this forces, and its direction is unfavourable
 
-> ⚠️ **The common capacity range binds the BASELINES and not the proposed
-> method.** §3.2.16 imposed one range across all three families. MR and PT press
-> against its ceiling in 6 of 8 sweeps with the objective still improving there.
-> The **BNN cannot use the top of that range at all**: §4.3.111 measured its
-> eligible region at **897–10,817 parameters inside a 625–54,529 box**, with
-> gate-1 failures concentrated in the top tercile (8 of 9).
+> ⚠️ **WITHDRAWN 2026-09-19, the same day it was written — its premise is false.**
+> This block claimed the ceiling "binds the BASELINES and not the proposed
+> method", on the ground that the BNN "cannot use the top of that range at all".
+> **It can.** Round 5 has drawn **width-7 trials in 3 of 4 sweeps**, and **two of
+> them are ELIGIBLE** — `xtynhgb5` (large_diverse w7 d1) and `vh9j04wh`
+> (medium_play w7 d3, **38,017 parameters**, 70% of the way up the range). The
+> eligible span is **2,305–38,017p**, not §4.3.111's 897–10,817p.
 >
-> **So if MR's and PT's optima lie above width 7 / `embd_dim` 5, the baselines
-> are handicapped by a ceiling the BNN was never going to reach — and the
-> comparison flatters the BNN.** That is the *unfavourable* direction and it must
-> be stated plainly in §7, not left for a reader to notice.
+> **The 897–10,817 figure was round-4 behaviour under the RAW objective.** Item F
+> (centring, §4.3.114) changed it: the gate-1-at-high-capacity problem was
+> substantially the unidentified offset, and removing it opened the top of the
+> range to the BNN. **This is the second conclusion drawn from round-4 data that
+> item F has overturned** — the first was §4.3.109's reading of the `n_meas`
+> control.
 >
-> **§9 forbids widening the range in response** (that is precisely
-> response-to-observed-behaviour), and §3.2.16's common ranges were themselves a
-> declared amendment. So the honest course is: **disclose, do not widen**, and
-> record that a future round wanting to settle it must run the baselines on a
-> wider range *by design*, not as a reaction. Widening now would also cost the
-> 8-sweep baseline re-run §4.3.111 declined.
+> **The procedural argument is also sound and I had it backwards.** The range is
+> common and *predetermined*; all three families search it under the same trial
+> budget and stopping rule; nothing stops the BNN optimiser exploring the
+> ceiling, and it does. **Any family's true optimum can lie outside any range** —
+> that is a universal limitation of a pre-registered search, symmetric across
+> families, not an asymmetry favouring one of them.
+
+**What survives, stated symmetrically.** Winners at a range boundary mean the
+optimum may lie outside it, and that is worth reporting **per family** without
+implying an unfairness:
+
+| family | winners at the width ceiling | at the floor | still improving at the ceiling? |
+|---|---|---|---|
+| MR | 3 of 4 | 1 (medium_diverse) | yes, +0.015 to +0.074 |
+| PT | 3 of 4 | 1 (medium_diverse) | yes, +0.010 to +0.19 |
+| BNN | — eligible span reaches 38,017p of 54,529 | — | gate 1 binds before the objective does |
+
+> **One thing that does NOT survive, and it is a pre-registered design decision.**
+> §3.2.16 justified the ceiling partly by discounting MR's large-model
+> preference: *"MR's apparent preference for large models came from the old
+> validation-only checkpoint selection (§4.3.106), which favoured large models.
+> The new MR ceiling rests on consistency and the general grounds, not on MR
+> data."* **Under the NEW test-split rule the preference persists** — ρ −0.777
+> and −0.587 on MR medium_play and large_play, with the ceiling genuinely better
+> in 6 of 8 sweeps at matched k. The stated ground for discounting it is
+> **refuted**. §3.2.16's ranges still stand on their general grounds, and §9
+> forbids widening in response, but the reasoning should be corrected in §7
+> rather than repeated.
 
 #### To-do item 12 — the MR/PT winner disclosures, settled
 
@@ -12889,19 +12914,24 @@ Disclose the expansions: they were decided from round-1 results, which is
 legitimate only because round 1 was discarded wholesale and round 2 was
 pre-registered before it ran.
 
-**The common capacity range binds the BASELINES and not the BNN — and the
-direction is unfavourable (§4.3.115).** §3.2.16 imposed one capacity range across
-all three families on comparability grounds. On the completed baseline sweeps MR
-and PT press against its ceiling in **6 of 8** sweeps, with the objective still
-improving there (penultimate-to-top gain +0.015 to +0.19), controlled for the
-optimiser's sampling concentration by a best-of-k resample at matched k. The BNN
-**cannot use the top of that range at all** — §4.3.111 measured its eligible
-region at 897–10,817 parameters inside a 625–54,529 box, with gate-1 failures
-concentrated in the top tercile. **If the baselines' optima lie above the
-ceiling, they are handicapped by a limit the BNN was never going to reach, and
-the comparison flatters the proposed method.** Report this plainly. §9 forbids
-widening the range in response; a future round wanting to settle it must search
-wider *by design*.
+**Winners sit at a capacity-range boundary in 8 of 8 baseline sweeps, so the
+optimum may lie outside the searched range (§4.3.115).** Six of eight MR/PT
+winners sit at the width ceiling and two at the floor, and at the ceiling the
+objective is still improving (penultimate-to-top gain +0.015 to +0.19, controlled
+for the optimiser's sampling concentration by a best-of-k resample at matched k).
+**Report this as the ordinary limitation of a pre-registered range, symmetric
+across families** — the range is common and was fixed in advance, all three
+families search it under the same budget and stopping rule, and any family's
+optimum can lie outside it. The BNN is **not** excluded from the top: round 5
+draws width-7 trials in 3 of 4 sweeps and two are eligible, one at 38,017 of a
+54,529-parameter ceiling. §9 forbids widening in response; a future round wanting
+to settle it must search wider *by design*.
+
+**§3.2.16's stated ground for the ceiling is partly refuted.** It discounted MR's
+large-model preference as an artefact of the old validation-only checkpoint rule.
+Under the new test-split rule the preference persists (ρ −0.777 and −0.587 on MR
+medium_play and large_play). The ranges stand on their general grounds; the
+reasoning does not, and should be corrected rather than repeated.
 
 **Stage 4's statistic is a max over 200 checkpoints** (§5) — optimistic relative
 to final-checkpoint reporting, applied identically to every method, and worth
@@ -13065,9 +13095,28 @@ data is thin will look worse on a validation set that never visits those cells,
 not better. It should be reported as a limit on what the validation metrics can
 certify, not as a defect in the models.~~
 
-**What §7.4 should say instead, once large is recomputed:** state the true
-per-variant coverage, and note that it was mis-measured at first by a diagnostic
-that rebuilt the prior basis instead of reading the one the run used (§4.3.110).
+**RECOMPUTED 2026-09-19 on the live layouts, all four variants** — this is what
+§7 should state:
+
+| variant | eval set occupies | free cells | coverage | §7.3 had claimed |
+|---|---|---|---|---|
+| medium_play | 21 | 26 | **81%** | 50% |
+| medium_diverse | 23 | 26 | **88%** | 50% |
+| large_play | 31 | 46 | **67%** | 55% |
+| large_diverse | 31 | 46 | **67%** | 55% |
+
+**Coverage is 67–88%, not "roughly half".** The withdrawn figures came from a
+diagnostic that rebuilt the prior basis with a wrong grid offset and, for large,
+the wrong maze (§4.3.110). State the corrected numbers, and note that the
+original were a measurement error rather than a property of the data.
+
+**Consequence for the large_play coverage argument.** §7.3 used the low figure to
+*support* the coverage-limited reading of large_play's width/signal ratio of 3.92
+(§4.3.53). At **67%** — and with large_diverse, which does *not* show the
+pathology, sitting at exactly the same 67% — that support is gone: the two large
+variants have identical coverage and opposite behaviour. **Whatever drives
+large_play's width/signal ratio, it is not eval-set coverage.** Drop the argument
+rather than restate it with better numbers.
 
 ---
 
