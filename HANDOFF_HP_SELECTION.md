@@ -10332,6 +10332,11 @@ must guarantee.
 
 ### 4.3.108 Pre-relaunch review (2026-09-15): both selection tools applied superseded gates — fixed
 
+> ⚠️ **Round-4 eligibility and gate-2 figures below are PROVISIONAL** — they
+> predate item F and rest on the raw CVaR objective (§4.3.116). The architecture
+> correlations survive under F; **the gate-2 binding does not** (0 of 13 round-5
+> trials fail it, against 19 of 27 here).
+
 Read end to end before the relaunch: all 12 sweep yamls (plus diffs between
 variants within each family), both launchers' logic, the BNN base configs, and
 the tools that decide eligibility and stopping.
@@ -11057,6 +11062,11 @@ is already known to be incomplete.
 
 #### RESULT (2026-09-18): NULL by the pre-registered rule — stratification is REFUTED
 
+> **The NULL verdict is unaffected by item F** (§4.3.116): it was carried by gate
+> 1 (+10.2σ and +7.7σ), which is centred. The `val_cvar_ce` figures in this block
+> are raw; §4.3.113 re-measured them centred and they are **worse**, so the
+> refutation strengthens.
+
 All four arms finished. **Validity first**: `param_clamp_sampling_pct` = 0 on all
 four and `gradnorm_..._pct_over_clip` ≤ 0.0003%, so the tail numbers are usable.
 **Config audit: clean on every key** for all four pairs.
@@ -11141,6 +11151,10 @@ the dimension it acts on** — the same class of error as §4.3.42 aiming `sig_c
 at λ_max while the stiffness sat at λ_min, and it is now twice in this document.
 
 #### RESULT (2026-09-18): the rule does NOT fire — `n_meas` stays at 256
+
+> **The NULL verdict is unaffected by item F** (§4.3.116): condition (2), gate-1
+> location headroom, failed on medium_play's 1c rung, and that is centred. The
+> `ce@0.95` columns are raw and remain provisional.
 
 All six rungs finished, clamp 0 everywhere, **config audit clean on every rung**.
 
@@ -11614,6 +11628,13 @@ object should assert it matches**, and the cheapest assertion is the one now
 printed: state the basis and let it be read.
 
 ### 4.3.111 DECIDED: the capacity ranges do NOT widen — the feasible region is interior
+
+> ⚠️ **The decision STANDS but two of its three premises have moved** (§4.3.116).
+> "The eligible region is interior (897–10,817p)" is **refuted** — under item F it
+> is 2,305–38,017p including an eligible width-7 trial (§4.3.115). What carries
+> the decision is §4.3.105's ladders showing gate 1 degrading above the ceiling,
+> which is centred and unaffected, reinforced by round 5's
+> ρ(`n_params`, `|log r|`) = +0.725.
 
 Bundle item D, settled 2026-09-17 at the user's request, before the restart.
 `scripts_bnn/capacity_range_decision.py`, on the 26 finished round-4 trials plus
@@ -12090,6 +12111,102 @@ implying an unfairness:
 - **Depth is inconsistent**: ρ(depth) runs −0.578 to +0.341 across MR and −0.275
   to +0.006 across PT. There is no cross-variant depth story, and §4.3.108's
   "depth changes sign" observation is confirmed on the completed sweeps.
+
+### 4.3.116 Systematic audit: which round-4 claims survive item F
+
+Item F has now overturned **two** conclusions drawn from round-4 data — §4.3.109's
+reading of the `n_meas` control (§4.3.113) and §4.3.111's "the BNN cannot use the
+top of the capacity range" (§4.3.115). Rather than wait for a third, this is the
+full pass, in the form §4.3.61 used for the raw-vs-centred audit.
+
+#### The classification rule, and it is mechanical
+
+Item F changes `val_cvar_ce` and everything derived from it — including the
+degeneracy **gap**, **threshold**, **margin** and therefore **eligibility**. It
+changes nothing else:
+
+| quantity | affected by F? | why |
+|---|---|---|
+| gate 1 (`\|log r\|`, `loc_sd`) | **no** | already centred (§3.6.3's amendment) |
+| gate 3 (centred `ess`) | **no** | already centred |
+| centred posterior sd, centred `rhat` | **no** | already centred |
+| mean CE, predictive CE, **accuracy** | **no** | Class A — exactly offset-invariant (§4.3.61) |
+| **`val_cvar_ce`, gate 2, eligibility** | **YES** | the CVaR reduction itself moves |
+
+So: **a claim is at risk if and only if it rests on `val_cvar_ce` or on gate 2 /
+eligibility.**
+
+#### Class I — UNAFFECTED. No action.
+
+| claim | section | rests on |
+|---|---|---|
+| depth raises drift; capacity raises drift | §4.3.78, §4.3.80, §4.3.86, §4.3.108 | gate 1, centred |
+| gate 3 never binds (min centred ess 41.5) | §4.3.108 | gate 3, centred |
+| `\|log r\|` rises monotonically above the width ceiling, both variants | §4.3.105 | gate 1, centred |
+| the stratified arms' posterior explodes 6.5–32× | §4.3.109 | centred sd |
+| MR/PT capacity, memorisation, winners, split-role results | §4.3.106, §4.3.108, §4.3.115 | `eval_loss_at_selected` — F does not touch the MR/PT *sweep* objective |
+| τ = 1.122 and τ_loc = 0.155 | §3.2.12, §4.3.88 | derived analytically |
+| every mechanism refuted in §4.3.30–§4.3.104 | — | centred drift and Class A metrics |
+
+#### Class II — AT RISK, and TESTED against round 5 (13 trials under F)
+
+| round-4 claim | round-5 result | verdict |
+|---|---|---|
+| ρ(depth, `\|log r\|`) = +0.44…+0.85 — *"depth is the gate-1 poison"* | **+0.549**; depth-4 median `\|log r\|` **0.2838** vs depth-2's 0.0238 | **SURVIVES** |
+| ρ(width, margin) positive — *"width is the gate-2 lever"* | **+0.577** | direction **survives** |
+| ρ(`n_params`, `\|log r\|`) = +0.396 | **+0.725** | survives, stronger |
+| ρ(`n_params`, margin) = +0.570 | **+0.676** | survives |
+| **gate 2 rejects 37% alone; margins −0.137…+0.034** | **0 of 13 fail; margins +0.034…+0.425** | **REFUTED — gate 2 no longer binds** |
+| eligible region is 897–10,817p | **2,305–38,017p**, incl. an eligible w7 d3 | **REFUTED** (§4.3.115) |
+| *"0 of 6 depth-4 trials eligible"* | **1 of 3** eligible at depth 4 | weakened, small n |
+
+> **The pattern: the CORRELATIONS survive, the BINDING does not.** Width still
+> buys gate-2 margin and depth still costs gate-1 stationarity — but under F
+> every trial clears gate 2, so the width lever is **moot** and **gate 1 is the
+> only binding constraint**. Any round-4 reasoning that traded one gate against
+> the other is now reasoning about a frontier with one live side.
+
+#### Class III — AT RISK and NOT YET VERIFIABLE
+
+Round-4 **sweep trials overwrote their chains** (§4.3), so their centred
+`val_cvar_ce` cannot be recovered. These stand unverified:
+
+| claim | section | status |
+|---|---|---|
+| the four sweeps' ungated best is ineligible, costing 17.6% / 12.4% / 3.7% | §4.3.108 | round 5 shows **1 of 4**, not 4 of 4 — the *motivation* for item C is weakened but C's validation does not depend on it |
+| gate 2 fails at every capacity (6/7/6 of 9 by tercile) | §4.3.111 | premise of a decision — see below |
+| the 27-trial validation of §3.2.17's penalised objective | §3.2.17 | the *form* is unaffected; the validation is on raw-objective trials |
+| no width × depth interaction | §4.3.106 | round-3 trials, raw |
+
+#### The one DECISION whose premises moved: §4.3.111 (capacity ranges)
+
+It rested on three lines. **One is refuted, one is unverified, one is Class I:**
+
+1. ~~the eligible region is interior (897–10,817p)~~ — **refuted**, now 2,305–38,017p
+2. gate-2 failure is not capacity-shaped — **unverified**, and gate 2 no longer binds at all
+3. above the ceiling, `|log r|` rises monotonically on both ladder variants — **Class I, intact**
+
+> ✅ **The decision still holds, on line 3 alone.** §4.3.105's ladders are
+> fixed-depth, single-axis and centred, and they show gate 1 degrading
+> monotonically from w7 → w9 on both variants (large_diverse 0.162 → 0.362,
+> large_play 0.258 → 0.346). Round 5 confirms the mechanism independently:
+> ρ(`n_params`, `|log r|`) = **+0.725**, *stronger* than round 4's +0.396. **Do
+> not widen.** But the decision now rests on one line rather than three, and that
+> should be stated rather than left implicit.
+
+#### The cheapest way to close the remaining gap
+
+**§4.3.105's twelve capacity-ladder rungs kept their own `OUT_DIR`s**, so unlike
+the sweep trials they *can* be re-scored on centred `f` for zero training
+compute. That would settle line 2 and the ladder's `cvar_ce` column together:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for V in large_diverse large_play; do for W in 4 5 6 7 8 9; do R=cap_ladder2_${V}_w${W}; [ -d exp/${R}_0 ] || continue; echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --centre-draws --device cuda > exp/cen_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/cen_${R}.txt || echo "  (see exp/cen_${R}.txt)"; done; done | tee exp/centred_capacity_ladder.txt
+```
+
+**Standing rule from this audit:** *a claim resting on `val_cvar_ce` or on gate 2
+from any run predating 2026-09-18 is provisional until re-scored under item F.*
+Round 5 is the clean record; round 4's is not.
 
 ### 4.4 Procedure
 
