@@ -11967,6 +11967,105 @@ full output first, so a wrong anchor cannot lose the data.)*
 the per-variant rung table, and the four-part rule above applied mechanically.
 Run `--selftest` first.
 
+### 4.3.115 Baselines re-analysed on the COMPLETED sweeps — the capacity ceiling binds MR and PT, and not the BNN
+
+To-do items 11 and 12, 2026-09-19, zero compute.
+`scripts_bnn/baseline_capacity_readout.py`. **Supersedes §4.3.108's mid-sweep
+reading**, which that section already flagged as unstable.
+
+#### 1. The capacity preference is variant-dependent, and weaker than it looked
+
+`eval_loss_at_selected` is minimised, so **negative ρ = bigger is better**:
+
+| family | variant | n | ρ(width) | ρ(depth) | ρ(`n_params`) | winner w/d |
+|---|---|---|---|---|---|---|
+| MR | medium_play | 27 | −0.455 | −0.578 | **−0.777** | 7/4 (ceiling) |
+| MR | large_play | 34 | −0.716 | +0.001 | **−0.587** | 7/4 (ceiling) |
+| MR | large_diverse | 26 | +0.022 | +0.341 | −0.017 | 7/2 (ceiling) |
+| MR | medium_diverse | 64 | +0.020 | +0.235 | +0.010 | **4/1 (floor)** |
+| PT | large_diverse | 17 | −0.417 | −0.275 | −0.270 | 5/3 (ceiling) |
+| PT | large_play | 20 | −0.441 | +0.006 | −0.232 | 5/2 (ceiling) |
+| PT | medium_play | 66 | −0.103 | −0.088 | −0.124 | 5/4 (ceiling) |
+| PT | medium_diverse | 29 | +0.144 | −0.068 | +0.217 | **3/2 (floor)** |
+
+Strong "bigger is better" survives only on **MR medium_play and large_play**. On
+both *diverse* variants it is ~zero or reversed, and their winners sit at the
+range **floor**. §4.3.108's mid-sweep impression of a broad width preference does
+not survive completion.
+
+#### 2. Mid-sweep capacity correlations are not trustworthy — quantified
+
+§4.3.108 discovered medium_diverse reversing between 19 and 40 trials by
+accident. Measured deliberately, ρ(`n_params`, loss) on the first *k* trials
+against the full sweep:
+
+| | k=10 | k=20 | k=30 | k=40 | all |
+|---|---|---|---|---|---|
+| MR medium_diverse | −0.867 | −0.552 | −0.425 | −0.089 | **+0.010** |
+| PT medium_play | −0.176 | +0.153 | +0.111 | −0.024 | **−0.124** |
+| MR large_diverse | +0.188 | −0.242 | — | — | **−0.017** |
+
+**Median |move| from k = 20 to completion is 0.116, max 0.562, with 2 sign flips
+in 7 sweeps.** A Bayes optimiser concentrates sampling as it learns, so early
+trials are the random-exploration phase and late ones are not a random sample of
+the space either. **Do not read a capacity correlation off a running sweep** —
+§4.3.106 and §4.3.108 both did, and §4.3.108's reading was wrong.
+
+#### 3. The §3.2.16 ceiling BINDS the baselines — controlled for sampling
+
+A bare min-over-trials favours widths the optimiser sampled more, so the ceiling
+comparison is a **best-of-k resample at matched k** (20,000 draws):
+
+| family | variant | comparison w | ceiling w | k | best-of-k cmp | best-of-k ceiling | P(ceiling better) |
+|---|---|---|---|---|---|---|---|
+| MR | medium_play | 4 | 7 | 4 | 0.1700 | **0.1497** | **100%** |
+| MR | large_play | 4 | 7 | 9 | 0.2697 | **0.2279** | **100%** |
+| MR | large_diverse | 5 | 7 | 1 | 0.3512 | **0.2264** | **100%** |
+| PT | medium_play | 3 | 5 | 21 | 0.2754 | **0.1740** | **100%** |
+| PT | large_play | 4 | 5 | 3 | 0.4328 | **0.2854** | **100%** |
+| PT | large_diverse | 4 | 5 | 2 | 0.2969 | **0.2584** | 94% |
+| MR | medium_diverse | 4 | 7 | 20 | **0.2512** | 0.2532 | 6% |
+| PT | medium_diverse | 3 | 5 | 5 | **0.3584** | 0.3844 | 6% |
+
+**The ceiling is genuinely better in 6 of 8 sweeps**, and the objective is still
+improving when it bites — the penultimate-to-top gain is +0.015 to **+0.19** (PT
+large_play 0.4328 → 0.2413). The two exceptions are both *medium_diverse*, whose
+winners sit at the floor.
+
+#### The disclosure this forces, and its direction is unfavourable
+
+> ⚠️ **The common capacity range binds the BASELINES and not the proposed
+> method.** §3.2.16 imposed one range across all three families. MR and PT press
+> against its ceiling in 6 of 8 sweeps with the objective still improving there.
+> The **BNN cannot use the top of that range at all**: §4.3.111 measured its
+> eligible region at **897–10,817 parameters inside a 625–54,529 box**, with
+> gate-1 failures concentrated in the top tercile (8 of 9).
+>
+> **So if MR's and PT's optima lie above width 7 / `embd_dim` 5, the baselines
+> are handicapped by a ceiling the BNN was never going to reach — and the
+> comparison flatters the BNN.** That is the *unfavourable* direction and it must
+> be stated plainly in §7, not left for a reader to notice.
+>
+> **§9 forbids widening the range in response** (that is precisely
+> response-to-observed-behaviour), and §3.2.16's common ranges were themselves a
+> declared amendment. So the honest course is: **disclose, do not widen**, and
+> record that a future round wanting to settle it must run the baselines on a
+> wider range *by design*, not as a reaction. Widening now would also cost the
+> 8-sweep baseline re-run §4.3.111 declined.
+
+#### To-do item 12 — the MR/PT winner disclosures, settled
+
+- **6 of 8 winners sit at the width ceiling**, 2 at the floor (both
+  medium_diverse). Broader than §4.3.108's "three of four MR winners".
+- **Every stopping-rule winner is also the best of all trials** — no rule-vs-best
+  regret to disclose for any of the eight (§4.3.108).
+- **Trial counts span 17–66.** Two sweeps kept improving late: MR medium_diverse
+  (improvements at trials 23, 35, 39, 40) and PT medium_play (0.2228 → 0.1740
+  over its last three).
+- **Depth is inconsistent**: ρ(depth) runs −0.578 to +0.341 across MR and −0.275
+  to +0.006 across PT. There is no cross-variant depth story, and §4.3.108's
+  "depth changes sign" observation is confirmed on the completed sweeps.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
