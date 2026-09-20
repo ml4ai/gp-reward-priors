@@ -11635,6 +11635,15 @@ printed: state the basis and let it be read.
 > the decision is §4.3.105's ladders showing gate 1 degrading above the ceiling,
 > which is centred and unaffected, reinforced by round 5's
 > ρ(`n_params`, `|log r|`) = +0.725.
+>
+> **Further support, 2026-09-20 (§4.3.117):** re-scoring §4.3.105's ladders on
+> centred `f` moves the objective's argmin **toward smaller capacity on both
+> variants** — large_diverse from w7 (54,529p) to w5 (4,417p), large_play to a
+> strictly monotone-increasing curve with no interior optimum. Raw scoring
+> flatters wide models, because offset spread grows with capacity. This is at the
+> **deployment** conservatism (0.95), not the selection one, so it does not close
+> line 2 — but it runs in the decision's direction, from a third independent
+> measurement.
 
 Bundle item D, settled 2026-09-17 at the user's request, before the restart.
 `scripts_bnn/capacity_range_decision.py`, on the 26 finished round-4 trials plus
@@ -12198,15 +12207,140 @@ It rested on three lines. **One is refuted, one is unverified, one is Class I:**
 
 **§4.3.105's twelve capacity-ladder rungs kept their own `OUT_DIR`s**, so unlike
 the sweep trials they *can* be re-scored on centred `f` for zero training
-compute. That would settle line 2 and the ladder's `cvar_ce` column together:
+compute. That would settle line 2 and the ladder's `cvar_ce` column together.
 
-```bash
-cd ~/iqlpref/gp_reward-priors && for V in large_diverse large_play; do for W in 4 5 6 7 8 9; do R=cap_ladder2_${V}_w${W}; [ -d exp/${R}_0 ] || continue; echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --centre-draws --device cuda > exp/cen_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/cen_${R}.txt || echo "  (see exp/cen_${R}.txt)"; done; done | tee exp/centred_capacity_ladder.txt
-```
+> ⚠️ **The command first written here was WRONG and the run it produced does
+> not close line 2** — see §4.3.117. It omitted `--conservatism 0.75`, and
+> `diagnose_sampling_tail.py` defaults to `--cvar-ce-alpha 0.05`, i.e. the
+> **deployment** conservatism 0.95, not the **selection** conservatism 0.75 that
+> `val_cvar_ce` and gate 2 are defined at. The corrected command is in §4.3.117;
+> the mis-specified run is *not* wasted — it is the deployment-side ladder, which
+> nothing else covers.
 
 **Standing rule from this audit:** *a claim resting on `val_cvar_ce` or on gate 2
 from any run predating 2026-09-18 is provisional until re-scored under item F.*
 Round 5 is the clean record; round 4's is not.
+
+### 4.3.117 The capacity ladder re-scored on centred `f` — at the WRONG conservatism, and what it still establishes
+
+Ran 2026-09-20, twelve rungs, output `exp/centred_capacity_ladder.txt`.
+
+#### 1. The command was mis-specified — my error, recorded rather than quietly fixed
+
+The §4.3.116 command passed `--cvar-ce --centre-draws` and **no conservatism
+flag**. `diagnose_sampling_tail.py` defaults to `--cvar-ce-alpha 0.05`, a *tail
+fraction*, which is **conservatism 0.95 — the deployment level**. The selection
+objective is `cvar_ce_conservatism: float = 0.75`
+(`run_bnn_training_antmaze_eval.py:254`), i.e. tail fraction **0.25**. So every
+number below is at the deployment tail, and **none of them is the `val_cvar_ce`
+that gate 2 and §4.3.111's line 2 are defined on.**
+
+**Caught by a reproduction check, not by inspection**: the `raw f` column should
+have reproduced §4.3.105's logged `cvar_ce` exactly (raw + same draws + same
+alpha = the same number), and it did not — large_diverse w4 gave 0.6068 against
+the table's 0.4767. The discrepancy is **ordered consistently with a deeper
+tail** at all twelve rungs: `mean CE < cvar_ce(α=0.25) < cvar_ce(α=0.05)`, e.g.
+large_play w9 at 0.2504 < 1.3238 < 1.8653. That ordering is the signature of an
+alpha mismatch and of nothing else.
+
+> **Lesson, and it is the same one as §4.3.104's `width` trap:** a re-score is
+> only evidence if it *reproduces the column it claims to replace* under the old
+> convention. The `raw f` column exists precisely so this check is possible —
+> and it worked. Any future re-score must be read raw-column-first.
+
+#### 2. What the run DOES establish: the deployment-conservatism ladder, centred
+
+This is new. §4.3.105 measured the ladder at selection conservatism only, and
+§4.3.114 put centring into the **deployment** path as well (`iql_eval.py`,
+`iql.py`, all four CVaR sites). Nothing until now measured capacity against the
+deployment tail under that convention.
+
+**large_diverse** (depth 4, 514 pairs), tail fraction 0.05:
+
+| w | n_params | centred CE | raw CE | centred acc | raw acc | width/pref ratio (centred) |
+|---|---|---|---|---|---|---|
+| 4 | 1,441 | 0.8557 | 0.6068 | **0.4545** | 0.6727 | 1.361 |
+| **5** | 4,417 | **0.6210** | 0.4027 | 0.6273 | 0.8091 | 0.818 |
+| 6 | 14,977 | 0.6371 | 0.3856 | 0.6364 | 0.8364 | 0.828 |
+| 7 | 54,529 | 0.7332 | **0.3502** | 0.6000 | 0.8545 | 1.006 |
+| 8 | 207,361 | 0.8872 | 0.4877 | 0.5455 | 0.7636 | 1.166 |
+| 9 | 807,937 | 1.2279 | 0.5952 | **0.4182** | 0.6727 | 1.471 |
+
+**large_play** (depth 6, 254 pairs), tail fraction 0.05:
+
+| w | n_params | centred CE | raw CE | centred acc | raw acc | width/pref ratio (centred) |
+|---|---|---|---|---|---|---|
+| **4** | 1,985 | **0.7434** | 0.4485 | 0.6111 | 0.8333 | 1.002 |
+| 5 | 6,529 | 0.9828 | **0.4481** | 0.6111 | 0.7963 | 1.486 |
+| 6 | 23,297 | 1.5297 | 0.6570 | 0.5741 | 0.7778 | 2.410 |
+| 7 | 87,553 | 2.1688 | 1.1725 | 0.5741 | 0.7593 | 4.215 |
+| 8 | 338,945 | 2.6792 | 1.3983 | 0.5370 | 0.7778 | 5.133 |
+| 9 | 1,333,249 | 3.5924 | 1.8653 | **0.4630** | 0.6296 | 6.281 |
+
+**(a) Centring moves the argmin toward SMALLER capacity on both variants.**
+large_diverse: raw picks **w7 (54,529p)**, centred picks **w5 (4,417p)** — a
+**12× drop** in selected capacity. large_play: raw is a dead heat between w4 and
+w5 (0.4485 / 0.4481, a 0.0004 difference); centred is **strictly monotone
+increasing** from w4, so the ladder has no interior optimum at all. Both shifts
+run the same way, and it is the direction §4.3.111 decided in.
+
+**(b) Raw scoring systematically flatters wide models.** This is §4.3.113's
+mechanism showing up as a *ranking* error rather than a level error: the draw
+offset `c_j` dominates the per-point sort, the same draws are selected
+everywhere, and the CVaR reward collapses toward `mean − constant`. Wide models
+have the largest offset variance, so they gain the most from the collapse. The
+`width/pref ratio` row makes this explicit — raw understates it by **23–80%** at
+eleven of twelve rungs, worst exactly where capacity is largest.
+
+**(c) At deployment conservatism, most of the ladder carries no preference
+information.** Against `log 2 = 0.6931`, only **three of twelve rungs** beat the
+trivial predictor on centred CE: large_diverse w5 (0.6210) and w6 (0.6371), and
+large_play w4 (0.7434 — which does *not*, it is 7% above). So strictly: **two of
+twelve.** And centred CVaR accuracy falls **below chance** at large_diverse w4
+(0.4545) and w9 (0.4182) and at large_play w9 (0.4630).
+
+> This is a **deployment**-side finding and must not be read as a selection-side
+> one. It says the α=0.05 reward field is close to preference-uninformative for
+> most capacities — which is consistent with §4.5's sparsity argument (at
+> α=0.05 the tail holds `α·n_draws` draws) and does **not** by itself impugn the
+> selection objective at α=0.25. It does bear on §3.1's deployment
+> comparability, and §7 should disclose it once the selection-α numbers are in.
+
+**(d) One rung is offset-robust: large_diverse w4**, whose width/pref ratio moves
+only **+2.5%** under centring. It is also the noisiest rung (§4.3.105: SE 0.033,
+the worst of the twelve) and the one §4.3.105 diagnosed as *underfitting*. A
+model too small to develop offset spread is the one case where centring is a
+no-op, which is a coherent story rather than a counterexample.
+
+#### 3. What is STILL open — line 2 is not closed
+
+Gate 2 is `|CVaR CE − mean CE| > 2·SE(CVaR CE)` **at α=0.25**. Nothing above
+measures it. §4.3.116's classification is unchanged: **§4.3.111's line 2 remains
+unverified, and the decision still rests on line 3 alone.**
+
+The corrected command gets both conservatisms in one pass, because the alpha
+sweep reuses the single sort and is therefore free (`_from_sorted` docstring,
+`diagnose_sampling_tail.py:553`). Centring lives inside `_sorted_over`, so the
+sweep inherits it:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for V in large_diverse large_play; do for W in 4 5 6 7 8 9; do R=cap_ladder2_${V}_w${W}; [ -d exp/${R}_0 ] || continue; echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --centre-draws --conservatism 0.75 --cvar-ce-alpha-sweep 0.25,0.05 --device cuda > exp/sel_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/sel_${R}.txt; grep -A 5 "DEGENERACY GATE" exp/sel_${R}.txt; done; done | tee exp/selection_capacity_ladder.txt
+```
+
+Grep anchors are the **printed banners** (`OFFSET ROBUSTNESS`, `DEGENERACY
+GATE`), not code comments — §10.3's recurring trap. Full per-rung output is kept
+in `exp/sel_*.txt` regardless, so a missed anchor costs a grep and not a re-run.
+
+**Three checks on the result before it is believed:**
+
+1. the `raw f` CE column must reproduce §4.3.105's `cvar_ce` column **to 4 dp**
+   at all twelve rungs (the check that caught this run);
+2. `2 * SE(CVaR CE)` must reproduce §4.3.105's threshold, which was read from
+   the logged `val_cvar_degeneracy_thr`;
+3. the alpha-sweep row at α=0.05 must reproduce the **centred** column above.
+
+If (1) and (2) hold, the gate-2 verdicts close line 2 and the `cvar_ce` column of
+§4.3.105 simultaneously.
 
 ### 4.4 Procedure
 
@@ -13866,6 +14000,17 @@ blind. Record it as a future-round candidate.
 18. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
+18a. **RE-RUN the capacity-ladder re-score at `--conservatism 0.75`** — the
+    2026-09-20 pass was at the diagnostic's default tail fraction 0.05, i.e. the
+    **deployment** conservatism, so it does **not** close §4.3.111's line 2
+    (§4.3.117). Command and three reproduction checks are in §4.3.117 §3. Zero
+    compute, one pass, and the alpha sweep returns the deployment column for free
+    so the §4.3.117 tables are re-verified in the same run.
+18b. **Disclose the deployment-tail finding in §7** once 18a lands: at
+    conservatism 0.95 on centred `f`, only **2 of 12** ladder rungs beat `log 2`
+    and centred CVaR accuracy is **below chance** at three rungs (§4.3.117 §2c).
+    This bears on §3.1 deployment comparability and is unfavourable; it should not
+    wait for a round where it is convenient.
 
 **QUEUED — FUTURE-ROUND CANDIDATES (after the restart, not in it)**
 
