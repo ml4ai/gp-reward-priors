@@ -9774,6 +9774,19 @@ robust to seed noise even though its endpoint rise is.
     w6's (0.039, which passes), but its threshold is 0.067 — 3.5× w6's — because
     its CVaR estimate is noisy (SE 0.033 vs 0.010).
   - **large_play passes gate 2 at every width**, w4 included (margin +0.018).
+> ❌ **WITHDRAWN 2026-09-20 (§4.3.118).** Everything in the two bullets below
+> that rests on **gate 2** is an artefact of raw scoring. Re-scored on centred
+> `f` at the same conservatism — with the raw column reproducing this table's
+> `cvar_ce` **exactly** — **both large_diverse failures reverse** (w4 margin
+> −0.032 → **+0.1397**, w5 −0.012 → **+0.1153**) and gate 2 passes at **12 of
+> 12** rungs. There is **no gate-2 lower bound on either variant**, so the
+> two-sided squeeze is demonstrated on *neither*. What replaces it: capacity is
+> bounded **below by fit** (large_diverse w4 is worse than w5 by 5.8 σ, and this
+> table already records it as the worst mean CE, SE and ess of the six) and
+> **above by tail behaviour**. The `cvar_ce` column below is raw and **must not
+> be read as a capacity ranking** — §4.3.118 §5 shows its best three rungs differ
+> by 0.1 SE, a tie, across a 12× span in parameters.
+
 - **So the two-sided squeeze is demonstrated on large_diverse only.** There,
   drift bounds the window from above and degeneracy from below (w5), leaving
   **w6 the only in-range rung passing all three gates**. On large_play at depth
@@ -11636,14 +11649,17 @@ printed: state the basis and let it be read.
 > which is centred and unaffected, reinforced by round 5's
 > ρ(`n_params`, `|log r|`) = +0.725.
 >
-> **Further support, 2026-09-20 (§4.3.117):** re-scoring §4.3.105's ladders on
-> centred `f` moves the objective's argmin **toward smaller capacity on both
-> variants** — large_diverse from w7 (54,529p) to w5 (4,417p), large_play to a
-> strictly monotone-increasing curve with no interior optimum. Raw scoring
-> flatters wide models, because offset spread grows with capacity. This is at the
-> **deployment** conservatism (0.95), not the selection one, so it does not close
-> line 2 — but it runs in the decision's direction, from a third independent
-> measurement.
+> **RESOLVED 2026-09-20 (§4.3.118).** The ladders were re-scored at the
+> *selection* conservatism on centred `f`, and check 1 reproduces §4.3.105's raw
+> column exactly at all twelve rungs. **Line 2 is now CLOSED and REFUTED** — gate
+> 2 passes 12 of 12 centred, so it does not bind on the ladders either. But the
+> decision no longer needs it: **both centred optima are INTERIOR to §3.2.16's
+> width 4–7** (large_diverse w6, large_play w4), the top of the range is worse
+> than the interior on both, and the objective degrades above the optimum by
+> **18.3 σ** and **67.7 σ**. §4.3.111 therefore rests on **two** independent
+> correctly-scored lines — gate 1 *and* the objective — where this warning
+> originally left it resting on one. **Do not widen. The footing is now stronger
+> than when the decision was taken.**
 
 Bundle item D, settled 2026-09-17 at the user's request, before the restart.
 `scripts_bnn/capacity_range_decision.py`, on the 26 finished round-4 trials plus
@@ -12192,8 +12208,18 @@ Round-4 **sweep trials overwrote their chains** (§4.3), so their centred
 It rested on three lines. **One is refuted, one is unverified, one is Class I:**
 
 1. ~~the eligible region is interior (897–10,817p)~~ — **refuted**, now 2,305–38,017p
-2. gate-2 failure is not capacity-shaped — **unverified**, and gate 2 no longer binds at all
+2. ~~gate-2 failure is not capacity-shaped~~ — **CLOSED 2026-09-20 and refuted**
+   (§4.3.118): gate 2 passes **12 of 12** on the centred ladders, so it does not
+   bind there either. Combined with round 5's 0-of-13, gate 2 has **never fired
+   on centred `f` in 25 measurements**.
 3. above the ceiling, `|log r|` rises monotonically on both ladder variants — **Class I, intact**
+
+> 🔁 **SUPERSEDED by §4.3.118 — read that instead of what follows.** The verdict
+> below ("holds on line 3 alone") was written before the ladders were re-scored
+> at the selection conservatism. They now supply a **second** correctly-scored
+> line: both centred optima are *interior* to §3.2.16's range and the objective
+> degrades above them by 18.3 σ and 67.7 σ. The decision is on firmer ground than
+> this paragraph says, and it no longer rests on an eligibility claim at all.
 
 > ✅ **The decision still holds, on line 3 alone.** §4.3.105's ladders are
 > fixed-depth, single-axis and centred, and they show gate 1 degrading
@@ -12341,6 +12367,196 @@ in `exp/sel_*.txt` regardless, so a missed anchor costs a grep and not a re-run.
 
 If (1) and (2) hold, the gate-2 verdicts close line 2 and the `cvar_ce` column of
 §4.3.105 simultaneously.
+
+> ✅ **RUN 2026-09-20 — see §4.3.118.** Check 1 passes **exactly at all twelve
+> rungs**. Check 2 was **ill-posed** (§4.3.118 §1). Line 2 is now **closed**.
+
+### 4.3.118 RESULT: the capacity ladder at selection conservatism, centred — line 2 closes, and raw scoring had destroyed the ladder's resolution
+
+Ran 2026-09-20 at `--conservatism 0.75 --centre-draws`, twelve rungs, output
+`exp/selection_capacity_ladder.txt`. Checker:
+`scripts_bnn/selection_ladder_readout.py` (`--selftest`).
+
+#### 1. The reproduction checks
+
+**Check 1 PASSES exactly, 12 of 12.** The `raw f` CVaR CE reproduces §4.3.105's
+logged `cvar_ce` **to 4 dp with zero residual** at every rung — large_diverse
+0.4767 / 0.3907 / 0.3911 / 0.3898 / 0.4055 / 0.4740 and large_play 0.4381 /
+0.4076 / 0.4540 / 0.6663 / 0.9427 / 1.3238. This is the check §4.3.117 was
+caught by, and it now confirms three things at once: the conservatism is right,
+the draws are the same draws, and the pipeline is still bitwise deterministic
+(§4.3.105 §3) eight days on.
+
+**Check 2 was ill-posed and is withdrawn.** It asked the printed `2 * SE` to
+reproduce §4.3.105's threshold — but the primary convention is now *centred*, so
+the gate-2 block reports the **centred** SE, which has no reason to match a raw
+one. Recording the error rather than quietly dropping the check. What the
+comparison actually shows is worth more than the check would have been:
+
+| | large_diverse w4→w9 | large_play w4→w6 | large_play w7→w9 |
+|---|---|---|---|
+| centred SE ÷ raw SE | **0.54 → 0.35** | **1.56 → 1.43** | **0.69 → 0.31** |
+
+Centring **roughly halves the jackknife SE** on large_diverse and on
+large_play's three largest rungs, and *raises* it ~1.3–1.6× on large_play's three
+smallest. The objective does not merely shift under centring — **it is measured
+about twice as precisely wherever capacity is large**, which is exactly where the
+decision is made.
+
+**Check 3 (the α=0.05 sweep row reproducing §4.3.117's centred column) is not yet
+read** — the grep took only the two gate banners. The per-rung files
+`exp/sel_*.txt` hold it; the command is in §4.3.119.
+
+#### 2. The ladder at selection conservatism 0.75, centred `f`
+
+**large_diverse** (depth 4, 514 pairs):
+
+| w | n_params | centred CE | raw CE | centred acc | gap | 2·SE | margin | g2 | width/pref | < log 2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 4 | 1,441 | 0.6176 | 0.4767 | 0.6455 | 0.1759 | 0.0362 | +0.1397 | **PASS** | 0.676 | yes |
+| 5 | 4,417 | 0.5033 | 0.3907 | 0.7636 | 0.1306 | 0.0153 | +0.1153 | **PASS** | 0.500 | yes |
+| **6** | 14,977 | **0.4951** | 0.3911 | 0.7636 | 0.1428 | 0.0119 | +0.1309 | **PASS** | 0.503 | yes |
+| 7 | 54,529 | 0.5093 | **0.3898** | 0.7545 | 0.1753 | 0.0107 | +0.1646 | **PASS** | 0.576 | yes |
+| 8 | 207,361 | 0.5508 | 0.4055 | 0.7182 | 0.2310 | 0.0085 | +0.2225 | **PASS** | 0.659 | yes |
+| 9 | 807,937 | 0.6657 | 0.4740 | 0.6091 | 0.3551 | 0.0144 | +0.3407 | **PASS** | 0.818 | yes |
+
+**large_play** (depth 6, 254 pairs):
+
+| w | n_params | centred CE | raw CE | centred acc | gap | 2·SE | margin | g2 | width/pref | < log 2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **4** | 1,985 | **0.5567** | 0.4381 | 0.7222 | 0.1508 | 0.0229 | +0.1279 | **PASS** | 0.511 | yes |
+| 5 | 6,529 | 0.6037 | **0.4076** | 0.7222 | 0.2497 | 0.0272 | +0.2225 | **PASS** | 0.690 | yes |
+| 6 | 23,297 | 0.7560 | 0.4540 | 0.6667 | 0.4313 | 0.0442 | +0.3871 | **PASS** | 1.003 | **NO** |
+| 7 | 87,553 | 1.1971 | 0.6663 | 0.6481 | 0.9111 | 0.0489 | +0.8622 | **PASS** | 1.739 | **NO** |
+| 8 | 338,945 | 1.6187 | 0.9427 | 0.6111 | 1.3653 | 0.0378 | +1.3275 | **PASS** | 2.279 | **NO** |
+| 9 | 1,333,249 | 2.2286 | 1.3238 | 0.5926 | 2.0106 | 0.0438 | +1.9668 | **PASS** | 3.016 | **NO** |
+
+#### 3. LINE 2 IS CLOSED — and it is refuted, exactly as line 1 was
+
+**Gate 2 passes at 12 of 12 rungs under centring, against 10 of 12 raw.** Both
+of §4.3.105's failures — large_diverse w4 (a resolution failure) and w5 (genuine
+narrowing) — **reverse**, and not marginally: w4's margin goes from −0.032 to
+**+0.1397**, w5's from −0.012 to **+0.1153**.
+
+> ❌ **§4.3.111's line 2, "gate-2 failure is not capacity-shaped", is REFUTED in
+> the same manner as line 1: gate 2 does not fail at all.** The ladders now agree
+> with round 5's 0-of-13 (§4.3.116). Under item F, **gate 2 has never once fired
+> on centred `f`, at any capacity, on any variant, in 25 measurements.**
+
+This also **withdraws §4.3.105's "two-sided squeeze"**: there is no gate-2 lower
+bound on either variant, so degeneracy bounds the capacity window from below
+*nowhere*. §4.3.101's stationarity–degeneracy trade-off is not traced along the
+capacity axis at all — not on one variant, as §4.3.105 concluded after
+correction, but on neither.
+
+#### 4. …and §4.3.111's DECISION is re-derived on a sound basis, not merely salvaged
+
+Line 1 claimed *the eligible region is interior*. That was an **eligibility**
+claim and it is dead. But the claim that actually justified not widening is that
+the **optimum** is interior — and the centred ladders show that directly, at the
+selection conservatism, on designed fixed-depth single-axis evidence:
+
+| variant | raw argmin | **centred argmin** | inside §3.2.16's width 4–7? |
+|---|---|---|---|
+| large_diverse | w7 (54,529p) | **w6 (14,977p)** | **yes** |
+| large_play | w5 (6,529p) | **w4 (1,985p)** | **yes**, at the floor |
+
+Both optima sit inside the declared range, and **the top of the range is worse
+than its interior on both variants**. Above the ceiling the objective degrades
+steeply and far outside noise:
+
+- large_diverse **w6 → w9: +0.1706**, against a pooled SE of 0.0093 — **18.3 σ**
+- large_play **w4 → w9: +1.6719**, against a pooled SE of 0.0247 — **67.7 σ**
+
+> ✅ **§4.3.111 now rests on TWO independent, correctly-scored, centred lines** —
+> gate 1 degrading above the ceiling (§4.3.105, Class I) **and** the selection
+> objective degrading above it (this section) — where §4.3.116 left it resting on
+> one. **Do not widen.** The conclusion is unchanged; its footing is stronger than
+> it has ever been, and it no longer depends on any eligibility claim.
+
+#### 5. The finding that matters most: raw scoring destroyed the ladder's RESOLUTION
+
+This is not a bias story. On large_diverse the raw objective's best three rungs —
+w5, w6, w7, spanning **12×** in parameters — differ by **0.0013**, which against
+the raw SE is **0.1 σ**. They are a three-way tie. A selector handed that column
+picks w7 **on noise**, which is precisely what §4.3.117's deployment-α run
+observed it doing.
+
+Centred, the same three span **0.0142 = 2.4 σ**, and large_play's best three go
+from 4.5 σ to **14.7 σ**. (σ here is the median jackknife SE *of the three rungs
+being compared*, not of the whole ladder — the readout pools it that way and an
+earlier draft of this paragraph did not, which understated both figures.)
+
+> **Centring did not just move the answer — it made the ladder answerable.** The
+> offset was consuming the between-rung signal, and §4.3.105's near-flat `cvar_ce`
+> column (0.3898/0.3907/0.3911) was not evidence that capacity is unimportant
+> over w5–w7; it was evidence that the raw statistic could not see capacity at
+> all. **Any round-4 reading of a flat or weakly-ordered `cvar_ce` column is
+> uninformative rather than null** — a sharper form of §4.3.116's standing rule,
+> and the reason the two are not interchangeable.
+
+#### 6. The selection conservatism has content where the deployment one does not
+
+Against `log 2 = 0.6931`, on centred `f`:
+
+| | beats log 2 |
+|---|---|
+| **selection**, α = 0.25 | **8 of 12** (large_diverse 6/6, large_play 2/6) |
+| **deployment**, α = 0.05 (§4.3.117) | **2 of 12** |
+
+This **vindicates 0.75 as the selection level** and sharpens §4.3.117 §2c: the
+"most of the ladder carries no preference information" finding is specific to the
+**deployment** tail and does not impugn the objective the sweeps optimise. To-do
+18b stands, and is now a narrower, better-supported disclosure.
+
+Two coherences worth recording, neither of which was designed:
+
+- **`width/pref` crosses 1.0 at exactly the rung where large_play stops beating
+  log 2** (w6, ratio 1.003, CE 0.7560). Above that the posterior-width term
+  dominates the preference signal, reaching **3.0×** at w9.
+- **large_diverse's `width/pref` minimum (w5 0.500, w6 0.503) sits at its CE
+  minimum (w6)**. The diagnostic and the objective agree without being tied.
+
+#### 7. What replaces the squeeze: bounded below by FIT, above by TAIL
+
+large_diverse still has a genuine lower bound — w4 (0.6176) is worse than w5
+(0.5033) by **+0.1143, a pooled 5.8 σ** — but it is an *underfitting* bound, not
+a degeneracy one. §4.3.105 already recorded w4 as having the worst mean CE
+(0.5056), the worst SE and the worst ess of the six. The corrected picture:
+
+> **Capacity is bounded below by fit and above by tail behaviour, with gate 2
+> playing no role at either end.** That is a simpler mechanism than the squeeze,
+> it is consistent across both variants, and it is what §3.2.16's range already
+> encodes.
+
+### 4.3.119 Commands for the ladder re-score, and the one check still outstanding
+
+**The re-score itself** (already run 2026-09-20; recorded so it is reproducible):
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for V in large_diverse large_play; do for W in 4 5 6 7 8 9; do R=cap_ladder2_${V}_w${W}; [ -d exp/${R}_0 ] || continue; echo "=== $R ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/${R}_0 --cvar-ce --centre-draws --conservatism 0.75 --cvar-ce-alpha-sweep 0.25,0.05 --device cuda > exp/sel_${R}.txt 2>&1; grep -A 12 "OFFSET ROBUSTNESS" exp/sel_${R}.txt; grep -A 5 "DEGENERACY GATE" exp/sel_${R}.txt; done; done | tee exp/selection_capacity_ladder.txt
+```
+
+**The readout** (runs locally against the saved file; `--selftest` covers the
+parse, the centred/raw column order and check 1's negative case):
+
+```bash
+/opt/anaconda3/envs/irl/bin/python scripts_bnn/selection_ladder_readout.py
+```
+
+**Check 3, still outstanding.** The α=0.05 row of the alpha sweep should
+reproduce §4.3.117's centred column, which is what to-do 18b's deployment
+disclosure quotes. The sweep already ran — only the grep omitted it — so this
+costs nothing but a read of the files already on the box:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && for V in large_diverse large_play; do for W in 4 5 6 7 8 9; do echo "=== ${V}_w${W} ==="; grep -A 8 "ALPHA SWEEP" exp/sel_cap_ladder2_${V}_w${W}.txt; done; done | tee exp/ladder_alpha_sweep.txt
+```
+
+Expected α=0.05 CE, from §4.3.117: large_diverse 0.8557 / 0.6210 / 0.6371 /
+0.7332 / 0.8872 / 1.2279; large_play 0.7434 / 0.9828 / 1.5297 / 2.1688 / 2.6792
+/ 3.5924. A mismatch would mean the deployment table is wrong and 18b must wait;
+agreement closes §4.3.117 as well as §4.3.118.
 
 ### 4.4 Procedure
 
@@ -14000,17 +14216,23 @@ blind. Record it as a future-round candidate.
 18. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
-18a. **RE-RUN the capacity-ladder re-score at `--conservatism 0.75`** — the
-    2026-09-20 pass was at the diagnostic's default tail fraction 0.05, i.e. the
-    **deployment** conservatism, so it does **not** close §4.3.111's line 2
-    (§4.3.117). Command and three reproduction checks are in §4.3.117 §3. Zero
-    compute, one pass, and the alpha sweep returns the deployment column for free
-    so the §4.3.117 tables are re-verified in the same run.
-18b. **Disclose the deployment-tail finding in §7** once 18a lands: at
-    conservatism 0.95 on centred `f`, only **2 of 12** ladder rungs beat `log 2`
-    and centred CVaR accuracy is **below chance** at three rungs (§4.3.117 §2c).
-    This bears on §3.1 deployment comparability and is unfavourable; it should not
-    wait for a round where it is convenient.
+18a. ✅ **DONE (§4.3.118)** — capacity ladder re-scored at `--conservatism 0.75`
+    on centred `f`. **Check 1 passes exactly at all twelve rungs.** §4.3.111's
+    line 2 is **closed and refuted** (gate 2 12/12 PASS), §4.3.105's two-sided
+    squeeze is **withdrawn**, and the decision gains a second correctly-scored
+    line: both centred optima are **interior** to width 4–7, degrading above by
+    18.3 σ and 67.7 σ. Headline: **raw scoring had destroyed the ladder's
+    resolution** — its best three rungs differed by 0.1 SE across a 12× parameter
+    span. Readout `scripts_bnn/selection_ladder_readout.py`.
+18b. **Disclose the deployment-tail finding in §7.** At conservatism 0.95 on
+    centred `f`, only **2 of 12** ladder rungs beat `log 2` and centred CVaR
+    accuracy is **below chance** at three (§4.3.117 §2c) — against **8 of 12** at
+    the selection conservatism (§4.3.118 §6). The contrast vindicates 0.75 for
+    selection and localises the problem to the deployment tail, which is where
+    §3.1's comparability lives. Unfavourable; do not defer it to a convenient
+    round. **Gated on check 3** (§4.3.119) confirming §4.3.117's table.
+18c. **Run check 3** (§4.3.119) — a grep over `exp/sel_*.txt`, already written by
+    the 18a pass. Confirms §4.3.117's deployment column, which 18b quotes.
 
 **QUEUED — FUTURE-ROUND CANDIDATES (after the restart, not in it)**
 
