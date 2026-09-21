@@ -13399,6 +13399,23 @@ generalise beyond this project:
   check on the deployed quantity (CVaR CE), never on drift diagnostics alone —
   and that in this project the drift gate alone would have certified a
   configuration whose reward model is uninformative.
+- **Selecting at one conservatism level and deploying at another needs the
+  DEPLOYED level checked, not just the ranking.** Hyperparameters were selected
+  at conservatism 0.75 and the model is deployed at 0.95, justified by a measured
+  rank transfer (ρ = 0.900 on 29 archived configurations, §3.2.3). The rank half
+  replicates on a designed capacity ladder — ρ = +0.886 / +1.000, +0.958 pooled —
+  but **the ranking transferring says nothing about whether the deployed field is
+  any good**. At 0.95 on the same twelve rungs, only **2 of 12** beat `log 2`
+  against 8 of 12 at 0.75, and the conservative reward **reverses the mean
+  reward's preference on 22–52% of held-out pairs**, reaching a rate at which the
+  two are uncorrelated. Report both levels' predictive content and the deployed
+  level's effective tail resolution (`(1−c)·ess`), not only the rank correlation.
+  Report also that part of the 0.95 degradation is **estimator bias at ~2
+  effective tail draws** and cannot be separated from genuine field degradation at
+  the sweep budget — §7.3's amendment has the disentangling check (§3.2.9's
+  higher-budget re-measurement of the winner). The generalisable point: **rank
+  transfer and deployed-level resolution are independent claims, and only the
+  first is usually measured.**
 - **A gate PASS at the chain count you happened to run is not stationarity.**
   The converse of the bullet below, and it bit in the other direction: the
   final medium_play configuration passes every §4.2 gate at 16 chains while
@@ -13663,6 +13680,88 @@ a **tail fraction** (α = 0.05 is the worst 5%); the paper and
 the worst 5%). They agree under `tail = 1 − conservatism`, verified against
 `iql_eval.empirical_cvar` at every level (§3.2.6). The write-up should use the
 conservatism convention throughout.
+
+#### AMENDED 2026-09-20 (to-do 18b) — the transfer holds in RANK but not in ARGMIN, and the 0.95 field is far worse than the paragraph above implies
+
+The transfer above was measured on **29 archived medium_play configurations, on
+raw draws, before item F**. §4.3.118/§4.3.120 re-measured it on the **twelve
+designed capacity-ladder rungs, centred, at both levels from the same sort**.
+Three things must be added, two of them unfavourable.
+
+**(a) The resolution argument is CORROBORATED, and much more strongly than when
+it was written.** The paragraph above predicted that conservatism 0.95 leaves
+~2 effective draws and is therefore unreliable at this budget. Measured:
+
+| on centred `f` | selection 0.75 | deployment 0.95 |
+|---|---|---|
+| rungs beating `log 2` | **8 of 12** | **2 of 12** |
+| `flip%` range (the CVaR reward reversing the mean's preference) | 11.1–35.2% | **22.2–51.8%** |
+| rungs with `wrong%` > 50% | 0 of 12 | **3 of 12** |
+
+At the worst rungs `flip%` reaches **51.8%** — the conservative field's
+preference is **uncorrelated** with the mean field's, not merely more cautious
+than it.
+
+**(b) But the rank transfer does NOT reproduce the "exactly 0.0000" cost.**
+Rank correlation between the two levels is **ρ = +0.886** (large_diverse),
+**+1.000** (large_play), **+0.958** pooled — consistent with the archive's 0.900,
+so *that* half replicates. The argmin does not:
+
+- **large_diverse: 0.75 selects w6, 0.95 selects w5.** The cost of selecting at
+  0.75 and scoring at 0.95 is **+0.0161, or 2.7× the selection SE** — not 0.0000.
+- large_play: same argmin, cost 0.0000 — but see (c).
+
+**Report the archive's 0.0000 and the ladder's 0.0161 together.** The archive
+measured a different population (29 tuned medium_play configurations) from the
+ladder (a designed single-axis capacity sweep on the large variants), so this is
+a second measurement on a harder case, not a refutation. The defensible claim is
+**"the ranking transfers; the argmin transfers on 2 of 3 measured populations,
+at a cost of ≤ 3 selection SE"**, not "the cost is zero".
+
+**(c) Scope limits that must be stated, because they cut the other way.**
+
+- **large_play's ladder is at depth 6, which is OUTSIDE §3.2.16's deployed depth
+  range of 1–4.** All six of its rungs are undeployable, so its 0-of-4 in-width-
+  range failure at 0.95 is a statement about d6 and **not** about any
+  configuration the sweep can select. §4.3.105 already flagged this confound.
+- **large_diverse's ladder is at depth 4 — inside the range.** There, of the four
+  in-range widths, **2 of 4 beat `log 2` at deployment conservatism** (w5 0.6210,
+  w6 0.6371) and **2 do not** (w4 0.8557, w7 0.7332). The one that fails at the
+  top of the range, **w7, is exactly what the RAW objective would have
+  selected** (§4.3.118 §5) — so item F is what keeps the deployed field on the
+  right side of `log 2` here.
+
+**(d) The honest reading, and the confound that this budget cannot resolve.**
+A worse CE at 0.95 has two causes that are **not separable at this budget**:
+
+1. the deployed field genuinely carries less preference information, or
+2. **the 0.95 CVaR estimator is itself biased downward** with ~2 effective
+   draws — which is the very argument in the paragraph above.
+
+Cause 2 makes the reward field more pessimistic *as estimated*, which degrades CE
+whether or not the underlying field is worse. So **these numbers should be
+reported as an upper bound on the degradation, not as a measurement of it**, and
+the paragraph above's own reasoning is the reason why. Claiming "the deployed
+reward is uninformative" would over-read them.
+
+**The mitigation is already in the procedure and should be reported as the
+resolution of this issue, not as an excuse.** §3.2.9's escalation clause
+re-measures the winner's deployment-level statistics at a **higher draw budget**,
+which is the direct lever on cause 2. **Report the winner's `ess_cen` at
+conservatism 0.95 from that re-measurement, alongside its CE, accuracy and
+`flip%` at 0.95.** If the degradation shrinks with budget, it was estimator bias;
+if it persists at well-resolved ess, it is the field, and that is a finding about
+the method that belongs in the paper. This is a **concrete, pre-registered
+check** and it is the thing that would settle (d).
+
+> **Generalisable point, and the reason this amendment exists:** *rank transfer
+> and deployed-level resolution are different claims, and a high rank correlation
+> does not license the deployed level.* ρ = 0.9 between two conservatism levels
+> coexisted here with a deployed field that reverses 28–52% of the mean field's
+> preferences. The original disclosure measured the first and did not check the
+> second. **Anything selected at one conservatism and deployed at another should
+> report the deployed level's own resolution and predictive content, not only
+> that the ranking transferred.**
 
 ---
 
@@ -14338,6 +14437,17 @@ blind. Record it as a future-round candidate.
 16. **Carry the corrected derived `map_amp2` (6848 / 6838) into §7.3's
     disclosure** and into the next round's pins. Do not change the running
     pins (§9).
+16a. **NEW, pre-registered by §7.3's amendment — at §3.2.9's escalation, report
+    the winner's deployment-level resolution and predictive content**, not only
+    its CE: `ess_cen` **at conservatism 0.95** (the `(1−c)·ess` the whole 0.75/
+    0.95 argument turns on), plus CE, accuracy and **`flip%`** at 0.95 on centred
+    `f`. This is the **only** check that separates estimator bias from genuine
+    field degradation (§7.3 amendment (d)), and it is why the escalation clause
+    exists. **Declare the reading before the re-measurement runs**: if `flip%` at
+    0.95 falls materially toward its 0.75 value as ess rises, the sweep-budget
+    degradation was estimator bias; if it persists at well-resolved ess, it is
+    the field, and that is a finding about the method rather than about the
+    budget. Add both to §7.4.
 17. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
     5 TB; cached reward labels are ~4 MB, and caching also removes the
     re-labelling cost from each of stage 4's 8 normalization indices. This is a
@@ -14353,15 +14463,20 @@ blind. Record it as a future-round candidate.
     18.3 σ and 67.7 σ. Headline: **raw scoring had destroyed the ladder's
     resolution** — its best three rungs differed by 0.1 SE across a 12× parameter
     span. Readout `scripts_bnn/selection_ladder_readout.py`.
-18b. **UNBLOCKED — disclose the deployment-tail finding in §7.** At conservatism
-    0.95 on centred `f`, only **2 of 12** ladder rungs beat `log 2` and centred
-    CVaR accuracy is **below chance** at three — against **8 of 12** at the
-    selection conservatism (§4.3.118 §6). Quote §4.3.120 §5's stronger form:
-    **`flip%` reaches 51.8% / 48.1%**, i.e. the conservative reward's preference
-    becomes *uncorrelated* with the mean's, and `wrong%` exceeds 50% at exactly
-    the three rungs §4.3.117 predicted. The contrast vindicates 0.75 for
-    selection and localises the problem to the deployment tail, which is where
-    §3.1's comparability lives. Unfavourable; do not defer it.
+18b. ✅ **DONE 2026-09-20** — written as a **§7.3 amendment** attached to the
+    existing 0.75/0.95 paragraph it qualifies, plus a settled methodological
+    bullet in **§7.1**. Findings: the resolution argument is strongly
+    corroborated (2 of 12 rungs beat `log 2` at 0.95 vs 8 of 12 at 0.75; `flip%`
+    22–52%); **the rank transfer replicates (ρ +0.886 / +1.000, +0.958 pooled)
+    but the "exactly 0.0000" selection cost does NOT** — large_diverse's argmin
+    moves w6 → w5 at a cost of **+0.0161, 2.7× the selection SE**. Scope stated
+    honestly: large_play's ladder is at depth 6, **outside** the deployed range,
+    so its 0-of-4 is undeployable; large_diverse's depth 4 is inside, and there
+    **2 of 4 in-range widths beat `log 2`** — the failing one, w7, being exactly
+    what the raw objective would have picked. The degradation is reported as an
+    **upper bound**, because estimator bias at ~2 effective tail draws cannot be
+    separated from genuine field degradation at this budget. Numbers reproduce
+    via `selection_ladder_readout.py`'s transfer block.
 18c. ✅ **DONE (§4.3.120)** — check 3 **PASSES 12/12 exactly**, confirming
     §4.3.117's deployment table. A **valid replacement for the withdrawn check
     2** (plug-in CE reproducing §4.3.105's gap column) also passes 12/12, which

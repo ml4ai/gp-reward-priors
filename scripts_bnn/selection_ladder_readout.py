@@ -321,6 +321,68 @@ def sweep_table(sw):
               f"w{min(T105[v], key=lambda w: sw[(v,w)]['rows'][0.25]['ce'])}]\n")
 
 
+LADDER_DEPTH = {"large_diverse": 4, "large_play": 6}
+D_RANGE = range(1, 5)          # §3.2.16's deployed depth range
+
+
+def _rank(a):
+    order = sorted(range(len(a)), key=lambda i: a[i])
+    r = [0] * len(a)
+    for j, i in enumerate(order):
+        r[i] = j
+    return r
+
+
+def spearman(x, y):
+    n = len(x)
+    rx, ry = _rank(x), _rank(y)
+    d2 = sum((a - b) ** 2 for a, b in zip(rx, ry))
+    return 1.0 - 6.0 * d2 / (n * (n * n - 1))
+
+
+def transfer(sw, rows):
+    """0.75 -> 0.95 transfer: the §7.3 amendment's numbers (to-do 18b).
+
+    §7.3 measured this on 29 archived medium_play configs, RAW, pre-item-F, and
+    recorded a selection cost of exactly 0.0000.  This is a second measurement on
+    a different population: the designed ladder, centred, both levels from one
+    sort.  The RANK half replicates; the ARGMIN half does not.
+    """
+    print("\n0.75 -> 0.95 TRANSFER on the centred ladders (section 7.3 amendment)\n")
+    pooled_a, pooled_b = [], []
+    for v in sorted(LADDER_DEPTH):
+        ws = sorted(w for (vv, w) in sw if vv == v)
+        if not ws:
+            continue
+        c25 = [sw[(v, w)]["rows"][0.25]["ce"] for w in ws]
+        c05 = [sw[(v, w)]["rows"][0.05]["ce"] for w in ws]
+        pooled_a += c25
+        pooled_b += c05
+        b25, b05 = ws[c25.index(min(c25))], ws[c05.index(min(c05))]
+        cost = sw[(v, b25)]["rows"][0.05]["ce"] - min(c05)
+        se25 = rows[(v, b25)]["se"]
+        inr = LADDER_DEPTH[v] in D_RANGE
+        ir = [w for w in ws if W_LO <= w <= W_HI]
+        nb = sum(sw[(v, w)]["rows"][0.05]["ce"] < LOG2 for w in ir)
+        print(f"  {v}  (ladder depth {LADDER_DEPTH[v]}, "
+              f"{'INSIDE' if inr else 'OUTSIDE'} deployed depth "
+              f"{D_RANGE.start}-{D_RANGE.stop - 1})")
+        print(f"    spearman(0.75, 0.95)  {spearman(c25, c05):+.3f}")
+        print(f"    argmin  @0.75 w{b25}   @0.95 w{b05}   "
+              f"{'SAME' if b25 == b05 else '** DIFFER **'}")
+        print(f"    cost of selecting @0.75 scored @0.95: {cost:+.4f} "
+              f"({cost / se25:.1f} x the 0.75 SE)   [7.3 archive: 0.0000]")
+        print(f"    in-range widths beating log2 @0.95: {nb}/{len(ir)}"
+              f"{'' if inr else '   (depth out of range -- not deployable)'}")
+        print(f"    flip% @0.95 over w{W_LO}-w{W_HI}: "
+              + ", ".join(f"{sw[(v, w)]['rows'][0.05]['flip']:.1f}" for w in ir)
+              + "\n")
+    print(f"  POOLED spearman {spearman(pooled_a, pooled_b):+.3f}; "
+          f"beat log2 @0.75 {sum(x < LOG2 for x in pooled_a)}/{len(pooled_a)}, "
+          f"@0.95 {sum(x < LOG2 for x in pooled_b)}/{len(pooled_b)}")
+    print("  => the RANK transfers; the ARGMIN does not on large_diverse.\n")
+
+
 SELFTEST = """
 === cap_ladder2_large_diverse_w4 ===
   --- OFFSET ROBUSTNESS of the CVaR rows (section 4.3.61) ---
@@ -356,6 +418,12 @@ def selftest():
     import io
     with contextlib.redirect_stdout(io.StringIO()):
         assert not check1({})
+    # Spearman against known answers: identical, reversed, and one swap of an
+    # adjacent pair in a 6-vector (d2 = 2 -> 1 - 12/210).
+    assert abs(spearman([1, 2, 3], [4, 5, 6]) - 1.0) < 1e-12
+    assert abs(spearman([1, 2, 3], [6, 5, 4]) + 1.0) < 1e-12
+    assert abs(spearman([1, 2, 3, 4, 5, 6], [2, 1, 3, 4, 5, 6])
+               - (1 - 12 / 210)) < 1e-12
     print("selftest OK")
     return 0
 
@@ -389,6 +457,7 @@ def main():
     verdicts = ladder(rows)
     if sw:
         sweep_table(sw)
+        transfer(sw, rows)
     conclude(rows, verdicts)
     if not ok:
         print("\n!! A CHECK FAILED -- do not quote these numbers (4.3.117).")
