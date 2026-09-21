@@ -14924,6 +14924,21 @@ blind. Record it as a future-round candidate.
     (last-10 mean, one IQL run per index, §5), then the **seeds 1–10 IQL
     evaluations**, then register the new sweep ids in
     `results/results_table.ipynb`.
+    > **Label caching (item 17) belongs HERE, between training and stage 4** —
+    > the tooling is already built and verified (§4.3.124), and this is the first
+    > moment the 11 chain sets per variant exist. Order: train seeds 0–10 →
+    > `precompute_labels.py --alphas 0.95,0.0` over every run dir → completeness
+    > table all `OK` → stage 4 and the seeds 1–10 IQL runs read from cache →
+    > `--emit-rm --require-alphas 0.95,0.0` only then. Note stage 4 is **16 IQL
+    > runs per cell** (8 normalization indices × 2 conservatism levels) over
+    > **2 labellings** per model.
+    >
+    > ⛔ **Do NOT delete the §3.2.9 ESCALATION run's chains.** To-do 16a's
+    > pre-registered draw ladder (§4.3.123) needs *subsets of the draws*, which
+    > requires the chains themselves — the labels cannot supply them. The label
+    > cache and 16a pull on the same artefacts in opposite directions, and
+    > `--emit-rm` works per source dir, so simply do not run it on the escalation
+    > dir until 16a is executed.
 
 **QUEUED — ANALYSIS DEBT (no compute, can be done while the diagnostics run)**
 
@@ -14965,13 +14980,12 @@ blind. Record it as a future-round candidate.
     pre-change form in exactly 2 marked hunks and no labelling arithmetic
     changed. **`verify_label_cache.py` PASSED on 2026-09-21** — cached labels are
     bit-identical to recomputed ones.
-    > ⚠️ **DELETION IS STILL GATED**, on completeness rather than correctness.
-    > The evaluation runs at **α 0.95 AND α 0.0**, each a separate entry
-    > (§4.3.124 §5). Run **`precompute_labels.py --alphas 0.95,0.0`** over every
-    > run dir, confirm its completeness table reads `OK` for all of them, and
-    > only then `--emit-rm --require-alphas 0.95,0.0`, which refuses to emit for
-    > any source missing a level. **Labels cannot be re-derived once chains are
-    > gone.**
+    `precompute_labels.py` verified working 2026-09-21.
+    > 🅿️ **PARKED — nothing to cache yet, and nothing to delete.** The chains this
+    > exists for are the **production reward models at seeds 0–10** (item 12),
+    > which do not exist until round 5 names winners. Sweep trials overwrite each
+    > other, so only one chain set per sweep is ever on disk (§3.2.9). **The
+    > tooling is ready and idle; it is used inside item 12, not before it.**
 
     MR ensembles deliberately not cached (§4.3.124 §6); a compute decision that
     biases nothing.
