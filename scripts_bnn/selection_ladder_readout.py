@@ -196,6 +196,131 @@ def conclude(rows, verdicts):
           f"(2/12 at the deployment alpha, 4.3.117).")
 
 
+def parse_sweep(text):
+    """-> {(variant, w): {"rows": {alpha: {...}}, "plug_ce":, "plug_acc":}}."""
+    parts = re.split(r"===\s*(\S+?)_w(\d+)\s*===", text)[1:]
+    out = {}
+    for variant, w, body in zip(parts[::3], parts[1::3], parts[2::3]):
+        rows = {}
+        for m in re.finditer(
+                r"^\s*([\d.]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"
+                r"\s+([\d.]+)\s+([\d.]+)\s*$", body, re.M):
+            a, k, ce, acc, med, fl, wr = m.groups()
+            rows[round(float(a), 3)] = dict(
+                k=int(k), ce=float(ce), acc=float(acc), med=float(med),
+                flip=float(fl), wrong=float(wr))
+        ref = re.search(r"plug-in sigma\(E\[f\]\) CE ([\d.]+)\s+acc ([\d.]+)", body)
+        if rows and ref:
+            out[(variant, int(w))] = dict(rows=rows, plug_ce=float(ref.group(1)),
+                                          plug_acc=float(ref.group(2)))
+    return out
+
+
+# §4.3.117's centred column at the DEPLOYMENT tail (conservatism 0.95).
+DEPLOY_CEN = {
+    "large_diverse": {4: 0.8557, 5: 0.6210, 6: 0.6371,
+                      7: 0.7332, 8: 0.8872, 9: 1.2279},
+    "large_play":    {4: 0.7434, 5: 0.9828, 6: 1.5297,
+                      7: 2.1688, 8: 2.6792, 9: 3.5924},
+}
+
+# §4.3.105's `gap` column = |raw cvar_ce - plug_ce|.  NOT the difference of its
+# two printed columns: that table's "mean CE" is the posterior-predictive CE,
+# a DIFFERENT quantity from the plug-in CE gate 2 actually uses (§4.3.120 §1).
+GAP105 = {
+    "large_diverse": {4: 0.035, 5: 0.018, 6: 0.039, 7: 0.056, 8: 0.086, 9: 0.163},
+    "large_play":    {4: 0.032, 5: 0.054, 6: 0.129, 7: 0.380, 8: 0.689, 9: 1.106},
+}
+
+
+def check3(sw, rows):
+    """alpha=0.05 must reproduce §4.3.117's centred column; 0.25 the primary."""
+    print("CHECK 3 -- the alpha sweep reproduces both scored columns\n")
+    bad = 0
+    print(f"  {'variant':14s} {'w':>2s} {'a=.05 exp':>10s} {'got':>8s} "
+          f"{'a=.25 exp':>10s} {'got':>8s}")
+    for v in sorted(DEPLOY_CEN):
+        for w in sorted(DEPLOY_CEN[v]):
+            s = sw.get((v, w))
+            if s is None:
+                print(f"  {v:14s} {w:2d}   MISSING")
+                bad += 1
+                continue
+            g05, g25 = s["rows"][0.05]["ce"], s["rows"][0.25]["ce"]
+            e05, e25 = DEPLOY_CEN[v][w], rows[(v, w)]["cen"]
+            d = max(abs(g05 - e05), abs(g25 - e25))
+            bad += d >= 5e-5
+            print(f"  {v:14s} {w:2d} {e05:10.4f} {g05:8.4f} {e25:10.4f} "
+                  f"{g25:8.4f}  {'OK' if d < 5e-5 else '** MISMATCH **'}")
+    print(f"\n  => CHECK 3 {'PASSES' if not bad else 'FAILS'} "
+          f"{12 - bad}/12   (0.25 agreeing confirms centring is inside the "
+          f"shared sort)\n")
+    return bad == 0
+
+
+def check4(sw):
+    """plug_ce must reproduce §4.3.105's gap column -- and is centring-invariant.
+
+    Replaces the withdrawn check 2 with a VALID invariance test: §4.3.105's gaps
+    were computed on RAW draws, this run is centred, and plug_ce is Class A
+    (§4.3.61), so the two must agree.  Twelve independent confirmations.
+    """
+    print("CHECK 4 -- plug-in CE reproduces 4.3.105's gap column")
+    print("  (a valid replacement for the withdrawn check 2: 4.3.105's gaps are")
+    print("   RAW-derived, this run is centred, and plug_ce is Class A.)\n")
+    bad = 0
+    print(f"  {'variant':14s} {'w':>2s} {'rawCVaR':>8s} {'plug_ce':>8s} "
+          f"{'implied':>8s} {'4.3.105':>8s}")
+    for v in sorted(GAP105):
+        for w in sorted(GAP105[v]):
+            s = sw.get((v, w))
+            if s is None:
+                bad += 1
+                continue
+            imp = abs(T105[v][w][0] - s["plug_ce"])
+            d = abs(imp - GAP105[v][w])
+            bad += d >= 6e-4
+            print(f"  {v:14s} {w:2d} {T105[v][w][0]:8.4f} {s['plug_ce']:8.4f} "
+                  f"{imp:8.4f} {GAP105[v][w]:8.3f}  "
+                  f"{'OK' if d < 6e-4 else '** MISMATCH **'}")
+    print(f"\n  => CHECK 4 {'PASSES' if not bad else 'FAILS'} {12 - bad}/12   "
+          f"(plug_ce is centring-invariant, confirmed at 12 rungs)\n")
+    return bad == 0
+
+
+def sweep_table(sw):
+    """flip% is the decision-relevant column: CVaR reverses the MEAN's ranking."""
+    print("\nWHAT CAPACITY BUYS AND SPENDS (4.3.120)\n")
+    for v in sorted(T105):
+        print(f"  {v}")
+        print(f"  {'w':>2s} {'plugCE':>7s} {'plugacc':>8s} | "
+              f"{'cvCE.25':>8s} {'cvacc.25':>9s} {'flip%':>6s} | "
+              f"{'cvCE.05':>8s} {'cvacc.05':>9s} {'flip%':>6s} {'wrong%':>7s}")
+        for w in sorted(T105[v]):
+            s = sw.get((v, w))
+            if s is None:
+                continue
+            a, b = s["rows"][0.25], s["rows"][0.05]
+            print(f"  {w:2d} {s['plug_ce']:7.4f} {s['plug_acc']:8.4f} | "
+                  f"{a['ce']:8.4f} {a['acc']:9.4f} {a['flip']:6.1f} | "
+                  f"{b['ce']:8.4f} {b['acc']:9.4f} {b['flip']:6.1f} "
+                  f"{b['wrong']:7.1f}")
+        pa = {w: sw[(v, w)]["plug_acc"] for w in T105[v] if (v, w) in sw}
+        ca = {w: sw[(v, w)]["rows"][0.25]["acc"] for w in T105[v] if (v, w) in sw}
+        fl = {w: sw[(v, w)]["rows"][0.25]["flip"] for w in T105[v] if (v, w) in sw}
+        pc = {w: sw[(v, w)]["plug_ce"] for w in T105[v] if (v, w) in sw}
+        mono = all(pc[w] > pc[w + 1] for w in sorted(pc)[:-1])
+        print(f"   plug-in CE monotone improving in capacity: {mono}"
+              f"   ({pc[min(pc)]:.4f} -> {pc[max(pc)]:.4f})")
+        print(f"   plug-in acc spans {min(pa.values()):.4f}-{max(pa.values()):.4f}"
+              f" (flat), CVaR acc {min(ca.values()):.4f}-{max(ca.values()):.4f}")
+        print(f"   plug-acc minus CVaR-acc: w{min(pa)} {pa[min(pa)]-ca[min(pa)]:+.4f}"
+              f"  ->  w{max(pa)} {pa[max(pa)]-ca[max(pa)]:+.4f}")
+        print(f"   flip% argmin w{min(fl, key=fl.get)} ({min(fl.values()):.1f}%)"
+              f"  ->  w9 {fl[9]:.1f}%   [CE argmin was "
+              f"w{min(T105[v], key=lambda w: sw[(v,w)]['rows'][0.25]['ce'])}]\n")
+
+
 SELFTEST = """
 === cap_ladder2_large_diverse_w4 ===
   --- OFFSET ROBUSTNESS of the CVaR rows (section 4.3.61) ---
@@ -238,6 +363,8 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=DEFAULT_SRC)
+    ap.add_argument("--sweep", default="exp/ladder_alpha_sweep.txt",
+                    help="alpha-sweep output; enables checks 3 and 4")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -251,10 +378,20 @@ def main():
         sys.exit(f"no `=== cap_ladder2_<variant>_w<N> ===` blocks in {a.src}")
     ok = check1(rows)
     check2(rows)
+    try:
+        sw = parse_sweep(open(a.sweep).read())
+    except OSError:
+        sw = {}
+        print(f"(no alpha sweep at {a.sweep} -- checks 3 and 4 skipped)\n")
+    if sw:
+        ok &= check3(sw, rows)
+        ok &= check4(sw)
     verdicts = ladder(rows)
+    if sw:
+        sweep_table(sw)
     conclude(rows, verdicts)
     if not ok:
-        print("\n!! CHECK 1 FAILED -- do not quote these numbers (4.3.117).")
+        print("\n!! A CHECK FAILED -- do not quote these numbers (4.3.117).")
         return 1
     return 0
 

@@ -9747,6 +9747,15 @@ gate 3 = centred ess ≥ 40.
 
 \* exploratory, licenses nothing (§3.2.15).
 
+> ⚠️ **The `mean CE` and `gap` columns above DO NOT RECONCILE, and that is not an
+> error** (§4.3.120 §1). w5 shows `cvar_ce` 0.3907, `mean CE` 0.3861 and `gap`
+> 0.018, but 0.3907 − 0.3861 = 0.0046. **`mean CE` is the posterior-predictive CE**
+> (`pred_ce` = `E[σ(Δf)]`, the logged `val_mean_cross_entropy`); **gate 2's gap
+> uses the plug-in CE** (`plug_ce` = `σ(E[Δf])`), which is a different and
+> uniformly smaller quantity. The plug-in values are in §4.3.120 §2, and they
+> reproduce this table's `gap` column at all twelve rungs. **Do not subtract the
+> two adjacent columns.**
+
 #### 1. The rule fires on both
 
 In-range `|log r|` rises monotonically on both: large_diverse 0.050 → 0.362
@@ -12558,6 +12567,126 @@ Expected α=0.05 CE, from §4.3.117: large_diverse 0.8557 / 0.6210 / 0.6371 /
 / 3.5924. A mismatch would mean the deployment table is wrong and 18b must wait;
 agreement closes §4.3.117 as well as §4.3.118.
 
+> ✅ **RUN 2026-09-20 — check 3 PASSES 12/12 exactly** (§4.3.120). §4.3.117's
+> deployment table is confirmed and to-do 18b is unblocked. The sweep also
+> supplied a **valid replacement for the withdrawn check 2**, which likewise
+> passes 12/12, and three columns that were never read before.
+
+### 4.3.120 The alpha sweep: checks 3 and 4 pass, and capacity BUYS mean accuracy while SPENDING tail agreement
+
+Output `exp/ladder_alpha_sweep.txt`, read by
+`scripts_bnn/selection_ladder_readout.py --sweep`. No new compute — these
+columns were produced by the §4.3.118 pass and simply not grepped.
+
+#### 1. Check 3 PASSES 12/12, and check 2 is replaced by a valid test that also passes
+
+**Check 3**: the α=0.05 sweep row reproduces §4.3.117's centred column **exactly
+at all twelve rungs**. The deployment table stands; **to-do 18b is unblocked**.
+The α=0.25 row simultaneously reproduces §4.3.118's primary column exactly —
+which **empirically confirms the design claim** that centring lives inside
+`_sorted_over` and is therefore inherited by every alpha in the sweep
+(§4.3.117 §3 asserted this from the source; it is now measured).
+
+**Check 4 — new, and it is the test check 2 should have been.** The sweep prints
+`reference: plug-in sigma(E[f]) CE`, and §4.3.105's `gap` column is
+`|raw cvar_ce − plug_ce|`. §4.3.105's gaps were computed on **raw** draws; this
+run is **centred**; `plug_ce` is **Class A, exactly invariant** (§4.3.61). So the
+two must agree — and they do, at **12 of 12 rungs to 3 dp**:
+
+| | large_diverse | large_play |
+|---|---|---|
+| implied gap | 0.0351 / 0.0180 / 0.0388 / 0.0558 / 0.0857 / 0.1634 | 0.0322 / 0.0536 / 0.1293 / 0.3803 / 0.6894 / 1.1058 |
+| §4.3.105 | 0.035 / 0.018 / 0.039 / 0.056 / 0.086 / 0.163 | 0.032 / 0.054 / 0.129 / 0.380 / 0.689 / 1.106 |
+
+> **This is the first direct empirical verification of the §4.3.61 Class A
+> claim** at scale: a mean-based quantity, recomputed under the opposite
+> convention eight days later, reproduces its raw value at twelve independent
+> rungs. §4.3.114's item-F reasoning rested on that invariance; it is no longer
+> resting on the algebra alone.
+
+**A trap in §4.3.105's table, found here.** Its `mean CE` and `gap` columns **do
+not reconcile** — large_diverse w5 shows `cvar_ce` 0.3907, `mean CE` 0.3861 and
+`gap` 0.018, but 0.3907 − 0.3861 = 0.0046. The reason: **`mean CE` is the
+posterior-predictive CE** (`pred_ce`, `E[σ(Δf)]`, the logged
+`val_mean_cross_entropy`) while **gate 2 uses the plug-in CE** (`plug_ce`,
+`σ(E[Δf])`). They are different quantities and `pred_ce > plug_ce` at all twelve
+rungs. A reader subtracting the two adjacent columns gets the wrong gap; an
+in-place warning is now on that table.
+
+#### 2. The new columns: `flip%` is the conservative reward REVERSING the mean's preference
+
+`flip%` = the percentage of validation pairs where `sign(CVaR logit difference)
+≠ sign(mean logit difference)` (`diagnose_sampling_tail.py:801`). It is not a
+gate, not a CE, and not derived from either — an independent view of what
+conservatism actually does to decisions.
+
+| | `plug CE` | `plug acc` | `cvCE .25` | `cvacc .25` | `flip% .25` | `flip% .05` | `wrong% .05` |
+|---|---|---|---|---|---|---|---|
+| **ld w4** | 0.4416 | 0.8182 | 0.6176 | 0.6455 | 22.7 | 43.6 | **54.5** |
+| **ld w5** | 0.3727 | 0.8909 | 0.5033 | 0.7636 | **12.7** | 30.0 | 37.3 |
+| **ld w6** | 0.3523 | 0.8818 | **0.4951** | 0.7636 | 13.6 | 28.2 | 36.4 |
+| **ld w7** | 0.3340 | **0.9000** | 0.5093 | 0.7545 | 18.2 | 35.5 | 40.0 |
+| **ld w8** | 0.3198 | 0.8909 | 0.5508 | 0.7182 | 20.9 | 38.2 | 45.5 |
+| **ld w9** | 0.3106 | 0.8636 | 0.6657 | 0.6091 | 29.1 | **51.8** | **58.2** |
+| **lp w4** | 0.4059 | 0.8333 | **0.5567** | 0.7222 | **11.1** | 22.2 | 38.9 |
+| **lp w5** | 0.3540 | 0.8704 | 0.6037 | 0.7222 | 18.5 | 29.6 | 38.9 |
+| **lp w6** | 0.3247 | 0.8519 | 0.7560 | 0.6667 | 22.2 | 31.5 | 42.6 |
+| **lp w7** | 0.2860 | 0.8519 | 1.1971 | 0.6481 | 24.1 | 31.5 | 42.6 |
+| **lp w8** | 0.2533 | 0.8704 | 1.6187 | 0.6111 | 29.6 | 37.0 | 46.3 |
+| **lp w9** | 0.2180 | **0.9074** | 2.2286 | 0.5926 | 35.2 | **48.1** | **53.7** |
+
+#### 3. The mechanism, stated plainly
+
+**The posterior MEAN is an excellent predictor at every capacity, and gets
+monotonically better.** `plug_ce` falls 0.4416 → 0.3106 (large_diverse) and
+0.4059 → 0.2180 (large_play), strictly monotone at both. `plug_acc` is
+**flat and high** — 0.8182–0.9000 and 0.8333–0.9074 — with **no capacity
+penalty whatsoever**.
+
+**The CVaR tail does the opposite.** CVaR accuracy falls 0.7636 → 0.6091 and
+0.7222 → 0.5926, and the **gap between them widens with capacity**:
+
+| | at w4 | at w9 |
+|---|---|---|
+| large_diverse, `plug acc − CVaR acc` | +0.1727 | **+0.2545** |
+| large_play, `plug acc − CVaR acc` | +0.1111 | **+0.3148** |
+
+> **Capacity buys mean accuracy and spends it on tail disagreement.** The
+> sharpest single instance: **large_play w9 has the best plug-in accuracy of all
+> twelve rungs (0.9074) and, at the deployment tail, the worst conservative
+> behaviour — 48.1% flips and 0.4630 accuracy, below chance.** The largest model
+> is simultaneously the best mean predictor and the worst conservative one. That
+> is the §3.2.7/§4.3.51 concern, measured rather than argued.
+
+#### 4. `flip%` independently reproduces the capacity verdict, with no gate involved
+
+At the selection conservatism, `flip%` degrades away from the centred optimum on
+both variants:
+
+- **large_play: monotone 11.1 → 35.2%, argmin w4 — the CE argmin exactly.**
+- **large_diverse: U-shaped 22.7 / 12.7 / 13.6 / 18.2 / 20.9 / 29.1, argmin w5** —
+  one rung from the CE argmin (w6), and w5/w6 differ by 0.9 points.
+
+> ✅ **§4.3.111 gains a THIRD line, and the first that touches no gate and no
+> CVaR CE.** `flip%` is computed from sign agreement between two reward fields.
+> It is not the objective, not gate 1, not gate 2 — and it says the same thing:
+> **the feasible capacity is interior, and w8–w9 are bad.** Three independent
+> statistics now agree on the decision §4.3.111 took.
+
+#### 5. At the deployment tail, conservatism approaches a coin flip
+
+`flip%` at α=0.05 reaches **51.8%** (large_diverse w9) and **48.1%** (large_play
+w9), with **43.6%** at large_diverse w4. **A 50% flip rate means the conservative
+reward's preference is uncorrelated with the mean reward's** — it is not being
+cautious about the ranking, it is discarding it.
+
+And `wrong%` exceeds 50% at exactly three rungs — large_diverse w4 (54.5%) and
+w9 (58.2%), large_play w9 (53.7%) — which **confirms §4.3.117 §2c to the rung**.
+
+This is the strongest form of to-do 18b's disclosure and the numbers it should
+quote. It remains a **deployment**-tail statement: at the selection α the same
+rungs flip at 22.7 / 29.1 / 35.2%, high but not uncorrelated.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -14224,15 +14353,22 @@ blind. Record it as a future-round candidate.
     18.3 σ and 67.7 σ. Headline: **raw scoring had destroyed the ladder's
     resolution** — its best three rungs differed by 0.1 SE across a 12× parameter
     span. Readout `scripts_bnn/selection_ladder_readout.py`.
-18b. **Disclose the deployment-tail finding in §7.** At conservatism 0.95 on
-    centred `f`, only **2 of 12** ladder rungs beat `log 2` and centred CVaR
-    accuracy is **below chance** at three (§4.3.117 §2c) — against **8 of 12** at
-    the selection conservatism (§4.3.118 §6). The contrast vindicates 0.75 for
+18b. **UNBLOCKED — disclose the deployment-tail finding in §7.** At conservatism
+    0.95 on centred `f`, only **2 of 12** ladder rungs beat `log 2` and centred
+    CVaR accuracy is **below chance** at three — against **8 of 12** at the
+    selection conservatism (§4.3.118 §6). Quote §4.3.120 §5's stronger form:
+    **`flip%` reaches 51.8% / 48.1%**, i.e. the conservative reward's preference
+    becomes *uncorrelated* with the mean's, and `wrong%` exceeds 50% at exactly
+    the three rungs §4.3.117 predicted. The contrast vindicates 0.75 for
     selection and localises the problem to the deployment tail, which is where
-    §3.1's comparability lives. Unfavourable; do not defer it to a convenient
-    round. **Gated on check 3** (§4.3.119) confirming §4.3.117's table.
-18c. **Run check 3** (§4.3.119) — a grep over `exp/sel_*.txt`, already written by
-    the 18a pass. Confirms §4.3.117's deployment column, which 18b quotes.
+    §3.1's comparability lives. Unfavourable; do not defer it.
+18c. ✅ **DONE (§4.3.120)** — check 3 **PASSES 12/12 exactly**, confirming
+    §4.3.117's deployment table. A **valid replacement for the withdrawn check
+    2** (plug-in CE reproducing §4.3.105's gap column) also passes 12/12, which
+    is the first direct empirical verification of the §4.3.61 Class A invariance
+    at scale. Found and flagged a column trap in §4.3.105's table. New finding:
+    **capacity buys mean accuracy and spends it on tail disagreement**, and
+    `flip%` gives §4.3.111 a **third** supporting line touching **no gate**.
 
 **QUEUED — FUTURE-ROUND CANDIDATES (after the restart, not in it)**
 
