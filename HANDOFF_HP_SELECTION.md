@@ -12913,6 +12913,132 @@ one because it was never transcribed — so the four round-5 sweeps are
 **uniform** in prior geometry and burn-in, which *strengthens* the §3.1
 comparability claim rather than weakening it.
 
+### 4.3.123 PRE-REGISTERED: how to read §3.2.9's escalation on the deployment tail (to-do 16a)
+
+**Written 2026-09-20, before round 5 has a winner and before any escalation run
+exists.** §7.3's amendment left one question open that only the escalation can
+settle, and §0's discipline requires the reading to be fixed first. Nothing here
+may be adjusted after the numbers are seen.
+
+#### 1. The question, stated so it can come out either way
+
+§4.3.117/§4.3.120 found the deployment tail (conservatism 0.95) badly degraded at
+the sweep budget: `flip%` 22–52%, only 2 of 12 ladder rungs beating `log 2`. Two
+causes are **not separable at that budget**:
+
+1. the deployed field genuinely carries less preference information, or
+2. the 0.95 CVaR estimator is **biased downward** at ~2 effective tail draws —
+   which is §7.3's own argument for selecting at 0.75.
+
+The escalation raises the draw budget, so the 0.95 tail becomes resolved. **If
+the degradation is (2) it shrinks; if it is (1) it persists.**
+
+#### 2. No code change is needed, and deliberately none is made
+
+`flip_pct` is computed in `diagnose_sampling_tail.py`'s alpha sweep and **thrown
+away at the logging step** — `run_bnn_training_antmaze_eval.py` keeps only `ce`,
+`acc` and `k_tail` per level. The jackknife SE is likewise computed at the
+**primary** alpha only, so the sweep's 0.95 CE has no SE attached.
+
+Both gaps close **without touching the running pipeline**: invoke the diagnostic
+**twice**, once with each conservatism as primary. Each invocation's jackknife SE
+is then the SE *at that level*, and each prints `flip%` for both levels.
+
+> **A mid-campaign edit to `cvar_ce` was considered and rejected.** Adding
+> per-alpha jackknife SEs would be ~5× the jackknife work on every running
+> trial, and the block is wrapped in a `try/except` that logs **NaN for
+> `val_cvar_ce`** on any exception — so a bug would silently render trials
+> unselectable. Two extra diagnostic invocations on saved chains cost nothing and
+> risk nothing. §0: do not patch a running campaign for observability that can be
+> obtained afterwards.
+
+#### 3. What gets measured
+
+At §3.2.9's escalation, on the winner's saved chains, for each
+**N ∈ {1/8, 1/4, 1/2, 1}** of the escalation draws (fractions, so this does not
+depend on the budget finally chosen) and each **c ∈ {0.75, 0.95}**:
+
+`CE_c(N)`, `acc_c(N)`, `flip%_c(N)`, the jackknife SE at the primary `c`, and
+`ess_cen(N)`.
+
+**Report effective tail draws explicitly as `(1 − c) · ess_cen`**, not as a
+multiplication left to the reader — it is the quantity the entire 0.75/0.95
+argument turns on, and the sweep budget's value is ≈ **2**.
+
+#### 4. The pre-registered reading
+
+Define **`D(N) ≡ CE_0.95(N) − CE_0.75(N)`**, the excess cost of the deployment
+tail on the *same draws*, and `S` = the pooled SE of the endpoint difference,
+`√(SE_0.95(N_max)² + SE_0.95(N_min)²)`.
+
+**Gate on resolution first.** The escalation must reach **`ess_cen ≥ 200`**, i.e.
+≥ 10 effective tail draws at 0.95 — the resolution 0.75 had at the sweep budget,
+and §3.2.1's stated minimum. **If it does not, the test is INCONCLUSIVE and must
+be reported as such**, not read in either direction.
+
+| reading | criterion |
+|---|---|
+| **ESTIMATOR BIAS** | `D(N_max) < D(N_min) − 2S` — the excess shrinks as the tail resolves |
+| **THE FIELD** | `\|D(N_max) − D(N_min)\| ≤ 2S` **and** `D(N_max) > 2·SE_0.95(N_max)` — flat, and non-zero |
+| **INDETERMINATE** | anything else; report as such |
+
+**Separately and unconditionally, the absolute question:** is
+**`CE_0.95(N_max) < log 2`**, and by how many `SE_0.95(N_max)`? This is the
+headline §7 number either way — *"the deployed reward beats chance by X ± Y"*, or
+that it does not.
+
+> **These are two different questions and must not be conflated.** `D > 0` at
+> high resolution means the deployed field predicts preferences **worse than the
+> selection field** — it does *not* mean the deployed field is uninformative.
+> The `log 2` comparison is what answers that, and a field can be both
+> genuinely worse than the 0.75 field and still well below chance.
+
+**`flip%` is reported as a DESCRIPTIVE companion, not as a test statistic.** It
+has no SE in the current implementation and none is invented for it. It is the
+most interpretable number in §7.3's amendment — the fraction of pairs on which
+the conservative reward reverses the mean reward's preference — so it is
+reported at `N_min` and `N_max` for both levels, against §4.3.120's ladder range
+(11–35% at 0.75, 22–52% at 0.95) as context.
+
+#### 5. What each verdict licenses — and what it does NOT
+
+- **ESTIMATOR BIAS** → the sweep-budget degradation is a measurement artefact.
+  §7.3's amendment resolves favourably; report the escalation numbers as *the*
+  deployment-level result and say the sweep-budget figures were an upper bound,
+  as that amendment already frames them.
+- **THE FIELD** → deploying at 0.95 costs real preference information at this
+  data scale. **That is a finding about the method and is reported as one**, in
+  §7, not buried in an appendix. It is unfavourable and it is interesting.
+
+> ⛔ **Neither verdict licenses changing the deployment conservatism.** Choosing
+> 0.95 is §3.2.10's pre-registered commitment and matches the paper's own
+> convention. Moving it *because a measurement came out badly* would be
+> selecting the deployment level on results — precisely the reactive tuning §0
+> forbids, and a much worse methodological error than the finding itself. If the
+> FIELD verdict lands, the honest move is to **report it**; any change to the
+> deployed level is a **§9 declared amendment**, argued separately and in
+> advance of the numbers it would be applied to.
+
+#### 6. Commands (run at escalation, on the winner's saved chains)
+
+Substitute the escalation run's `OUT_DIR` and total draws per chain for `$R` and
+`$TOT`:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && R=exp/<escalation_out_dir>_0; TOT=<draws_per_chain>; for FR in 8 4 2 1; do N=$((TOT/FR)); for C in 0.75 0.95; do echo "=== N=$N  conservatism=$C ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir $R --cvar-ce --centre-draws --conservatism $C --cvar-ce-alpha-sweep 0.25,0.05 --max-draws $N --device cuda 2>&1 | grep -E "ALPHA SWEEP|^ +0\.(25|05)0|jackknife|tail depth|plug-in"; done; done | tee exp/escalation_tail_ladder.txt
+```
+
+And the resolution number the whole argument turns on:
+
+```bash
+cd ~/iqlpref/gp_reward-priors && python scripts_bnn/diagnose_sampling_tail.py --run-dir exp/<escalation_out_dir>_0 --tail --device cuda 2>&1 | grep -iE "ess|rhat" | tee exp/escalation_ess.txt
+```
+
+**Before quoting anything**, apply §4.3.117's lesson: the `raw f` column at
+conservatism 0.75 must reproduce the winner's logged `val_cvar_ce`. If it does
+not, the invocation is wrong — as it was in §4.3.117 — and nothing in the output
+may be used.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -14679,17 +14805,21 @@ blind. Record it as a future-round candidate.
 16. **Carry the corrected derived `map_amp2` (6848 / 6838) into §7.3's
     disclosure** and into the next round's pins. Do not change the running
     pins (§9).
-16a. **NEW, pre-registered by §7.3's amendment — at §3.2.9's escalation, report
-    the winner's deployment-level resolution and predictive content**, not only
-    its CE: `ess_cen` **at conservatism 0.95** (the `(1−c)·ess` the whole 0.75/
-    0.95 argument turns on), plus CE, accuracy and **`flip%`** at 0.95 on centred
-    `f`. This is the **only** check that separates estimator bias from genuine
-    field degradation (§7.3 amendment (d)), and it is why the escalation clause
-    exists. **Declare the reading before the re-measurement runs**: if `flip%` at
-    0.95 falls materially toward its 0.75 value as ess rises, the sweep-budget
-    degradation was estimator bias; if it persists at well-resolved ess, it is
-    the field, and that is a finding about the method rather than about the
-    budget. Add both to §7.4.
+16a. ✅ **READING DECLARED (§4.3.123)** — written before round 5 has a winner and
+    before any escalation run exists, so it cannot be steered by the numbers.
+    Primary statistic `D(N) = CE_0.95 − CE_0.75` on the same draws, over a
+    budget-independent draw ladder; **ESTIMATOR BIAS** if `D` shrinks by > 2
+    pooled SE, **THE FIELD** if flat and non-zero, **INCONCLUSIVE** unless the
+    escalation reaches `ess_cen ≥ 200` (= 10 effective tail draws at 0.95).
+    Separately and unconditionally: is `CE_0.95 < log 2`, and by how many SE.
+    `flip%` is descriptive only — it has no SE and none was invented. **No code
+    change**: two diagnostic invocations, one per conservatism, give a jackknife
+    SE at each level; a mid-campaign edit to `cvar_ce` was considered and
+    rejected because its `try/except` NaNs `val_cvar_ce` on any bug. **Neither
+    verdict licenses moving the deployment conservatism** — that would be
+    selecting it on results; it is a §9 amendment or nothing. **Execution is
+    queued behind the escalation itself** (item 17's label caching and a round-5
+    winner both precede it); commands are in §4.3.123 §6.
 17. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
     5 TB; cached reward labels are ~4 MB, and caching also removes the
     re-labelling cost from each of stage 4's 8 normalization indices. This is a
