@@ -13125,7 +13125,51 @@ would have printed, and the skipped diagnostics themselves (stability check,
 posterior-mean stats, architecture, chain and draw counts) are stored in the
 entry's metadata so deleting the chains does not lose them.
 
-#### 5. Scope: BNN only, deliberately
+#### 5. ⚠️ TWO conservatism levels must be cached, not one (2026-09-21)
+
+**The IQL evaluation is run at BOTH `bnn_alpha` 0.95 (the CVaR reward) and
+`bnn_alpha` 0.0 (the posterior-mean reward)** — the ablation that shows what
+conservatism actually buys (§3.2.7, §4.3.51). The user stated this after the
+cache was built and **it changes the deletion criterion**.
+
+`alpha` **is** cache-key material — verified, the two keys are distinct — so each
+level is a **separate entry**. The hazard is therefore concrete:
+
+> ❌ **Caching only α=0.95 and then deleting the chains destroys the ability to
+> produce the α=0 labels, permanently and silently.** The first α=0 IQL run
+> would simply fail to find chains.
+
+Two changes, both made:
+
+- **`precompute_labels.py`** (new) populates every (run dir × α) in one pass,
+  driving the same `qlearning_dataset_bnn` the evaluation uses — so the cached
+  labels come from the verified path, not a reimplementation. It reuses one
+  `env.get_dataset()` across all of them and ends with a **per-source
+  completeness table**.
+- **`--emit-rm` now REFUSES to emit** unless told the complete set via
+  `--require-alphas`, and then emits **only** for sources that have every one of
+  them. Sources missing an α are listed as `INCOMPLETE` with the missing levels
+  named. Covered by self-test check 10, which is the check that must never
+  regress: it asserts that a source with only α=0.95 cached produces **no** `rm`
+  line.
+
+**Cost, stated plainly:** one forward pass per (run dir, α). The pass over
+S × N is repeated for each α even though only the tail reduction differs, so two
+levels cost **2× the labelling compute, once**. Collapsing that would mean
+restructuring `_bnn_cvar_labels` again and re-running the verification, which is
+a bad trade against a one-off compute cost on a critical path that has just been
+verified.
+
+**A free consistency check worth running once** (`--check-centring-invariance`):
+at α=0 the CVaR reduction *is* the posterior mean, so centring subtracts a
+per-draw constant whose average is a single global constant — which
+`gauge_reward` (`max0`/`mean0`) removes **exactly**. So α=0 labels should be
+identical under both conventions after gauging. That is precisely the claim
+`iql.py`'s item-F comment makes — *"the mean-reward baseline and the MR/PT
+comparison are untouched"* — and §3.1 comparability rests on it, so it is worth
+measuring rather than asserting.
+
+#### 6. Scope: BNN only, deliberately
 
 `qlearning_dataset_mr_ensemble` is **not** cached. Item 17's rationale is BNN
 chain storage, MR snapshots are small, and an MR ensemble is ~20 members against
@@ -14915,16 +14959,22 @@ blind. Record it as a future-round candidate.
     selecting it on results; it is a §9 amendment or nothing. **Execution is
     queued behind the escalation itself** (item 17's label caching and a round-5
     winner both precede it); commands are in §4.3.123 §6.
-17. 🔨 **BUILT, NOT YET VERIFIED (§4.3.124)** — `reward_label_cache.py`
-    (self-test 9/9), wired into `qlearning_dataset_bnn` in **both** `iql_eval.py`
-    and `iql.py`, which remain byte-identical there; the moved block differs from
-    `HEAD` in exactly 2 marked hunks and no labelling arithmetic changed.
-    **GATING: run `verify_label_cache.py` on one run dir per variant BEFORE
-    deleting any chains** — it proves cached labels are *bit-identical* to
-    recomputed ones, and once the chains are gone the labels cannot be
-    re-derived. `--emit-rm` prints deletion commands and never runs them. MR
-    ensembles deliberately not cached (§4.3.124 §5); that is a compute decision
-    and biases nothing.
+17. ✅ **BUILT AND VERIFIED (§4.3.124)** — `reward_label_cache.py` (self-test
+    10/10), wired into `qlearning_dataset_bnn` in **both** `iql_eval.py` and
+    `iql.py`, which remain byte-identical there; the moved block differs from its
+    pre-change form in exactly 2 marked hunks and no labelling arithmetic
+    changed. **`verify_label_cache.py` PASSED on 2026-09-21** — cached labels are
+    bit-identical to recomputed ones.
+    > ⚠️ **DELETION IS STILL GATED**, on completeness rather than correctness.
+    > The evaluation runs at **α 0.95 AND α 0.0**, each a separate entry
+    > (§4.3.124 §5). Run **`precompute_labels.py --alphas 0.95,0.0`** over every
+    > run dir, confirm its completeness table reads `OK` for all of them, and
+    > only then `--emit-rm --require-alphas 0.95,0.0`, which refuses to emit for
+    > any source missing a level. **Labels cannot be re-derived once chains are
+    > gone.**
+
+    MR ensembles deliberately not cached (§4.3.124 §6); a compute decision that
+    biases nothing.
 18. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.

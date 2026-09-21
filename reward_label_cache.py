@@ -222,8 +222,11 @@ def save(key, payload, rewards, inventory_now, meta=None):
     os.replace(tmp, path)
     size_mb = os.path.getsize(path) / 1e6
     print(f"[label-cache] wrote {path} ({size_mb:.1f} MB, "
-          f"{rewards.shape[0]} labels) — the source chains may now be deleted "
-          f"(reward_label_cache.py --emit-rm).")
+          f"{rewards.shape[0]} labels) for alpha="
+          f"{full.get('payload', {}).get('params', {}).get('alpha')}.")
+    print(f"[label-cache]   this is ONE alpha.  The chains are not deletable "
+          f"until EVERY alpha the evaluation needs is cached — check with "
+          f"`--emit-rm --require-alphas ...`.")
     return path
 
 
@@ -247,13 +250,22 @@ def entries():
 
 # ---------------------------------------------------------------- CLI ----- #
 
-def _cmd_list(emit_rm=False):
+def _cmd_list(emit_rm=False, require_alphas=None):
+    """List entries; with emit_rm, print deletion commands for COMPLETE sources.
+
+    "Complete" means every alpha in `require_alphas` is cached for that source.
+    The IQL evaluation is run at more than one conservatism — CVaR at 0.95 AND
+    the posterior mean at 0.0 — and each is a SEPARATE cache entry, because
+    `alpha` is key material.  Deleting the chains after caching only one alpha
+    destroys the ability to produce the other, permanently.  So this refuses to
+    emit anything unless told what the complete set is.
+    """
     rows = entries()
     if not rows:
         print(f"no cache entries under {cache_root()}")
         return 0
     print(f"{len(rows)} entry(ies) under {cache_root()}\n")
-    deletable = []
+    by_src = {}
     for key, meta in rows:
         if "ERROR" in meta:
             print(f"  {key}  !! {meta['ERROR']}")
@@ -270,14 +282,41 @@ def _cmd_list(emit_rm=False):
               f"{meta.get('n_draws')} draws")
         print(f"    source   {src}   [{'PRESENT' if alive else 'deleted'}]")
         if alive:
-            deletable.append(src)
-    if emit_rm and deletable:
-        print("\n# Sources whose labels are cached.  REVIEW EACH LINE, then run\n"
-              "# them yourself — this tool never deletes anything.")
-        for d in deletable:
-            print(f"rm -rf {d}/sampling_f")
-    elif emit_rm:
-        print("\n# nothing to emit: no cached entry has its source dir present.")
+            by_src.setdefault(src, set()).add(
+                float(p.get("params", {}).get("alpha", float("nan"))))
+
+    if not emit_rm:
+        return 0
+
+    if not require_alphas:
+        print("\n!! --emit-rm needs --require-alphas: the set of conservatism\n"
+              "   levels the IQL evaluation will use (e.g. 0.95,0.0).  Each\n"
+              "   alpha is a SEPARATE cache entry, and deleting the chains with\n"
+              "   only some of them cached destroys the rest permanently.\n"
+              "   Refusing to emit anything.")
+        return 2
+
+    req = {float(x) for x in require_alphas}
+    complete, incomplete = [], []
+    for src, have in sorted(by_src.items()):
+        missing = sorted(req - have)
+        (incomplete if missing else complete).append((src, missing, sorted(have)))
+
+    if incomplete:
+        print(f"\n!! {len(incomplete)} source(s) are INCOMPLETE and are NOT "
+              f"emitted — cache the missing alphas first:")
+        for src, missing, have in incomplete:
+            print(f"   {src}\n      have {have}, MISSING {missing}")
+
+    if complete:
+        print(f"\n# {len(complete)} source(s) have every required alpha "
+              f"{sorted(req)} cached.")
+        print("# REVIEW EACH LINE, then run them yourself — this tool never\n"
+              "# deletes anything, and the labels CANNOT be re-derived after.")
+        for src, _, have in complete:
+            print(f"rm -rf {src}/sampling_f")
+    else:
+        print("\n# nothing to emit: no source has the full required alpha set.")
     return 0
 
 
@@ -357,6 +396,50 @@ def _cmd_selftest():
 
         # 9. entries() round-trips
         assert [e[0] for e in entries()] == [k], entries()
+
+        # 10. THE DELETION GUARD.  The IQL evaluation runs at alpha 0.95 (CVaR)
+        #     and alpha 0.0 (posterior mean); each is a separate entry.  Emitting
+        #     `rm` for a source that has only one of them would destroy the other
+        #     permanently, so this is the check that must never regress.
+        import contextlib
+        import io
+
+        def emit(require):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = _cmd_list(emit_rm=True, require_alphas=require)
+            return rc, buf.getvalue()
+
+        os.makedirs(md, exist_ok=True)          # resurrect the source dir
+        params95 = {"alpha": 0.95, "n_samples": 500, "centre_draws": True}
+        k95, pay95 = make_key("bnn", md, "antmaze-large-diverse-v2", 5, params95)
+        save(k95, pay95, np.zeros(5, np.float32), [],
+             meta={"source_dir": md, "device": "cpu", "n_draws": 7})
+
+        # only 0.95 cached -> must NOT emit, and must name what is missing
+        rc, out = emit(["0.95", "0.0"])
+        assert "rm -rf" not in out, out
+        assert "INCOMPLETE" in out and "MISSING [0.0]" in out, out
+
+        # no --require-alphas at all -> refuse outright
+        rc, out = emit(None)
+        assert rc == 2 and "rm -rf" not in out, (rc, out)
+
+        # now cache 0.0 as well -> complete, so it may emit
+        params0 = dict(params95, alpha=0.0)
+        k0, pay0 = make_key("bnn", md, "antmaze-large-diverse-v2", 5, params0)
+        save(k0, pay0, np.ones(5, np.float32), [],
+             meta={"source_dir": md, "device": "cpu", "n_draws": 7})
+        rc, out = emit(["0.95", "0.0"])
+        assert out.count("rm -rf") == 1 and md in out, out
+        assert "INCOMPLETE" not in out, out
+
+        # a source whose chains are already gone is never emitted
+        shutil_ = __import__("shutil")
+        shutil_.rmtree(md)
+        rc, out = emit(["0.95", "0.0"])
+        assert "rm -rf" not in out, out
+
         print("selftest OK")
         return 0
     finally:
@@ -370,14 +453,21 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true", help="show cache entries")
     ap.add_argument("--emit-rm", action="store_true",
-                    help="with --list, PRINT (never run) deletion commands for "
-                         "sources whose labels are cached")
+                    help="PRINT (never run) deletion commands, but only for "
+                         "sources that have EVERY --require-alphas entry cached")
+    ap.add_argument("--require-alphas", default=None,
+                    help="comma-separated conservatism levels the IQL evaluation "
+                         "will use, e.g. '0.95,0.0'.  Required by --emit-rm: each "
+                         "alpha is a separate entry, and deleting chains with only "
+                         "some cached destroys the rest permanently.")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return _cmd_selftest()
     if a.list or a.emit_rm:
-        return _cmd_list(emit_rm=a.emit_rm)
+        alphas = ([t.strip() for t in a.require_alphas.split(",") if t.strip()]
+                  if a.require_alphas else None)
+        return _cmd_list(emit_rm=a.emit_rm, require_alphas=alphas)
     ap.print_help()
     return 0
 
