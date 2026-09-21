@@ -12824,6 +12824,95 @@ binding. **Re-check at ~20 trials per sweep**, and treat medium_diverse's width
 lock-in as the thing to watch. If it persists, it is a **§9 declared-amendment
 question**, not a knob to turn mid-campaign.
 
+### 4.3.122 The `map_sig_n2` decision, recorded: 0.001 on all four, and it arrived by OMISSION rather than by choice
+
+To-do 18e. §4.3.121 §7 found §7.1 listing `map_sig_n2` **0.05** on large_play as
+a stage-3 setting while round 5 runs **0.001** on all four variants. Settled
+here, and the honest part is *how* it got that way.
+
+#### 1. It was never dropped — it was never carried in
+
+`git log -L` on the line: **`map_sig_n2: 0.001` has been in
+`antmaze_large_play_bnn_antmaze_eval.yaml` since the file was created**
+(`76e7931`, 2026-07-16) and **has never been edited**. `git log -S"map_sig_n2:
+0.05"` returns **nothing** — the value was never committed to any config, in any
+variant, at any time.
+
+So 0.05 existed only as a **command-line flag on stage-3 diagnostic runs**
+(`--map_sig_n2 0.05`, §4.3.44). §4.3.45's table calls it one of "two per-variant
+deviations, both with a measured justification", and it then simply never reached
+the sweep configs. **This is an omission that happens to have produced the right
+answer, not a decision**, and §0's pre-registration discipline means it gets
+recorded as such rather than retrofitted into a rationale.
+
+#### 2. The setting is nevertheless CORRECT for round 5, on four grounds
+
+**(a) Its main measured benefit is now redundant with item F.** §4.3.46
+established the nugget "reliably suppresses offset drift" — inflation
+(centred ÷ raw `cvar_ess`) 3.4–4.9× without it, 1.1–1.8× with. But that benefit
+is about the **offset**, and item F (§4.3.114) removes the offset *analytically
+at scoring time*. Every §3.2.12 gate is centred. **Whether the offset is
+suppressed by the prior or by the scoring, the gated quantity is the same** — so
+the nugget's headline stage-3 result buys nothing the current pipeline does not
+already have.
+
+**(b) Its remaining benefit is on an axis that is not binding.** The nugget's
+*other*, separable effect is the shape tail: large_play centred `cvar_ess`
+196.94 → 663.72, a real 3.37× gain in the identified component that centring does
+**not** give you. But gate 3 (`ess ≥ 40`) **rejected nothing in 38 round-5
+trials**, and large_play's eligible trials run ess 66–155. A 3.4× gain on a gate
+with 1.7–3.9× headroom already buys nothing either.
+
+**(c) Applying it uniformly would have been actively harmful.** §4.3.46 measured
+the same knob on medium_play: centred `cvar_ess` **122.42 → 83.50, 32% worse**.
+The nugget helps large_play's shape tail and hurts medium_play's. So the only
+ways to use it are per-variant — a comparability deviation — or uniformly, which
+damages a variant. **0.001 everywhere avoids both.**
+
+**(d) It preserves the prior the paper is about.** §4.3.44 records the cost in
+its own words: 0.05 "weakens the fine-scale prior — a real cost" and "weakens
+the cell-equality prior — a real modelling choice". The map-informed heat-kernel
+prior **is** the contribution under evaluation. Weakening it on one variant to
+work around a sampler problem is a concession that would itself need disclosing.
+
+#### 3. The suggestive check: large_play at 0.001 is doing BETTER on gate 1 than the nugget run did
+
+| | stage-3 `nugget` (0.05) | **round 5 (0.001), eligible trials** |
+|---|---|---|
+| centred `ratio` | 0.9231 | 0.9873 – 1.0917 |
+| `\|log r\|` | **0.0800** | **median 0.0127** (best 0.0064) |
+| eligible | — | **7 of 10** |
+
+**Round-5 large_play sits ~6× closer to a unit ratio than the run the nugget was
+adopted to fix**, and is the second-healthiest of the four sweeps.
+
+> ⚠️ **This is suggestive, not controlled.** The comparison crosses a different
+> architecture, sampler schedule, burn-in and draw budget, and the round-5
+> figures are mid-sweep. It is consistent with (a) and (b) — the sampler work
+> since stage 3 removed the problem the nugget was patching — but it does not
+> *establish* that. No claim rests on it; (a)–(d) stand without it.
+
+#### 4. What to report
+
+**In §7.1, report the deviation as stage-3 history and state that neither
+per-variant setting is live.** Both of §7.1's listed deviations are dead, for
+different reasons, and the sentence currently reads as though they carried
+forward:
+
+- `num_burn_in_steps` 100000 on medium_diverse — **refuted** by §4.3.65 on
+  centred metrics (5× burn-in moved medium_play's centred rhat 1.440 → 1.988 and
+  made it worse on every axis).
+- `map_sig_n2` 0.05 on large_play — **never adopted into any config**; the
+  reasons it should not be are (a)–(d) above.
+
+**The disclosure §7.1 owes is unchanged in substance**: stage 3 ran 36
+diagnostic training runs outside the pre-registered procedure, and two of its
+conclusions were per-variant deviations. What must be added is that **neither
+deviation is in the shipped configuration** — one because it was later refuted,
+one because it was never transcribed — so the four round-5 sweeps are
+**uniform** in prior geometry and burn-in, which *strengthens* the §3.1
+comparability claim rather than weakening it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -13588,6 +13677,22 @@ reach a sampler whose identified component is stationary. The resulting settings
 `num_burn_in_steps` 100000 on medium_diverse and `map_sig_n2` 0.05 on large_play
 — were **chosen on stationarity diagnostics, not produced by §3.6.3's
 selection**. Report all of this, including the run count.
+
+> 📌 **NEITHER per-variant deviation is in the shipped configuration** (§4.3.122,
+> 2026-09-20), and the sentence above should not be read as listing live pins.
+> `num_burn_in_steps` 100000 was **refuted** by §4.3.65 on centred metrics — 5×
+> burn-in moved medium_play's centred rhat 1.440 → 1.988 and was worse on every
+> axis. `map_sig_n2` 0.05 was **never committed to any config**: `git log -S`
+> finds it nowhere, and the large_play base config has read 0.001 since the file
+> was created. It existed only as a flag on stage-3 diagnostic runs.
+>
+> **Report this as strengthening the comparability claim, not weakening it**: the
+> four round-5 sweeps are **uniform** in prior geometry and burn-in, so the
+> stage-3 tuning disclosed above did not produce per-variant settings in the
+> evaluated configuration. **Disclose honestly that the nugget's absence is an
+> omission rather than a decision** — it was never transcribed — while §4.3.122
+> gives the four independent grounds on which 0.001 is nevertheless correct, the
+> first being that item F makes the nugget's measured benefit redundant.
 
 **The distinction that makes it defensible, and its limit.** There are two kinds
 of tuning here and only one is governed by the budget invariant:
@@ -14621,13 +14726,18 @@ blind. Record it as a future-round candidate.
     medium_diverse, where the ungated frontier is at 6/15 while the eligible one
     is at 1/15. **No config changes** — §0/§9; if the lock-in persists it is a
     declared-amendment question.
-18e. **Record the `map_sig_n2` decision** (§4.3.121 §7). §7.1 lists 0.05 on
-    large_play from stage 3; round 5 runs 0.001 on all four. Nothing is broken —
-    large_play is the second-healthiest sweep — but the choice to drop a
-    per-variant setting that §4.3 called a "real modelling choice" should be
-    written down rather than inferred from the yaml. Same paragraph should note
-    that §7.1's `num_burn_in_steps` 100000 was **refuted** by §4.3.65 and is
-    history, not a live pin.
+18e. ✅ **DONE (§4.3.122)** — settled, and the finding is that **0.05 was never
+    dropped: it was never carried in.** `git log -S` finds it in no config ever;
+    the large_play base yaml has read 0.001 since `76e7931` (2026-07-16) and that
+    line has never been edited. So the setting **arrived by omission, not by
+    decision**, and is recorded that way per §0. It is nevertheless **correct**
+    on four grounds — item F makes its offset benefit redundant, gate 3 is not
+    binding so its shape-tail benefit buys nothing, applying it uniformly would
+    have cost medium_play 32% of centred `cvar_ess`, and it preserves the
+    map-informed prior the paper is about. §7.1 amended: **neither** stage-3
+    per-variant deviation is live (the other was refuted by §4.3.65), so the four
+    sweeps are uniform in prior geometry and burn-in — which **strengthens** the
+    §3.1 comparability claim.
 18c. ✅ **DONE (§4.3.120)** — check 3 **PASSES 12/12 exactly**, confirming
     §4.3.117's deployment table. A **valid replacement for the withdrawn check
     2** (plug-in CE reproducing §4.3.105's gap column) also passes 12/12, which
