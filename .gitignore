@@ -816,3 +816,7 @@ exp/*
 # Generated experiment output at any depth (root exp/ is covered by exp/* above,
 # which git anchors to the repo root because of its mid-pattern slash).
 **/exp/
+
+# Cached CVaR reward labels (handoff 3.2.9, to-do 17) -- ~4 MB each, and
+# regenerable from the chains while those still exist.  Not source.
+reward_label_cache/

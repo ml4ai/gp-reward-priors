@@ -13039,6 +13039,101 @@ conservatism 0.75 must reproduce the winner's logged `val_cvar_ce`. If it does
 not, the invocation is wrong — as it was in §4.3.117 — and nothing in the output
 may be used.
 
+### 4.3.124 Label caching built (to-do 17) — the chains become deletable, and stage 4 stops re-labelling
+
+§3.2.9 called this "the one storage change that is actually required". Built
+2026-09-20, **not yet verified on real chains** — see §3 below, which is the
+gating step.
+
+#### 1. What is cached, and why at that exact point
+
+**`penalized_r`, the `(N−1,)` float32 CVaR reward, before the keep mask, before
+`gauge_reward()` and before `modify_reward()`.** Pre-gauge is the reusable point:
+gauge mode and normalization index are config knobs applied *downstream*, so
+**all 8 of stage 4's normalization indices and every gauge mode share one entry**
+instead of repeating the whole forward pass over every posterior draw to arrive
+at identical numbers.
+
+| | size |
+|---|---|
+| posterior chains, worst case | up to **458 GB** per set, **~5 TB** for 11 sets/variant |
+| the labels they exist to produce | **~4 MB** |
+
+#### 2. Correctness is the whole problem, so the design is built around it
+
+A cache that silently serves the wrong labels puts wrong rewards into the paper's
+results and **nothing downstream would notice**. `reward_label_cache.py`:
+
+- **keys on every input that determines the labels** — `LOGIC_VERSION`, kind,
+  model-dir basename, env id, `N−1`, `alpha`, `n_samples`, `centre_draws`;
+- **`LOGIC_VERSION` must be bumped whenever the labelling maths changes.** It
+  would have had to be bumped for item F (§4.3.114), which changed every label.
+  Stated at the top of the module, and version 1 is defined as *centred CVaR +
+  partition tail mean*;
+- **verifies the stored source inventory on every read when the chains are
+  present**, so retraining into the same `OUT_DIR` — the hazard §10.3 records as
+  having destroyed evidence **twice** — is caught and forces a recompute;
+- when the chains are gone (the point of the cache) verification is necessarily
+  partial, and **every such read says so loudly**, printing the provenance:
+  when it was cached, from where, on which device, how many draws, and the
+  weights digest;
+- **the key is computable without the chains** — otherwise deleting them would
+  make the entry unfindable — and the inventory is verification data, not key
+  material;
+- refuses to write non-finite labels; rejects length mismatches and corrupt
+  entries; writes atomically via a temp file and rename.
+
+**`device` is recorded but is deliberately NOT key material.** A GPU and a CPU
+forward pass can differ in the last bits, so including it would create two
+entries for what is meant to be one labelling. The cache therefore **fixes a
+canonical labelling — first writer wins** — which is a reproducibility
+*improvement* over re-labelling per consumer, but it is a choice and is
+documented as one rather than left to be discovered.
+
+**Self-test: 9 checks, passing**, including the §10.3 stale-source hazard, that
+every parameter change misses rather than reuses, and that a vanished source
+yields `HIT_UNVERIFIED` rather than a silent hit.
+
+#### 3. ⚠️ GATING STEP — nothing may be deleted until this passes
+
+`verify_label_cache.py` proves the equality the whole change rests on: **cached
+labels are bit-identical to freshly computed ones**, on a real run directory,
+using `np.array_equal` on the raw float32 rather than a tolerance. It also
+checks that the miss and hit paths return identical `rewards`, `observations`
+and `terminals`, that flipping `centre_draws` misses, and it **measures** the
+stage-4 saving instead of assuming it.
+
+> **Once the chains are deleted the labels cannot be re-derived.** Run the
+> verification first, on one run dir per variant, and only then delete. The tool
+> writes to a temporary cache dir by default so it cannot disturb a real cache,
+> and `reward_label_cache.py --emit-rm` **prints** deletion commands and never
+> executes them.
+
+#### 4. How it was wired, and how that was checked
+
+The expensive half of `qlearning_dataset_bnn` was extracted verbatim into
+`_bnn_cvar_labels`, and the wrapper now does cache-lookup → compute-on-miss →
+save. Applied by script to **both** `iql_eval.py` and `iql.py`, whose
+`qlearning_dataset_bnn` were byte-identical and remain so.
+
+**Verified mechanically against `HEAD`:** the moved block is **161 lines with
+exactly 2 differing hunks**, both intended and both marked `# [moved: ...]` —
+capturing `cvar_stability_check`'s return value, and building the metadata dict
+in place of `del all_preds, partitioned`. **No labelling arithmetic was
+touched.** A cache HIT re-emits the reward mean/std that the skipped diagnostics
+would have printed, and the skipped diagnostics themselves (stability check,
+posterior-mean stats, architecture, chain and draw counts) are stored in the
+entry's metadata so deleting the chains does not lose them.
+
+#### 5. Scope: BNN only, deliberately
+
+`qlearning_dataset_mr_ensemble` is **not** cached. Item 17's rationale is BNN
+chain storage, MR snapshots are small, and an MR ensemble is ~20 members against
+500+ BNN draws, so the stage-4 compute saving is much smaller. The cache module
+already supports `kind="mr_ensemble"` if that changes. **This is a compute
+decision only and biases nothing** — the labels are identical either way, so §3.1
+comparability is untouched.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -14820,10 +14915,16 @@ blind. Record it as a future-round candidate.
     selecting it on results; it is a §9 amendment or nothing. **Execution is
     queued behind the escalation itself** (item 17's label caching and a round-5
     winner both precede it); commands are in §4.3.123 §6.
-17. **Label caching before stage 4** (§3.2.9). 11 chain sets per variant is up to
-    5 TB; cached reward labels are ~4 MB, and caching also removes the
-    re-labelling cost from each of stage 4's 8 normalization indices. This is a
-    prerequisite for item 10, not an optional tidy-up.
+17. 🔨 **BUILT, NOT YET VERIFIED (§4.3.124)** — `reward_label_cache.py`
+    (self-test 9/9), wired into `qlearning_dataset_bnn` in **both** `iql_eval.py`
+    and `iql.py`, which remain byte-identical there; the moved block differs from
+    `HEAD` in exactly 2 marked hunks and no labelling arithmetic changed.
+    **GATING: run `verify_label_cache.py` on one run dir per variant BEFORE
+    deleting any chains** — it proves cached labels are *bit-identical* to
+    recomputed ones, and once the chains are gone the labels cannot be
+    re-derived. `--emit-rm` prints deletion commands and never runs them. MR
+    ensembles deliberately not cached (§4.3.124 §5); that is a compute decision
+    and biases nothing.
 18. **§7.4 (round-4 results)** cannot be written until there are results, but
     §3.2.16's declared §9 amendment, the MR/PT split-role change and the
     last-10 statistic all already owe disclosure text.
