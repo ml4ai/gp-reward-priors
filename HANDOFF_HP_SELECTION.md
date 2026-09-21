@@ -12451,6 +12451,14 @@ narrowing) — **reverse**, and not marginally: w4's margin goes from −0.032 t
 > the same manner as line 1: gate 2 does not fail at all.** The ladders now agree
 > with round 5's 0-of-13 (§4.3.116). Under item F, **gate 2 has never once fired
 > on centred `f`, at any capacity, on any variant, in 25 measurements.**
+>
+> 📌 **AMENDED 2026-09-20 at 38 round-5 trials (§4.3.121).** Gate 2 has now fired
+> **once in 50 measurements** — `8fwr6352` (medium_play w5 d4), margin −0.894.
+> **It has still never been a SOLE cause**: that trial also fails gate 1 with
+> `|log r|` = 3.15 and ran with its gradient norm over the clip throughout. The
+> correct statement is therefore **"gate 2 has never rejected a trial that gate 1
+> accepted"** — which is what the refutation above needs, and which the extra 25
+> trials strengthen rather than weaken.
 
 This also **withdraws §4.3.105's "two-sided squeeze"**: there is no gate-2 lower
 bound on either variant, so degeneracy bounds the capacity window from below
@@ -12686,6 +12694,135 @@ w9 (58.2%), large_play w9 (53.7%) — which **confirms §4.3.117 §2c to the run
 This is the strongest form of to-do 18b's disclosure and the numbers it should
 quote. It remains a **deployment**-tail statement: at the selection α the same
 rungs flip at 22.7 / 29.1 / 35.2%, high but not uncorrelated.
+
+### 4.3.121 ROUND 5 CHECKED at 38 trials — healthy overall, but medium_diverse is failing and depth 4 is a cliff
+
+Checked 2026-09-20. `check_sweep_convergence.py` on all four sweeps plus a
+per-trial gate and config audit. **38 finished, 4 running, none stopped.**
+
+#### 1. Config audit: CLEAN, zero violations on all 42 runs
+
+`map_amp2` **6848** (medium) / **6838** (large), `centre_draws` **True**,
+`n_meas` 256, `num_burn_in_steps` 20000, 32 chains × 60 draws, `cycle_length`
+2000, `chain_init_jitter` 1.0, `cvar_ce_conservatism` 0.75, `map_sig_n2` 0.001,
+`burn_in_lr` **absent**, width 4–7 × depth 1–4. **No unsynced runs** (§10.6's
+standing check). Items A, C, E and F are all live in the numbers, not just the
+flags.
+
+#### 2. Eligibility is transformed — 61% against round 4's 15%
+
+| sweep | trials | eligible | rejected on |
+|---|---|---|---|
+| large_diverse | 10 | **9 (90%)** | scale ×1 |
+| large_play | 10 | **7 (70%)** | scale ×3, loc ×1 |
+| medium_play | 10 | **6 (60%)** | scale ×3, loc ×2, degen ×1 |
+| **medium_diverse** | 8 | **1 (12%)** | **scale ×7** |
+| **total** | **38** | **23 (61%)** | — |
+
+**Gate 1 scale is essentially the only binding constraint.** Sole-cause
+failures: **scale 11, loc 1, degen 0, ess 0**, plus 3 multi-gate. Gates 2 and 3
+reject nothing on their own.
+
+#### 3. NEW — depth 4 is a CLIFF, not a slope, and a rank correlation hides it
+
+| depth | n | median `\|log r\|` | max | eligible |
+|---|---|---|---|---|
+| 1 | 7 | 0.0521 | 0.340 | 4/7 (57%) |
+| 2 | 16 | 0.0471 | 0.365 | 11/16 (69%) |
+| 3 | 11 | 0.0896 | 1.207 | 7/11 (64%) |
+| **4** | **4** | **1.6434** | **3.146** | **1/4 (25%)** |
+
+**An 18× jump in median `|log r|` between d3 and d4**, and all three
+order-of-magnitude blow-ups (`|log r|` > 1) sit at d3–d4. §3.2.16's declared
+depth range 1–4 therefore contains a rung that essentially **cannot pass gate
+1** — the depth-axis analogue of §4.3.111's width-ceiling finding, and not
+previously measured this way.
+
+> **Methodological point worth keeping:** ρ(depth, `|log r|`) = **+0.355** at 38
+> trials understates this badly, because the relationship is a **step at d4**,
+> not a trend across d1–d4 (whose medians are 0.052 / 0.047 / 0.090 — flat).
+> **A rank correlation is the wrong summary for a cliff**, and §4.3.116's Class
+> II tracking of this quantity should be read with that in mind.
+
+#### 4. medium_diverse is failing, and it is ONE coherent story
+
+- **All 9 runs drew width 7.** Every other sweep explored three widths
+  (medium_play 4/5/6/7, large_play 4/5/6, large_diverse 5/6/7). Under
+  `int_uniform 4–7` that is **3.8e−6** by chance: the optimiser has locked on.
+- **7 of 8 fail gate 1 on scale**, the only sweep where gate 1 is not incidental.
+- **ESS is inflated 5–20×** — **277–1648** against 46–182 in the other three.
+  **This is the §3.7 / round-1 signature exactly**: a drifting chain's growing
+  within-chain variance inflates ESS, so the huge numbers are a *symptom*, not a
+  strength. §7.1's first bullet, recurring in live data.
+- **Gradient-norm clipping on 7 of 8 trials** (to 130%), against 2 of 10 on
+  large_diverse.
+- **Its one eligible trial has `val_cvar_ce` 0.7001 — above `log 2`.** So
+  **medium_diverse has not yet produced a single configuration that is both
+  eligible and better than chance.**
+
+**Item C is not rescuing this variant, and that should be recorded plainly.**
+Ranked by `J`, the eligible trial is **7th of 8**; `J`'s best (0.6540,
+`oblzkcw9`) is ineligible. §3.2.17's validation had the four eligible round-4
+trials ranking **1–4 of 27**. The mechanism is visible: **5 of 8 trials sit at
+`J` = 0.693147 exactly**, because `P` underflows to 0 when the slacks are ~6 sd
+out, and `J → log 2` whenever `P = 0` and `cvar_ce < log 2`. The GP therefore
+sees a **flat plateau across most of its observations**, which plausibly explains
+the width lock-in. *This is the penalty behaving as designed on hopeless trials,
+not a bug — but the consequence for the optimiser is real and belongs in §7.*
+
+#### 5. §3.2.7's stopping-rule risk is LIVE in medium_diverse
+
+Ungated best is trial 2 at **6/15** non-improving; the eligible best is trial 7
+at **1/15**. **The ungated rule will fire first while the eligible frontier is
+still improving** — exactly the round-2 failure §7.2 recorded. The tool reports
+both frontiers, so this is visible rather than latent; it must be disclosed if
+the sweep stops there.
+
+#### 6. Class II correlations at 38 trials, and the eligible span
+
+| | round 4 | r5 @ 13 (§4.3.116) | **r5 @ 38** |
+|---|---|---|---|
+| ρ(depth, `\|log r\|`) | +0.44…+0.85 | +0.549 | **+0.355** |
+| ρ(width, margin) | positive | +0.577 | **+0.602** |
+| ρ(`n_params`, `\|log r\|`) | +0.396 | +0.725 | **+0.527** |
+
+All three **survive in sign**; two weakened on more data. Per §4.3.108's own
+measurement — mid-sweep capacity correlations move a median 0.116 with sign
+flips in 2 of 7 sweeps — **these remain provisional until the sweeps stop**, and
+§3 above shows why the depth one is the wrong statistic anyway.
+
+**The eligible span is now 897–38,017p over 23 trials**, against 2,305–38,017 at
+13 trials. That is **the entire declared range**, width 4 d2 through width 7 d3,
+with **no boundary pressure at either end**. §4.3.111's "do not widen, do not
+narrow" is confirmed a third time, and the last remnant of the "interior
+eligible region" framing is gone: the eligible region is the *whole* range —
+what varies across it is the *rate*.
+
+#### 7. A documentation gap found on the way
+
+§7.1 lists two per-variant stage-3 settings — `num_burn_in_steps` **100000** on
+medium_diverse and `map_sig_n2` **0.05** on large_play — that are **not** in the
+round-5 configs (both run 20000 and 0.001).
+
+- The burn-in one is **correct as-is**: §4.3.65 **refuted** 100k burn-in on
+  centred metrics (5× burn-in made medium_play worse on every axis, centred rhat
+  1.440 → 1.988). §7.1's sentence is accurate *as history* but reads like a
+  carried-forward pin.
+- The nugget one has **no recorded decision**. §4.3 records `map_sig_n2` 0.05 as
+  "reliably suppresses offset drift" while "weakens the cell-equality prior — a
+  real modelling choice". large_play runs 0.001 like the other three and is the
+  **second-healthiest sweep (7/10)**, so nothing is broken — but the choice to
+  drop it should be recorded rather than inferred.
+
+#### 8. Verdict: do not touch anything
+
+Three of four sweeps are healthy and the binding constraint is a single gate.
+**Per §0 and §9 this is not the moment for a reactive change**, and medium_diverse's
+problem — an optimiser exploiting a capacity region that cannot pass gate 1 — is
+one the search may still escape: 8 trials of a 130 cap, with `run_cap` far from
+binding. **Re-check at ~20 trials per sweep**, and treat medium_diverse's width
+lock-in as the thing to watch. If it persists, it is a **§9 declared-amendment
+question**, not a knob to turn mid-campaign.
 
 ### 4.4 Procedure
 
@@ -14477,6 +14614,20 @@ blind. Record it as a future-round candidate.
     **upper bound**, because estimator bias at ~2 effective tail draws cannot be
     separated from genuine field degradation at this budget. Numbers reproduce
     via `selection_ladder_readout.py`'s transfer block.
+18d. **Re-check round 5 at ~20 trials per sweep** (§4.3.121). Watch, in order:
+    **medium_diverse's width lock-in** (9 of 9 at width 7, 7 of 8 failing gate
+    1); whether **depth 4** stays unusable (1 of 4 eligible, median `|log r|`
+    18× the other depths); and **§3.2.7's stopping-rule split** in
+    medium_diverse, where the ungated frontier is at 6/15 while the eligible one
+    is at 1/15. **No config changes** — §0/§9; if the lock-in persists it is a
+    declared-amendment question.
+18e. **Record the `map_sig_n2` decision** (§4.3.121 §7). §7.1 lists 0.05 on
+    large_play from stage 3; round 5 runs 0.001 on all four. Nothing is broken —
+    large_play is the second-healthiest sweep — but the choice to drop a
+    per-variant setting that §4.3 called a "real modelling choice" should be
+    written down rather than inferred from the yaml. Same paragraph should note
+    that §7.1's `num_burn_in_steps` 100000 was **refuted** by §4.3.65 and is
+    history, not a live pin.
 18c. ✅ **DONE (§4.3.120)** — check 3 **PASSES 12/12 exactly**, confirming
     §4.3.117's deployment table. A **valid replacement for the withdrawn check
     2** (plug-in CE reproducing §4.3.105's gap column) also passes 12/12, which
