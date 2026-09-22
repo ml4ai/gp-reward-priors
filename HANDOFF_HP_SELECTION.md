@@ -12746,6 +12746,16 @@ previously measured this way.
 
 #### 4. medium_diverse is failing, and it is ONE coherent story
 
+> 🔁 **SUPERSEDED 2026-09-22 (§4.3.125).** medium_diverse **escaped at trial 13**
+> and its leader is now eligible and competitive (J = 0.4601, better than
+> large_play's). **Two corrections to what follows.** (a) The exit was **depth**,
+> not width: w7 at depth 1 is only 4,993 params and clears gate 1 at `|log r|`
+> = 0.0067, so *"a capacity region that cannot pass gate 1"* was wrong — the
+> region w7×d1 passes easily. (b) The width lock-in is **not chance alone**: item
+> C's `J → log 2` saturation flattened 5 of its first 8 observations to an
+> identical value, leaving the GP no gradient in any direction. The bullets below
+> are accurate as of 38 trials; read §4.3.125 for what they became.
+
 - **All 9 runs drew width 7.** Every other sweep explored three widths
   (medium_play 4/5/6/7, large_play 4/5/6, large_diverse 5/6/7). Under
   `int_uniform 4–7` that is **3.8e−6** by chance: the optimiser has locked on.
@@ -13177,6 +13187,141 @@ chain storage, MR snapshots are small, and an MR ensemble is ~20 members against
 already supports `kind="mr_ensemble"` if that changes. **This is a compute
 decision only and biases nothing** — the labels are identical either way, so §3.1
 comparability is untouched.
+
+### 4.3.125 ROUND 5 at 65 trials — medium_diverse ESCAPED, on depth; and the width lock-in has a MECHANISM
+
+Checked 2026-09-22. 65 finished (17/15/16/17), 4 running, none stopped.
+**large_play is closest: 11/15 non-improving, 4 trials from the rule firing.**
+
+#### 1. medium_diverse escaped — and §4.3.121's diagnosis was half wrong
+
+§4.3.121 called it "an optimiser exploiting a capacity region that cannot pass
+gate 1" and said *do not touch it, the search may still escape*. **It escaped,
+at trial 13, and the exit was DEPTH.**
+
+| md trial | w | d | n_params | `\|log r\|` | verdict |
+|---|---|---|---|---|---|
+| 1–12 | 7 | 2–4 | 21,505–54,529 | 0.093–3.00 | 11 of 12 FAIL scale |
+| **13** | 7 | **1** | **4,993** | 0.0473 | **ELIGIBLE** |
+| **14** | 7 | **1** | **4,993** | 0.0270 | **ELIGIBLE** |
+| **15** | 7 | **1** | **4,993** | **0.0067** | **ELIGIBLE — new leader** |
+
+> ❌ **The diagnosis to retract: width 7 was never the problem.** At depth 1,
+> w7 is **4,993 params** — comfortably interior to the eligible span. The binding
+> variable was always **depth**: w7×d3 = 38,017p fails, w7×d1 = 4,993p passes with
+> `|log r|` = **0.0067**, essentially a unit ratio. The width lock-in did not stop
+> medium_diverse finding an eligible, competitive leader.
+
+**It is no longer the failing sweep.** Its leader `no6ywdoh` scores **J = 0.4601**
+— better than large_play's 0.4701 — and the ungated and eligible bests now
+**coincide**, so §4.3.121's "ungated best is ineligible, costing 7.1%" disclosure
+is withdrawn for this variant.
+
+#### 2. Depth 1 is the answer across the board
+
+| current leader | w | d | n_params | J | `\|log r\|` | ess |
+|---|---|---|---|---|---|---|
+| medium_play `9jcqok4g` | 6 | **1** | 2,497 | **0.3767** | 0.0538 | 73 |
+| medium_diverse `no6ywdoh` | 7 | **1** | 4,993 | 0.4601 | 0.0067 | 165 |
+| large_play `q45qbz8h` | 5 | 2 | 2,305 | 0.4701 | 0.0122 | 72 |
+| large_diverse `owlrd69d` | 4 | **1** | **625** | 0.3980 | 0.0243 | 82 |
+
+**Three of four leaders are depth 1**, the fourth depth 2, and gate-1 eligibility
+falls monotonically with depth — **d1 79%, d2 65%, d3 62%, d4 25%** (median
+`|log r|` 0.044 / 0.053 / 0.089 / **1.643**). §4.3.121's depth cliff holds at
+nearly double the trials.
+
+**All four leaders clear gate 1 by ≥ 2.7σ** (σ = 0.0226), so §4.3.108's
+"eligibility is seed-dependent within ~1σ" disclosure does **not** apply to any
+of them. Eligibility is now **43 of 65 (66%)**, the eligible span **625–38,017p**
+— the entire declared range, floor to ceiling, with no boundary pressure.
+Class II correlations have settled: ρ(depth, `|log r|`) **+0.375**,
+ρ(width, margin) **+0.558**, ρ(`n_params`, `|log r|`) **+0.563**.
+
+#### 3. The width lock-in is NOT chance alone — item C's plateau converted it into a lock
+
+Measured free from the existing data, no compute:
+
+| | J = `log 2` exactly | `P` < 0.01 | distinct J | distinct widths | left opening width at |
+|---|---|---|---|---|---|
+| medium_play | 1/17 | 2/17 | 17/17 | 4 | **trial 2** |
+| **medium_diverse** | **6/15** | **8/15** | **10/15** | **1** | **NEVER** |
+| large_play | 2/16 | 4/16 | 15/16 | 4 | **trial 2** |
+| large_diverse | 0/17 | 0/17 | 17/17 | 4 | **trial 2** |
+
+And the plateau arrived **early** — medium_diverse was at 3/5 by trial 5 and 5/8
+by trial 8, against 1/8, 1/8 and 0/8 for the others.
+
+> **The mechanism.** `J = cvar_ce + (1 − P)·max(0, log 2 − cvar_ce)`, so when
+> `P` underflows to 0 — the slacks are ~6 sd out — `J` collapses to **exactly
+> `log 2`** regardless of how the trial actually behaved. medium_diverse's GP
+> had **five of its first eight observations at an identical value** and only 10
+> distinct J across 15 trials. **A flat surface has no gradient in ANY direction,
+> including width**, so nothing ever pulled it off its opening draw. The other
+> three sweeps had near-zero plateau and all left their opening width at **trial
+> 2**.
+>
+> So the honest account is: **chance in the first draw (P = 1/4), converted into
+> a lock by item C's saturation.** Not chance alone, and not a property of width 7.
+
+**This is a real and disclosable property of item C (§3.2.17).** The penalty does
+what it was built for — gate 2 no longer binds, eligibility went 15% → 66% — but
+it is **informative near the eligibility boundary and uninformative far from
+it**, because `P` saturates. A form keeping a gradient far from the boundary
+(e.g. penalising on `log P` rather than `1 − P`) would not have this failure.
+
+> ⛔ **NOT a change to make now.** §0 forbids reactive mid-campaign tuning, item C
+> is pre-registered (§3.2.17), and it is working: the variant that hit the
+> plateau hardest still escaped on its own. Record it for §7 and for any future
+> round; do not touch the running objective.
+
+#### 4. Pre-registered: the medium_diverse replication probe
+
+The user proposes re-running the medium_diverse sweep to see whether it locks to
+width 7 again, **keeping the original sweep's best eligible run regardless**.
+That instinct is correct and is what makes the probe admissible. Registering it
+before it runs, per §0.
+
+**Status: an exploratory probe, like §4.3.105's capacity ladders — outside the
+sweep, licensing nothing about selection.** Not a §9 amendment, because the
+procedure does not change.
+
+> ⛔ **The replica MUST NOT supply a winner, however good it looks.** §7.1's
+> budget invariant is that the BNN receives *no more* tuning than the baselines
+> (`run_cap: 130` each). A second medium_diverse sweep that could contribute a
+> configuration would give that variant **260 trials against MR/PT's 130**, and
+> in the direction that **flatters the BNN** — the exact asymmetry §7 exists to
+> prevent. The original sweep's best eligible trial remains the winner.
+>
+> **Knowledge leakage is real and is handled by disclosure, not by pretending.**
+> If the replica shows some other width is excellent, that cannot be un-known.
+> The protection is that it is declared non-selecting *in advance* and that §7
+> says the replica ran and what it showed.
+
+**Design — 2–3 short replicas, not one long sweep.** One replica answers almost
+nothing: if it locks to w7 again that is 1/4 by chance on the opening draw alone.
+**~15 trials each** matches the original's current depth and is far cheaper than
+130.
+
+**Pre-registered reading**, fixed now. Per replica record: opening width; the
+trial at which it first leaves that width (`NEVER` if it does not); plateau share
+of the first 8 trials; distinct widths.
+
+| outcome | reading |
+|---|---|
+| replicas with **low** early plateau leave the opening width by ~trial 2–3, replicas with **high** early plateau lock | **mechanism confirmed** — §3 above is causal, and item C's saturation is the disclosable finding |
+| replicas lock **regardless** of plateau | something else about medium_diverse's landscape; §3 is incomplete |
+| **no** replica locks | the original was a joint-chance outlier; report as search-procedure variance |
+
+**Scheduling: wait for round 5 to stop.** §10.7 measured 4 concurrent sweeps
+costing **2.8× throughput** from CPU oversubscription; a 5th would slow the live
+campaign, and large_play is **4 trials from its stopping rule**. The probe has no
+deadline. Launch with a **new sweep id** and **no `--emit-prior-runs`**
+(§10.5) — otherwise it resumes the existing sweep instead of replicating it.
+
+**Either way this earns a §7 sentence**, because it speaks to a limitation the
+write-up should own: *one Bayes sweep per variant, and the optimiser's early path
+can determine which region it explores.*
 
 ### 4.4 Procedure
 
@@ -15014,13 +15159,23 @@ blind. Record it as a future-round candidate.
     **upper bound**, because estimator bias at ~2 effective tail draws cannot be
     separated from genuine field degradation at this budget. Numbers reproduce
     via `selection_ladder_readout.py`'s transfer block.
-18d. **Re-check round 5 at ~20 trials per sweep** (§4.3.121). Watch, in order:
-    **medium_diverse's width lock-in** (9 of 9 at width 7, 7 of 8 failing gate
-    1); whether **depth 4** stays unusable (1 of 4 eligible, median `|log r|`
-    18× the other depths); and **§3.2.7's stopping-rule split** in
-    medium_diverse, where the ungated frontier is at 6/15 while the eligible one
-    is at 1/15. **No config changes** — §0/§9; if the lock-in persists it is a
-    declared-amendment question.
+18d. ✅ **DONE at 65 trials (§4.3.125)** — medium_diverse **escaped on depth**;
+    all four leaders eligible and ≥ 2.7σ clear of gate 1; eligibility 66%;
+    3 of 4 leaders at depth 1; depth cliff holds (d4 25% eligible). The width
+    lock-in persists (15/15 at w7) but is **benign** — w7×d1 is 4,993p — and now
+    has a mechanism: **item C's `J → log 2` saturation removed the GP's
+    gradient**, §4.3.125 §3. **large_play is 4 trials from its stopping rule.**
+18f. **Watch large_play stop, then read it on the eligible frontier too**
+    (§3.2.7): at 11/15 non-improving it is the first sweep that will fire. Its
+    ungated and eligible bests currently coincide, so no disclosure is owed
+    unless that changes before it stops.
+18g. **Pre-registered and QUEUED: the medium_diverse replication probe**
+    (§4.3.125 §4). 2–3 replicas of ~15 trials, new sweep ids, **no
+    `--emit-prior-runs`**. **Wait for round 5 to stop** — §10.7's 2.8×
+    concurrency cost, and large_play is about to fire. **The replica MUST NOT
+    supply a winner**: that would give medium_diverse 260 trials against MR/PT's
+    130, in the direction that flatters the BNN. Reading declared in §4.3.125 §4
+    before it runs.
 18e. ✅ **DONE (§4.3.122)** — settled, and the finding is that **0.05 was never
     dropped: it was never carried in.** `git log -S` finds it in no config ever;
     the large_play base yaml has read 0.001 since `76e7931` (2026-07-16) and that
