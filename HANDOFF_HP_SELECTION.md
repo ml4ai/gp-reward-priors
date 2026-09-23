@@ -13442,6 +13442,108 @@ Gate 1 scale remains the only binding constraint. medium_play is at 5/15
 non-improving, large_diverse at 8/15, medium_diverse at **0/15** — it just
 improved, so it has the furthest to run.
 
+### 4.3.127 ROUND 5 at 96 trials — every winner is STATISTICALLY TIED with its runners-up, and §3.2.5's separation target has failed
+
+Checked 2026-09-23. 96 finished (26/24/21/25). **large_play is FINISHED** — the
+agent is stopped, 21 trials, rule fired at 20, winner unchanged.
+
+#### 1. The finding: the argmin is selecting noise — but the ARCHITECTURE is not
+
+Two trials are indistinguishable when `|ΔCE| ≤ 2·√(SEa² + SEb²)`. Applying that
+to the eligible set of each sweep:
+
+| sweep | eligible | winner | **tied with the winner** | architectures in the tied set |
+|---|---|---|---|---|
+| medium_play | 21 | `us8j8ujo` w6×d1 | **12** | {w6×d1 ×12, w5×d1 ×1} |
+| medium_diverse | 12 | `cgzn6zfe` w6×d1 | **2** | **{w6×d1} — one** |
+| large_play | 16 | `q45qbz8h` w5×d2 | **3** | {w5×d2, w4×d2} |
+| large_diverse | 24 | `owlrd69d` w4×d1 | **7** | {w4×d1, w5×d1} |
+
+medium_play's winner beats its runner-up by **0.14× the joint 2·SE**; the top
+five span 0.0017–0.0032 against a threshold of ~0.0117. **A thirteen-way tie.**
+
+> ⚠️ **State this precisely, because the two halves point opposite ways.**
+> **The specific trial selected is arbitrary** — it is an argmin over a set the
+> objective cannot separate, so the winner's *sampler* settings (`sghmc_lr`,
+> `sghmc_lr_max`, `mdecay`) are picked on noise. **The architecture is not
+> arbitrary**: every tied set spans at most two architectures, medium_diverse's
+> spans exactly one, and 12 of medium_play's 13 are the same w6×d1. **Depth 1
+> appears in every tied set except large_play's.**
+>
+> So the *result* is robust where the *selection* is not: any member of the tied
+> set gives essentially the same model. That is the sentence §7 should carry —
+> it is more defensible than claiming the winner is meaningfully best, and it is
+> what the data supports.
+
+#### 2. §3.2.5's design target has FAILED — but not in the way it guarded against
+
+§3.2.5 sized the budget so the **top five could be separated**, needing gaps
+> 0.026 and assuming SE 0.0147. Measured now:
+
+| | §3.2.5's assumption | **observed** |
+|---|---|---|
+| SE on `val_cvar_ce` | 0.0147 | **0.0032–0.0079 — better** |
+| gap needed to separate the top five | 0.026 | — |
+| **observed top-five gaps** | — | **0.0012–0.0107 — far smaller** |
+
+**The SE came in 2–4× better than budgeted and the target still failed**,
+because the *true differences near the optimum are smaller than §3.2.5 assumed*,
+not because the measurement is noisier. Raising the draw budget would not fix
+this: the objective is genuinely flat over the tied set. §3.2.5's reasoning was
+sound; its premise about the landscape was wrong.
+
+#### 3. The K=15 stopping rule is being reset by sub-resolution improvements
+
+Of the 16 improvements across the four sweeps, **5 are smaller than the
+objective's own resolution (2·SE)**:
+
+| sweep | improvement | Δ | 2·SE | ratio |
+|---|---|---|---|---|
+| medium_play | trial 24 | **+0.00038** | 0.00808 | **0.05×** |
+| medium_play | trial 16 | +0.00381 | 0.00844 | 0.45× |
+| medium_diverse | trial 12 | +0.01142 | 0.02123 | 0.54× |
+| large_diverse | trial 11 | +0.00490 | 0.01009 | 0.49× |
+| large_diverse | trial 12 | +0.00708 | 0.01272 | 0.56× |
+
+medium_play's trial-24 "improvement" is **one twentieth** of what the objective
+can resolve, and it reset the counter from 5/15 to 2/15 — buying at least 13 more
+trials. This is the rule behaving exactly as pre-registered (§3.1: *"stop when
+the best-so-far has not improved for K = 15 consecutive trials"*, with no
+resolution floor), so **it is not a fault and must not be patched mid-campaign**.
+
+#### 4. The consequence to watch: a comparability risk that runs the WRONG way
+
+With ~12 trials clustered inside 2·SE, a new trial in the good region has a
+material chance of setting a new "best" by noise alone, which resets the counter
+again. **medium_play and medium_diverse may run a long way toward `run_cap`
+130.**
+
+> ⚠️ **§7.1's budget invariant is ONE-SIDED and this pushes against it.** The
+> fairness claim requires the BNN to receive *no more* tuning than the
+> baselines. §4.3.115 measured the **MR/PT sweeps at 17–66 trials**. The BNN
+> sweeps currently sit at **26 / 24 / 21 / 25 — inside that range**, so nothing
+> is owed yet.
+>
+> **Pre-registered threshold, fixed now:** if any BNN sweep exceeds **66 trials**
+> — the baselines' maximum — that is a disclosure in §7, stating the count and
+> that the BNN's objective is flat near its optimum so the shared K=15 rule fires
+> later for it than for the baselines. It flatters the BNN, so it gets disclosed
+> rather than explained away. At `run_cap` 130 the worst case is **~2× the
+> baselines' maximum**.
+
+#### 5. State
+
+| sweep | trials | eligible | leader | w × d | `cvar_ce` | non-improving |
+|---|---|---|---|---|---|---|
+| medium_play | 26 | 21 (81%) | `us8j8ujo` | 6×1 | 0.3738 ± 0.0040 | 2/15 |
+| medium_diverse | 24 | 12 (50%) | `cgzn6zfe` | 6×1 | 0.4143 ± 0.0032 | 1/15 |
+| **large_play** | **21 — FINISHED** | 16 (76%) | `q45qbz8h` | 5×2 | 0.4701 ± 0.0079 | fired at 20 |
+| large_diverse | 25 | 24 (96%) | `owlrd69d` | 4×1 | 0.3980 ± 0.0041 | **12/15** |
+
+**large_diverse is 3 trials from firing.** medium_diverse has climbed from 37%
+to **50% eligible** and is still improving; its width exploration is now
+`...676766`, so the §4.3.126 breakout held.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15289,6 +15391,22 @@ blind. Record it as a future-round candidate.
     coincide, so §3.2.7's split did not materialise and nothing is owed there.
     **ACTION: stop the still-running agent** — its trials are now discardable and
     the freed GPU speeds the other three (§10.7's 2.8× concurrency cost).
+18i. **§7 disclosure owed: the winners are statistically TIED with their
+    runners-up** (§4.3.127). 12 / 2 / 3 / 7 eligible trials sit inside the joint
+    2·SE of each winner; medium_play's margin over its runner-up is **0.14×**
+    that threshold. **Write it as the two-sided fact it is**: the *trial* is an
+    argmin over noise, so the winner's sampler settings are arbitrary within the
+    tied set — but the **architecture is determined** (each tied set spans ≤ 2
+    architectures, medium_diverse's exactly one, and depth 1 is in all but
+    large_play's). §3.2.5's separation target failed **despite SE coming in 2–4×
+    better than budgeted**, because the true differences near the optimum are
+    smaller than it assumed — so a bigger draw budget would not fix it.
+18j. **WATCH: if any BNN sweep exceeds 66 trials**, disclose it (§4.3.127 §4).
+    That is the MR/PT maximum (§4.3.115); the BNN is at 26/24/21/25 now, so
+    nothing is owed yet. Sub-resolution improvements keep resetting the K=15
+    counter — 5 of 16 improvements are below 2·SE, one at **0.05×** — so
+    medium_play and medium_diverse may run long. The rule is pre-registered and
+    **must not be patched mid-campaign**; the remedy is disclosure.
 18h. **§7 disclosure owed for large_play's coverage** (§4.3.126 §2): it sampled
     **depth 1 twice in 20 trials and both failed gate 1 on the sampler**, while
     depth 1 supplies 3 of the other 4 leaders and is 83% eligible overall. A
