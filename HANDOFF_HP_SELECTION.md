@@ -13544,6 +13544,57 @@ again. **medium_play and medium_diverse may run a long way toward `run_cap`
 to **50% eligible** and is still improving; its width exploration is now
 `...676766`, so the §4.3.126 breakout held.
 
+### 4.3.128 ROUND 5 at 106 trials — large_diverse STOPPED; medium_diverse has the first SEPARATED winner
+
+Checked 2026-09-23. 106 finished (29/27/21/29). **Two of four sweeps are done.**
+
+#### 1. large_diverse's rule FIRED at trial 28 — cleanly
+
+**Winner `owlrd69d`, w4 × d1, 625p, `val_cvar_ce` 0.3980 ± 0.0041** — the
+smallest architecture in the declared range. Rule winner, best-of-all and
+eligible best are the same trial, so §3.2.7's split did not materialise; gate 1
+clears at **4.0σ**. Its winning improvement (trial 13) was **4.08×** the
+objective's resolution — a real step, not noise. The two sub-resolution
+improvements (trials 11, 12) came *before* it, so they did not extend the final
+stop point.
+
+**Final tied set: 9 trials**, architectures {w4×d1, w5×d1} — the §4.3.127
+reading holds: the trial is an argmin over noise, the architecture is
+determined.
+
+> ⚠️ **Agent still RUNNING — stop it**, as for large_play. Trials after 28 are
+> discardable, and the freed GPU speeds the two sweeps still searching.
+
+**Both finished sweeps are within the baselines' 17–66 trial range** (21 and 29),
+so §4.3.127 §4's comparability threshold is not touched for them.
+
+#### 2. medium_diverse: the first winner that is SEPARATED from its runners-up — narrowly
+
+New leader **`rdtjd999`, w5 × d1, 1,249p, `val_cvar_ce` 0.4051 ± 0.0026**, a
+real improvement (**1.61×** resolution). Its runner-up `wr47zzqd` at 0.4139 sits
+**1.2× the joint 2·SE** above it — **the only one of the four winners not
+statistically tied**. 1.2× is a narrow margin, so report it as *separated, just*,
+not as a clear winner.
+
+Its width path is now `…676766657`: after the trial-19 breakout it has explored
+**w5, w6 and w7**, and the leader has walked **down** the capacity axis —
+**4,993p → 2,497p → 1,249p** (w7 → w6 → w5, all depth 1). That is §4.3.118's
+"capacity bounded above by tail behaviour" appearing in the live search, and the
+§4.3.126 breakout has fully generalised rather than stopping at w6. Eligibility
+**56%**, up from 37% at 81 trials.
+
+#### 3. State
+
+| sweep | trials | status | winner / leader | w × d | n_params | `cvar_ce` | tied |
+|---|---|---|---|---|---|---|---|
+| medium_play | 29 | 5/15 | `us8j8ujo` | 6×1 | 2,497 | 0.3738 ± 0.0040 | 13 |
+| medium_diverse | 27 | 1/15 | `rdtjd999` | **5×1** | 1,249 | 0.4051 ± 0.0026 | **0 (1.2×)** |
+| **large_play** | 21 | **STOPPED** | `q45qbz8h` | 5×2 | 2,305 | 0.4701 ± 0.0079 | 3 |
+| **large_diverse** | 29 | **STOPPED** | `owlrd69d` | 4×1 | 625 | 0.3980 ± 0.0041 | 9 |
+
+**Three of four winners are depth 1**, and all four sit at **625–2,497p** — the
+bottom decade of a declared range that runs to 54,529p.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15391,6 +15442,11 @@ blind. Record it as a future-round candidate.
     coincide, so §3.2.7's split did not materialise and nothing is owed there.
     **ACTION: stop the still-running agent** — its trials are now discardable and
     the freed GPU speeds the other three (§10.7's 2.8× concurrency cost).
+18k. ✅ **large_diverse STOPPED at trial 28** (§4.3.128). Winner `owlrd69d`
+    (w4×d1, 625p); rule winner = best-of-all = eligible best. **ACTION: stop its
+    still-running agent.** Two of four sweeps done, both inside the baselines'
+    17–66 trial range. medium_diverse now has the only **separated** winner
+    (`rdtjd999`, w5×d1, 1.2× joint 2·SE — narrow).
 18i. **§7 disclosure owed: the winners are statistically TIED with their
     runners-up** (§4.3.127). 12 / 2 / 3 / 7 eligible trials sit inside the joint
     2·SE of each winner; medium_play's margin over its runner-up is **0.14×**
