@@ -13937,6 +13937,38 @@ targets are 0.470096, 0.00795 and +0.1137 from `q45qbz8h`. A mismatch means
 something in the configuration differs from what was selected. Stop and diff
 before anything is trained on it.
 
+### 4.3.131 large_diverse escalation LAUNCHED — and its config verified against the winner
+
+Launched by the user 2026-09-24 **19:53 UTC**: wandb run
+`59ca9913-7e71-4d41-bf48-2d058a26ae34`, 128 chains @ 32/GPU on GPUs 2–5, seed 0.
+The sampling part should take about as long as the winner's own 3.8 h trial
+(§4.3.129 §6a), plus the 128-refit diagnostic tail.
+
+**Config verified from wandb before waiting on it:** the launched run is the
+winner `owlrd69d`'s configuration, apart from the chain budget. Four keys differ
+in wandb, and only one is a real difference:
+
+| key | winner | launched | verdict |
+|---|---|---|---|
+| `num_chains` | 32 | 128 | **the escalation** |
+| `width` | 4 | 16 | **logging artefact** — same 16-unit network |
+| `config_path` | set | `None` | logging artefact |
+| `name` | uuid | uuid | per-run |
+
+**The `width` row is §4.3.104's exponent-vs-expanded trap, confirmed in the code
+rather than assumed.** `TrainConfig.__post_init__` applies `2 ** width` exactly
+once, and `wandb.init(config=asdict(config))` logs the *expanded* value. A sweep
+trial instead records the *exponent*, because the wandb agent pre-sets sweep
+parameters and `wandb.init` does not overwrite them. Double expansion (a 2¹⁶-wide
+network) was the case to rule out. The config file holds `width: 4` and the
+expansion runs once, so it cannot happen.
+
+`make_production_config.py --check-run <run> ` now performs this comparison with
+both artefacts classified rather than flagged, and fails on anything else
+(self-tested, including a wrong budget, a changed sampler value, a changed seed
+and a double-expanded width). **Run it within minutes of every production
+launch**: large_play next, then the medium variants and seeds 0–10.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from

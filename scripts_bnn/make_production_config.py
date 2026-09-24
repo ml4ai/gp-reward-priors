@@ -188,6 +188,50 @@ def verify(new_text, old_text, ran, num_chains, cpg, ann=None):
     return bad
 
 
+# Differences between a LAUNCHED run's wandb config and its sweep winner's that
+# are logging artefacts, not configuration differences (handoff 4.3.131):
+#   width        a sweep run records the EXPONENT (the agent pre-sets it, and
+#                wandb.init does not overwrite sweep keys); a direct launch
+#                records the value AFTER __post_init__'s 2**width.  Same network.
+#   config_path  a sweep passes it as a parameter; a direct --config_path is
+#                consumed by pyrallis and never logged.
+#   name         per-run uuid suffix.
+EXPECTED_RUN_DIFFS = {"num_chains", "chains_per_gpu", "name", "config_path",
+                      "seed", "OUT_DIR", "train_dataset", "val_dataset",
+                      "test_dataset"}
+
+
+def _norm_width(w):
+    """Exponent 4-7 and expanded 16-128 never overlap, so this is unambiguous."""
+    return int(round(__import__("math").log2(w))) if w and w >= 16 else w
+
+
+def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=True):
+    """[(key, winner, run, verdict)] for every differing key; verdict is
+    'expected', 'artefact' or 'UNEXPECTED'."""
+    out = []
+    for k in sorted(set(run_cfg) | set(winner_cfg)):
+        a, b = winner_cfg.get(k), run_cfg.get(k)
+        if k == "width" and _norm_width(a) == _norm_width(b):
+            if a != b:
+                out.append((k, a, b, "artefact"))
+            continue
+        if _same(a, b):
+            continue
+        if k == "num_chains":
+            ok = b == num_chains
+        elif k == "chains_per_gpu":
+            ok = b == cpg
+        elif k in ("seed", "OUT_DIR", "train_dataset", "val_dataset",
+                   "test_dataset"):
+            ok = not same_seed        # must match for the seed-0 escalation
+        else:
+            ok = k in EXPECTED_RUN_DIFFS
+        out.append((k, a, b, ("expected" if k in ("num_chains", "chains_per_gpu")
+                              else "artefact") if ok else "UNEXPECTED"))
+    return out
+
+
 def selftest():
     text = ("# old header\n# more\nwidth: 9                 # log2 exponent\n"
             "num_chains: 8   # stage 3\nsghmc_lr: 0.0001\ncentre_draws: true\n"
@@ -229,6 +273,17 @@ def selftest():
     assert y2["clip_grad_norm_value"] == 100.0 and \
         isinstance(y2["clip_grad_norm_value"], float), y2
     assert y2["cycle_length"] == 2000 and isinstance(y2["cycle_length"], int), y2
+    # check_run: the observed large_diverse launch (4.3.131) must read clean...
+    win = {"width": 4, "num_chains": 32, "chains_per_gpu": 32, "seed": 0,
+           "config_path": "scripts_bnn/x.yaml", "name": "a", "mdecay": 0.03}
+    run = {"width": 16, "num_chains": 128, "chains_per_gpu": 32, "seed": 0,
+           "config_path": None, "name": "b", "mdecay": 0.03}
+    assert all(v != "UNEXPECTED" for *_, v in check_run(run, win, 128, 32))
+    # ...and a real difference, a wrong budget, or a double-expanded width must not
+    for bad in ({"mdecay": 0.3}, {"num_chains": 96}, {"width": 65536},
+                {"seed": 1}):
+        assert any(v == "UNEXPECTED" for *_, v in
+                   check_run(dict(run, **bad), win, 128, 32)), bad
     print("selftest OK")
     return 0
 
@@ -241,10 +296,33 @@ def main():
     ap.add_argument("--num-chains", type=int, default=128)
     ap.add_argument("--chains-per-gpu", type=int, default=32)
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--check-run", metavar="RUN_ID", default=None,
+                    help="instead of writing: diff a LAUNCHED run's wandb config "
+                         "against the winner, with known logging artefacts "
+                         "(width exponent vs expanded, config_path, name) "
+                         "classified rather than flagged")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.check_run:
+        if not a.run_id:
+            ap.error("--check-run needs the winner's run_id as well")
+        import wandb
+        api = wandb.Api(timeout=60)
+        g = lambda rid: {k: v for k, v in dict(api.run(
+            f"{ENTITY}/{PROJECT}/{rid}").config).items() if not k.startswith("_")}
+        r = api.run(f"{ENTITY}/{PROJECT}/{a.check_run}")
+        rows = check_run(g(a.check_run), g(a.run_id), a.num_chains,
+                         a.chains_per_gpu)
+        print(f"launched run {a.check_run} ({r.state}) vs winner {a.run_id}:")
+        for k, w, v, verdict in rows:
+            print(f"   {k:28s} winner={w!r:40.40s} run={v!r:40.40s} {verdict}")
+        bad = [k for k, *_, v in rows if v == "UNEXPECTED"]
+        print("VERDICT: " + ("the launched run IS the winner's configuration, "
+                             "apart from the chain budget and logging artefacts"
+                             if not bad else f"MISMATCH on {bad} -- stop the run"))
+        return 1 if bad else 0
     if not (a.variant and a.run_id):
         ap.error("variant and run_id are required")
 
