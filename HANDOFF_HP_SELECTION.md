@@ -13765,6 +13765,52 @@ configuration that was validated.
     (item 12's documented order), or 8 concurrent stage-4 runs that all miss the
     cache would each allocate it.
 
+#### 6a. DECIDED 2026-09-24, and scheduled against the live sweeps
+
+**User decisions: 128 chains, and seeds 1–10 also train at 128.**
+
+**CPU.** At `OMP_NUM_THREADS=2` the measured load is **~1.0 core per chain**
+(§3.2.3: 128 chains → 128.1 of 255 cores). The chains are GPU-bound at ~50% of
+their 2-thread cap. Chain processes are the whole cost.
+
+| scenario | chains | est. cores of 255 | GPUs of 6 | chains / GPU |
+|---|---|---|---|---|
+| now: 2 medium sweeps | 64 | ~64 (25%) | 2 | 32 |
+| **+ ONE escalation** | **192** | **~192 (75%)** | **6** | **32** |
+| + BOTH escalations | 320 | **~320 (125% — oversubscribed)** | 6 | **64** on the escalations |
+
+**Running both at once does not fit cleanly.** Two escalations need 8 GPUs at
+the sweep's 32 chains/GPU and only 4 are free, so they would have to run at **64
+chains per GPU**:
+
+- **CPU oversubscribed ~1.25×.** §10.7 measured 2.6× oversubscription costing
+  2.8× throughput. 1.25× costs less, but it would also slow the **two live
+  sweeps**. Their results would be unaffected, since thread count does not
+  change and scheduling does not change arithmetic, but they would finish later.
+- **64 chains/GPU is unprofiled.** §3.2.4 measured throughput and CUDA-context
+  memory only up to 32/GPU.
+- **Little time saved.** The GPU is the bottleneck. Extrapolating §3.2.4's last
+  doubling (16 → 32: 1.63× wall for 2× work), both together at 64/GPU would take
+  ~1.6–2× one run's wall-clock. That is barely less than running them back to
+  back.
+- **The bit-for-bit check is less clean.** Chains 0–31 would share their GPU
+  with 32–63, a layout the sweep trial never had.
+
+**Recommended: one at a time, at 32 chains/GPU on the 4 free GPUs.** That is
+~192 cores (75%), all 6 GPUs busy, no oversubscription. **Each GPU then does
+exactly the per-GPU work of the original sweep trial**, so the winners' own
+runtimes predict the sampling wall-clock: **~3.8 h (large_diverse) and ~4.2 h
+(large_play)**. The post-hoc diagnostics add an unmeasured tail on top, since
+the leave-one-chain-out jackknife refits 128 times instead of 32. **Run
+large_diverse first.** It is the quicker run, so its first-32-chains reproduction
+check validates the setup before the longer run is committed.
+
+**Planning note for seeds 1–10 at 128 (rough).** Each 128-chain model needs 4
+GPUs at 32/GPU. Once round 5 stops, the box can hold roughly one such run plus
+~120 chains of CPU headroom on the remaining 2 GPUs. **GPU count is the binding
+constraint**: 44 models (11 seeds × 4 variants) at ~4 h each is on the order of
+**a week of wall-clock**. Plan for it rather than discover it.
+
 #### 6. §7 framing (for §7.4 once the escalation has run)
 
 *"Escalation to 128 chains raised the precision of the deployed reward (ESS from
@@ -15931,7 +15977,14 @@ blind. Record it as a future-round candidate.
     still-running agent.** Two of four sweeps done, both inside the baselines'
     17–66 trial range. medium_diverse now has the only **separated** winner
     (`rdtjd999`, w5×d1, 1.2× joint 2·SE — narrow).
-18m. **ESCALATION DECIDED (§4.3.129), awaiting the user's go.** The escalation
+18m. ✅ **GO GIVEN 2026-09-24: 128 chains, and seeds 1–10 also at 128.**
+    Scheduling (§4.3.129 §6a): **run the two escalations ONE AT A TIME at 32
+    chains/GPU on the 4 free GPUs**, i.e. ~192 of 255 cores alongside the two
+    live sweeps. Both at once would need 64/GPU (unprofiled) and ~320 cores, and
+    would save little time. **large_diverse first** (~3.8 h), then large_play
+    (~4.2 h). **Launch from regenerated production configs (item 10)**, not the
+    sweep base configs, which lack the winners' hyperparameters. Original entry
+    follows. **ESCALATION DECIDED (§4.3.129), awaiting the user's go.** The escalation
     run **is** the seed-0 production model, and production trains at the
     escalated budget. **Needed for precision, not stability.** Both finished
     winners have 3.6–4.1 effective tail draws against §3.2.1's 10, and
