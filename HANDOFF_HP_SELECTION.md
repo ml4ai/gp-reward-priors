@@ -13892,14 +13892,38 @@ preflight line intact. **The sweeps override all 10 changed keys**, so editing
 these files does not alter a re-run of either sweep. **The medium configs are
 untouched**, since their sweeps are live.
 
-#### 3. What the seed-0 directory holds, and why it is moved aside
+#### 3. What the seed-0 directory holds, and why it must be EMPTIED first
 
 The sweep trials ran with `OUT_DIR …/antmaze_<variant>_bnn_eval_0`, i.e. **the
 seed-0 production directory**, and each trial overwrote the one before. So that
-directory holds the **last** trial's 32 chains, not the winner's. The run script
-only `ensure_dir`s, so it does not clear it. **Move it aside before the
-escalation** (reversible, not deleted), so a crash cannot leave a mix of old and
-new chains. It also means **the reproduction check compares against the winner's
+directory holds the **last** trial's 32 chains, a post-trigger, discardable
+trial, not the winner's. **Its contents have no value. Delete them.** *(An
+earlier draft said "move it aside"; the user rightly asked what there was to
+preserve. Nothing. What matters is that the directory is empty, not that
+anything is kept.)*
+
+**Why it must be empty, which is a silent-correctness hazard:**
+
+- Each chain writes its sampled weights **once, at the END of its run**
+  (`f_pref_net.py`: `train(...)` then `_save_sampled_weights()`). The run script
+  only `ensure_dir`s. So for the whole ~4 h run, `chain_0`–`chain_31` still hold
+  the **old trial's complete** weight files. If the escalation dies (OOM at 128
+  chains, a GPU fault, a reboot), the directory looks like **a complete, valid
+  32-chain model — the wrong one**.
+- **The IQL path would not notice.** `qlearning_dataset_bnn` globs
+  `chain_*/…/sampled_weights_0000000` and **infers the architecture from the
+  weights**, not from `config.yaml`. It would load the old trial without error,
+  even with a different width and depth, and `precompute_labels.py` would cache
+  it. Meanwhile `config.yaml` is rewritten at the *start* of the run, so it would
+  describe the winner while the chains are another trial's.
+- An empty directory turns a failed run into **missing chains**, which fails
+  loudly.
+
+The same applies to **every** production run written into a directory a sweep
+used (all seed-0 dirs). Seeds 1–10 write to fresh `_<seed>` dirs, but item 11
+("clear the reward-model directories") covers them for the same reason.
+
+It also means **the reproduction check compares against the winner's
 wandb-logged numbers**: the winner's own chains no longer exist on disk.
 
 #### 4. Launch plan (§4.3.129 §6a)
