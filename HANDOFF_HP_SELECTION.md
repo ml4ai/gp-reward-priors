@@ -13969,6 +13969,37 @@ both artefacts classified rather than flagged, and fails on anything else
 and a double-expanded width). **Run it within minutes of every production
 launch**: large_play next, then the medium variants and seeds 0–10.
 
+### 4.3.132 ROUND 5 at 64 trials: the stopping counter reset on a `J` improvement that did NOT move the winner
+
+Checked 2026-09-24. Live sweeps: medium_play 33 trials, medium_diverse 31, both
+running. The large_diverse escalation is alive (heartbeat 20:52 UTC, about 1 h
+in, still sampling).
+
+**medium_play: first observed case of the stop rule and the winner rule
+disagreeing.** Trial 33 (`35udthj2`) set a new best on the sweep metric `J`, so
+the K=15 counter reset from **9/15 to 0/15**. It did **not** improve the winner
+metric:
+
+| trial | `val_cvar_ce` | `P` | `J` |
+|---|---|---|---|
+| `us8j8ujo` (winner, trial 24) | **0.373800** | 0.9921 | 0.376314 |
+| `35udthj2` (trial 33) | 0.374112 | **1.0000** | **0.374119** |
+
+`J` preferred trial 33 because it is *more certainly eligible*, not because it
+fits better. On CE it is 0.0003 worse, about 0.03× the joint 2·SE, so the two are
+tied (§7.4 A). **The winner is unchanged**, and the eligible frontier on CE last
+moved at trial 24.
+
+**This is the rules working as pre-registered.** The optimiser and stopping rule
+track `J` (§3.2.17, the sweep metric), and the winner rule tracks CE. But it has
+a consequence for §7.4. **The stopping counter can be reset by a trial that
+cannot change the winner.** That is one-sided in the same direction as §4.3.127
+§3: it only ever *extends* a sweep. medium_play now needs ≥ 15 more trials, so at
+least **48** in total, still inside the baselines' 17–66, but it moves toward the
+18j threshold. Added to §7.4 A's mechanical-consequence paragraph.
+
+medium_diverse: 5/15, leader `rdtjd999` unchanged, eligibility up to **61%**.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15279,8 +15310,12 @@ improvements that reset the K=15 counter, several were smaller than the
 objective's own resolution. The smallest, medium_play's trial 24, was **0.05×**
 2·SE (§4.3.127 §3). On a flat landscape new trials keep setting noise minima,
 so the shared stopping rule fires later for the BNN than it did for the
-baselines. **If any BNN sweep exceeds 66 trials** — the MR/PT maximum
-(§4.3.115) — disclose the count and this reason. That would flatter the BNN
+baselines. **A second mechanism pushes the same way** (§4.3.132). The stopping
+rule tracks the penalised `J` while the winner rule tracks CE, so the counter can
+be reset by a trial that improves `J` only by being more certainly eligible,
+without moving the winner. medium_play's trial 33 did exactly that. **If any BNN
+sweep exceeds 66 trials** — the MR/PT maximum (§4.3.115) — disclose the count and
+both reasons. That would flatter the BNN
 under §7.1's one-sided budget invariant. Current counts are 32 / 30 / 20 / 28,
 all inside the baselines' 17–66.
 
