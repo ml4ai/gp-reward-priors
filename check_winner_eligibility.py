@@ -57,6 +57,16 @@ from selection_gates import gate_failures, gate_values, has_gate_keys
 CLAMP = "param_clamp_sampling_pct"
 CLIP = "gradnorm_sampling_pct_over_clip"
 
+# Handoff §3.2.17 (round 5): the OPTIMISER minimises the penalised objective
+# `val_cvar_ce_penalised`, but the WINNER is still "the lowest val_cvar_ce among
+# eligible trials".  So a sweep whose metric is the penalised objective is
+# STOPPED on that metric (the stopping rule tracks what the optimiser saw, as in
+# check_sweep_convergence) but RANKED on val_cvar_ce.  Until 2026-09-24 this tool
+# ranked on the sweep metric.  That gave the right winner for large_play and
+# large_diverse, whose winners have P = 1 so J = CE, but it can diverge wherever an
+# eligible trial has P < 1 (handoff 4.3.130).
+RANK_METRIC = {"val_cvar_ce_penalised": "val_cvar_ce"}
+
 
 def _num(summ, key):
     v = summ.get(key)
@@ -113,6 +123,7 @@ def report(entity, project, sweep_id, patience, pattern):
     cfg = sweep.config or {}
     metric = (cfg.get("metric") or {}).get("name")
     goal = (cfg.get("metric") or {}).get("goal", "minimize")
+    rank_metric = RANK_METRIC.get(metric, metric)   # §3.2.17; see RANK_METRIC
     keys = swept_keys(cfg)
 
     runs = [r for r in sorted(sweep.runs, key=lambda r: r.created_at)
@@ -135,7 +146,10 @@ def report(entity, project, sweep_id, patience, pattern):
                     verdict, bad = eligibility(summ)
                     src = f"  [diagnostics from re-run {d.id[:8]}]"
                     break
-        resolved.append((r, v, summ, verdict, bad, src))
+        # The rank value always comes from the ORIGINAL trial (§3.6.3), never a
+        # re-run's borrowed summary.  NaN ranks last and cannot win.
+        rv = _num(dict(r.summary or {}), rank_metric)
+        resolved.append((r, v, summ, verdict, bad, src, rv))
 
     # Patience trigger on the RAW metric — mirrors
     # check_sweep_convergence.summarize(), which is the source of truth.  The
@@ -162,13 +176,17 @@ def report(entity, project, sweep_id, patience, pattern):
     # would give a negative staleness.
     cut = trigger if trigger else len(resolved)
     ebest, elast = None, None
-    for i, (_, v, _, verdict, *_ ) in enumerate(resolved[:cut], 1):
-        if verdict == "ELIGIBLE" and better(v, ebest, goal):
-            ebest, elast = v, i
+    # The eligible frontier is tracked on the RANK metric: it asks when the
+    # quantity that decides the winner last improved among eligible trials.
+    for i, (_, _v, _, verdict, _b, _s, rv) in enumerate(resolved[:cut], 1):
+        if verdict == "ELIGIBLE" and rv == rv and better(rv, ebest, goal):
+            ebest, elast = rv, i
     stale = (cut - elast) if elast else None
 
     print(f"\n=== {project}/{sweep_id} ===")
-    print(f"  metric   : {metric} ({goal})")
+    print(f"  metric   : {metric} ({goal})"
+          + (f"  -- stopping rule only; winner RANKED on {rank_metric} (§3.2.17)"
+             if rank_metric != metric else ""))
     print(f"  trials   : {len(resolved)} scored"
           + (f"; STOP FIRED at {trigger} — ranking trials 1-{trigger} only"
              if trigger else "; stop NOT fired — ranking is provisional"))
@@ -183,27 +201,34 @@ def report(entity, project, sweep_id, patience, pattern):
             print(f"             The stopping rule tracks the raw metric, so the "
                   f"search stopped on progress it could not use. DISCLOSE (§3.6.3).")
 
-    ranked = sorted(resolved[:cut], key=lambda t: t[1], reverse=(goal != "minimize"))
+    sign = 1.0 if goal == "minimize" else -1.0
+    ranked = sorted(resolved[:cut],
+                    key=lambda t: (t[6] != t[6], sign * t[6] if t[6] == t[6] else 0.0))
     # Count over EVERY ranked trial, not just the ones displayed.  The display
     # loop below stops early once a winner is found, and counting inside it
     # silently undercounted the rejections — §3.6.3 requires reporting how many
     # trials the criteria rejected, so the tally must cover the whole pool.
-    n_reject = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "REJECT")
-    n_nodiag = sum(1 for *_r, verdict, _b, _s in ranked if verdict == "NO DIAGS")
+    n_reject = sum(1 for t in ranked if t[3] == "REJECT")
+    n_nodiag = sum(1 for t in ranked if t[3] == "NO DIAGS")
     # Trials that lack their OWN diagnostics split into two counts, and
     # conflating them is how §7.2 came to report 16 unclassifiable when 15 were:
     # n_nodiag are unclassifiable, n_borrowed were recovered by a paired re-run.
     n_borrowed = sum(1 for t in ranked if t[5])
 
     winner = None
-    print(f"  {'rk':>2} {'run':10s} {'metric':>9} {'|logr|':>7} {'loc_sd':>7} "
+    split = rank_metric != metric
+    print(f"  {'rk':>2} {'run':10s} {'rank':>9} "
+          + (f"{'sweep':>8} " if split else "")
+          + f"{'|logr|':>7} {'loc_sd':>7} "
           f"{'ess':>6} {'margin':>8} {'clamp%':>7} {'clip%':>6}  verdict")
-    for rk, (r, v, summ, verdict, bad, src) in enumerate(ranked, 1):
-        if winner is None and verdict == "ELIGIBLE":
-            winner = (r.id, v, rk)
+    for rk, (r, v, summ, verdict, bad, src, rv) in enumerate(ranked, 1):
+        if winner is None and verdict == "ELIGIBLE" and rv == rv:
+            winner = (r.id, rv, rk)
         if rk <= 12 or verdict == "ELIGIBLE":
             g = gate_values(summ)
-            print(f"  {rk:>2} {r.id:10s} {v:>9.4f} {g['logr']:>7.4f} {g['loc_sd']:>7.4f} "
+            print(f"  {rk:>2} {r.id:10s} {rv:>9.4f} "
+                  + (f"{v:>8.4f} " if split else "")
+                  + f"{g['logr']:>7.4f} {g['loc_sd']:>7.4f} "
                   f"{g['ess']:>6.1f} {g['margin']:>+8.4f} {_num(summ, CLAMP):>7.4f} "
                   f"{_num(summ, CLIP):>6.2f}  {verdict}{src}"
                   + (f"  ({'; '.join(bad)})" if bad else ""))
@@ -219,8 +244,16 @@ def report(entity, project, sweep_id, patience, pattern):
           f"unclassifiable count (§7.2).")
     if winner:
         rid, v, rk = winner
-        gap = v - ranked[0][1]
-        print(f"  WINNER   : {rid} @ {v:.6f}"
+        gap = v - ranked[0][6]
+        # Cross-check: would ranking on the SWEEP metric have named the same
+        # trial?  Reported, not acted on -- it quantifies what the 2026-09-24
+        # fix changed for this sweep.
+        if split:
+            el = [t for t in ranked if t[3] == "ELIGIBLE"]
+            by_sweep = min(el, key=lambda t: sign * t[1])[0].id if el else None
+            print(f"  cross    : ranking on {metric} would name "
+                  f"{by_sweep} -- {'SAME' if by_sweep == rid else 'DIFFERENT'}")
+        print(f"  WINNER   : {rid} @ {v:.6f} ({rank_metric})"
               + (f"  (rank {rk}; +{gap:.4f} vs the lowest-metric trial "
                  f"{ranked[0][0].id} — DISCLOSE this gap, §3.6.3)"
                  if rk > 1 else "  (also the lowest-metric trial)"))

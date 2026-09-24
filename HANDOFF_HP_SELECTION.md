@@ -13818,6 +13818,101 @@ constraint**: 44 models (11 seeds × 4 variants) at ~4 h each is on the order of
 construction could not, improve agreement between chains. Centred R-hat is
 ~1.4 and is reported as a characterised property of the sampler."*
 
+### 4.3.130 Items 9–10 for large_play and large_diverse — winners named, production configs regenerated
+
+2026-09-24.
+
+#### 1. Item 9: winners named under the operative gates
+
+`check_winner_eligibility.py`, stop-truncated (large_play trials 1–20,
+large_diverse 1–28):
+
+| variant | winner | w × d | params | `val_cvar_ce` ± SE | gate margins (σ) |
+|---|---|---|---|---|---|
+| large_play | **`q45qbz8h`** | 5 × 2 | 2,305 | 0.470096 ± 0.0079 | `\|log r\|` 4.6, `loc_sd` 3.6, degeneracy 31 |
+| large_diverse | **`owlrd69d`** | 4 × 1 | 625 | 0.397951 ± 0.0041 | `\|log r\|` 4.0, `loc_sd` 4.0, degeneracy 23 |
+
+**Neither is within ~1σ of a gate**, so item 9's seed-dependence disclosure does
+not apply. Both are also the best of all trials, and nothing is owed on the
+stopping rule.
+
+> ❌ **A bug in the tool, found and fixed before it could bite.**
+> `check_winner_eligibility.py` ranked on the **sweep's metric**, which since
+> round 5 is the penalised objective `J`. §3.2.17's rule is that the winner is
+> **the lowest `val_cvar_ce` among eligible trials**, with `J` only steering the
+> optimiser. The tool now **stops on `J`** (matching `check_sweep_convergence`)
+> and **ranks on `val_cvar_ce`**, and prints a cross-check. For the two large
+> variants both rankings name the same trial, because the winners have `P` = 1.
+> **For medium_play they already disagree**: ranking on `J` names `35udthj2`,
+> ranking on CE names `us8j8ujo` (0.3738 vs 0.3741, statistically tied, §7.4 A).
+> Left unfixed, the tool would have applied the wrong rule to that variant.
+
+#### 2. Item 10: production configs regenerated from the winners' RECORDED configs
+
+**The production config and the sweep's base config are the same file**
+(`scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`). `train_rewards.sh`
+trains from it, and the sweep yaml points at it. The file still held
+**round-2** values: width 9 × depth 6, `cycle_length` 500, `num_samples` 75 and
+round-2 sampler settings. The sweep overrode all of them per trial. So the file
+was **not** what the winner ran, and the production config was rebuilt from the
+winner's **wandb config** by a new tool, `scripts_bnn/make_production_config.py`
+(self-tested).
+
+**What changed, identically for both variants in shape:** the five swept
+values, `num_samples` 75 → 60, `cycle_length` → 2000, `fraction_cool` → 0.25,
+and `num_chains` / `chains_per_gpu` → **128 / 32** (the escalation, §4.3.129).
+**16 keys that were code defaults when the trial ran are now pinned
+explicitly**, so production cannot drift from the selected trial if a default
+ever changes.
+
+**Deliberately not changed:**
+
+- **`seed`, `OUT_DIR`, data paths.** The launcher sets these per seed. Pinning
+  the dataset paths would make seeds 1–10 train on seed 0's split.
+- **`burn_in_lr` never written.** `launch_hp_sweeps.sh`'s preflight rejects any
+  base config that mentions it (§3.7).
+- **Unchanged lines are left byte-identical.** That keeps `map_amp2`'s §4.3.109
+  correction note, and the `centre_draws: true` line, whose preflight check
+  forbids a trailing comment.
+
+**Two wandb artefacts the tool had to handle, recorded because they would
+recur:**
+
+- **wandb stores an integral float as an int** (`1.0` → `1`), so its config
+  cannot be trusted for **types**. The tool reads each field's declared type from
+  `TrainConfig`'s *source*, because pyrallis is broken on the Mac.
+- **Numeric equality counts as unchanged.** An int in the file for a float field
+  (`map_amp2: 6838`) decodes to the same float the trial ran.
+
+**Verification, field by field against the recorded config: PASS for both.**
+Every behaviour-relevant key equals what the winner ran, except `num_chains` /
+`chains_per_gpu`. An independent grep confirms: no `SUPERSEDED-ROUND1` marker
+(so `train_rewards.sh` will run), no `burn_in_lr`, and the `centre_draws`
+preflight line intact. **The sweeps override all 10 changed keys**, so editing
+these files does not alter a re-run of either sweep. **The medium configs are
+untouched**, since their sweeps are live.
+
+#### 3. What the seed-0 directory holds, and why it is moved aside
+
+The sweep trials ran with `OUT_DIR …/antmaze_<variant>_bnn_eval_0`, i.e. **the
+seed-0 production directory**, and each trial overwrote the one before. So that
+directory holds the **last** trial's 32 chains, not the winner's. The run script
+only `ensure_dir`s, so it does not clear it. **Move it aside before the
+escalation** (reversible, not deleted), so a crash cannot leave a mix of old and
+new chains. It also means **the reproduction check compares against the winner's
+wandb-logged numbers**: the winner's own chains no longer exist on disk.
+
+#### 4. Launch plan (§4.3.129 §6a)
+
+**large_diverse first, alone, on GPUs 2–5** at 32 chains/GPU, with the sweep
+agents' exact thread environment (`OMP/MKL/OPENBLAS_NUM_THREADS=2`,
+`OMP_WAIT_POLICY=PASSIVE`). **Then the reproduction check:** chains 0–31 must
+give `val_cvar_ce` **0.397951**, SE **0.004057** and degeneracy margin
+**+0.0830**, matching `owlrd69d`. **Only if it passes, launch large_play**, whose
+targets are 0.470096, 0.00795 and +0.1137 from `q45qbz8h`. A mismatch means
+something in the configuration differs from what was selected. Stop and diff
+before anything is trained on it.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15849,13 +15944,25 @@ blind. Record it as a future-round candidate.
 
 **AFTER THE BNN SWEEPS FIRE**
 
-9. **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
+9. 🟡 **HALF DONE (§4.3.130)** — large_play `q45qbz8h` and large_diverse
+   `owlrd69d` named, neither within 1σ of a gate. The tool was **fixed to rank
+   on `val_cvar_ce`, not the penalised sweep metric** (§3.2.17). That already
+   matters for medium_play. **Remaining: medium_play and medium_diverse, once
+   they stop.** Original brief follows.
+   **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
    gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
    applies: that is a result to disclose, not to escalate around. **If a winner
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
-10. **Regenerate the four production configs** from the new winners (§10.3); they
+10. 🟡 **HALF DONE (§4.3.130)** — large_play and large_diverse regenerated from
+   the winners' **recorded wandb configs** by
+   `scripts_bnn/make_production_config.py`: 128 chains @ 32/GPU, verified field
+   by field, preflight-safe. **Remaining: the medium configs, once their sweeps
+   stop.** Do not edit them while their sweeps are live, since they are those
+   sweeps' base configs. Use the same command:
+   `make_production_config.py <variant> <winner>` (dry-run), then `--write`.
+   Original brief: **Regenerate the four production configs** from the new winners (§10.3); they
    are currently HYBRID and must not be used for production training as they
    stand.
 11. **Clear the reward-model directories** before production training, so a
