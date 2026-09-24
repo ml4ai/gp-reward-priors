@@ -53,7 +53,12 @@ def main():
     ap.add_argument("--alphas", default="0.95,0.0",
                     help="comma-separated conservatism levels (default 0.95,0.0: "
                          "CVaR and posterior mean)")
-    ap.add_argument("--n-samples", type=int, default=500)
+    # -1 = ALL posterior draws, NOT the iql_eval code default of 500.  Every
+    # stage-4 IQL sweep (bnn_sweeps/*.yaml) sets bnn_n_samples: -1, and
+    # n_samples is cache-KEY material, so labels precomputed at 500 would never
+    # be hit by stage 4 -- it would silently relabel from scratch (handoff
+    # 4.3.129).  Pass the same value the consuming IQL runs use.
+    ap.add_argument("--n-samples", type=int, default=-1)
     ap.add_argument("--centre-draws", action="store_true")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--check-centring-invariance", action="store_true",

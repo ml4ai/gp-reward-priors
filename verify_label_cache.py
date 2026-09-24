@@ -22,7 +22,7 @@ directory by default, so it cannot disturb a real cache.
 Usage:
     python gp_reward-priors/verify_label_cache.py \\
         --run-dir exp/<bnn_run>_0 --env antmaze-large-diverse-v2 \\
-        --alpha 0.95 --n-samples 500 --centre-draws --device cuda
+        --alpha 0.95 --n-samples -1 --centre-draws --device cuda
 """
 
 import argparse
@@ -45,7 +45,8 @@ def main():
     ap.add_argument("--run-dir", required=True, help="BNN run dir (with sampling_f/)")
     ap.add_argument("--env", required=True, help="d4rl env id, e.g. antmaze-large-diverse-v2")
     ap.add_argument("--alpha", type=float, default=0.95)
-    ap.add_argument("--n-samples", type=int, default=500)
+    # -1 = all draws, matching bnn_sweeps/*.yaml (handoff 4.3.129).
+    ap.add_argument("--n-samples", type=int, default=-1)
     ap.add_argument("--centre-draws", action="store_true")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--cache-dir", default=None,

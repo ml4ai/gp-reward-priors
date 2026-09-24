@@ -12983,6 +12983,19 @@ At §3.2.9's escalation, on the winner's saved chains, for each
 **N ∈ {1/8, 1/4, 1/2, 1}** of the escalation draws (fractions, so this does not
 depend on the budget finally chosen) and each **c ∈ {0.75, 0.95}**:
 
+> 📌 **AMENDED 2026-09-24, BEFORE any escalation data exists (§4.3.129 §5):
+> read "N" as a fraction of the escalation run's CHAINS, not of its draws per
+> chain.** The draw ladder as first written subsets draws *within* each chain
+> (`--max-draws`), which **shortens the horizon**. With chains that disagree
+> (centred R-hat ~1.4) and a small real half-to-half shift, a shorter horizon
+> changes the estimand itself. That would confound exactly the estimator-bias
+> question this ladder exists to isolate. Subsetting **chains**
+> (`--num-chains`) keeps every chain's horizon at the sweep's 60 × 2000 and
+> varies only precision. That is §4.5's "chains buy precision, not mixing", and
+> §4.6's fixed-estimand premise. Chains are deterministic in (seed, index), so
+> each lower rung is an exact subset of the escalation run. The reading in §4
+> below is unchanged, and §6's command is corrected to match.
+
 `CE_c(N)`, `acc_c(N)`, `flip%_c(N)`, the jackknife SE at the primary `c`, and
 `ess_cen(N)`.
 
@@ -13046,12 +13059,15 @@ reported at `N_min` and `N_max` for both levels, against §4.3.120's ladder rang
 
 #### 6. Commands (run at escalation, on the winner's saved chains)
 
-Substitute the escalation run's `OUT_DIR` and total draws per chain for `$R` and
-`$TOT`:
+Substitute the escalation run's `OUT_DIR` and total **chain count** for `$R` and
+`$TOT` (amended 2026-09-24: the ladder is on chains, see §3 above):
 
 ```bash
-cd ~/iqlpref/gp_reward-priors && R=exp/<escalation_out_dir>_0; TOT=<draws_per_chain>; for FR in 8 4 2 1; do N=$((TOT/FR)); for C in 0.75 0.95; do echo "=== N=$N  conservatism=$C ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir $R --cvar-ce --centre-draws --conservatism $C --cvar-ce-alpha-sweep 0.25,0.05 --max-draws $N --device cuda 2>&1 | grep -E "ALPHA SWEEP|^ +0\.(25|05)0|jackknife|tail depth|plug-in"; done; done | tee exp/escalation_tail_ladder.txt
+cd ~/iqlpref/gp_reward-priors && R=exp/<escalation_out_dir>_0; TOT=<num_chains>; for FR in 8 4 2 1; do N=$((TOT/FR)); for C in 0.75 0.95; do echo "=== chains=$N  conservatism=$C ==="; python scripts_bnn/diagnose_sampling_tail.py --run-dir $R --num-chains $N --cvar-ce --centre-draws --conservatism $C --cvar-ce-alpha-sweep 0.25,0.05 --device cuda 2>&1 | grep -E "ALPHA SWEEP|^ +0\.(25|05)0|jackknife|tail depth|plug-in"; done; done | tee exp/escalation_tail_ladder.txt
 ```
+
+*(Superseded form, kept for the record: it passed `--max-draws $N` with `TOT` =
+draws per chain.)*
 
 And the resolution number the whole argument turns on:
 
@@ -13616,6 +13632,146 @@ Its width path is now `…676766657`: after the trial-19 breakout it has explore
 **Three of four winners are depth 1**, and all four sit at **625–2,497p** — the
 bottom decade of a declared range that runs to 54,529p.
 
+### 4.3.129 Is escalation NEEDED for large_play and large_diverse? — yes, for precision; no, for stability
+
+2026-09-24. **User decision recorded:** the §3.2.9 escalation run **doubles as the
+seed-0 production model**, and **production trains at the escalated budget**. The
+user asked first whether escalation is needed at all: would more chains or more
+samples per chain stabilise the sampled distribution, or improve its statistics?
+§3.2.9 escalates only "if [the winner's statistics] fall short", so this is a
+real question, not a formality.
+
+#### 1. The two winners' diagnostics at the sweep budget (32 chains × 60 draws, 120k steps)
+
+| centred, validation | large_play `q45qbz8h` | large_diverse `owlrd69d` | target |
+|---|---|---|---|
+| gate 1: scale ratio / `\|log r\|` | 1.012 / 0.012 | 0.976 / 0.024 | ≤ 0.115 — **pass, 4.6σ / 4.0σ** |
+| gate 1: `loc_sd` | 0.112 | 0.108 | ≤ 0.155 — pass |
+| **R-hat median / 95th** | **1.44 / 1.62** | **1.36 / 1.54** | — (not a gate) |
+| R-hat > 1.01 | **100%** of points | **100%** | — |
+| **between-chain share of variance** | **41%** | **34%** | — |
+| ESS median | 71.8 | 81.7 | ≥ 40 (gate 3) — pass |
+| **effective tail draws at 0.95**, `0.05·ESS` | **3.6** | **4.1** | **≥ 10 (§3.2.1)** — **SHORT** |
+| CVaR relMCSE median / max | **0.177** / 0.93 | **0.154** / 1.79 | falls as 1/√draws (§4.6) |
+
+The chains are **each stationary** (gate 1 passes comfortably) but **disagree
+with each other**: R-hat ~1.4 at every point, with over a third of the variance
+between chains. This is §4.3.64's signature — "internally stationary inside a
+short sampling window while still disagreeing with each other". **With
+`chain_init_jitter` 1.0 this R-hat is an honest measure**, not the optimistic
+jitter-0 figure §4.5 warned about (now amended there).
+
+#### 2. Stability — escalation CANNOT deliver it, by either lever
+
+- **More chains: no.** §4.5, pre-registered long before these results: *"Chains
+  buy precision, not mixing."* R-hat measures between-chain disagreement. Adding
+  chains adds power to *detect* it, so **R-hat is expected to RISE** at the
+  escalated budget. That is the sampler being measured better, not a regression.
+  The same holds for within-chain drift. The round-3 chain-count curve
+  (`exp/chain_count_curve_r3_trial1_medium_play_0.txt`) has the half-to-half
+  location shift falling 0.212 → 0.090 sd from 8 to 128 chains, and
+  **flattening** rather than tracking 1/√chains. More chains resolve a small
+  real shift; they do not remove it.
+- **More samples per chain: ruled out, for three reasons.**
+  1. **It breaks the pre-registered horizon rule.** Production draws per chain
+     must equal selection draws per chain, and total draws are bought with
+     chains. Round 1 failed precisely by selecting at one horizon and deploying
+     at another (§3.7, §7.1).
+  2. **It changes what gate 1 measures.** Gate 1 compares the halves of the
+     sampling window. A longer window could fail stationarity at the new horizon,
+     so the deployed model would no longer be the configuration that was
+     validated.
+  3. **The evidence against it fixing R-hat is already in hand.** 5× burn-in
+     made things worse (§4.3.65), and §4.3.72 closed the preconditioner line
+     after five refuted mechanisms. Between-chain disagreement has resisted
+     every run-length knob tried. Whether *longer sampling* could let chains
+     migrate is untested in round 5, and it is a sampler-design question for a
+     future round (§4.5: hot-phase mixing and jitter), not an escalation.
+
+> **So escalation does not make the distribution more stable, and it should not
+> be described as doing so.** Its job is precision.
+
+#### 3. Statistics — escalation IS needed, and chains deliver it
+
+By the pre-registered resolution rule (§3.2.1: `(1 − c)·ESS ≥ 10` effective tail
+draws), **both winners fall short at the deployment conservatism**: 3.6 and 4.1
+against 10, i.e. ESS ~72–82 against the ≥ 200 the deployment tail needs. §3.2.5's
+table already carried that as "≥ 200 for α = 0.05", and 16a's pre-registered
+reading needs the same 200 to be conclusive. The direct symptom: **each
+transition's deployed CVaR reward carries a 15–18% median relative Monte-Carlo
+error**, over 90% at the worst points.
+
+*(The CVaR-specific ESS, 210 / 263, looks as if it already clears 200. §4.5
+warns that the CVaR integrand is mostly zeros, so that statistic is the less
+reliable one. relMCSE is the honest precision measure, and 15–18% is not
+adequate.)*
+
+**It reaches the deployed reward.** Every stage-4 IQL sweep
+(`bnn_sweeps/*.yaml`) sets **`bnn_n_samples: -1`**, i.e. all draws, so extra
+chains flow into the IQL labels. The code default of 500 would have capped the
+gain. It is overridden for stage 4, and **must also be overridden for the seeds
+1–10 IQL runs**, whose launcher does not exist yet.
+
+#### 4. Sizing: escalate to 128 chains, at the sweep's horizon
+
+ESS per chain at the sweep budget is 2.24 (lp) and 2.55 (ld). §3.2.5 measured
+the linear-ESS-in-chains assumption at **86%** of projection (276 vs 322):
+
+| chains | large_play ESS (86%–100% of linear) | large_diverse ESS | clears 200? |
+|---|---|---|---|
+| 32 (sweep) | 72 | 82 | no |
+| 96 | 185 – 215 | 211 – 245 | **large_play borderline** |
+| **128** | **247 – 287** | **281 – 327** | **both, with margin** |
+
+**Recommendation: 128 chains, `num_samples` 60, `cycle_length` 2000**, i.e. the
+winner's exact configuration with only `num_chains` (and `chains_per_gpu`)
+changed. 128 is also the per-trial budget round 3 was originally designed at
+(§3.2.5) before the sweep cut it to 32 for throughput. Expected relMCSE is about
+halved (÷√4).
+
+**The §4.6 ladder comes free.** Chains are deterministic in (seed, index)
+(`diagnose_sampling_tail.py --num-chains`), so one 128-chain seed-0 run contains
+the 32- and 64-chain rungs exactly. The §4.6 checks can be read from it: ESS
+roughly linear, relMCSE falling as 1/√draws, `loc_sd` falling toward its floor.
+**And its first 32 chains should reproduce the selected sweep trial
+bit-for-bit.** The deployed production model then literally contains the
+configuration that was validated.
+
+#### 5. What changes as a result
+
+- **16a's ladder moves from draws to chains** (§4.3.123 §3/§6, amended before any
+  escalation data exists). Subsetting draws shortens the horizon and so changes
+  the estimand. Subsetting chains keeps it fixed.
+- **Pre-registered response if the escalated run's gate 1 moves.** Eligibility
+  is decided at the sweep budget (§3.2.9) and escalation may not re-select. If
+  the 128-chain `|log r|` exceeds τ, **report it as the effect-size estimate
+  having moved with 4× the chains. It is not a de-selection, and not grounds to
+  pick another trial.** With 4.0–4.6σ margins it is unlikely.
+- **Expect, and pre-state, a HIGHER R-hat on the production model than on the
+  sweep trial** (§4.5), so nobody reads it as the escalation having made things
+  worse.
+- **`precompute_labels.py` / `verify_label_cache.py` defaulted to
+  `--n-samples 500`. That was a bug, now fixed to `-1`.** `n_samples` is cache-key
+  material, so labels precomputed at 500 would never have been hit by stage 4,
+  which uses −1. No production labels existed yet, so nothing was lost.
+- **Costs of "production trains at the escalated budget"**, stated for the user
+  to confirm:
+  - **4× the chains per reward model** (128 vs 32) for all 11 seeds × 4 variants,
+    if seeds 1–10 also train at 128.
+  - **Labelling memory scales with draws.** At ~1M transitions per antmaze
+    dataset (the figure `iql_eval`'s docstring uses), 128 × 60 = 7,680 draws is
+    ~31 GB per copy and ~61 GB at the labelling peak, against ~15 GB at 32
+    chains. **Run `precompute_labels.py` one model at a time before stage 4**
+    (item 12's documented order), or 8 concurrent stage-4 runs that all miss the
+    cache would each allocate it.
+
+#### 6. §7 framing (for §7.4 once the escalation has run)
+
+*"Escalation to 128 chains raised the precision of the deployed reward (ESS from
+~72–82 to ~[measured]; relative MC error roughly halved). It did not, and by
+construction could not, improve agreement between chains. Centred R-hat is
+~1.4 and is reported as a characterised property of the sampler."*
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -13734,6 +13890,13 @@ as something the chain count is supposed to fix.
   point.** R-hat therefore *understates* disagreement, and adding chains from a
   shared start adds little independent information about multimodality. Treat
   the R-hat numbers as optimistic, and say so in the write-up.
+
+  > 🔁 **No longer true for round 5 (noted 2026-09-24, §4.3.129).** Round 5 and
+  > every production config run `chain_init_jitter` **1.0**, so chains start from
+  > dispersed points. Round 5's centred R-hat of ~1.36–1.44 is therefore **an
+  > honest measure of between-chain disagreement, not an optimistic one**, and
+  > extra chains now add genuinely independent starts. The "optimistic" caveat
+  > applies only to the jitter-0 runs of stages 1–3.
 
 **What the medium_play c4 diagnosis showed** (`--worst-k 20`, 2026-08-16): only
 **56 of 6400 points (0.88%)** are unresolved, and they cluster spatially — three
@@ -15768,6 +15931,23 @@ blind. Record it as a future-round candidate.
     still-running agent.** Two of four sweeps done, both inside the baselines'
     17–66 trial range. medium_diverse now has the only **separated** winner
     (`rdtjd999`, w5×d1, 1.2× joint 2·SE — narrow).
+18m. **ESCALATION DECIDED (§4.3.129), awaiting the user's go.** The escalation
+    run **is** the seed-0 production model, and production trains at the
+    escalated budget. **Needed for precision, not stability.** Both finished
+    winners have 3.6–4.1 effective tail draws against §3.2.1's 10, and
+    15–18% relMCSE. Chains cannot fix R-hat ~1.4, and more draws per chain is
+    ruled out. **Recommended: 128 chains at the sweep's 60 × 2000**, the
+    winner's config with only `num_chains`/`chains_per_gpu` changed. The 32- and
+    64-chain rungs come free via `--num-chains`, and **the first 32 chains
+    should reproduce the sweep trial bit-for-bit** — check that first. For
+    large_play and large_diverse this unblocks items 9–10 (name the winners;
+    production config = winner HPs + 128 chains). **Confirm:** do seeds 1–10
+    also train at 128? That is 4× the reward-model chains, and ~61 GB peak per
+    labelling.
+18n. **When the seeds 1–10 IQL launcher is written, set `bnn_n_samples: -1`**
+    (§4.3.129 §3). Every stage-4 sweep uses −1. The code default of 500 would
+    make seeds 1–10 label with a subset of draws, disagree with stage 4, and miss
+    the label cache.
 18l. ✅ **18h and 18i WRITTEN as §7.4 A and B** (2026-09-24), backed by
     `scripts_bnn/round5_disclosures.py` (self-test passes), which truncates at
     the K=15 stop via `check_sweep_convergence.frontier`. **B (large_play) is
