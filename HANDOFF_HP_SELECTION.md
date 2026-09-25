@@ -14327,6 +14327,65 @@ exist yet. Precompute before stage 4, as item 12 orders.
 guard (`--emit-rm --require-alphas 0.95,0.0`) stays for anyone who later needs the
 space.
 
+### 4.3.137 Item 10b DONE — all eight MR/PT production configs regenerated from the round-2 baseline winners
+
+2026-09-25. `make_production_config.py` now takes `--family bnn|mr|pt`.
+
+#### What MR/PT needed that BNN did not (confirmed in the code)
+
+- **No chain budget.** MR/PT have no escalation; `train_rewards.sh` retrains
+  seed 0 like any other seed.
+- **PT has three DERIVED fields.** `TrainConfig.__post_init__`
+  (`run_pt_training_antmaze_eval.py`) sets `num_heads = embd // head` and, when
+  left `None`, `pref_attn_embd_dim = embd_dim` and `intermediate_dim = 4 ×
+  embd_dim`. The winners' wandb configs show 8–128 there only because wandb logs
+  the post-derivation value. The trials read `None` from the file. **They are
+  never written and never compared.** Verification *fails* if one is written,
+  since that would turn a derivation into a constant.
+- **PT's `head_dim` is clamped** to `embd_dim` after exponentiation. So
+  `rupj57fq`'s `head_dim` 5 with `embd_dim` 3 runs a head of 8, not 32.
+  `--check-run` expands both sides through the same clamp.
+- **MR/PT write to `checkpoints_path`** (+ `_{seed}`), not `OUT_DIR`. It is
+  exempt from the file and per-seed in `--check-run`.
+- **The `centre_draws` preflight check is BNN-only.**
+
+#### The eight changes, each matching §4.3.108's winners table
+
+| | winner | changed (was → now) |
+|---|---|---|
+| MR medium_play | `a4qo4g4i` | width 8→**7**, depth 5→**4**, lr 6.2e-3→**4.1e-4** |
+| MR medium_diverse | `p2f7p8dv` | width 6→**4**, lr 4.8e-3→**1.3e-3** (depth already 1) |
+| MR large_play | `c898c0xe` | width 9→**7**, lr 9.4e-3→**6.4e-5** (depth already 4) |
+| MR large_diverse | `s8nbeehf` | depth 3→**2**, lr 5.8e-3→**5.6e-4** (width already 7) |
+| PT medium_play | `giab551o` | embd 7→**5**, head 7→**3**, layers 1→**4**, lr 8.6e-3→**2.0e-5** |
+| PT medium_diverse | `rupj57fq` | embd 6→**3**, head 7→**5**, lr 1.4e-5→**8.9e-3** (layers already 2) |
+| PT large_play | `cyrngs49` | embd 6→**5**, head 6→**3**, lr 2.3e-3→**1.7e-5** (layers already 2) |
+| PT large_diverse | `xokkypz7` | embd 8→**5**, head 6→**5**, layers 1→**3**, lr 7.6e-3→**1.3e-3** |
+
+Plus four code defaults pinned in every file: **`select_split: test`** (the
+split-role rule, §4.3.107), `bt_pool: mean`, `num_workers: 4` and
+`prefetch_factor: 2`.
+
+**Verification:** every file passes field by field against its winner's recorded
+config. A second pass changes nothing (idempotent). No `SUPERSEDED` markers. PT's
+derived fields are `null` in all four. **Only the eight configs changed**, and
+the medium BNN configs used by the live sweeps are untouched. The MR/PT sweeps
+override every changed key (MR: width/depth/lr; PT: embd/head/layers/lr), and
+all eight sweeps are complete, so no running or re-run sweep is affected. The
+BNN large configs re-verify with 0 changes after the refactor.
+
+#### Ready to train, in this order (§4.3.135 §3)
+
+1. **Item 11**: empty `~/iqlpref/exp/reward_learning/antmaze_*_{mr,pt}_eval_{0..10}`.
+   For MR this matters beyond crash safety. The ensemble globs every
+   `checkpoint_*.pt`, so an older run's checkpoints can mix in even on success.
+2. **`train_rewards.sh mr` then `pt`** with the default `SEEDS` 0–10 and
+   `GPU_LIST "2 3 4 5"`. Winner runtimes are ~0.15 h (MR) and ~0.35 h (PT) per
+   model, so all 88 models take **hours, not days**. Hence MR/PT go before the
+   ~4.6-day BNN large seeds 1–10.
+3. `--check-run` each family's first job, e.g. `--family mr medium_play a4qo4g4i
+   --check-run <run_id>`. It now handles MR/PT seeds 1–10 and absolute paths.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16373,7 +16432,11 @@ blind. Record it as a future-round candidate.
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
-10b. ⛔ **NEW, BLOCKING MR/PT training (§4.3.135 §2): all eight MR/PT production
+10b. ✅ **DONE 2026-09-25 (§4.3.137)** — all eight MR/PT production configs
+   regenerated from the round-2 baseline winners, verified, and idempotent.
+   PT's derived fields are left to `__post_init__`, and `select_split: test` is
+   pinned. **Unblocks item 11 + `train_rewards.sh mr/pt`** (hours in total).
+   Original entry: ⛔ **NEW, BLOCKING MR/PT training (§4.3.135 §2): all eight MR/PT production
    configs hold OLD, pre-§3.2.16 winners** (MR widths 8–9, PT embeddings 6–8,
    wrong learning rates), not the completed round-2 baseline winners of
    §4.3.108. No `SUPERSEDED` marker, so `train_rewards.sh mr/pt` would silently

@@ -1,5 +1,11 @@
 #!/usr/bin/env python
-"""Regenerate a BNN production config from a round-5 winner (handoff to-do 10, §4.3.130).
+"""Regenerate a production config from its sweep winner (to-do 10/10b, §4.3.130/§4.3.137).
+
+`--family bnn` (default) | `mr` | `pt`.  The BNN description below applies to all
+three with two differences for MR/PT (§4.3.137): there is no chain budget to set
+(seed 0 is simply retrained by train_rewards.sh), and PT's derived fields
+(`pref_attn_embd_dim`, `intermediate_dim`, `num_heads`) are left null for
+`__post_init__` to compute, exactly as the trial read them.
 
 The production config and the sweep's BASE config are the same file,
 `scripts_bnn/antmaze_<variant>_bnn_antmaze_eval.yaml`: `train_rewards.sh` trains
@@ -29,6 +35,8 @@ Dry-run by default (prints the diff and the verification); --write applies it.
 Usage:
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/make_production_config.py \\
         large_play q45qbz8h [--num-chains 128 --chains-per-gpu 32] [--write]
+    /opt/anaconda3/envs/irl/bin/python scripts_bnn/make_production_config.py \\
+        --family pt medium_play giab551o [--write]
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/make_production_config.py --selftest
 """
 
@@ -46,10 +54,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Per-run identity, or paths the launcher/eval script derive per seed.  Pinning
 # the *_dataset paths would make seeds 1-10 train on seed 0's split.
 EXEMPT = {"name", "seed", "OUT_DIR", "config_path", "data_root", "project",
-          "group", "train_dataset", "val_dataset", "test_dataset"}
+          "group", "train_dataset", "val_dataset", "test_dataset",
+          "checkpoints_path"}          # MR/PT: gets _{seed} appended per run
 NEVER_WRITE = {"burn_in_lr"}          # preflight-enforced absence (§3.7)
 PREFLIGHT_CENTRE = re.compile(
     r"^[ \t]*centre_draws[ \t]*:[ \t]*(true|True)[ \t]*$", re.M)
+
+# Per-family facts (handoff 4.3.137).  `derived` fields are computed in
+# TrainConfig.__post_init__ when left None, and wandb logs the DERIVED value --
+# the trial itself read None from the file.  Writing them would replace a
+# derivation with a constant, so they are never written and never compared.
+# `exponents` are log2 fields: a sweep trial logs the exponent (the agent pre-sets
+# sweep keys), a direct launch logs 2**x after __post_init__.
+FAMILIES = {
+    "bnn": {"project": "BNN-training", "dir": "scripts_bnn", "suffix": "bnn",
+            "script": "run_bnn_training_antmaze_eval.py", "budget": True,
+            "derived": set(), "exponents": {"width"}},
+    "mr": {"project": "MR-training", "dir": "scripts_mr", "suffix": "mr",
+           "script": "run_mr_training_antmaze_eval.py", "budget": False,
+           "derived": set(), "exponents": {"width"}},
+    "pt": {"project": "PT-training", "dir": "scripts_pt", "suffix": "pt",
+           "script": "run_pt_training_antmaze_eval.py", "budget": False,
+           "derived": {"pref_attn_embd_dim", "intermediate_dim", "num_heads"},
+           "exponents": {"embd_dim", "head_dim"}},
+}
 
 
 def fmt(v):
@@ -109,12 +137,22 @@ def _same(a, b):
     return a == b and type(a) is type(b)
 
 
-def build(text, ran, rid, num_chains, cpg, ann=None):
+def _targets(ran, num_chains, cpg, ann, family):
+    """What the file must hold: the recorded config, minus per-run identity,
+    never-write keys, None values and derived fields; plus the BNN budget."""
+    fam = FAMILIES[family]
+    t = {k: coerce(k, v, ann) for k, v in ran.items()
+         if k not in EXEMPT and k not in NEVER_WRITE and v is not None
+         and k not in fam["derived"]}
+    if fam["budget"]:
+        t["num_chains"], t["chains_per_gpu"] = num_chains, cpg
+    return t
+
+
+def build(text, ran, rid, num_chains, cpg, ann=None, family="bnn"):
     """(new_text, changed, added).  Pure function of its inputs."""
     old = yaml.safe_load(text)
-    target = {k: coerce(k, v, ann) for k, v in ran.items()
-              if k not in EXEMPT and k not in NEVER_WRITE and v is not None}
-    target["num_chains"], target["chains_per_gpu"] = num_chains, cpg
+    target = _targets(ran, num_chains, cpg, ann, family)
 
     lines = text.split("\n")
     changed, seen = [], set()
@@ -126,10 +164,12 @@ def build(text, ran, rid, num_chains, cpg, ann=None):
         seen.add(k)
         if _same(old.get(k), target[k]):
             continue                                     # byte-identical
+        who = ("round-5 winner" if family == "bnn"
+               else "round-2 baseline winner")
         why = (f"round-5 escalation, §4.3.129 (was {fmt(old.get(k))})"
                if k in ("num_chains", "chains_per_gpu")
-               else f"round-5 winner {rid} (was {fmt(old.get(k))})")
-        if k == "width":
+               else f"{who} {rid} (was {fmt(old.get(k))})")
+        if k in FAMILIES[family]["exponents"]:
             why = "log2 exponent; " + why
         lines[i] = f"{k}: {fmt(target[k])}   # {why}"
         changed.append((k, old.get(k), target[k]))
@@ -142,8 +182,26 @@ def build(text, ran, rid, num_chains, cpg, ann=None):
                   "# default ever changes."]
         lines += [f"{k}: {fmt(target[k])}" for k in added]
 
-    # Replace the leading comment header with a round-5 provenance block.
+    # Replace the leading comment header with a provenance block.
     j = next(i for i, ln in enumerate(lines) if ln.strip() and not ln.startswith("#"))
+    if family != "bnn":
+        header = [
+            f"# Production config: round-2 {family.upper()} BASELINE winner {rid}",
+            "# (handoff §4.3.108 winners table; regenerated §4.3.137).",
+            "# Generated by scripts_bnn/make_production_config.py from the winning",
+            "# trial's recorded wandb config, so every value below is what that trial",
+            "# RAN, except by design:",
+            "#   seed / checkpoints_path / data paths -- set per seed by the launcher.",
+            "#   derived fields left null -- TrainConfig.__post_init__ computes them,",
+            "#     exactly as it did for the trial." if FAMILIES[family]["derived"]
+            else "#   (no derived fields for this family)",
+            "# No escalation for this family: seed 0 is retrained by train_rewards.sh.",
+            "# This file is also the sweep's base config; the sweep overrides every",
+            "# field it varied, so editing it does not change a sweep re-run.",
+            "# The previous header and values (pre-§3.2.16 winners) are in git history.",
+            "#",
+        ]
+        return "\n".join(header + lines[j:]), changed, added
     header = [
         f"# Production config: ROUND-5 BNN winner {rid} (handoff §4.3.130).",
         "# Generated by scripts_bnn/make_production_config.py from the winning",
@@ -162,15 +220,23 @@ def build(text, ran, rid, num_chains, cpg, ann=None):
     return "\n".join(header + lines[j:]), changed, added
 
 
-def verify(new_text, old_text, ran, num_chains, cpg, ann=None):
+def verify(new_text, old_text, ran, num_chains, cpg, ann=None, family="bnn"):
     """List of failures (empty = pass)."""
     new, old = yaml.safe_load(new_text), yaml.safe_load(old_text)
+    fam = FAMILIES[family]
     bad = []
     for k, v in ran.items():
         if k in EXEMPT or k in NEVER_WRITE or v is None:
             continue
-        want = {"num_chains": num_chains, "chains_per_gpu": cpg}.get(
-            k, coerce(k, v, ann))
+        if k in fam["derived"]:
+            # must be left to __post_init__ exactly as the trial read it
+            if new.get(k) != old.get(k):
+                bad.append(f"{k}: derived field changed {old.get(k)!r} -> "
+                           f"{new.get(k)!r}; __post_init__ must compute it")
+            continue
+        budget = ({"num_chains": num_chains, "chains_per_gpu": cpg}
+                  if fam["budget"] else {})
+        want = budget.get(k, coerce(k, v, ann))
         if k not in new:
             bad.append(f"{k}: missing (ran {v!r})")
         elif not _same(new[k], want):
@@ -181,7 +247,7 @@ def verify(new_text, old_text, ran, num_chains, cpg, ann=None):
             bad.append(f"{k}: exempt key changed {old[k]!r} -> {new.get(k)!r}")
     if "burn_in_lr" in new or re.search(r"^[ \t]*burn_in_lr[ \t]*:", new_text, re.M):
         bad.append("burn_in_lr present -- launch preflight would refuse")
-    if not PREFLIGHT_CENTRE.search(new_text):
+    if family == "bnn" and not PREFLIGHT_CENTRE.search(new_text):
         bad.append("centre_draws line no longer matches the launch preflight")
     if "SUPERSEDED-ROUND1" in new_text:
         bad.append("SUPERSEDED-ROUND1 marker present -- train_rewards.sh would refuse")
@@ -202,8 +268,10 @@ EXPECTED_RUN_DIFFS = {"num_chains", "chains_per_gpu", "name", "config_path",
 
 
 PATH_KEYS = {"data_root", "measurement_dataset", "train_dataset", "val_dataset",
-             "test_dataset", "OUT_DIR"}
-SEED_KEYS = {"seed", "OUT_DIR", "train_dataset", "val_dataset", "test_dataset"}
+             "test_dataset", "OUT_DIR", "checkpoints_path"}
+# MR/PT write to checkpoints_path (+ _{seed}); BNN to OUT_DIR (+ _{seed}).
+SEED_KEYS = {"seed", "OUT_DIR", "checkpoints_path", "train_dataset",
+             "val_dataset", "test_dataset"}
 
 
 def _same_path(a, b):
@@ -220,7 +288,26 @@ def _norm_width(w):
     return int(round(__import__("math").log2(w))) if w and w >= 16 else w
 
 
-def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=None):
+# Largest exponent each log2 field can take under §3.2.16's ranges; anything
+# above is already expanded.  MR/BNN width: exponent 4-7 vs expanded >= 16.
+# PT embd/head: exponent 3-5 vs expanded >= 8.  Unambiguous for these ranges.
+_EXP_MAX = {"width": 12, "embd_dim": 7, "head_dim": 7}
+
+
+def _expanded(family, key, cfg):
+    """The value __post_init__ would produce, whichever form cfg holds.
+    PT clamps head_dim to embd_dim, so a trial with head 5 / embd 3 runs head 8."""
+    v = cfg.get(key)
+    if v is None or isinstance(v, bool):
+        return v
+    e = 2 ** v if v <= _EXP_MAX.get(key, -1) else v
+    if family == "pt" and key == "head_dim":
+        return min(e, _expanded(family, "embd_dim", cfg))
+    return e
+
+
+def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=None,
+              family="bnn"):
     """[(key, winner, run, verdict)] for every differing key; verdict is
     'expected', 'artefact' or 'UNEXPECTED'.
 
@@ -233,7 +320,8 @@ def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=None):
     out = []
     for k in sorted(set(run_cfg) | set(winner_cfg)):
         a, b = winner_cfg.get(k), run_cfg.get(k)
-        if k == "width" and _norm_width(a) == _norm_width(b):
+        if k in FAMILIES[family]["exponents"] and \
+                _expanded(family, k, winner_cfg) == _expanded(family, k, run_cfg):
             if a != b:
                 out.append((k, a, b, "artefact"))
             continue
@@ -242,9 +330,9 @@ def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=None):
         if k in PATH_KEYS and _same_path(a, b):
             out.append((k, a, b, "artefact"))          # same file, other spelling
             continue
-        if k == "num_chains":
+        if k == "num_chains" and FAMILIES[family]["budget"]:
             ok, tag = b == num_chains, "expected"
-        elif k == "chains_per_gpu":
+        elif k == "chains_per_gpu" and FAMILIES[family]["budget"]:
             ok, tag = b == cpg, "expected"
         elif k in SEED_KEYS:
             ok, tag = not same_seed, "expected (other seed)"
@@ -322,6 +410,66 @@ def selftest():
                check_run(dict(r3, mdecay=0.3), w0, 128, 32))
     assert any(v == "UNEXPECTED" for *_, v in check_run(
         dict(r3, measurement_dataset="/home/u/g/data/OTHER.hdf5"), w0, 128, 32))
+
+    # ---- MR / PT (4.3.137) ----------------------------------------------------
+    # PT: derived fields stay null even though wandb logged their derived values
+    pt_text = ("# old header\nembd_dim: 7\nhead_dim: 7\nnum_layers: 1\n"
+               "lr: 0.0085\npref_attn_embd_dim: null\nintermediate_dim: null\n"
+               "epochs: 5000\nseed: 1\ncheckpoints_path: ./exp/pt\n")
+    pt_ran = {"embd_dim": 5, "head_dim": 3, "num_layers": 4, "lr": 2.0e-05,
+              "pref_attn_embd_dim": 32, "intermediate_dim": 128, "num_heads": 4,
+              "epochs": 5000, "seed": 0, "checkpoints_path": "./exp/pt_0",
+              "select_split": "test"}
+    pt_ann = {"embd_dim": "int", "head_dim": "int", "num_layers": "int",
+              "lr": "float", "epochs": "int", "select_split": "str"}
+    new_pt, ch_pt, add_pt = build(pt_text, pt_ran, "giab551o", 128, 32,
+                                  pt_ann, family="pt")
+    ypt = yaml.safe_load(new_pt)
+    assert ypt["embd_dim"] == 5 and ypt["head_dim"] == 3 and ypt["num_layers"] == 4
+    assert ypt["pref_attn_embd_dim"] is None and ypt["intermediate_dim"] is None
+    assert "num_heads" not in ypt and "num_chains" not in ypt, ypt
+    assert ypt["select_split"] == "test" and ypt["seed"] == 1, ypt
+    assert ypt["checkpoints_path"] == "./exp/pt", "per-seed path must be exempt"
+    assert not verify(new_pt, pt_text, pt_ran, 128, 32, pt_ann, family="pt"), \
+        verify(new_pt, pt_text, pt_ran, 128, 32, pt_ann, family="pt")
+    assert verify(new_pt.replace("pref_attn_embd_dim: null", "pref_attn_embd_dim: 32"),
+                  pt_text, pt_ran, 128, 32, pt_ann, family="pt"), \
+        "writing a derived field must fail verification"
+    assert "BASELINE winner giab551o" in new_pt and "escalation" not in new_pt.split("\n")[0]
+    assert "round-2 baseline winner giab551o" in new_pt and "round-5" not in new_pt
+    # MR: no budget keys, no centre_draws requirement
+    mr_text = "# h\nwidth: 8\ndepth: 5\nlr: 0.0062\nseed: 1\n"
+    mr_ran = {"width": 7, "depth": 4, "lr": 0.00041, "seed": 0}
+    new_mr, _, _ = build(mr_text, mr_ran, "a4qo4g4i", 128, 32,
+                         {"width": "int", "depth": "int", "lr": "float"}, family="mr")
+    ymr = yaml.safe_load(new_mr)
+    assert ymr["width"] == 7 and "num_chains" not in ymr, ymr
+    assert not verify(new_mr, mr_text, mr_ran, 128, 32,
+                      {"width": "int", "depth": "int", "lr": "float"}, family="mr")
+    # check_run PT: sweep-logged exponents (embd 3, head 5 -> clamped to 8)
+    # against a direct launch's expanded values must read clean...
+    ptw = {"embd_dim": 3, "head_dim": 5, "num_heads": 1, "pref_attn_embd_dim": 8,
+           "intermediate_dim": 32, "lr": 0.0089, "seed": 0}
+    ptr = {"embd_dim": 8, "head_dim": 8, "num_heads": 1, "pref_attn_embd_dim": 8,
+           "intermediate_dim": 32, "lr": 0.0089, "seed": 0}
+    assert all(v != "UNEXPECTED" for *_, v in check_run(ptr, ptw, 128, 32,
+                                                        family="pt"))
+    # ...and a genuinely different head must not
+    assert any(v == "UNEXPECTED" for *_, v in check_run(
+        dict(ptr, head_dim=4, num_heads=2), ptw, 128, 32, family="pt"))
+    # MR seeds 1-10 via train_rewards.sh: checkpoints_path is per seed, width is
+    # logged expanded; neither is a mismatch, but a different lr is
+    mrw = {"width": 7, "lr": 0.00041, "seed": 0,
+           "checkpoints_path": "./exp/reward_learning/m_mr_eval_0"}
+    mrr = {"width": 128, "lr": 0.00041, "seed": 4,
+           "checkpoints_path": "./exp/reward_learning/m_mr_eval_4"}
+    assert all(v != "UNEXPECTED" for *_, v in check_run(mrr, mrw, 128, 32,
+                                                        family="mr"))
+    assert any(v == "UNEXPECTED" for *_, v in check_run(
+        dict(mrr, lr=0.001), mrw, 128, 32, family="mr"))
+    # ...and on seed 0 a changed checkpoints_path IS a mismatch
+    assert any(v == "UNEXPECTED" for *_, v in check_run(
+        dict(mrr, seed=0), mrw, 128, 32, family="mr"))
     print("selftest OK")
     return 0
 
@@ -339,20 +487,26 @@ def main():
                          "against the winner, with known logging artefacts "
                          "(width exponent vs expanded, config_path, name) "
                          "classified rather than flagged")
+    ap.add_argument("--family", choices=sorted(FAMILIES), default="bnn",
+                    help="bnn (default) | mr | pt -- selects the wandb project, "
+                         "config directory, TrainConfig source and derived fields")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    fam = FAMILIES[a.family]
+    project = fam["project"]
+    root = os.path.join(os.path.dirname(HERE), fam["dir"])
     if a.check_run:
         if not a.run_id:
             ap.error("--check-run needs the winner's run_id as well")
         import wandb
         api = wandb.Api(timeout=60)
         g = lambda rid: {k: v for k, v in dict(api.run(
-            f"{ENTITY}/{PROJECT}/{rid}").config).items() if not k.startswith("_")}
-        r = api.run(f"{ENTITY}/{PROJECT}/{a.check_run}")
+            f"{ENTITY}/{project}/{rid}").config).items() if not k.startswith("_")}
+        r = api.run(f"{ENTITY}/{project}/{a.check_run}")
         rows = check_run(g(a.check_run), g(a.run_id), a.num_chains,
-                         a.chains_per_gpu)
+                         a.chains_per_gpu, family=a.family)
         print(f"launched run {a.check_run} ({r.state}) vs winner {a.run_id}:")
         for k, w, v, verdict in rows:
             print(f"   {k:28s} winner={w!r:40.40s} run={v!r:40.40s} {verdict}")
@@ -365,27 +519,31 @@ def main():
         ap.error("variant and run_id are required")
 
     import wandb
-    run = wandb.Api(timeout=60).run(f"{ENTITY}/{PROJECT}/{a.run_id}")
+    run = wandb.Api(timeout=60).run(f"{ENTITY}/{project}/{a.run_id}")
     ran = {k: v for k, v in dict(run.config).items() if not k.startswith("_")}
     if ran.get("antmaze_variant", "").replace("-", "_").find(a.variant) < 0:
         sys.exit(f"run {a.run_id} is {ran.get('antmaze_variant')!r}, not {a.variant}")
 
-    path = os.path.join(HERE, f"antmaze_{a.variant}_bnn_antmaze_eval.yaml")
+    path = os.path.join(root, f"antmaze_{a.variant}_{fam['suffix']}_antmaze_eval.yaml")
     old_text = open(path).read()
-    ann = field_types(os.path.join(HERE, "run_bnn_training_antmaze_eval.py"))
-    new_text, changed, added = build(old_text, ran, a.run_id,
-                                     a.num_chains, a.chains_per_gpu, ann)
+    ann = field_types(os.path.join(root, fam["script"]))
+    new_text, changed, added = build(old_text, ran, a.run_id, a.num_chains,
+                                     a.chains_per_gpu, ann, family=a.family)
 
-    print(f"=== {a.variant}: {path}")
+    print(f"=== {a.family.upper()} {a.variant}: {path}")
     print(f"    winner {a.run_id} -> {len(changed)} value(s) changed, "
           f"{len(added)} key(s) pinned explicitly")
     for k, o, n in changed:
         print(f"    CHANGED {k:24s} {o!r} -> {n!r}")
     for k in added:
         print(f"    PINNED  {k:24s} {ran[k]!r}")
-    bad = verify(new_text, old_text, ran, a.num_chains, a.chains_per_gpu, ann)
+    bad = verify(new_text, old_text, ran, a.num_chains, a.chains_per_gpu, ann,
+                 family=a.family)
     print("    VERIFY: " + ("PASS -- every behaviour-relevant key equals what the "
-                            "trial ran, except num_chains/chains_per_gpu"
+                            "trial ran" + (", except num_chains/chains_per_gpu"
+                                           if fam["budget"] else "")
+                            + ("; derived fields left to __post_init__"
+                               if fam["derived"] else "")
                             if not bad else f"FAIL ({len(bad)})"))
     for b in bad:
         print(f"      !! {b}")
