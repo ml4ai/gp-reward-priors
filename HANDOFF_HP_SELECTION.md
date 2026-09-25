@@ -14000,6 +14000,101 @@ least **48** in total, still inside the baselines' 17–66, but it moves toward 
 
 medium_diverse: 5/15, leader `rdtjd999` unchanged, eligibility up to **61%**.
 
+### 4.3.133 large_diverse escalation RESULT — reproduces the winner exactly, and delivers the precision it was for
+
+Run `59ca9913…` finished (5.38 h). Reproduction check:
+`exp/escalation_large_diverse_repro32.txt`.
+
+#### 1. Reproduction: PASS, 15 of 15
+
+Chains 0–31 of the 128-chain run, read with `--num-chains 32`, reproduce winner
+`owlrd69d`'s logged values at the printed precision on **15 of 15 independent
+statistics**. The headline three are CVaR CE 0.3980, SE 0.0041 and margin
++0.0830. Also matched: plug-in and predictive CE, CVaR accuracy, raw and centred
+ESS, centred R-hat, between-chain share, CVaR effective draws and relMCSE, both
+centred drift z-scores, and raw `loc_sd`. A different sampling path would move
+every one of these, so **the production model's first 32 chains ARE the selected
+trial**. This also confirms, on production data, the tool's claim that chains
+are deterministic in (seed, index).
+
+#### 2. The escalation delivered what §4.3.129 predicted
+
+| | 32 ch | **128 ch** | ratio | §4.3.129's expectation |
+|---|---|---|---|---|
+| ESS, centred median | 81.7 | **316.8** | 3.88 | ~4× (3.4× at the 86% measured before) |
+| effective tail draws @0.95 (`0.05·ESS`) | 4.1 | **15.8** | 3.88 | **≥ 10 (§3.2.1) — now MET** |
+| centred CVaR relMCSE, median | 0.154 | **0.093** | 0.60 | ~0.5 |
+| centred CVaR relMCSE, max | 1.79 | **0.61** | 0.34 | — |
+| centred CVaR effective draws | 262 | 767 | 2.92 | — |
+| q05 ESS, centred | 222 | 760 | 3.42 | ~linear |
+| jackknife SE on CVaR CE | 0.0041 | **0.0019** | 0.46 | ~0.5 |
+| **R-hat, centred median** | 1.361 | **1.376** | 1.01 | **expected to RISE (§4.5)** |
+| between-chain share | 0.339 | 0.353 | 1.04 | unchanged |
+| `val_cvar_ce` (0.75) | 0.3980 | 0.3955 | — | same estimand, within 1 SE |
+| `val_cvar_ce` (0.95) | 0.4998 | 0.4942 | — | — |
+| gate 1: `\|log r\|` / `loc_sd` | 0.024 / 0.108 | 0.033 / 0.066 | — | ≤ 0.115 / ≤ 0.155 — **pass** |
+| gate 2 margin | +0.083 | +0.087 | — | **pass** |
+
+- **Precision: delivered.** ESS scaled almost exactly linearly (3.88× for 4×
+  the chains), better than the 86% efficiency §3.2.5 measured. The
+  deployment-tail resolution rule of §3.2.1 is now satisfied, 15.8 effective
+  tail draws against 10. The median relative MC error on each transition's
+  deployed reward fell from **15% to 9%**, and the worst point from **179% to
+  61%**. relMCSE fell by 0.60 rather than the ideal 0.5 because the CVaR-specific
+  effective draws scaled 2.92× (1/√2.92 = 0.585): the tail is harder to resolve
+  than the bulk, as §4.6 anticipates. It is still falling, which is §4.6's
+  condition for the budget being meaningful.
+- **Stability: unchanged, exactly as pre-stated.** R-hat rose slightly
+  (1.361 → 1.376) and the between-chain share is flat. More chains measured the
+  disagreement a little better and did not reduce it (§4.5, §4.3.129 §2).
+- **Nothing moved that should not have.** The CE estimand agrees within one SE.
+  Gate 1 still passes by a wide margin: `|log r|` 0.033 against 0.115, i.e.
+  3.6σ. So §4.3.129 §5's pre-registered "if gate 1 moves" contingency was not
+  triggered. `loc_sd` *fell*, 0.108 → 0.066, as a sharper estimate of a small
+  effect should.
+- **The §4.6 ladder is satisfied from its endpoints.** ESS is ~linear, relMCSE is
+  falling, and `loc_sd` is falling. The 64-chain rung can still be read with
+  `--num-chains 64` if §7 wants the full ladder. It is not needed to accept the
+  budget.
+
+#### 3. A caveat the diagnostic printed, and why its advice is NOT taken
+
+The reproduction output warns that the integrated autocorrelation time, **τ ≈
+23.5 kept draws, is only ~2.6× shorter than the 60-draw chains**. So τ is
+**estimated low and ESS estimated HIGH**, and it advises raising `num_samples`.
+
+- **The caveat is real, and it is not new.** The same horizon produced the same
+  warning on the sweep trial, as the 15/15 match implies. It applies to every
+  ESS in round 5.
+- **The ratios are robust to it; the absolutes are not.** The 3.88× scaling
+  compares two runs at the *same* horizon, so a common bias cancels. The absolute
+  **ESS 317 may be optimistic**, by an amount this horizon cannot measure. Against
+  the 200 target it has a 1.58× margin, which absorbs a moderate bias. That is a
+  judgement, not a measurement, and §7 should say so.
+- **Raising `num_samples` is ruled out.** It would break the pre-registered
+  horizon rule (§4.3.129 §2): production draws per chain must equal selection
+  draws per chain, the rule round 1 was lost to. Longer chains are a
+  **sampler-design question for a future round**, the same one R-hat raises.
+  This caveat is a second reason to ask it.
+
+#### 4. Planning: 5.4 h per 128-chain model, not 3.8
+
+Wall-clock was **5.38 h** against the winner trial's 3.77 h. Sampling matched,
+as §4.3.129 §6a predicted, and the extra **~1.6 h (43%)** is the 128-chain
+diagnostic tail. **Seeds 0–10 × 4 variants = 44 such models, at one 4-GPU run
+at a time, is ~10 days, not ~1 week.** Overlapping one run's diagnostic tail with
+the next run's sampling could recover part of that, if the tail is not
+GPU-bound. Unmeasured.
+
+#### 5. What this unblocks
+
+- **large_play's escalation.** Same procedure; targets 0.470096, SE 0.00795,
+  margin +0.1137 from `q45qbz8h`.
+- **16a for large_diverse.** `ess_cen` 317 ≥ 200 clears its resolution gate
+  (§4.3.123 §4), so its chain ladder can run on this output. The command is in
+  §4.3.123 §6 with `R=exp/reward_learning/antmaze_large_diverse_bnn_eval_0`,
+  `TOT=128`. Read it with §3's caveat: the 200 threshold is itself an ESS.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16175,6 +16270,12 @@ blind. Record it as a future-round candidate.
     still-running agent.** Two of four sweeps done, both inside the baselines'
     17–66 trial range. medium_diverse now has the only **separated** winner
     (`rdtjd999`, w5×d1, 1.2× joint 2·SE — narrow).
+18o. ✅ **large_diverse escalation DONE and VERIFIED (§4.3.133).** Reproduces
+    `owlrd69d` on 15/15 statistics. ESS 82 → 317 (3.88×), effective tail draws at
+    0.95 **4.1 → 15.8 (≥ 10 met)**, relMCSE 15% → 9%. R-hat rose slightly, as
+    pre-stated, and all gates still pass. **Planning correction: 5.4 h per
+    128-chain model**, so seeds 0–10 ≈ 10 days, not a week. **16a is now
+    runnable for large_diverse.** Next: large_play's escalation.
 18m. ✅ **GO GIVEN 2026-09-24: 128 chains, and seeds 1–10 also at 128.**
     Scheduling (§4.3.129 §6a): **run the two escalations ONE AT A TIME at 32
     chains/GPU on the 4 free GPUs**, i.e. ~192 of 255 cores alongside the two
