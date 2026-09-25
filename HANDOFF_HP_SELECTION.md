@@ -14095,6 +14095,79 @@ GPU-bound. Unmeasured.
   §4.3.123 §6 with `R=exp/reward_learning/antmaze_large_diverse_bnn_eval_0`,
   `TOT=128`. Read it with §3's caveat: the 200 threshold is itself an ESS.
 
+### 4.3.134 large_play escalation VERIFIED — both large production seed-0 models are done
+
+Run `ec14bdbe-e2e0-4f1d-a0ac-39df43b93362`, 5.56 h. Read with the new
+`scripts_bnn/escalation_readout.py`, which bundles §4.3.131's config check,
+§4.3.133's 15-statistic reproduction and the precision table. It is
+self-tested, and it re-verifies large_diverse unchanged.
+
+| | large_diverse | **large_play** |
+|---|---|---|
+| config vs winner | PASS | **PASS** (`width` 5 → 32 is the logging artefact) |
+| reproduction, chains 0–31 | 15/15 | **15/15** |
+| ESS centred, 32 → 128 ch | 81.7 → 316.8 (×3.88) | **71.8 → 282.4 (×3.93)** |
+| effective tail draws @0.95 | 4.1 → 15.8 | **3.6 → 14.1 (≥ 10 met)** |
+| CVaR relMCSE median | 0.154 → 0.093 | **0.177 → 0.106** |
+| jackknife SE | 0.0041 → 0.0019 | **0.0079 → 0.0045** |
+| R-hat centred (pre-stated to rise) | 1.361 → 1.376 | **1.444 → 1.456** |
+| `val_cvar_ce` @0.75 | 0.3980 → 0.3955 | **0.4701 → 0.4793** |
+| `val_cvar_ce` @0.95 | 0.4998 → 0.4942 | **0.5988 → 0.6286** |
+| gates at 128 | all pass | **all pass** (`\|log r\|` 0.035) |
+| wall-clock | 5.38 h | **5.56 h** |
+
+**Both large variants now have a verified seed-0 production model.**
+
+#### Which CE §7 reports: the escalated one
+
+large_play's CE moved **up by 0.0092 (1.2 SE of the trial)**; large_diverse's
+moved **down by 0.0025 (0.6 SE)**. Both are within 2 SE, and opposite signs
+across two cases give no evidence of systematic selection optimism. But the
+principle should be stated. **The sweep value was selected as the minimum of a
+statistically tied set (§7.4 A), so it is optimistically biased by construction.**
+The escalation's 96 additional chains are a partly independent re-measurement.
+**§7 should report the escalated (production) CE as the model's validation CE**,
+not the selection value, and note which is which. At the deployment level the
+large_play shift is larger (0.5988 → 0.6286), which is the number §7.3's
+amendment and 16a bear on.
+
+#### `--check-run` fixed for seeds 1–10 BEFORE they launch
+
+A seeds 1–10 run legitimately differs from the winner in seed, output dir and
+data split, and `train_rewards.sh` passes **absolute** `data_root` and
+`measurement_dataset` where the sweep used relative ones. As written,
+`check_run` would have flagged every one of those. It now:
+
+- **infers** whether the run is the winner's seed;
+- classifies seed, split and output dir as **expected** on other seeds (and still
+  as **UNEXPECTED** on seed 0);
+- classifies **same file, different spelling** paths as artefacts.
+
+It still fails a sampler change or a different measurement file (self-tested).
+
+#### Seeds 1–10 for the large variants — two `train_rewards.sh` defaults that would do damage
+
+The large variants' seeds 1–10 need no further decision. The configs are final,
+and training them now uses GPUs 2–5 while the medium sweeps finish. **But two
+defaults must be overridden:**
+
+1. **`GPU_LIST` defaults to `"0 1 2 3 4 5"`.** At 4 GPUs/job the first slot is
+   GPUs **0–3**, on top of the live medium sweeps. Pass **`"2 3 4 5"`**.
+2. **`SEEDS` defaults to `"0 1 … 10"`.** Seed 0 would **retrain over the verified
+   escalation**. Pass **`"1 2 3 4 5 6 7 8 9 10"`**.
+
+Also: `NUM_CHAINS=128` (the script defaults to 8 and computes `chains_per_gpu`
+from it, so 128 with PACK 4 gives 32/GPU, matching the config);
+`VARIANTS="large_play large_diverse"`; and **item 11 first**. Empty the `_1`–`_10`
+directories, for §4.3.130 §3's reason: a crashed run must not leave an older
+model's chains looking complete. **Never `_0`.** Budget: 20 jobs, one at a time
+at ~5.5 h, so **~4.6 days**, at ~192 of 255 cores alongside the sweeps.
+
+#### 16a is now runnable for BOTH large variants
+
+ESS 317 and 282 both clear its 200 resolution gate (§4.3.123 §4), subject to
+§4.3.133 §3's caveat that the 200 is itself an ESS.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16270,6 +16343,14 @@ blind. Record it as a future-round candidate.
     still-running agent.** Two of four sweeps done, both inside the baselines'
     17–66 trial range. medium_diverse now has the only **separated** winner
     (`rdtjd999`, w5×d1, 1.2× joint 2·SE — narrow).
+18p. ✅ **large_play escalation DONE and VERIFIED (§4.3.134)**: config PASS,
+    15/15 reproduction, ESS 72 → 282, tail draws 3.6 → 14.1, all gates pass.
+    **Both large seed-0 production models are done.** `escalation_readout.py`
+    now does the whole check in one command. **§7 reports the escalated CE**, not
+    the selection value. **Next: large seeds 1–10** via `train_rewards.sh`, with
+    `GPU_LIST "2 3 4 5"` and `SEEDS 1–10`. Both defaults would do damage: GPUs
+    0–3 hit the live sweeps, and seed 0 overwrites the escalation. Empty
+    `_1`–`_10` first. ~4.6 days.
 18o. ✅ **large_diverse escalation DONE and VERIFIED (§4.3.133).** Reproduces
     `owlrd69d` on 15/15 statistics. ESS 82 → 317 (3.88×), effective tail draws at
     0.95 **4.1 → 15.8 (≥ 10 met)**, relMCSE 15% → 9%. R-hat rose slightly, as

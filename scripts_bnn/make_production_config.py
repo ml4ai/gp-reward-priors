@@ -201,14 +201,35 @@ EXPECTED_RUN_DIFFS = {"num_chains", "chains_per_gpu", "name", "config_path",
                       "test_dataset"}
 
 
+PATH_KEYS = {"data_root", "measurement_dataset", "train_dataset", "val_dataset",
+             "test_dataset", "OUT_DIR"}
+SEED_KEYS = {"seed", "OUT_DIR", "train_dataset", "val_dataset", "test_dataset"}
+
+
+def _same_path(a, b):
+    """Same file written differently: train_rewards.sh passes ABSOLUTE
+    data_root/measurement_dataset, a sweep leaves them repo-relative."""
+    if not (isinstance(a, str) and isinstance(b, str)):
+        return False
+    a2, b2 = a.lstrip("./"), b.lstrip("./")
+    return a2 == b2 or a2.endswith("/" + b2) or b2.endswith("/" + a2)
+
+
 def _norm_width(w):
     """Exponent 4-7 and expanded 16-128 never overlap, so this is unambiguous."""
     return int(round(__import__("math").log2(w))) if w and w >= 16 else w
 
 
-def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=True):
+def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=None):
     """[(key, winner, run, verdict)] for every differing key; verdict is
-    'expected', 'artefact' or 'UNEXPECTED'."""
+    'expected', 'artefact' or 'UNEXPECTED'.
+
+    same_seed=None infers it: a seed-0 escalation must match the winner's seed,
+    output dir and data split exactly; a seeds 1-10 production run legitimately
+    differs in exactly those, and in nothing else.
+    """
+    if same_seed is None:
+        same_seed = run_cfg.get("seed") == winner_cfg.get("seed")
     out = []
     for k in sorted(set(run_cfg) | set(winner_cfg)):
         a, b = winner_cfg.get(k), run_cfg.get(k)
@@ -218,17 +239,18 @@ def check_run(run_cfg, winner_cfg, num_chains, cpg, same_seed=True):
             continue
         if _same(a, b):
             continue
+        if k in PATH_KEYS and _same_path(a, b):
+            out.append((k, a, b, "artefact"))          # same file, other spelling
+            continue
         if k == "num_chains":
-            ok = b == num_chains
+            ok, tag = b == num_chains, "expected"
         elif k == "chains_per_gpu":
-            ok = b == cpg
-        elif k in ("seed", "OUT_DIR", "train_dataset", "val_dataset",
-                   "test_dataset"):
-            ok = not same_seed        # must match for the seed-0 escalation
+            ok, tag = b == cpg, "expected"
+        elif k in SEED_KEYS:
+            ok, tag = not same_seed, "expected (other seed)"
         else:
-            ok = k in EXPECTED_RUN_DIFFS
-        out.append((k, a, b, ("expected" if k in ("num_chains", "chains_per_gpu")
-                              else "artefact") if ok else "UNEXPECTED"))
+            ok, tag = k in EXPECTED_RUN_DIFFS, "artefact"
+        out.append((k, a, b, tag if ok else "UNEXPECTED"))
     return out
 
 
@@ -280,10 +302,26 @@ def selftest():
            "config_path": None, "name": "b", "mdecay": 0.03}
     assert all(v != "UNEXPECTED" for *_, v in check_run(run, win, 128, 32))
     # ...and a real difference, a wrong budget, or a double-expanded width must not
-    for bad in ({"mdecay": 0.3}, {"num_chains": 96}, {"width": 65536},
-                {"seed": 1}):
+    for bad in ({"mdecay": 0.3}, {"num_chains": 96}, {"width": 65536}):
         assert any(v == "UNEXPECTED" for *_, v in
                    check_run(dict(run, **bad), win, 128, 32)), bad
+    # a seed-0 run whose OUT_DIR differs is wrong...
+    assert any(v == "UNEXPECTED" for *_, v in check_run(
+        dict(run, OUT_DIR="./x_1"), dict(win, OUT_DIR="./x_0"), 128, 32))
+    # ...but a seeds 1-10 production run (train_rewards.sh: other seed, other
+    # split, ABSOLUTE data paths) must read clean, while a sampler change in it
+    # must still be caught
+    w0 = dict(win, OUT_DIR="./exp/m_0", data_root="data/antmaze",
+              measurement_dataset="data/antmaze/v/t.hdf5",
+              val_dataset="data/antmaze/v/eval/seed_0/v_pref_val_0.hdf5")
+    r3 = dict(run, seed=3, OUT_DIR="./exp/m_3", data_root="/home/u/g/data/antmaze",
+              measurement_dataset="/home/u/g/data/antmaze/v/t.hdf5",
+              val_dataset="/home/u/g/data/antmaze/v/eval/seed_3/v_pref_val_3.hdf5")
+    assert all(v != "UNEXPECTED" for *_, v in check_run(r3, w0, 128, 32))
+    assert any(v == "UNEXPECTED" for *_, v in
+               check_run(dict(r3, mdecay=0.3), w0, 128, 32))
+    assert any(v == "UNEXPECTED" for *_, v in check_run(
+        dict(r3, measurement_dataset="/home/u/g/data/OTHER.hdf5"), w0, 128, 32))
     print("selftest OK")
     return 0
 
