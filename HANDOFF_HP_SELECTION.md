@@ -13894,6 +13894,14 @@ untouched**, since their sweeps are live.
 
 #### 3. What the seed-0 directory holds, and why it must be EMPTIED first
 
+> ❌ **Correction (§4.3.135 §1):** the directory the sweep trials wrote to is
+> `gp_reward-priors/exp/reward_learning/…_0`, the sweeps' **scratch** directory.
+> The **production** directory IQL reads is `~/iqlpref/exp/reward_learning/…_0`,
+> because a run's `chdir("..")` is relative to where it was launched. The
+> escalations, launched from `scripts_bnn`, landed in the scratch directory and
+> must be moved. The emptying argument below still holds for any directory a
+> model is written into.
+
 The sweep trials ran with `OUT_DIR …/antmaze_<variant>_bnn_eval_0`, i.e. **the
 seed-0 production directory**, and each trial overwrote the one before. So that
 directory holds the **last** trial's 32 chains, a post-trigger, discardable
@@ -14160,13 +14168,117 @@ Also: `NUM_CHAINS=128` (the script defaults to 8 and computes `chains_per_gpu`
 from it, so 128 with PACK 4 gives 32/GPU, matching the config);
 `VARIANTS="large_play large_diverse"`; and **item 11 first**. Empty the `_1`–`_10`
 directories, for §4.3.130 §3's reason: a crashed run must not leave an older
-model's chains looking complete. **Never `_0`.** Budget: 20 jobs, one at a time
+model's chains looking complete. **Never `_0`.**
+
+> ❌ **CORRECTED 2026-09-25 (§4.3.135 §1): the directories to empty are under
+> `~/iqlpref/exp/reward_learning/`, NOT `gp_reward-priors/exp/reward_learning/`.**
+> `train_rewards.sh`'s runs `chdir` to `~/iqlpref`. The command first handed over
+> here targeted `gp_reward-priors/exp/…`, a harmless no-op that would have left
+> the real targets uncleared. Also note §4.3.135 §3's order: MR/PT first, after
+> their configs are regenerated. Budget: 20 jobs, one at a time
 at ~5.5 h, so **~4.6 days**, at ~192 of 255 cores alongside the sweeps.
 
 #### 16a is now runnable for BOTH large variants
 
 ESS 317 and 282 both clear its 200 resolution gate (§4.3.123 §4), subject to
 §4.3.133 §3's caveat that the 200 is itself an ESS.
+
+### 4.3.135 Where models actually land, a wrong delete path, and ALL EIGHT MR/PT production configs are stale
+
+2026-09-25. The user pointed out that `train_rewards.sh` writes to
+`~/iqlpref/exp/reward_learning`, where the IQL sweeps read. Checked, and correct.
+Three corrections follow, one of them blocking.
+
+#### 1. The output directory depends on WHERE a run is launched from
+
+Every run script does `os.chdir("..")` at import, **relative to the working
+directory** (`run_bnn_training_antmaze_eval.py:104`, and line 15 of the MR and PT
+scripts). The config's `OUT_DIR: ./exp/reward_learning/…` then resolves
+differently:
+
+| launched from | cwd after `chdir("..")` | model lands in |
+|---|---|---|
+| `gp_reward-priors/scripts_bnn` — every sweep trial, and §4.3.130's escalation commands | `gp_reward-priors` | `gp_reward-priors/exp/reward_learning/` |
+| `train_rewards.sh`, which `cd`s to `gp_reward-priors` | `~/iqlpref` | **`~/iqlpref/exp/reward_learning/`** — where IQL reads (`bnn_sweeps/*.yaml` `reward_model_root`) |
+
+This is why `train_rewards.sh` passes an **absolute** `--data_root` and
+`--measurement_dataset`: after its `chdir` the relative data paths would resolve
+under `~/iqlpref`.
+
+**Consequences:**
+
+- **The two escalations are in the wrong place for IQL.** They sit in
+  `gp_reward-priors/exp/reward_learning/antmaze_large_*_bnn_eval_0` and must be
+  **moved** to `~/iqlpref/exp/reward_learning/`. Nothing about them depends on
+  the path: IQL infers the architecture from the weights, and the label cache
+  keys on the directory basename and relative inventory. Both are unchanged by a
+  move.
+- **The target very likely already exists and holds an OLDER production model.**
+  §4.3.130 §3 called the sweeps' directory "the seed-0 production directory".
+  **Wrong**: it is the sweeps' scratch directory, and the production directory is
+  the `~/iqlpref` one. So the move must **replace** the target, never merge into
+  it. `mv` into an existing directory nests the source inside it, and stale
+  chains from the old model would sit beside the new ones.
+- **§4.3.134's seeds 1–10 delete command targeted the wrong directory**
+  (`gp_reward-priors/exp/…`). It would have been a harmless no-op, but it would
+  **not** have cleared the `~/iqlpref/exp/…` directories `train_rewards.sh` writes
+  to, and its `ls` would have shown nothing and falsely reassured. Corrected there.
+- **After the move, point 16a and `precompute_labels.py` at
+  `../exp/reward_learning/…`** when running from `gp_reward-priors`. The
+  `config.yaml` inside each run uses repo-relative data paths, which resolve
+  from `gp_reward-priors`.
+
+#### 2. BLOCKING: all eight MR/PT production configs still hold OLD winners
+
+The user's plan is to run `train_rewards.sh` for MR and PT with the default
+`SEEDS` 0–10, so the winning configuration gets regenerated at seed 0. **Right in
+principle**: MR/PT have no escalation, so their seed-0 production model must be
+retrained. **But the files it would train from are stale.** Diffed field by field
+against each completed baseline winner's recorded wandb config (§4.3.108's table):
+
+| family | variant | winner | what the production FILE holds instead |
+|---|---|---|---|
+| MR | medium_play | `a4qo4g4i` w7 d4 | w**8** d**5**, lr 6.2e-3 (winner 4.1e-4) |
+| MR | medium_diverse | `p2f7p8dv` w4 d1 | w**6**, lr 4.8e-3 (winner 1.3e-3) |
+| MR | large_play | `c898c0xe` w7 d4 | w**9**, lr 9.4e-3 (winner 6.4e-5) |
+| MR | large_diverse | `s8nbeehf` w7 d2 | d**3**, lr 5.8e-3 (winner 5.6e-4) |
+| PT | medium_play | `giab551o` embd 5 head 3 L4 | embd **7** head **7** L**1**, lr 8.6e-3 (winner 2.0e-5) |
+| PT | medium_diverse | `rupj57fq` embd 3 head 5 L2 | embd **6** head **7**, lr 1.4e-5 (winner 8.9e-3) |
+| PT | large_play | `cyrngs49` embd 5 head 3 L2 | embd **6** head **6**, lr 2.3e-3 (winner 1.7e-5) |
+| PT | large_diverse | `xokkypz7` embd 5 head 5 L3 | embd **8** head **6** L**1**, lr 7.6e-3 (winner 1.3e-3) |
+
+These are **pre-§3.2.16 values**: widths 8–9 and embeddings 6–8 lie *outside*
+the current declared ranges. **Running `train_rewards.sh mr`/`pt` now would
+silently train the old configurations for all 11 seeds**, and nothing would
+refuse: none of the files carries a `SUPERSEDED-ROUND1` marker. Item 10 named
+only "the four production configs" (BNN), and the baselines' completed winners
+(2026-09-16) were never transcribed. **A gap in the plan, now closed as item 10b.**
+
+- `select_split`: the winners ran `test`, and the files rely on the `TrainConfig`
+  default, also `test` (§4.3.107). Consistent, but it should be **pinned**, as
+  the BNN tool pins code defaults.
+- PT's `pref_attn_embd_dim`/`intermediate_dim` are `None` in the files and 8–128
+  in the winners' wandb configs. **Probably** derived at runtime from
+  `embd_dim`/`head_dim` and logged after derivation, the PT analogue of the BNN
+  `width` artefact (§4.3.131). **To be confirmed in the code before
+  regeneration**, since writing a derived field explicitly could override the
+  derivation.
+
+#### 3. The corrected order
+
+1. **Move the two BNN escalations** into `~/iqlpref/exp/reward_learning/`,
+   replacing the old seed-0 directories. Independent of everything below.
+2. **Item 10b: regenerate the eight MR/PT production configs** from the winners'
+   recorded configs, with the same verify-before-write discipline as §4.3.130.
+   `make_production_config.py` needs MR/PT support first: other projects, other
+   script paths, and PT's derived fields.
+3. **Item 11 for MR/PT**: empty `~/iqlpref/exp/reward_learning/antmaze_*_{mr,pt}_eval_{0..10}`.
+   For MR this is **not only** crash safety. The MR ensemble globs *every*
+   `checkpoint_*.pt` past burn-in, so stale checkpoints from an older run can mix
+   in **even when the new run succeeds**, if the two runs' eval epochs differ.
+4. **Then `train_rewards.sh mr` and `pt` with `SEEDS` 0–10**, as the user planned,
+   on **`GPU_LIST "2 3 4 5"`** while the medium BNN sweeps hold GPUs 0–1.
+5. BNN large seeds 1–10 as §4.3.134, with the corrected delete path.
 
 ### 4.4 Procedure
 
@@ -16214,6 +16326,14 @@ blind. Record it as a future-round candidate.
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
+10b. ⛔ **NEW, BLOCKING MR/PT training (§4.3.135 §2): all eight MR/PT production
+   configs hold OLD, pre-§3.2.16 winners** (MR widths 8–9, PT embeddings 6–8,
+   wrong learning rates), not the completed round-2 baseline winners of
+   §4.3.108. No `SUPERSEDED` marker, so `train_rewards.sh mr/pt` would silently
+   train the old configurations for all 11 seeds. **Regenerate them from the
+   winners' recorded configs first.** That needs `make_production_config.py`
+   extended to MR/PT, and PT's derived `pref_attn_embd_dim`/`intermediate_dim`
+   confirmed in the code.
 10. 🟡 **HALF DONE (§4.3.130)** — large_play and large_diverse regenerated from
    the winners' **recorded wandb configs** by
    `scripts_bnn/make_production_config.py`: 128 chains @ 32/GPU, verified field
