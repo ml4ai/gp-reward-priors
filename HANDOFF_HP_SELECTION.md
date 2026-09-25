@@ -14386,6 +14386,82 @@ BNN large configs re-verify with 0 changes after the refactor.
 3. `--check-run` each family's first job, e.g. `--family mr medium_play a4qo4g4i
    --check-run <run_id>`. It now handles MR/PT seeds 1–10 and absolute paths.
 
+### 4.3.138 MR/PT production reward models (seeds 0–10) VERIFIED — MR bit-exact, PT not quite
+
+2026-09-25. `train_rewards.sh mr` then `pt`, GPUs 2–5, from the §4.3.137 configs.
+Read with the new `scripts_bnn/production_readout.py <family>` (self-tested; also
+usable for BNN seeds 1–10).
+
+#### 1. Complete, correctly configured, healthy: 88 of 88
+
+**44 MR + 44 PT runs, all finished, exactly one per (variant, seed), no
+duplicates.** Every run passes `check_run` against its winner. Seed, split and
+`checkpoints_path` differ as expected, and the absolute paths are classified as
+artefacts. Every run has `reload_check_ok = 1`: the checkpoint on disk is the one
+the test split selected.
+
+#### 2. Seed-0 reproduction: MR bit-exact; PT differs, and once enough to change the checkpoint
+
+The seed-0 production run re-runs the winner's configuration at the winner's
+seed, so it should reproduce the winner.
+
+| variant | MR | PT `\|Δ eval_loss_at_selected\|` | PT selected epoch |
+|---|---|---|---|
+| medium_play | **bit-exact** | 6.3e-7 | same |
+| medium_diverse | **bit-exact** | **8.8e-3** (0.3524 → 0.3611) | **18 → 13** |
+| large_play | **bit-exact** | 1.9e-6 | same |
+| large_diverse | **bit-exact** | 2.0e-4 | same |
+
+- **MR's production seed-0 models ARE the selected models**, as for BNN's 32-chain
+  subset (§4.3.133–§4.3.134).
+- **PT training is not bitwise reproducible on GPU.** Three variants drift at
+  floating-point level with the same selected checkpoint. In **medium_diverse the
+  drift tipped a near-tie in the test-split checkpoint selection**, from epoch 18
+  to 13, costing 0.0088 in validation loss. That winner (`rupj57fq`) is the
+  configuration most exposed to it: lr 8.9e-3 and a selection at epoch 18 of
+  5,000.
+- **Magnitude in context:** 0.0088 is about **0.13 of that configuration's
+  seed-to-seed sd** (0.066). It is inside the run-to-run variation the evaluation
+  already absorbs, not a different model class.
+- **No remedy is warranted, and none is available.** The sweep winner's own
+  checkpoint no longer exists: sweep trials overwrote each other in the scratch
+  directory (§4.3.135). Forcing determinism now would make production diverge
+  from how every sweep trial ran. **Selection chose a configuration; production
+  retrains it.** For MR and BNN the retraining happens to be bit-exact; for PT
+  it is not.
+
+> **§7 must say so:** MR and BNN production models reproduce their selection
+> trials exactly (MR bitwise; BNN on 15/15 statistics of chains 0–31). PT does
+> not, because of GPU non-determinism in its training. The seed-0 production PT
+> models match their selection trials to ≤ 2×10⁻⁴ in validation loss for three
+> variants. For medium_diverse the test-selected checkpoint moved from epoch 18
+> to 13 (+0.0088), about 0.13 of that configuration's seed-to-seed sd.
+
+#### 3. No seed-level selection optimism, and why
+
+Checked because the spread table suggested it. **It did not hold.** Seed 0's rank
+among the 11 seeds, by `eval_loss_at_selected`:
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR | 2 | 8 | 9 | 5 |
+| PT | 4 | 8 | 5 | 2 |
+
+Seed 0 sits on both sides of the other seeds' mean (−1.3 sd to +1.0 sd). **The data
+split dominates.** The same configuration's validation loss varies **2–5×**
+across seeds (MR medium_play 0.133–0.616, PT large_play 0.169–0.503), which
+swamps whatever advantage a configuration gained by being selected on seed 0.
+This supports the §1 design of reporting seeds 1–10 as the evaluation. It also
+says **the split, not the model, is the largest source of variance** the IQL
+comparison will face.
+
+#### 4. What this unblocks
+
+**MR and PT reward models are done for all seeds.** Item 12's remaining
+reward-model work is BNN: large seeds 1–10 now (§4.3.134, with the corrected
+`~/iqlpref/exp/…` paths of §4.3.135), and the medium variants after their sweeps
+stop and escalate.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16432,6 +16508,14 @@ blind. Record it as a future-round candidate.
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
+12a. ✅ **MR + PT reward models, seeds 0–10, TRAINED and VERIFIED (§4.3.138).**
+   88/88 complete, configured as the winners, and healthy. **MR seed 0 is
+   bit-exact** with its winners. **PT is not**: GPU non-determinism, ≤ 2e-4 on
+   three variants, but medium_diverse's checkpoint moved from epoch 18 to 13
+   (+0.0088, 0.13 seed-sd). That is a §7 disclosure, with no remedy warranted.
+   No seed-0 selection optimism: the data split dominates (2–5× across seeds).
+   Read with `production_readout.py mr|pt`. **Remaining reward models: BNN** —
+   large seeds 1–10 now, medium after their sweeps stop.
 10b. ✅ **DONE 2026-09-25 (§4.3.137)** — all eight MR/PT production configs
    regenerated from the round-2 baseline winners, verified, and idempotent.
    PT's derived fields are left to `__post_init__`, and `select_split: test` is
