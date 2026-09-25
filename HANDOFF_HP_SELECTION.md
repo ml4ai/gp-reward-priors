@@ -14280,6 +14280,53 @@ only "the four production configs" (BNN), and the baselines' completed winners
    on **`GPU_LIST "2 3 4 5"`** while the medium BNN sweeps hold GPUs 0–1.
 5. BNN large seeds 1–10 as §4.3.134, with the corrected delete path.
 
+### 4.3.136 Keep the escalation chains — label caching's STORAGE rationale is moot at round-5 sizes
+
+2026-09-25. The user asked whether to cache the two escalation models' labels
+and delete their chains now to save space, or keep the chains.
+
+**There is no space to save.** Weights are saved as float32 copies of the
+parameters (`f_pref_net._save_sampled_weights`), so the chains cost about draws ×
+params × 4 B. **Measured on the box with `du -sh`: the large_diverse escalation
+is 33 MB and large_play 107 MB**, whole run directories. That is ~1.5–1.7× the
+chain-only estimates (19 and 71 MB), consistent with logs, diagnostic outputs and
+serialisation overhead.
+
+| | params | chain-only estimate | **measured, whole dir** |
+|---|---|---|---|
+| large_diverse | 625 | ~19 MB | **33 MB** |
+| large_play | 2,305 | ~71 MB | **107 MB** |
+| **all 44 BNN production models** (11 seeds × winners 625 / 2,305 / 2,497 / 1,249) | — | ~2.3 GB | **~4 GB** by the measured ratio |
+
+§3.2.9's "up to 5 TB" was computed for the **old** search space's largest
+architecture (width 1024, depth 6, 5.3M params, 21 MB per draw). §3.2.16's
+ranges, and winners that all sit in the bottom decade (§4.3.128), removed it.
+
+**Decision (user, 2026-09-25): keep the chains.** Three reasons that do not
+depend on space:
+
+1. **16a needs them.** Its pre-registered ladder subsets the escalation run's
+   *chains* (`--num-chains`, §4.3.123 as amended). Cached labels cannot supply
+   subsets.
+2. **They are the reported production models.** Every sampler diagnostic the
+   write-up may need runs on chains: §4.5's `--worst-k` spatial reading of R-hat,
+   the optional 64-chain §4.6 rung, and any reviewer question. Labels answer
+   none of these.
+3. **Labels are only valid under the current labelling maths.** If
+   `LOGIC_VERSION` ever has to change (§4.3.124), chains can be relabelled and
+   labels cannot.
+
+**Label caching stays worth doing, for its OTHER two reasons**: stage 4's 16 IQL
+runs per cell share 2 labellings instead of repeating the forward pass, and a
+128-chain labelling peaks at ~61 GB of RAM (§4.3.129 §5), which should happen
+once per (model, α), not per IQL run. **There is no reason to precompute now.**
+Stage 4 needs every family's seed-0 model, and the medium BNN escalations do not
+exist yet. Precompute before stage 4, as item 12 orders.
+
+**Deleting chains is now OPTIONAL and deferred indefinitely.** The completeness
+guard (`--emit-rm --require-alphas 0.95,0.0`) stays for anyone who later needs the
+space.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16410,6 +16457,13 @@ blind. Record it as a future-round candidate.
     changed. **`verify_label_cache.py` PASSED on 2026-09-21** — cached labels are
     bit-identical to recomputed ones.
     `precompute_labels.py` verified working 2026-09-21.
+    > 📌 **2026-09-25 (§4.3.136): the STORAGE rationale is moot at round-5 model
+    > sizes.** The escalations measure 33 MB and 107 MB, and the whole BNN
+    > production set is ~4 GB, not ~5 TB. **Decision: keep the chains.** 16a,
+    > the write-up's diagnostics and any future relabelling need them. Caching
+    > still pays for compute (stage 4 shares 2 labellings) and memory (~61 GB
+    > peak once per model, not per IQL run). Deleting chains is optional and
+    > deferred.
     > 🅿️ **PARKED — nothing to cache yet, and nothing to delete.** The chains this
     > exists for are the **production reward models at seeds 0–10** (item 12),
     > which do not exist until round 5 names winners. Sweep trials overwrite each
