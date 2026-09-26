@@ -14537,6 +14537,29 @@ the round-2 winners (§4.3.137–§4.3.138), so their stage 4 must be **re-run**
 - **Then evaluation:** `winners` on each finished stage-4 sweep, then
   `eval --write`, then the existing `<family>_sweeps/launch.sh`.
 
+### 4.3.140 ROUND 5 at 80 live-sweep trials — both leaders changed, by noise, within one architecture each
+
+Checked 2026-09-25. medium_play **41** trials, medium_diverse **39**, both running.
+
+| sweep | new CE leader | beats the old leader by | architecture | `J` counter |
+|---|---|---|---|---|
+| medium_play | `ez84hubu` (trial 41), 0.3734 ± 0.0040 | **0.04×** joint 2·SE | w6×d1, same as before | **8/15**, not reset |
+| medium_diverse | `pz1r3y9f` (trial 33), 0.4044 ± 0.0032 | **0.08×** joint 2·SE | w5×d1, same as before | 6/15, reset at 33 |
+
+**§7.4 A's reading in real time:** the selected *trial* changes on noise far below
+the objective's resolution, and the *architecture* does not move.
+
+**medium_play is §4.3.132 in mirror image.** There, a trial improved `J` without
+moving the CE winner and reset the counter. Here, a trial moved the CE winner
+(0.3738 → 0.3734) without improving `J` (its `J`, 0.3787, is above the
+best-so-far 0.3741), so **the counter did NOT reset**. The two rules track
+different metrics and can each move without the other. Neither affects the
+architecture.
+
+**Projections:** both need 7–9 more non-improving `J` trials, so the earliest
+fire is at **trial 48** for each. Both are well inside the baselines' 17–66
+(18j). Eligibility 88% (medium_play) and 69% (medium_diverse).
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
