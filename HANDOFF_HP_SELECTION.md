@@ -16508,6 +16508,14 @@ blind. Record it as a future-round candidate.
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
+12b. 🔄 **BNN large seeds 1–10 LAUNCHED 2026-09-25** — `train_rewards.sh bnn "2 3 4 5"
+   4`, `NUM_CHAINS=128`, 20 jobs one at a time into `~/iqlpref/exp/reward_learning/`,
+   ~4.6 days. `--check-run` on the first job **passed** (user-confirmed): it is the
+   winner's configuration apart from seed, split and path. **When it finishes:**
+   `production_readout.py bnn --variants large_play,large_diverse`. Its seed-0 row
+   is the escalation, already verified by `escalation_readout.py`. Gate verdicts
+   for seeds 1–10 are REPORTED, not enforced, since eligibility is decided at
+   sweep budget (§3.2.9).
 12a. ✅ **MR + PT reward models, seeds 0–10, TRAINED and VERIFIED (§4.3.138).**
    88/88 complete, configured as the winners, and healthy. **MR seed 0 is
    bit-exact** with its winners. **PT is not**: GPU non-determinism, ≤ 2e-4 on
