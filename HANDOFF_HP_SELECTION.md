@@ -14462,6 +14462,81 @@ reward-model work is BNN: large seeds 1–10 now (§4.3.134, with the corrected
 `~/iqlpref/exp/…` paths of §4.3.135), and the medium variants after their sweeps
 stop and escalate.
 
+### 4.3.139 To-do 18n: the Phase-2 sweep generator — and item F was only HALF-WIRED
+
+2026-09-25. Asked for the seeds 1–10 IQL launcher. `PIPELINE.md` defines Phase 2b
+as a hand-flip of the 24 stage-4 sweep files (set the winning index, restore seeds
+1–10, "nothing else changes"). So the launcher inherits whatever those files say.
+**Audited first. They were wrong in two ways.**
+
+#### 1. BLOCKING, found and fixed: `centre_draws` was set in NO deployment file
+
+§4.3.114 decided centring in **both** paths, and explicitly that
+*"MR-ensemble-CVaR must be centred too, or §3.1's cross-family comparability
+[breaks]"*. Its WIRED table shows what was actually done:
+
+- `iql_eval.py`/`iql.py` gained the flag, **default `False`**;
+- the four BNN **training** configs set `centre_draws: true`;
+- `launch_hp_sweeps.sh` guards the **training** side.
+
+**Nothing turned it on for deployment.** No `bnn_sweeps`/`ensemble_sweeps` file and
+no `configs/offline/iql/antmaze/*.yaml` sets it. So **every BNN and MR-ensemble
+IQL run, stage 4 and evaluation alike, would have deployed RAW CVaR**, while the
+BNN winners were **selected on centred CVaR**. That is the selection/deployment
+mismatch §3.2.1 exists to prevent, and it would have been silent: no error, just
+the wrong reward, with CVaR collapsing toward `mean − constant` as §4.3.113 measured.
+It would also have missed every label-cache entry, since `centre_draws` is key
+material, and been relabelled raw.
+
+**Item F is now wired on the deployment side.** All 16 BNN and MR-ensemble sweep
+files set `centre_draws: true`, generated from the spec below. *(Lesson for any
+future two-path change: wire both paths in the same step, and guard both.)*
+
+#### 2. 16 of 24 files were in a STALE evaluation state
+
+The 8 ensemble, 4 MR and 4 PT files were still flipped to seeds 1–10 with stage-4
+indices from the **old** reward models. Those MR/PT models were retrained under
+the round-2 winners (§4.3.137–§4.3.138), so their stage 4 must be **re-run**.
+
+#### 3. The fix: `phase2_sweeps.py` (parent repo) generates both lineages from ONE spec
+
+| subcommand | does |
+|---|---|
+| `check` | audits every file against the spec, and flags any file the generator did not write |
+| `stage4 --write` | seed 0 × `normalize_reward` 0–7 |
+| `winners <sweep_id…> --out phase2_winners.json` | scores finished stage-4 sweeps with `results/iql_score.py`'s own `select_normalization`, the same statistic as reporting, and maps each sweep to its file by an **exact** parameter match |
+| `eval --winners phase2_winners.json --write` | seeds 1–10 × the winning index, only for files whose winner is known, so families move to evaluation independently |
+
+- **Every lineage-relevant value is written explicitly**, including ones equal to
+  an `iql_eval` default (`bnn_alpha: 0.95`, `mr_alpha: 0.95`), so a changed
+  default cannot silently change a run. BNN keeps `bnn_n_samples: -1` (all draws,
+  the label-cache key, §4.3.129). `mr_burn_in: 100` is **inherited from the old
+  files, not revisited**.
+- **The two lineages differ ONLY in `seed` and `normalize_reward`**, enforced on
+  every write.
+- **The self-test caught a real bug**, fixed before any use: sweep→file matching
+  by *subset* would have filed an MR-ensemble sweep under MR best-model as well,
+  since MR best-model's params are a strict subset of the ensemble's. Matching is
+  now exact.
+- **State after writing: 24/24 files match the spec, in the stage-4 lineage.**
+  `PIPELINE.md` Phase 2a/2b now point at the generator instead of hand-flipping.
+- The oracle `tr_sweeps` are out of scope: no reward model, no stage 4, seeds
+  1–10 by design.
+
+#### 4. What is now runnable, and what it waits on
+
+- **Stage 4 for MR, MR-ensemble and PT (16 sweeps × 8 = 128 IQL runs) is runnable
+  now**, since their seeds 0–10 reward models exist. It waits only on
+  compute: each IQL run takes a GPU and 25 CPU workers (`PIPELINE.md`), and all six
+  GPUs are busy until BNN large seeds 1–10 finish (~4.6 days) and the medium sweeps
+  stop.
+- **BNN stage 4** needs each variant's seed-0 model (large: done; medium: after
+  escalation) and, per item 12, **`precompute_labels.py` first** at
+  `--alphas 0.95,0.0 --centre-draws --n-samples -1`, matching these sweep files,
+  one model at a time (~61 GB peak).
+- **Then evaluation:** `winners` on each finished stage-4 sweep, then
+  `eval --write`, then the existing `<family>_sweeps/launch.sh`.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16706,6 +16781,14 @@ blind. Record it as a future-round candidate.
     production config = winner HPs + 128 chains). **Confirm:** do seeds 1–10
     also train at 128? That is 4× the reward-model chains, and ~61 GB peak per
     labelling.
+18q. ✅ **18n DONE (§4.3.139): `phase2_sweeps.py` generates all 24 Phase-2 sweep
+    files, stage 4 and seeds 1–10, from one spec.** Found and fixed on the way:
+    **item F was never wired on the DEPLOYMENT side.** No IQL sweep or config set
+    `centre_draws`, so every BNN and MR-ensemble IQL run would have deployed raw
+    CVaR against centred selection. All 16 now set it. 16 files were also stale
+    (seeds 1–10 with old-model indices), and all 24 are now in the stage-4 lineage
+    and match the spec. **Stage 4 for MR, ensemble and PT is runnable once GPUs
+    free**; BNN stage 4 runs after `precompute_labels.py`.
 18n. **When the seeds 1–10 IQL launcher is written, set `bnn_n_samples: -1`**
     (§4.3.129 §3). Every stage-4 sweep uses −1. The code default of 500 would
     make seeds 1–10 label with a subset of draws, disagree with stage 4, and miss
