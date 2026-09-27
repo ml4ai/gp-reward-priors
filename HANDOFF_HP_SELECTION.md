@@ -14560,6 +14560,79 @@ architecture.
 fire is at **trial 48** for each. Both are well inside the baselines' 17–66
 (18j). Eligibility 88% (medium_play) and 69% (medium_diverse).
 
+### 4.3.141 16a RESULT — the deployment-tail cost is REAL (the field), and the deployed rewards still beat chance
+
+2026-09-27. The pre-registered reading of §4.3.123 (chain ladder as amended in
+§4.3.129), on both escalated large winners, run on CPU. Outputs:
+`exp/escalation_tail_ladder_{large_diverse,large_play}.txt`.
+
+#### 1. Valid invocation
+
+The 32-chain rung reproduces the **sweep trials** exactly at both levels:
+large_diverse 0.3980 / 0.4998, large_play 0.4701 / 0.5988. The 128-chain rung
+reproduces the **escalation logs**: 0.3955 / 0.4942 and 0.4793 / 0.6286. The
+primary is centred, so this is the centred analogue of §4.3.123 §6's
+reproduction precondition. **Resolution gate passed**: `ess_cen` is 317 and 282
+at 128 chains, against 200.
+
+#### 2. The pre-registered verdict: THE FIELD, both variants
+
+D(N) = CE₀.₉₅ − CE₀.₇₅ on the same draws; S = the pooled SE₀.₉₅ of the endpoints.
+
+| chains | ld CE .75 | ld CE .95 | **ld D** | ld SE.95 | lp CE .75 | lp CE .95 | **lp D** | lp SE.95 |
+|---|---|---|---|---|---|---|---|---|
+| 16 | 0.4039 | 0.5072 | **0.1033** | 0.0130 | 0.4807 | 0.6033 | **0.1226** | 0.0204 |
+| 32 | 0.3980 | 0.4998 | 0.1018 | 0.0089 | 0.4701 | 0.5988 | 0.1287 | 0.0132 |
+| 64 | 0.4004 | 0.5039 | 0.1035 | 0.0066 | 0.4787 | 0.6240 | 0.1453 | 0.0125 |
+| 128 | 0.3955 | 0.4942 | **0.0987** | 0.0040 | 0.4793 | 0.6286 | **0.1493** | 0.0088 |
+
+| | D(128) − D(16) | 2S | D(128) vs 2·SE | **verdict** |
+|---|---|---|---|---|
+| large_diverse | −0.0046 | 0.0272 | 0.099 ≫ 0.008 | **THE FIELD** |
+| large_play | **+0.0267** | 0.0444 | 0.149 ≫ 0.018 | **THE FIELD** |
+
+**Estimator bias is ruled out as the explanation for the 0.95 degradation.** 8×
+the chains does not shrink D on either variant. On large_play D *rises*,
+monotonically 0.123 → 0.149, which is the **opposite** of what bias would predict.
+It stays inside 2S, so the pre-registered verdict is "flat", but the direction is
+worth recording (§3).
+
+#### 3. The absolute question (unconditional): both beat chance clearly
+
+| | CE₀.₉₅ at 128 ch | below `log 2` by | acc₀.₉₅ | flip% .75 / .95 | wrong% .95 |
+|---|---|---|---|---|---|
+| large_diverse | 0.4942 ± 0.0040 | **0.199 = 49.7 SE** | 0.764 | 9.1 / 17.3 | 23.6 |
+| large_play | 0.6286 ± 0.0088 | **0.065 = 7.3 SE** | 0.704 | 13.0 / 18.5 | 29.6 |
+
+- **The deployed rewards are informative.** The conservative reward reverses the
+  mean reward's preference on **16–22%** of pairs across the whole ladder, far
+  from the ~50% "uncorrelated" regime.
+- **§4.3.117/§4.3.120's alarming numbers came from the capacity ladder**, not from
+  the winners. There, only 2 of 12 rungs beat `log 2` at 0.95, with flip% up to
+  52%. Those were fixed-depth rungs spanning 625p to 1.3M params, most of which
+  the selection avoided. **The selected models sit in the region where the
+  deployment tail works.**
+- **large_play is the narrower of the two**: 7.3 SE from chance, 30% wrong at 0.95,
+  and its CE₀.₉₅ drifts upward with chains (0.5988 → 0.6286 from 32 to 128,
+  ~1.9 pooled SE). That is §4.6's "the sampler is still discovering tail mass"
+  pattern, **short of 2σ**. **Watch it on large_play's seeds 1–10**: if CE₀.₉₅ keeps
+  running high there, the deployment tail for that variant is weaker than one
+  seed says.
+
+#### 4. What it means, and what it does NOT license
+
+- **§7.3 amendment (d) is settled**: report the 0.95 cost as **measured**,
+  ΔCE ≈ 0.10 (large_diverse) and 0.15 (large_play), and the deployed CE as beating
+  chance by 49.7 and 7.3 SE. It is no longer an upper bound. Medium winners are
+  pending their escalations. The same command applies.
+- **"The field" here means the field as the 128-chain ensemble represents it at
+  the sweep horizon.** Chains do not mix (centred R-hat ≈ 1.4, §4.3.133). So this
+  test separates **estimator precision from the estimand**; it cannot separate
+  the estimand from the true posterior. ESS is also possibly optimistic (§4.3.133
+  §3), and the 200 gate is passed with a 1.4–1.6× margin.
+- ⛔ **Nothing here licenses changing the deployment conservatism** (§4.3.123 §5).
+  0.95 stays. The finding is reported, not acted on.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15654,6 +15727,22 @@ if it persists at well-resolved ess, it is the field, and that is a finding abou
 the method that belongs in the paper. This is a **concrete, pre-registered
 check** and it is the thing that would settle (d).
 
+> ✅ **SETTLED 2026-09-27 (§4.3.141): IT IS THE FIELD, and the field still beats
+> chance clearly.** On the two escalated winners (ESS 317 and 282, clearing the
+> 200 gate), the deployment tail's excess CE over the selection tail, D = CE₀.₉₅
+> − CE₀.₇₅, **does not shrink with 8× the chains**. It is **0.103 → 0.099**
+> (large_diverse) and **0.123 → 0.149** (large_play) from 16 to 128 chains, both
+> within the pre-registered 2S and non-zero. So the 0.95 degradation is **not
+> estimator bias**. Report it as a real cost of deploying at 0.95: **ΔCE ≈ 0.10
+> and 0.15** relative to the selection level. **But the deployed rewards carry
+> clear preference information.** CE at 0.95 is **0.494** (large_diverse) and
+> **0.629** (large_play), respectively **49.7 SE and 7.3 SE below `log 2`**, and
+> the conservative reward reverses the mean's preference on only **16–22%** of
+> pairs. §4.3.117/§4.3.120's near-coin-flip behaviour (to 52%) came from
+> capacity-ladder rungs the selection avoided, not from the selected models.
+> **"Upper bound" is therefore replaced by these measured values for the two
+> large winners.** The medium winners are pending their escalations.
+
 > **Generalisable point, and the reason this amendment exists:** *rank transfer
 > and deployed-level resolution are different claims, and a high rank correlation
 > does not license the deployed level.* ρ = 0.9 between two conservatism levels
@@ -16688,6 +16777,13 @@ blind. Record it as a future-round candidate.
     disclosure ("state that rounds 1–4 ran 3.4% below it"), and round 5 runs
     on those pins (§4.3.121 §1). Ticked 2026-09-24. It was done earlier, but
     the line was never marked.
+16b. ✅ **16a RUN for both large winners (§4.3.141): THE FIELD.** D = CE₀.₉₅ − CE₀.₇₅
+   does not shrink with 8× the chains (0.103 → 0.099 and 0.123 → 0.149), so the
+   0.95 cost is real, not estimator bias. **But both deployed rewards beat chance
+   clearly** (49.7 SE and 7.3 SE below `log 2`, flip 16–22%). §7.3 (d) is settled
+   for the large winners. **Watch large_play's CE₀.₉₅ on its seeds 1–10**: it
+   drifted up ~1.9 pooled SE with chains. **Run the same command on the medium
+   winners after their escalations.**
 16a. ✅ **READING DECLARED (§4.3.123)** — written before round 5 has a winner and
     before any escalation run exists, so it cannot be steered by the numbers.
     Primary statistic `D(N) = CE_0.95 − CE_0.75` on the same draws, over a
