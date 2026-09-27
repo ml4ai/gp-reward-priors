@@ -14633,6 +14633,35 @@ worth recording (§3).
 - ⛔ **Nothing here licenses changing the deployment conservatism** (§4.3.123 §5).
   0.95 stays. The finding is reported, not acted on.
 
+### 4.3.142 ROUND 5 at 92 live-sweep trials — both medium sweeps one to three trials from stopping
+
+Checked 2026-09-27. **medium_play 47 trials, 14/15** non-improving on `J`: it
+fires at trial 48 unless trial 48 improves `J`. **medium_diverse 45 trials,
+12/15**: it fires at 48 unless trials 46–48 improve. Both land inside the
+baselines' 17–66 (18j). The CE leaders are unchanged: medium_play `ez84hubu`
+(trial 41), medium_diverse `pz1r3y9f` (trial 33). Eligibility 87% / 73%.
+
+**medium_play: the stopping metric and the winner rule name DIFFERENT
+ARCHITECTURES.**
+
+| pick | by | arch | CE | P |
+|---|---|---|---|---|
+| `ez84hubu` | **CE, the winner rule (§3.2.17)** | **w6×d1** | 0.3734 ± 0.0040 | 0.983 |
+| `35udthj2` | `J`, the stopping metric | **w5×d1** | 0.3741 ± 0.0049 | 1.000 |
+
+They are **tied at 0.06× the joint 2·SE**. `J` prefers `35udthj2` only because
+it is more certainly eligible. **The rule is fixed and names `ez84hubu`**, so
+there is nothing to decide. §7.4 A should note that in medium_play the two
+metrics pick **adjacent widths at the same depth**. That is exactly §7.4 A's
+claim that the architecture is determined up to adjacent widths at a single
+depth, now shown on the stop-vs-win split as well.
+
+**When both fire:** re-run `check_winner_eligibility.py` on the truncated sweeps,
+then items 9–10 (`make_production_config.py <variant> <winner>`), the
+escalation (§4.3.130's procedure; seed-0 dir in the **sweeps' scratch dir** goes
+to `~/iqlpref/exp/reward_learning` after, §4.3.135), `escalation_readout.py`,
+16a, and `round5_disclosures.py` for §7.4 C.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
