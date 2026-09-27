@@ -14662,6 +14662,77 @@ escalation (§4.3.130's procedure; seed-0 dir in the **sweeps' scratch dir** goe
 to `~/iqlpref/exp/reward_learning` after, §4.3.135), `escalation_readout.py`,
 16a, and `round5_disclosures.py` for §7.4 C.
 
+### 4.3.143 medium_play STOPPED at trial 48 — winner `ez84hubu`; medium_diverse 13/15
+
+Checked 2026-09-27 (second check that day). 94 finished (48 / 46).
+
+#### 1. medium_play's rule FIRED at trial 48 — item 9 done for it
+
+Trial 48 did not improve `J`, so the counter reached 15. Stop-truncated to
+trials 1–48, `check_winner_eligibility.py` names **`ez84hubu`, w6 × d1, 2,497p,
+`val_cvar_ce` 0.373365 ± 0.0040** (§3.2.17's CE rule). Eligibility 42 of 48
+(88%): scale ×5, loc ×2, degeneracy ×1. 48 trials is inside the baselines'
+17–66 range (18j not triggered).
+
+| gate | value | threshold | slack in 1σ units (§4.3.108) |
+|---|---|---|---|
+| `\|log r\|` | 0.0671 | 0.1151 | **2.1σ** (sd 0.0226) |
+| `loc_sd` | 0.1060 | 0.155 | **4.2σ** (sd 0.0118, implied by §4.3.126's 3.6σ) |
+| margin | +0.0704 | > 0 | **20σ** (sd 0.00358) |
+| ESS | 76.5 | 40 | — |
+
+**Not within ~1σ of a gate**, so item 9's seed-dependence disclosure does not
+apply. It is the least clear of the three winners so far on gate 1 (large_play
+4.6σ, large_diverse 4.0σ); it is still clear.
+
+#### 2. Two disclosures the stop produced, both about the J-vs-CE split
+
+- **Stop-vs-win, final (§4.3.142):** `J` names `35udthj2` (w5×d1, CE 0.3741),
+  the CE rule names `ez84hubu` (w6×d1, 0.3734). Tied at 0.06× the joint 2·SE.
+  Adjacent widths, same depth. §7.4 A.
+- **"Eligible frontier still improving at the trigger"** (§3.6.3's disclosure):
+  the CE frontier last improved at trial 41, 7 trials before the stop. That
+  improvement was `ez84hubu` over `us8j8ujo` by **0.0004 = 0.04× the joint
+  2·SE** (§4.3.140), and it did not improve `J`, so it could not reset the
+  counter. So the disclosure fires formally but is **substantively empty**: the
+  "progress" the stop cut off was below the objective's resolution. Report it in
+  that form. *(The tool's printed reason, "the stopping rule tracks the RAW
+  metric", predates item C. In round 5 the rule tracks `J`, and the split is
+  J vs CE, not raw vs eligible.)*
+
+Also printed, already known: 1 diverged trial per sweep (`8fwr6352` in
+medium_play, w5×d4, §4.3.121; `kunpa7k0` in medium_diverse, J = `log 2`
+exactly). Both ineligible, neither near a leader.
+
+#### 3. Item 10 dry run for medium_play: VERIFY PASS
+
+`make_production_config.py medium_play ez84hubu` → 9 values changed (depth
+2 → 1, `num_chains`/`chains_per_gpu` → 128/32, `num_samples` 75 → 60,
+`sghmc_lr`, `mdecay`, `sghmc_lr_max`, `cycle_length` → 2000, `fraction_cool` →
+0.25), 16 defaults pinned, **every behaviour-relevant key equals what the trial
+ran**. Width needed no change. **Not yet written**: the file is still the base
+config of a sweep whose agent is running. Stop the agent first.
+
+#### 4. The escalation cannot start on the GPU this frees
+
+- **128 chains do not fit on one GPU.** Chains are separate processes, and a
+  32-chain trial uses ~14 GB per GPU (wandb system metrics, `ez84hubu`). So
+  128 chains need ~56 GB against the A6000's 48 GB.
+- **GPUs 2–5 are held by the large seeds 1–10 jobs** until ~2026-09-30 (12b).
+- **Two GPUs at 64/GPU is §4.3.129 §6a's rejected option.** It is unprofiled,
+  slower per chain, and leaves chains 0–31 in a layout the trial never had.
+  It would also put ~256 chain processes on 255 cores with the large seed job
+  and slow that job.
+
+**Recommended: queue both medium escalations behind the large seeds 1–10 jobs.**
+Run them one at a time on 4 GPUs at 32/GPU, as for the large pair. Meanwhile,
+**give the freed GPUs to MR / ensemble / PT stage 4**: those models are
+trained and verified (12a), and the stage 4 runs are IQL, not BNN sampling.
+User decision pending.
+
+medium_diverse: **13/15**, fires at trial 48 unless trials 47–48 improve `J`.
+Leader unchanged, `pz1r3y9f` (w5×d1, 0.4044); J and CE name the same trial.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16716,8 +16787,9 @@ blind. Record it as a future-round candidate.
 9. 🟡 **HALF DONE (§4.3.130)** — large_play `q45qbz8h` and large_diverse
    `owlrd69d` named, neither within 1σ of a gate. The tool was **fixed to rank
    on `val_cvar_ce`, not the penalised sweep metric** (§3.2.17). That already
-   matters for medium_play. **Remaining: medium_play and medium_diverse, once
-   they stop.** Original brief follows.
+   matters for medium_play. **medium_play `ez84hubu` named 2026-09-27
+   (§4.3.143), 2.1σ clear of gate 1. Remaining: medium_diverse, once it stops.**
+   Original brief follows.
    **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
    gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
    applies: that is a result to disclose, not to escalate around. **If a winner
@@ -16755,8 +16827,8 @@ blind. Record it as a future-round candidate.
 10. 🟡 **HALF DONE (§4.3.130)** — large_play and large_diverse regenerated from
    the winners' **recorded wandb configs** by
    `scripts_bnn/make_production_config.py`: 128 chains @ 32/GPU, verified field
-   by field, preflight-safe. **Remaining: the medium configs, once their sweeps
-   stop.** Do not edit them while their sweeps are live, since they are those
+   by field, preflight-safe. **medium_play dry run PASSES (§4.3.143); `--write`
+   once its agent is stopped. Remaining: medium_diverse, once its sweep stops.** Do not edit them while their sweeps are live, since they are those
    sweeps' base configs. Use the same command:
    `make_production_config.py <variant> <winner>` (dry-run), then `--write`.
    Original brief: **Regenerate the four production configs** from the new winners (§10.3); they
