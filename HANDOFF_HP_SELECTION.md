@@ -14844,6 +14844,18 @@ medians: 3.6–4.2 h PT, 4.1–6.0 h ensemble, 5.5–6.0 h MR). So ~10 h per swe
 and ~8–9 days for the 20 sweeps available now. When GPUs 2–5 free up (~10-05),
 split the remainder across them.
 
+#### 5. Launched 2026-09-28 ~20:03 UTC
+
+User-confirmed: labels cached for both large seed-0 models, then **queue 1**
+(BNN large ×4, then MR ×4) on GPUs 0–1 × 2. The first sweep is **`cu5o0tv4`**
+(BNN large_play CVaR). Its 4 runs match the spec on every checked key: seed 0,
+`bnn_alpha` 0.95, `bnn_n_samples` −1, `centre_draws` True, `gauge_reward` max0,
+`normalize_reward` 0–3. They reached step 5,500–7,750 within ~2 minutes, which
+means no relabelling pass, consistent with cache HITs. The explicit
+`labels from cache` line goes only to stdout, and wandb uploads `output.log` at
+run end, so confirm it in the agent logs. Stage-4 sweep ids are recorded here as
+the queue creates them.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
