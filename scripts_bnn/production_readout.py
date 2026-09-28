@@ -38,13 +38,14 @@ ENTITY = "champlin-university-of-arizona"
 VARIANTS = ("medium_play", "medium_diverse", "large_play", "large_diverse")
 SEEDS = tuple(range(11))
 
-# Winners: §4.3.108 (MR/PT round-2 baselines), §4.3.130 (BNN round 5).
+# Winners: §4.3.108 (MR/PT round-2 baselines), §4.3.130/§4.3.143/§4.3.144 (BNN round 5).
 WINNERS = {
     "mr": {"medium_play": "a4qo4g4i", "medium_diverse": "p2f7p8dv",
            "large_play": "c898c0xe", "large_diverse": "s8nbeehf"},
     "pt": {"medium_play": "giab551o", "medium_diverse": "rupj57fq",
            "large_play": "cyrngs49", "large_diverse": "xokkypz7"},
-    "bnn": {"large_play": "q45qbz8h", "large_diverse": "owlrd69d"},
+    "bnn": {"medium_play": "ez84hubu", "medium_diverse": "q2dd6xqt",
+            "large_play": "q45qbz8h", "large_diverse": "owlrd69d"},
 }
 METRIC = {"mr": "eval_loss_at_selected", "pt": "eval_loss_at_selected",
           "bnn": "val_cvar_ce"}

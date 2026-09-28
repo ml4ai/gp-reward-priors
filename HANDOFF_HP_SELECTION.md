@@ -14733,6 +14733,57 @@ User decision pending.
 medium_diverse: **13/15**, fires at trial 48 unless trials 47–48 improve `J`.
 Leader unchanged, `pz1r3y9f` (w5×d1, 0.4044); J and CE name the same trial.
 
+### 4.3.144 ROUND 5 COMPLETE — medium_diverse stopped at 48, and its winner IS trial 48
+
+Checked 2026-09-28. The user confirmed the medium_play agent is stopped with no
+orphaned process. medium_diverse: 50 finished, **stop fired at trial 48**.
+Trials 49–50 are discardable. **Its agent is still running: stop it.**
+
+#### 1. Item 9 for medium_diverse: `q2dd6xqt`, the trigger trial
+
+| | `q2dd6xqt` (trial 48) — **winner** | `pz1r3y9f` (trial 33) — J leader |
+|---|---|---|
+| arch | w5×d1, 1,249p | w5×d1 |
+| `val_cvar_ce` | **0.401708 ± 0.0026** | 0.404428 ± 0.0032 |
+| `J` | 0.40474 | **0.40443** |
+| `P` | 0.990 | 1.000 |
+
+Trial 48 improved CE by **0.0027 = 0.33× the joint 2·SE**, but not `J`, so it
+did not reset the counter and the rule fired on it. The winner rule ranks trials
+1–48, so it is included. **Same architecture as the J leader**, so unlike
+medium_play the two metrics differ only in sampler settings.
+
+Gates: `|log r|` 0.0629 (**2.3σ** clear), `loc_sd` 0.1009 (**4.6σ**), margin
++0.0762 (**21σ**), ESS 105. Not within 1σ, so no seed-dependence disclosure.
+Eligibility 36 of 48 (75%), every rejection on scale.
+
+#### 2. All four winners
+
+| variant | winner | arch | params | `val_cvar_ce` | trials | gate-1 slack |
+|---|---|---|---|---|---|---|
+| medium_play | `ez84hubu` | w6×d1 | 2,497 | 0.3734 ± 0.0040 | 48 | 2.1σ |
+| medium_diverse | `q2dd6xqt` | w5×d1 | 1,249 | 0.4017 ± 0.0026 | 48 | 2.3σ |
+| large_play | `q45qbz8h` | w5×d2 | 2,305 | 0.4701 ± 0.0079 | 20 | 4.6σ |
+| large_diverse | `owlrd69d` | w4×d1 | 625 | 0.3980 ± 0.0041 | 28 | 4.0σ |
+
+**§7.4 A/B/C regenerated from `round5_disclosures.py` and marked final.** One
+correction in the process: medium_play's final tied set is **29 trials over
+w4–w6** (26 at w6), not "two adjacent widths". §7.4 A's architecture claim is
+restated as depth plus a narrow width band, and §4.3.142's "adjacent widths at a
+single depth" reading is superseded by it. 18j does not fire (48/48/20/28).
+
+#### 3. Item 10
+
+- **medium_play WRITTEN** (`--write`, VERIFY PASS; independent grep: no
+  `burn_in_lr` key, `centre_draws: true` intact, `map_amp2` 6848, `n_meas`
+  256, width 6).
+- **medium_diverse dry run PASSES**: 10 values changed (width 10 → 5, depth
+  2 → 1, the chain budget, `num_samples` 60, the three sampler settings,
+  `cycle_length` 2000, `fraction_cool` 0.25) and 16 pinned. **Written after its
+  agent is stopped.**
+
+The escalation-scheduling decision of §4.3.143 §4 still stands, now for both.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -15988,16 +16039,13 @@ diagnostics'.
 
 ### 7.4 Round-5 BNN results — disclosures
 
-> ⏳ **Two of four sweeps are still searching** (medium_play, medium_diverse), so
-> every number below marked *provisional* must be **regenerated when they
-> stop**, with:
->
-> `/opt/anaconda3/envs/irl/bin/python scripts_bnn/round5_disclosures.py`
->
-> The readout truncates each sweep at its K=15 stop using
-> `check_sweep_convergence.frontier` itself, so it cannot disagree with the tool
-> that decides the stop. The **text** of each disclosure is fixed now. Only the
-> numbers move. Written 2026-09-24 at 110 trials (32/30/20/28).
+> ✅ **FINAL 2026-09-28: all four sweeps have stopped** (48 / 48 / 20 / 28
+> trials). Numbers regenerated with
+> `/opt/anaconda3/envs/irl/bin/python scripts_bnn/round5_disclosures.py`,
+> which truncates each sweep at its K=15 stop using
+> `check_sweep_convergence.frontier` itself. The text was written 2026-09-24 at
+> 110 trials; where the final numbers changed its meaning (A's width claim), the
+> text is corrected in place and marked.
 
 ---
 
@@ -16010,8 +16058,8 @@ Treating two trials as indistinguishable when
 
 | variant | status | winner | runner-up margin | tied with winner | architectures in the tied set |
 |---|---|---|---|---|---|
-| medium_play | *provisional* | w6×d1, 2,497p | **0.14×** joint 2·SE | **15** | w6×d1 ×15, w5×d1 ×1 |
-| medium_diverse | *provisional* | w5×d1, 1,249p | **0.05×** | 1 | w5×d1 ×2 |
+| medium_play | **final** (stop at 48) | w6×d1, 2,497p (`ez84hubu`) | **0.04×** joint 2·SE | **29** | w6×d1 ×26, w5×d1 ×3, **w4×d1 ×1** |
+| medium_diverse | **final** (stop at 48) | w5×d1, 1,249p (`q2dd6xqt`) | **0.33×** | 3 | w5×d1 ×4 |
 | large_play | **final** (stop at 20) | w5×d2, 2,305p | **0.30×** | 3 | w5×d2 ×2, w4×d2 ×2 |
 | large_diverse | **final** (stop at 28) | w4×d1, 625p | **0.09×** | 9 | w5×d1 ×6, w4×d1 ×4 |
 
@@ -16026,9 +16074,14 @@ winner is transient.**
   (`sghmc_lr`, `sghmc_lr_max`, `mdecay`) go into the production config, and they
   were chosen from a set the objective cannot separate. Choosing any other member
   of the tied set would have been equally justified.
-- **The architecture is determined.** Every tied set spans at most two adjacent
-  widths at a single depth. Depth 1 is the depth in three of the four. So the
-  capacity conclusion does not depend on which tied trial was picked.
+- **The architecture is determined, to within a narrow width band at one
+  depth.** Every tied set sits at a single depth. Depth 1 is the depth in three
+  of the four. Three tied sets span two adjacent widths or one. **medium_play's
+  spans three (w4–w6)**, though 26 of its 30 members are w6. So the capacity
+  conclusion (depth, and the bottom decade of parameters) does not depend on
+  which tied trial was picked. The exact width does, for medium_play.
+  *(Corrected 2026-09-28. At 110 trials this read "at most two adjacent widths";
+  medium_play's final tied set added one w4 trial.)*
 - **This holds on the selection objective only.** The tied trials match on
   validation CVaR cross-entropy. **It has not been shown that they are
   equivalent in downstream IQL return.** Do not write "any member of the tied set
@@ -16039,8 +16092,8 @@ winner is transient.**
 §3.2.5 sized the per-trial budget so the top five could be separated. It assumed
 SE 0.0147 and needed gaps above 0.026. **The SE came in 2–4× better than
 budgeted (0.0026–0.0079), and the target failed anyway**, because the gap from
-each winner to its runner-up is only **0.0004–0.0072** (medium_diverse 0.0004,
-large_diverse 0.0011, medium_play 0.0017, large_play 0.0072). The objective
+each winner to its runner-up is only **0.0004–0.0072** (medium_play 0.0004,
+large_diverse 0.0011, medium_diverse 0.0027, large_play 0.0072; final). The objective
 really is flat over the tied set. A larger draw budget would narrow the SE but would not create
 differences that are not there. Report this as a mistaken premise about the
 landscape, not as an under-resourced measurement.
@@ -16065,8 +16118,16 @@ be reset by a trial that improves `J` only by being more certainly eligible,
 without moving the winner. medium_play's trial 33 did exactly that. **If any BNN
 sweep exceeds 66 trials** — the MR/PT maximum (§4.3.115) — disclose the count and
 both reasons. That would flatter the BNN
-under §7.1's one-sided budget invariant. Current counts are 32 / 30 / 20 / 28,
-all inside the baselines' 17–66.
+under §7.1's one-sided budget invariant. **Final counts are 48 / 48 / 20 / 28,
+all inside the baselines' 17–66, so 18j does not fire.**
+
+**The second mechanism cuts both ways, and the final medium sweeps show the
+other direction.** In medium_play (trial 41) and medium_diverse (trial 48) a
+trial improved CE, and so became the winner, **without** improving `J`, so it did
+**not** reset the counter. medium_diverse's winner `q2dd6xqt` is the trigger
+trial itself. A counter tracking CE would have reset there and searched up to 15
+more trials. So the J-vs-CE split both lengthened a search (medium_play trial
+33) and shortened two. Neither CE improvement exceeded 0.33× the joint 2·SE.
 
 ---
 
@@ -16085,8 +16146,8 @@ across most of the decade. The two depth-1 trials both sat outside that band:
 | 6 `c6zuq01h` (w5) | **1.04e-04** — 16% above | 2.48e-03 | 0.927 | **1 of 3** |
 | 15 `5ueev7qz` (w7) | **3.96e-04** — 4.4× above | **5.4e-04** — below | **0.001** — below | **3 of 3** |
 
-In the other three sweeps depth 1 is **95% eligible (52 of 55)** and supplies
-**every one of their winners**.
+In the other three sweeps depth 1 is **96% eligible (85 of 89, final)** and
+supplies **every one of their winners**.
 
 **What can and cannot be concluded:**
 
@@ -16112,15 +16173,29 @@ depth 1 for large_play.*
 
 ---
 
-**C. What is still owed to §7.4 once round 5 is complete.**
+**C. Rule winner vs best-of-all vs selected winner** (§3.1: *always report
+both*). **Final 2026-09-28**; the 18i table and 18j check above are also final.
 
-- the final 18i table for medium_play and medium_diverse, from the readout above;
-- the 18j count check on those two sweeps;
-- the rule-winner vs best-of-all vs eligible-best comparison for each (§3.1: *always
-  report both*). The two finished sweeps coincide on all three, so nothing is
-  owed there yet;
-- ~~the item-C plateau side effect~~ — **written as D below (2026-09-24).** It
-  did not need to wait: the episode ended at trial 19 and its numbers are fixed.
+| variant | `J` rule winner = `J` best-of-all | selected (lowest CE among eligible) | same? | gap |
+|---|---|---|---|---|
+| medium_play | `35udthj2` w5×d1 | `ez84hubu` w6×d1 | **no** | 0.06× joint 2·SE |
+| medium_diverse | `pz1r3y9f` w5×d1 | `q2dd6xqt` w5×d1 | **no** | 0.33× |
+| large_play | `q45qbz8h` | `q45qbz8h` | yes | — |
+| large_diverse | `owlrd69d` | `owlrd69d` | yes | — |
+
+- **In all four, the stopping rule's winner is also the best of all trials**, so
+  there is no rule-vs-best regret.
+- **The two medium disagreements are J vs CE, not ungated vs eligible.** Every
+  trial in the table is eligible. `J` prefers the trial that is more certainly
+  eligible (`P` 1.000 vs 0.983 and 0.99999 vs 0.990), and CE prefers the one
+  that scores lower. Both gaps are ties. §7.2's failure mode, where the ungated
+  best was ineligible, **did not occur in round 5**.
+- `check_winner_eligibility.py` prints "eligible frontier still improving at the
+  trigger" for both medium sweeps (CE improved at trials 41 and 48). Report it in
+  the form of A's last paragraph: the cut-off "progress" was below the
+  objective's resolution. The tool's printed explanation ("tracks the RAW
+  metric") predates item C.
+- ~~the item-C plateau side effect~~ — **written as D below (2026-09-24).**
 
 ---
 
@@ -16787,8 +16862,9 @@ blind. Record it as a future-round candidate.
 9. 🟡 **HALF DONE (§4.3.130)** — large_play `q45qbz8h` and large_diverse
    `owlrd69d` named, neither within 1σ of a gate. The tool was **fixed to rank
    on `val_cvar_ce`, not the penalised sweep metric** (§3.2.17). That already
-   matters for medium_play. **medium_play `ez84hubu` named 2026-09-27
-   (§4.3.143), 2.1σ clear of gate 1. Remaining: medium_diverse, once it stops.**
+   matters for medium_play. ✅ **DONE 2026-09-28: medium_play `ez84hubu`
+   (§4.3.143) and medium_diverse `q2dd6xqt` (§4.3.144), 2.1σ and 2.3σ clear of
+   gate 1. All four winners named.**
    Original brief follows.
    **Name the BNN winners** with `check_winner_eligibility.py` (now the §3.2.12
    gates via `selection_gates.py`). If no trial is eligible in a variant, §3.2.9
@@ -16827,8 +16903,8 @@ blind. Record it as a future-round candidate.
 10. 🟡 **HALF DONE (§4.3.130)** — large_play and large_diverse regenerated from
    the winners' **recorded wandb configs** by
    `scripts_bnn/make_production_config.py`: 128 chains @ 32/GPU, verified field
-   by field, preflight-safe. **medium_play dry run PASSES (§4.3.143); `--write`
-   once its agent is stopped. Remaining: medium_diverse, once its sweep stops.** Do not edit them while their sweeps are live, since they are those
+   by field, preflight-safe. **medium_play WRITTEN 2026-09-28 (§4.3.144).
+   medium_diverse dry run PASSES; `--write` once its agent is stopped.** Do not edit them while their sweeps are live, since they are those
    sweeps' base configs. Use the same command:
    `make_production_config.py <variant> <winner>` (dry-run), then `--write`.
    Original brief: **Regenerate the four production configs** from the new winners (§10.3); they
