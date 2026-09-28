@@ -14784,6 +14784,66 @@ single depth" reading is superseded by it. 18j does not fire (48/48/20/28).
 
 The escalation-scheduling decision of §4.3.143 §4 still stands, now for both.
 
+### 4.3.145 Round-5 sweeps closed; the GPU plan decided; stage 4 starts on GPUs 0–1
+
+2026-09-28. The user confirmed **both medium agents stopped, no orphaned
+process**. **medium_diverse's production config is WRITTEN**: VERIFY PASS, and an
+independent grep finds no `burn_in_lr` key, `centre_draws: true`, width 5,
+depth 1, 128/32, `map_amp2` 6848, `n_meas` 256. Item 10 is done for all four.
+
+#### 1. User decision: GPU allocation until the BNN production models are done
+
+- **GPUs 2–5: BNN production, in series.** The large seeds 1–10 jobs finish first
+  (~2026-09-30). Then the **medium_play escalation**, then the **medium_diverse
+  escalation**, each at 128 chains, 32 per GPU, with `escalation_readout.py`
+  and its reproduction check before the next step. Then **medium seeds 1–10**
+  (20 jobs, ~4.6 days). Same procedure as the large pair (§4.3.130 §3–4,
+  §4.3.134, §4.3.135).
+- **GPUs 0–1 and the remaining CPU: stage 4.**
+
+#### 2. CPU sizing for stage 4
+
+Each IQL run's evaluation uses **25 CPU workers**. The BNN job on GPUs 2–5 holds
+**~128 cores** (~1 core per chain, §4.3.129 §6a), which leaves ~127.
+
+| IQL runs at once | eval cores | + BNN job | of 255 |
+|---|---|---|---|
+| **4 (2 per GPU)** | 100 | 228 | **89%** |
+| 5 | 125 | 253 | 99%, no headroom |
+| 6 | 150 | 278 | oversubscribed |
+
+**4 concurrent.** Runs launched together hit their evaluation steps together,
+so assume the evaluations coincide.
+
+#### 3. A launcher trap, found before it bit
+
+`<family>_sweeps/launch.sh all` round-robins agents over sweeps, and each agent
+stays on its own sweep until that grid is done. **With 4 agents on the 8 BNN or
+8 ensemble sweeps, the last 4 sweeps would get no agent and never run.** For
+BNN those are the **large** sweeps, the only ones whose models exist. New
+`~/iqlpref/stage4_queue.sh` runs sweeps **one at a time with all agents on
+each**. It validates the whole queue before launching (`DRY_RUN=1`), logs
+timestamps, and continues past a failed launch. Also noted in PIPELINE.md.
+
+#### 4. Order: BNN large first, because BNN is the critical path
+
+BNN evaluation is the last thing to finish. Its medium models are ~7 days away,
+and its stage-4 winners gate its seeds 1–10 IQL runs. **BNN large stage 4 goes
+first**, so its winners are known by the time the large seeds 1–10 finish
+(~09-30). MR, PT and ensemble follow. BNN medium is queued once its escalations
+exist.
+
+**BNN stage 4 needs its labels cached first.** Otherwise each of the 16 runs per
+model relabels on its own, 4 at a time, at ~61 GB of host RAM each.
+`precompute_labels.py` runs on the two large seed-0 models (the escalations)
+first, `--alphas 0.95,0.0 --n-samples -1 --centre-draws`, one model at a time
+on GPU 0.
+
+**Estimate.** 8 runs per sweep over 4 agents is 2 waves of ~4–6 h (measured
+medians: 3.6–4.2 h PT, 4.1–6.0 h ensemble, 5.5–6.0 h MR). So ~10 h per sweep,
+and ~8–9 days for the 20 sweeps available now. When GPUs 2–5 free up (~10-05),
+split the remainder across them.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16903,8 +16963,8 @@ blind. Record it as a future-round candidate.
 10. 🟡 **HALF DONE (§4.3.130)** — large_play and large_diverse regenerated from
    the winners' **recorded wandb configs** by
    `scripts_bnn/make_production_config.py`: 128 chains @ 32/GPU, verified field
-   by field, preflight-safe. **medium_play WRITTEN 2026-09-28 (§4.3.144).
-   medium_diverse dry run PASSES; `--write` once its agent is stopped.** Do not edit them while their sweeps are live, since they are those
+   by field, preflight-safe. ✅ **DONE 2026-09-28: medium_play (§4.3.144) and
+   medium_diverse (§4.3.145) WRITTEN. All four production configs are final.** Do not edit them while their sweeps are live, since they are those
    sweeps' base configs. Use the same command:
    `make_production_config.py <variant> <winner>` (dry-run), then `--write`.
    Original brief: **Regenerate the four production configs** from the new winners (§10.3); they
