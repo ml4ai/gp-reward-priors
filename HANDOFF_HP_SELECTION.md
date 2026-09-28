@@ -14853,8 +14853,9 @@ User-confirmed: labels cached for both large seed-0 models, then **queue 1**
 `normalize_reward` 0–3. They reached step 5,500–7,750 within ~2 minutes, which
 means no relabelling pass, consistent with cache HITs. The explicit
 `labels from cache` line goes only to stdout, and wandb uploads `output.log` at
-run end, so confirm it in the agent logs. Stage-4 sweep ids are recorded here as
-the queue creates them.
+run end, so confirm it in the agent logs. **Confirmed by the user: all four
+agent logs print `labels from cache`, and CPU load is fine with the evaluations
+running.** Stage-4 sweep ids are recorded here as the queue creates them.
 
 ### 4.4 Procedure
 
