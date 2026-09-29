@@ -14855,7 +14855,8 @@ means no relabelling pass, consistent with cache HITs. The explicit
 `labels from cache` line goes only to stdout, and wandb uploads `output.log` at
 run end, so confirm it in the agent logs. **Confirmed by the user: all four
 agent logs print `labels from cache`, and CPU load is fine with the evaluations
-running.** Stage-4 sweep ids are recorded here as the queue creates them.
+running.** Stage-4 sweep ids and winners are recorded in **§6's live stage-4
+table** as each sweep finishes. The first row is `cu5o0tv4`, index 3.
 
 ### 4.4 Procedure
 
@@ -15339,6 +15340,11 @@ of a **discarded** design (§3.7) — it is kept because the discard itself has 
 be reportable, not because those hyperparameters are in use. No BNN result in
 this document is currently valid.
 
+> **Stage 4 is live below** ("Stage 4 — output normalization"), a table filled
+> in as each IQL sweep finishes. The stage-1 tables in this section predate
+> rounds 3–5 and the MR/PT round-2 baselines. The current winners are in
+> §4.3.108 (MR/PT) and §4.3.144 (BNN).
+
 ### Stage 1 — BNN merged sweep (metric `val_predictive_cross_entropy`) — complete, 4 of 4 fired
 
 Round 2. Every sweep fired well inside the 130 cap, and every winner is the
@@ -15432,6 +15438,66 @@ all four.
 of 1e-5, so the optimum may lie below the searched range. The range is
 pre-registered and was **not** widened; record it as a limitation. The note also
 lives in the config file itself.
+
+### Stage 4 — output normalization, seed 0 (project `IQL-pref`) — LIVE, filled in as sweeps finish
+
+Started 2026-09-29. The reward models are the round-5 BNN winners (escalated
+seed-0 models) and the round-2 MR/PT baseline winners (§4.3.108). Statistic:
+**last-10 mean** of the 100-episode evaluation means; exact ties go to the
+lowest index (`results/iql_score.py`, §4.3.107). Last-20 is the robustness check.
+
+**How a row is filled** (from `~/iqlpref`):
+- `python phase2_sweeps.py winners <sweep_id>` names the winner and merges it
+  into `phase2_winners.json`, which `eval` reads.
+- `python results/iql_score.py --stage4 [--n 20] champlin-university-of-arizona/IQL-pref/<sweep_id>`
+  prints the full grid.
+
+**Gap in noise units** divides the winner − runner-up gap by **0.086**. That is
+the SD of a difference of two single runs, √2 × Experiment 1's last-10
+run-to-run SD of 0.061 (§4.3.107). Below ~1, the pick is not resolved by one run
+per index. §4.3.107 put P(correct pick) at ~0.78 at the median gap (0.068).
+This is **descriptive**: the pre-registered rule is the argmax, whatever the gap.
+
+| file | sweep | idx 0–7 (last-10) | **winner** | runner-up | gap (noise units) | last-20 pick | done |
+|---|---|---|---|---|---|---|---|
+| bnn large_play cvar | `cu5o0tv4` | .427 .294 .444 **.614** .000 .000 .078 .095 | **3** (0.614) | 2 (0.444) | 0.170 (**2.0**) | 3 ✓ | 2026-09-29 |
+| bnn large_play mean | — | | | | | | queue 1 |
+| bnn large_diverse cvar | — | | | | | | queue 1 |
+| bnn large_diverse mean | — | | | | | | queue 1 |
+| bnn medium_play cvar | — | | | | | | queue 2 |
+| bnn medium_play mean | — | | | | | | queue 2 |
+| bnn medium_diverse cvar | — | | | | | | queue 2 |
+| bnn medium_diverse mean | — | | | | | | queue 2 |
+| mr medium_play | — | | | | | | queue 1 |
+| mr medium_diverse | — | | | | | | queue 1 |
+| mr large_play | — | | | | | | queue 1 |
+| mr large_diverse | — | | | | | | queue 1 |
+| ensemble medium_play cvar | — | | | | | | queue 2 |
+| ensemble medium_play mean | — | | | | | | queue 2 |
+| ensemble medium_diverse cvar | — | | | | | | queue 2 |
+| ensemble medium_diverse mean | — | | | | | | queue 2 |
+| ensemble large_play cvar | — | | | | | | queue 2 |
+| ensemble large_play mean | — | | | | | | queue 2 |
+| ensemble large_diverse cvar | — | | | | | | queue 2 |
+| ensemble large_diverse mean | — | | | | | | queue 2 |
+| pt medium_play | — | | | | | | queue 2 |
+| pt medium_diverse | — | | | | | | queue 2 |
+| pt large_play | — | | | | | | queue 2 |
+| pt large_diverse | — | | | | | | queue 2 |
+
+**Notes, per row:**
+- *bnn large_play cvar:* all 8 runs complete (200 evaluation points each).
+  Indices 4 and 5 score exactly 0. They were near 0 in every earlier stage-4 grid
+  too (§4.3.107).
+  The winner, index 3, is the same index the pre-redesign MR best grid picked on
+  this variant (§5's validation example), but the constants in indices 2–7 come
+  from each model's own label range, so the two are not the same transformation.
+
+**Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
+--winners phase2_winners.json --write`, then launch) wait for that family's
+seeds 1–10 **reward models to be verified** (`production_readout.py`). For BNN
+large that is ~09-30. For BNN medium it follows the medium escalations and
+seeds 1–10. MR and PT are verified already (§4.3.138).
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
