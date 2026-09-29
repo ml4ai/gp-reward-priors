@@ -88,7 +88,7 @@ argument collapses if any tuning touches an evaluation seed.
 | 1 | model architecture + prior strength + (BNN) sampler schedule | validation loss | 0 |
 | ~~2~~ | *merged into stage 1 in round 2 — see §3.7* | — | — |
 | 3 | (BNN only) chain count / draws per chain | MCMC tail diagnostics | 0 |
-| 4 | output normalization function | max mean IQL score over eval points | 0 |
+| 4 | output normalization function | IQL score, last-10 mean of the 100-episode evaluation means (same as reporting; max over evals before 2026-09-15, §4.3.107) | 0 |
 
 Stage 1 is an automated wandb sweep — **one per (family × variant), for every
 family alike**. Stage 3 is a deliberate manual step. Stage 4 is a small grid
@@ -15106,7 +15106,8 @@ end to end, happens at seed 0; all evaluation happens at seeds 1–10.
 > gives last-10 0.4301 ± 0.0743 and legacy max 0.5640 ± 0.0660, and its stage-4
 > grid picks index 3.
 
-**Selection statistic, precisely.** One IQL run is **1,000,000 training steps**
+**LEGACY (before 2026-09-15; superseded by the box above) — selection statistic,
+precisely.** One IQL run is **1,000,000 training steps**
 with an evaluation every **5,000** steps, i.e. **200 evaluation points per run**.
 One evaluation point is the **mean score over 100 episodes**. The selected
 normalization index is the one maximising the **maximum, over those 200
@@ -17574,8 +17575,14 @@ Round 3 is specified in §3.2.1 (search space, gates, objective), §3.2.9 (budge
 and the escalation clause) and §3.2.10 (selection at conservatism 0.75,
 reporting at 0.95). §10.2 holds the current blockers and the relaunch criteria.
 
-Stage 4 (§5) is the 8-way normalization grid, selected on max mean IQL score at
-seed 0. It runs outside this repo, in the surrounding `iqlpref` pipeline.
+Stage 4 (§5) is the 8-way normalization grid at seed 0. The winning index is the
+one with the highest **last-10 mean**: each IQL run's score is the mean of its
+last 10 evaluation points, each point being the mean over 100 episodes. Exact
+ties go to the lowest index. That is the **same statistic used for reporting**
+(§4.3.107, decided 2026-09-15; canonical code `results/iql_score.py`,
+`select_normalization`). It is **not** the legacy max over the 200 evaluation
+points, which selected every stage-4 grid run before that date. It runs outside
+this repo, in the surrounding `iqlpref` pipeline (`phase2_sweeps.py winners`).
 
 ### 10.5 Sweep IDs
 
