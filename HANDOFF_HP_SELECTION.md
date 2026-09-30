@@ -16455,6 +16455,24 @@ sweep then walked down to its current w5×d1 leader.
   `1 − P`, is a candidate for any future round. It is not a correction to this
   one.
 
+---
+
+**E. At the deployment conservatism, the reward is worse than chance for one
+large_play data split.** (§4.3.146; large variants **final**, medium pending
+their seeds 1–10)
+
+Across the 11 production seeds, CE₀.₉₅ on each seed's own validation pairs is
+0.523 ± 0.112 (large_play) and 0.478 ± 0.055 (large_diverse), against
+`log 2` = 0.693. **large_play seed 7 is above chance (0.731, ~3 SE by estimate)**
+and seed 3 is within ~2 SE of it. Every large_diverse seed beats chance by
+≥ 0.14. Both large_play seeds are also the hardest splits for the mean reward, so
+the variation is data-split variation that the tail amplifies. It is not a
+sampler failure: all 11 seeds pass all gates. **Report it**: the conservative
+reward's informativeness varies with the split, and at 0.95 it can fall to
+chance. The IQL result for seed 7 is reported unchanged, and the conservatism is
+not revisited (§4.3.123 §5). Re-run `production_readout.py` and §4.3.146's
+per-seed query for the medium variants once their seeds 1–10 exist.
+
 ### 7.5 Procedure changes of 2026-09-15 that govern every reported winner
 
 Both changes were made **before** the reported selection rounds ran: round 2 of
