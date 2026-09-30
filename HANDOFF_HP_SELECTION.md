@@ -14926,6 +14926,12 @@ and a GPU slot frees. Fit it in on GPUs 2–5 between the medium escalations and
 the medium seeds 1–10, one model at a time. Precompute duration is unmeasured,
 so **time the first one**.
 
+**LAUNCHED 2026-09-30 04:47 UTC**: run `a5ac5f3c-0e59-4236-a7e2-9d68a351a536`,
+128 chains @ 32/GPU, GPUs 2–5, seed 0. **`--check-run` vs `ez84hubu`: PASS.**
+The only differences are the chain budget (expected), plus `width` 6 → 64,
+`config_path` and `name` (logging artefacts). Expected wall-clock ~5.5 h. The
+large pair took 5.4–5.6 h, and `ez84hubu` sampled for 5.3 h under four-sweep load.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
