@@ -14932,6 +14932,38 @@ The only differences are the chain budget (expected), plus `width` 6 → 64,
 `config_path` and `name` (logging artefacts). Expected wall-clock ~5.5 h. The
 large pair took 5.4–5.6 h, and `ez84hubu` sampled for 5.3 h under four-sweep load.
 
+### 4.3.147 medium_play escalation VERIFIED — 15/15, and three of four seed-0 BNN production models are done
+
+2026-09-30. Run `a5ac5f3c…` finished in **4.14 h**, faster than the winner's
+own 5.27 h, which ran under four-sweep CPU load (§10.7). Read with
+`escalation_readout.py medium_play ez84hubu a5ac5f3c… exp/escalation_medium_play_repro32.txt`.
+
+| | large_diverse | large_play | **medium_play** |
+|---|---|---|---|
+| config vs winner | PASS | PASS | **PASS** |
+| reproduction, chains 0–31 | 15/15 | 15/15 | **15/15** |
+| ESS centred, 32 → 128 ch | ×3.88 | ×3.93 | **76.5 → 303.0 (×3.96)** |
+| eff. tail draws @0.95 | 15.8 | 14.1 | **15.2** |
+| jackknife SE | 0.0041 → 0.0019 | 0.0079 → 0.0045 | **0.0040 → 0.0022** |
+| R-hat centred (pre-stated to rise) | 1.361 → 1.376 | 1.444 → 1.456 | **1.400 → 1.405** |
+| `val_cvar_ce` @0.75 | 0.3980 → 0.3955 | 0.4701 → 0.4793 | **0.3734 → 0.3761** |
+| `val_cvar_ce` @0.95 | 0.4998 → 0.4942 | 0.5988 → 0.6286 | **0.4489 → 0.4531** |
+| gate 1 `\|log r\|` at 128 | pass | 0.035 | **0.081** (≤ 0.1151) |
+| wall-clock | 5.38 h | 5.56 h | **4.14 h** |
+
+**The 128-chain CE moved up by 0.0027 (0.7 trial SE).** That is the third case,
+signs +, −, +, all within 2 SE, so still no evidence of systematic selection
+optimism. §7 reports the escalated CE (§4.3.134). **Gate 1's slack narrowed at
+128 chains** (`|log r|` 0.067 → 0.081) but still passes. `loc_sd` improved
+0.106 → 0.074.
+
+**16a is runnable for medium_play** (ESS 303 ≥ 200), after the move to
+`~/iqlpref`.
+
+**Next:** move it to `~/iqlpref/exp/reward_learning/`, then the medium_diverse
+escalation on GPUs 2–5. Targets from `q2dd6xqt`: `val_cvar_ce` **0.401708**,
+SE **0.0026**, margin **+0.0762**.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
