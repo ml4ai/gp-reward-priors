@@ -14858,6 +14858,74 @@ agent logs print `labels from cache`, and CPU load is fine with the evaluations
 running.** Stage-4 sweep ids and winners are recorded in **§6's live stage-4
 table** as each sweep finishes. The first row is `cu5o0tv4`, index 3.
 
+### 4.3.146 BNN large production models (seeds 0–10) VERIFIED — and one large_play seed's deployed reward is worse than chance
+
+2026-09-30. The user reports the 20 large seeds 1–10 jobs are done.
+
+#### 1. `production_readout.py bnn --variants large_play,large_diverse`: VERIFIED, 22 of 22
+
+Complete, every run the winner's configuration apart from seed, split and path,
+and **every seed passes all four gates at 128 chains**.
+
+> ⚠️ **Pass `--since 2026-09-24T19:00:00` for BNN.** The default cutoff
+> (2026-09-25) predates MR/PT production but **excludes the large_diverse
+> escalation** (launched 09-24 19:53 UTC), so the default reads "seed 0 missing".
+> The medium escalations will be well after either cutoff.
+
+#### 2. The 16b watch: large_play's CE₀.₉₅ across seeds
+
+Per seed, on each seed's **own** validation split. D = CE₀.₉₅ − CE₀.₇₅.
+
+| | CE₀ (mean reward) | CE₀.₇₅ | **CE₀.₉₅ (deployed)** | D | seeds with CE₀.₉₅ ≥ `log 2` |
+|---|---|---|---|---|---|
+| large_play, 11 seeds | 0.327 ± 0.038 | 0.428 ± 0.073 | **0.523 ± 0.112** (0.352–**0.731**) | 0.096 ± 0.042 | **1 (seed 7)** |
+| large_diverse, 11 seeds | 0.309 ± 0.028 | 0.387 ± 0.037 | 0.478 ± 0.055 (0.380–0.549) | 0.090 ± 0.020 | 0 |
+
+(mean ± sd across seeds, then range.)
+
+- **Seed 0 was pessimistic, not optimistic.** large_play seed 0's CE₀.₉₅
+  (0.629) is the third highest of 11; seeds 1–10 average **0.512**, 0.18 below
+  `log 2`. §4.3.141's worry ("the deployment tail for that variant is weaker than
+  one seed says") is **not** borne out on average.
+- **But the spread is wide, and one seed crosses chance.** **large_play seed 7:
+  CE₀.₉₅ = 0.731, above `log 2` = 0.693 by 0.038.** No SE is logged at 0.95.
+  Scaling seed 0's 128-chain SE ratio (SE₀.₉₅/SE₀.₇₅ ≈ 2) to seed 7's
+  SE₀.₇₅ of 0.0055 gives ~0.011, so it sits **~3.4 SE above chance**, an
+  estimate rather than a measurement. **Seed 3** (0.674) is ~0.020 below, which
+  is within ~2 SE. The other nine are ≥ 0.17 below.
+- **It is the split, amplified by the tail.** Seeds 3 and 7 are high at every
+  level (CE₀ 0.414 and 0.366, the two highest), and their D is among the largest
+  (0.121, 0.182). CE₀.₇₅ and CE₀.₉₅ correlate at 0.98 across seeds.
+  **Seed 7's mean reward is informative** (CE₀ 0.366); at 0.95 its CVaR
+  reward mis-orders the validation pairs slightly more often than chance.
+- ⛔ **Nothing is changed.** The deployment conservatism is not selected on
+  results (§4.3.123 §5), and seed 7's CVaR IQL run is run and reported as is.
+  **§7 disclosure:** *at the deployment conservatism, large_play's reward is
+  worse than chance on its validation pairs for 1 of 11 data splits (seed 7) and
+  near chance for a second (seed 3); large_diverse's beats chance on all 11.*
+  **Optional, to replace the estimate with a measured SE** (CPU, a few minutes):
+  run `diagnose_sampling_tail.py` on `…_large_play_bnn_eval_7` at
+  `--num-chains 128 --cvar-ce --centre-draws --conservatism 0.95`.
+
+#### 3. Next on GPUs 2–5: the medium_play escalation (§4.3.145 §1)
+
+The same procedure as the large pair (§4.3.130 §3–4, §4.3.131, §4.3.133):
+1. Empty the **scratch** seed-0 dir. It holds the last (cancelled) sweep trial's
+   chains.
+2. Launch with the sweep agents' thread environment.
+3. Run `--check-run` within minutes.
+4. After it finishes, reproduce chains 0–31 against `ez84hubu` (targets:
+   `val_cvar_ce` **0.373365**, SE **0.0040**, margin **+0.0704**) with
+   `escalation_readout.py`.
+5. Only then move it to `~/iqlpref/exp/reward_learning/`, then medium_diverse
+   the same way.
+
+**Label caching for the 20 large seeds 1–10 models** is needed before their
+BNN IQL runs. Those runs cannot start before large_diverse's stage 4 finishes
+and a GPU slot frees. Fit it in on GPUs 2–5 between the medium escalations and
+the medium seeds 1–10, one model at a time. Precompute duration is unmeasured,
+so **time the first one**.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -17012,7 +17080,10 @@ blind. Record it as a future-round candidate.
    lands within ~1σ of a gate** (`|log r|` 0.0226, margin 0.00358), disclose that
    its eligibility is seed-dependent — §4.3.108 measured 15 of 25 trials in that
    band.
-12b. 🔄 **BNN large seeds 1–10 LAUNCHED 2026-09-25** — `train_rewards.sh bnn "2 3 4 5"
+12b. ✅ **VERIFIED 2026-09-30 (§4.3.146)**: 22/22 large models, config OK, all gates
+   pass. large_play seed 7's CE₀.₉₅ is above `log 2` (a §7 disclosure, not acted
+   on). Use `--since 2026-09-24T19:00:00` for BNN. Original entry:
+   🔄 **BNN large seeds 1–10 LAUNCHED 2026-09-25** — `train_rewards.sh bnn "2 3 4 5"
    4`, `NUM_CHAINS=128`, 20 jobs one at a time into `~/iqlpref/exp/reward_learning/`,
    ~4.6 days. `--check-run` on the first job **passed** (user-confirmed): it is the
    winner's configuration apart from seed, split and path. **When it finishes:**
@@ -17099,7 +17170,9 @@ blind. Record it as a future-round candidate.
    0.95 cost is real, not estimator bias. **But both deployed rewards beat chance
    clearly** (49.7 SE and 7.3 SE below `log 2`, flip 16–22%). §7.3 (d) is settled
    for the large winners. **Watch large_play's CE₀.₉₅ on its seeds 1–10**: it
-   drifted up ~1.9 pooled SE with chains. **Run the same command on the medium
+   drifted up ~1.9 pooled SE with chains. → **Read 2026-09-30 (§4.3.146):**
+   seeds 1–10 average 0.512, so seed 0 was on the pessimistic side. But seed 7
+   (0.731) is above `log 2`, and seed 3 is near it. §7 disclosure. **Run the same command on the medium
    winners after their escalations.**
 16a. ✅ **READING DECLARED (§4.3.123)** — written before round 5 has a winner and
     before any escalation run exists, so it cannot be steered by the numbers.
