@@ -14964,6 +14964,13 @@ optimism. §7 reports the escalated CE (§4.3.134). **Gate 1's slack narrowed at
 escalation on GPUs 2–5. Targets from `q2dd6xqt`: `val_cvar_ce` **0.401708**,
 SE **0.0026**, margin **+0.0762**.
 
+**Done:** the user moved medium_play's escalation to `~/iqlpref` and launched
+medium_diverse's **2026-09-30 18:30 UTC**: run
+`46114e70-bdbe-4d52-bbaa-dff973ede026`, 128 @ 32/GPU, seed 0, leviathan.
+**`--check-run` vs `q2dd6xqt`: PASS.** The only differences are the chain budget
+(expected), plus `width` 5 → 32, `config_path` and `name` (artefacts). Expected
+~4–5.5 h.
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
