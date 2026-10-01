@@ -14971,6 +14971,42 @@ medium_diverse's **2026-09-30 18:30 UTC**: run
 (expected), plus `width` 5 → 32, `config_path` and `name` (artefacts). Expected
 ~4–5.5 h.
 
+### 4.3.149 medium_diverse escalation VERIFIED — all four seed-0 BNN production models are done
+
+2026-10-01. Run `46114e70…` finished in **4.27 h**. Read with
+`escalation_readout.py medium_diverse q2dd6xqt 46114e70… exp/escalation_medium_diverse_repro32.txt`:
+**config PASS, reproduction 15/15, all six precision checks PASS.**
+
+| | 32 ch (`q2dd6xqt`) | 128 ch | ratio |
+|---|---|---|---|
+| ESS centred | 105.2 | **409.1** | ×3.89 |
+| eff. tail draws @0.95 | 5.3 | **20.5** | |
+| jackknife SE | 0.0026 | **0.0013** | ×0.51 |
+| R-hat centred (pre-stated to rise) | 1.251 | 1.259 | |
+| `val_cvar_ce` @0.75 | 0.4017 | **0.4012** | |
+| `val_cvar_ce` @0.95 | 0.4989 | **0.4970** | |
+| `\|log r\|` / `loc_sd` (gate 1) | 0.063 / 0.101 | **0.053 / 0.057** | |
+| margin (gate 2) | +0.0762 | +0.0771 | |
+
+The CE moved **−0.0005 (0.2 trial SE)**. Across the four escalations the shifts
+are +0.0025 ↓, +0.0092 ↑, +0.0027 ↑, −0.0005 ↓, all within 2 SE: **no
+systematic selection optimism.** medium_diverse has the lowest R-hat and the
+highest ESS of the four, and both gate-1 statistics *improved* at 128 chains.
+
+**All four seed-0 production models now exist and are verified:** large_diverse
+(§4.3.133), large_play (§4.3.134), medium_play (§4.3.147), medium_diverse (here).
+Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
+(ESS 409 ≥ 200).
+
+**GPUs 2–5 are free.** Next, in order:
+1. **Label caching for the two medium seed-0 models**, so queue 2's BNN
+   medium stage 4 can read from the cache. Time each run: precompute duration is
+   still unmeasured.
+2. **Large seeds 1–10 labels (20 models) or medium seeds 1–10 training first**,
+   decided on that timing. Training is the critical path (~20 jobs × 4.2 h ≈
+   3.5 days at the medium wall-clock). Caching is only needed before the BNN
+   large IQL evaluation runs, which also wait for large_diverse's stage 4.
+
 ### 4.3.148 16a RESULT for medium_play — THE FIELD again, and the smallest deployment cost of the three
 
 2026-10-01. The same pre-registered reading as §4.3.141 (§4.3.123, chain ladder
