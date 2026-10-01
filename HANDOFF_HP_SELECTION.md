@@ -14971,6 +14971,47 @@ medium_diverse's **2026-09-30 18:30 UTC**: run
 (expected), plus `width` 5 → 32, `config_path` and `name` (artefacts). Expected
 ~4–5.5 h.
 
+### 4.3.148 16a RESULT for medium_play — THE FIELD again, and the smallest deployment cost of the three
+
+2026-10-01. The same pre-registered reading as §4.3.141 (§4.3.123, chain ladder
+per §4.3.129), on the escalated medium_play winner, run on CPU. Output:
+`exp/escalation_tail_ladder_medium_play.txt`.
+
+**Valid invocation.** The 32-chain rung reproduces the sweep trial `ez84hubu`
+at both levels (0.3734 / 0.4489). The 128-chain rung reproduces the escalation
+logs (0.3761 / 0.4531). Resolution gate: `ess_cen` 303 ≥ 200.
+
+| chains | CE .75 | CE .95 | **D** | SE .95 |
+|---|---|---|---|---|
+| 16 | 0.3731 | 0.4466 | **0.0735** | 0.0078 |
+| 32 | 0.3734 | 0.4489 | 0.0755 | 0.0071 |
+| 64 | 0.3731 | 0.4484 | 0.0753 | 0.0053 |
+| 128 | 0.3761 | 0.4531 | **0.0770** | 0.0034 |
+
+D(128) − D(16) = **+0.0035**, against 2S = 0.0170 (S = √(0.0078² + 0.0034²)).
+That is flat, and D(128) = 0.077 ≫ 2·SE 0.0068 is non-zero. **Verdict: THE
+FIELD.** As on large_play, D drifts slightly *up* with chains, the opposite of
+estimator bias, well inside 2S.
+
+**The absolute question.** CE₀.₉₅ = **0.4531 ± 0.0034**, **0.240 = 70.6 SE below
+`log 2`**, acc₀.₉₅ 0.779, wrong 22.1%. The conservative reward reverses the
+mean's preference on **10.4% / 16.9%** of pairs at 0.75 / 0.95.
+
+| | D(128) | CE₀.₉₅ at 128 | SE below `log 2` | flip% .75 / .95 |
+|---|---|---|---|---|
+| large_diverse | 0.099 | 0.494 | 49.7 | 9.1 / 17.3 |
+| large_play | 0.149 | 0.629 | 7.3 | 13.0 / 18.5 |
+| **medium_play** | **0.077** | **0.453** | **70.6** | **10.4 / 16.9** |
+
+**medium_play has the smallest 0.95 cost and the clearest deployed reward of the
+three.** This is seed 0 only. §4.3.146 showed that the split varies these
+numbers widely (large_play's CE₀.₉₅ spans 0.35–0.73 over 11 seeds), so the
+cross-seed check follows medium's seeds 1–10. ⛔ As before, nothing here moves
+the deployment conservatism (§4.3.123 §5). §7.3 (d) is updated for medium_play.
+medium_diverse runs the same command after its escalation.
+
+### 4.4 Procedure
+
 ### 4.4 Procedure
 
 Run at **seed 0** (the selection lineage — §1; never touch seeds 1–10), from
@@ -16146,6 +16187,9 @@ check** and it is the thing that would settle (d).
 > capacity-ladder rungs the selection avoided, not from the selected models.
 > **"Upper bound" is therefore replaced by these measured values for the two
 > large winners.** The medium winners are pending their escalations.
+> **medium_play added 2026-10-01 (§4.3.148): THE FIELD, D 0.074 → 0.077, CE₀.₉₅
+> 0.453, 70.6 SE below `log 2`. It has the smallest deployment cost of the three.**
+> medium_diverse is pending.
 
 > **Generalisable point, and the reason this amendment exists:** *rank transfer
 > and deployed-level resolution are different claims, and a high rank correlation
@@ -17236,7 +17280,9 @@ blind. Record it as a future-round candidate.
    drifted up ~1.9 pooled SE with chains. → **Read 2026-09-30 (§4.3.146):**
    seeds 1–10 average 0.512, so seed 0 was on the pessimistic side. But seed 7
    (0.731) is above `log 2`, and seed 3 is near it. §7 disclosure. **Run the same command on the medium
-   winners after their escalations.**
+   winners after their escalations.** → **medium_play DONE 2026-10-01
+   (§4.3.148): THE FIELD, D 0.077, CE₀.₉₅ 70.6 SE below `log 2`.**
+   medium_diverse pending its escalation.
 16a. ✅ **READING DECLARED (§4.3.123)** — written before round 5 has a winner and
     before any escalation run exists, so it cannot be steered by the numbers.
     Primary statistic `D(N) = CE_0.95 − CE_0.75` on the same draws, over a
