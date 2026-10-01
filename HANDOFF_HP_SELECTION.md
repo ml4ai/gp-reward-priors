@@ -15058,6 +15058,15 @@ unmeasured. Each precompute is pinned to 16 threads, so the four together
 **Expected cache after it: 48 entries** = 2 alphas × (4 seed-0 models + 20
 large seeds 1–10). The medium seeds 1–10 add 40 more after training.
 
+**DONE 2026-10-01:** the user reports `reward_label_cache.py --list` counts
+**48** entries. **Medium seeds 1–10 LAUNCHED** via `train_rewards.sh bnn "2 3 4 5" 4`,
+with `NUM_CHAINS=128`, `SEEDS` 1–10 and the medium variants, after emptying
+`_1`–`_10` in `~/iqlpref`. The first job is `eb0aafaa-5877-4f20-9333-05dcd04f9d03`
+(medium_play seed 1, 19:45 UTC). **`--check-run` vs `ez84hubu`: PASS.** Seed,
+splits and `OUT_DIR` differ as expected for another seed; absolute data paths,
+`width` 6 → 64, `config_path` and `name` are artefacts. 20 jobs at ~4.2 h
+should finish around **2026-10-05**.
+
 #### 3. Stage 4: MR medium_diverse → index 2
 
 `5hxmtx6j`: index 2 (0.631) over 3 (0.574), a gap of 0.66 noise units, and
@@ -17305,6 +17314,11 @@ blind. Record it as a future-round candidate.
    is the escalation, already verified by `escalation_readout.py`. Gate verdicts
    for seeds 1–10 are REPORTED, not enforced, since eligibility is decided at
    sweep budget (§3.2.9).
+12c. 🔄 **BNN medium seeds 1–10 LAUNCHED 2026-10-01 (§4.3.150)**: 20 jobs on
+   GPUs 2–5, first job's `--check-run` PASS, done ~10-05. **When finished:**
+   `production_readout.py bnn --variants medium_play,medium_diverse --since 2026-09-30T00:00:00`,
+   the §4.3.146 cross-seed CE₀.₉₅ query for §7.4 E, then cache their labels (40
+   entries, ~20 min per model, 4 GPUs in parallel).
 12a. ✅ **MR + PT reward models, seeds 0–10, TRAINED and VERIFIED (§4.3.138).**
    88/88 complete, configured as the winners, and healthy. **MR seed 0 is
    bit-exact** with its winners. **PT is not**: GPU non-determinism, ≤ 2e-4 on
