@@ -15651,15 +15651,15 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | file | sweep | idx 0–7 (last-10) | **winner** | runner-up | gap (noise units) | last-20 pick | done |
 |---|---|---|---|---|---|---|---|
 | bnn large_play cvar | `cu5o0tv4` | .427 .294 .444 **.614** .000 .000 .078 .095 | **3** (0.614) | 2 (0.444) | 0.170 (**2.0**) | 3 ✓ | 2026-09-29 |
-| bnn large_play mean | — | | | | | | queue 1 |
-| bnn large_diverse cvar | — | | | | | | queue 1 |
-| bnn large_diverse mean | — | | | | | | queue 1 |
+| bnn large_play mean | `sxrmkdyc` | .326 .438 .445 **.510** .000 .000 .017 .128 | **3** (0.510) | 2 (0.445) | 0.065 (0.76) | 3 ✓ | 2026-09-29 |
+| bnn large_diverse cvar | `oasb22i7` | .010 .015 .038 **.378** .017 .009 .017 .031 | **3** (0.378) | 2 (0.038) | 0.340 (**4.0**) | 3 ✓ | 2026-09-30 |
+| bnn large_diverse mean | `658tch22` | .017 .013 .149 **.220** .036 .021 .025 .038 | **3** (0.220) | 2 (0.149) | 0.071 (0.83) | 3 ✓ | 2026-09-30 |
 | bnn medium_play cvar | — | | | | | | queue 2 |
 | bnn medium_play mean | — | | | | | | queue 2 |
 | bnn medium_diverse cvar | — | | | | | | queue 2 |
 | bnn medium_diverse mean | — | | | | | | queue 2 |
-| mr medium_play | — | | | | | | queue 1 |
-| mr medium_diverse | — | | | | | | queue 1 |
+| mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
+| mr medium_diverse | `5hxmtx6j` | | | | | | running |
 | mr large_play | — | | | | | | queue 1 |
 | mr large_diverse | — | | | | | | queue 1 |
 | ensemble medium_play cvar | — | | | | | | queue 2 |
@@ -15682,6 +15682,18 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   The winner, index 3, is the same index the pre-redesign MR best grid picked on
   this variant (§5's validation example), but the constants in indices 2–7 come
   from each model's own label range, so the two are not the same transformation.
+- *All four BNN large sweeps pick index 3* (2026-10-01). Index 2 is the
+  runner-up in all four, but at last-20 large_play mean's runner-up is index 1.
+  Two picks are clear (2.0 and 4.0 noise units) and two are not (0.76, 0.83),
+  though last-20 agrees in every case. large_diverse at 0.75 conservatism is
+  **index 3 or nothing**: every other index scores ≤ 0.038. The mean reward
+  (α=0) scores **below** the CVaR reward on both large variants at the
+  winning index (0.510 vs 0.614, 0.220 vs 0.378). That is seed 0 only, a single
+  run each, and **not a result**. The comparison belongs to seeds 1–10.
+- *mr medium_play:* index 0 (identity) beats index 2 by **0.001**, 0.01 noise
+  units, and index 3 is 0.027 behind. That is a **three-way tie** (indices 0,
+  2, 3 within 0.31 noise units), decided by the argmax as pre-registered.
+  last-20 agrees (0 over 2 by 0.0025). Disclose as tied in §7.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
