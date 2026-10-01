@@ -15007,6 +15007,63 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.150 16a for medium_diverse — THE FIELD on all four; label-caching cost measured, and the order it sets
+
+2026-10-01.
+
+#### 1. 16a, medium_diverse (`exp/escalation_tail_ladder_medium_diverse.txt`, CPU)
+
+Valid invocation: the 32-chain rung reproduces `q2dd6xqt` (0.4017 / 0.4989), and
+the 128-chain rung reproduces the escalation (0.4012 / 0.4970). ESS 409 ≥ 200.
+
+| chains | CE .75 | CE .95 | **D** | SE .95 |
+|---|---|---|---|---|
+| 16 | 0.3996 | 0.4943 | **0.0947** | 0.0067 |
+| 32 | 0.4017 | 0.4989 | 0.0972 | 0.0052 |
+| 64 | 0.4025 | 0.4993 | 0.0968 | 0.0033 |
+| 128 | 0.4012 | 0.4970 | **0.0958** | 0.0026 |
+
+D(128) − D(16) = **+0.0011** against 2S = 0.0144: flat, and non-zero (0.096 ≫
+0.005). **Verdict: THE FIELD.** CE₀.₉₅ = **0.4970 ± 0.0026, 0.196 = 75.4 SE below
+`log 2`**, acc₀.₉₅ 0.748, flip% 5.6 / 19.6.
+
+**16a across all four winners (seed 0, 128 chains):**
+
+| | D(128) | ΔD (16 → 128) vs 2S | CE₀.₉₅ | SE below `log 2` | flip% .75 / .95 |
+|---|---|---|---|---|---|
+| large_diverse | 0.099 | −0.005 / 0.027 | 0.494 | 49.7 | 9.1 / 17.3 |
+| large_play | 0.149 | +0.027 / 0.044 | 0.629 | 7.3 | 13.0 / 18.5 |
+| medium_play | 0.077 | +0.004 / 0.017 | 0.453 | 70.6 | 10.4 / 16.9 |
+| medium_diverse | 0.096 | +0.001 / 0.014 | 0.497 | 75.4 | 5.6 / 19.6 |
+
+**Unanimous: the 0.95 cost is real (ΔCE 0.08–0.15), not estimator bias, and
+every deployed seed-0 reward carries clear preference information.** large_play
+is the weakest at seed 0, and across seeds (§4.3.146). §7.3 (d) is settled for
+all four. ⛔ The deployment conservatism is unchanged (§4.3.123 §5).
+
+#### 2. Label caching costs ~20 min per model, so it goes FIRST
+
+Measured by the user with `time` on GPU 2: **18 min (medium_play) and 20 min
+(medium_diverse)** per model, both alphas. The box has **774 GB RAM**, and
+peak use during escalation plus IQL was 28% (wandb system metrics), so four
+concurrent precomputes at ~61 GB each fit.
+
+**Order decided:** cache the **20 large seeds 1–10 models first, 4 in parallel
+on GPUs 2–5** (≈ 5 models × 20 min ≈ 1.7 h), **then** medium seeds 1–10
+training. That delays a ~3.5-day job by under 2 h, and it avoids co-locating
+precompute with training or IQL on a GPU whose memory headroom for it is
+unmeasured. Each precompute is pinned to 16 threads, so the four together
+(64 cores) fit beside the 4 IQL runs (100 at evaluation).
+
+**Expected cache after it: 48 entries** = 2 alphas × (4 seed-0 models + 20
+large seeds 1–10). The medium seeds 1–10 add 40 more after training.
+
+#### 3. Stage 4: MR medium_diverse → index 2
+
+`5hxmtx6j`: index 2 (0.631) over 3 (0.574), a gap of 0.66 noise units, and
+last-20 agrees. Six winners are now in `phase2_winners.json` (user-run, on the
+Mac and on the box).
+
 ### 4.3.148 16a RESULT for medium_play — THE FIELD again, and the smallest deployment cost of the three
 
 2026-10-01. The same pre-registered reading as §4.3.141 (§4.3.123, chain ladder
@@ -15659,7 +15716,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | bnn medium_diverse cvar | — | | | | | | queue 2 |
 | bnn medium_diverse mean | — | | | | | | queue 2 |
 | mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
-| mr medium_diverse | `5hxmtx6j` | | | | | | running |
+| mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
 | mr large_play | — | | | | | | queue 1 |
 | mr large_diverse | — | | | | | | queue 1 |
 | ensemble medium_play cvar | — | | | | | | queue 2 |
@@ -16236,8 +16293,10 @@ check** and it is the thing that would settle (d).
 > **"Upper bound" is therefore replaced by these measured values for the two
 > large winners.** The medium winners are pending their escalations.
 > **medium_play added 2026-10-01 (§4.3.148): THE FIELD, D 0.074 → 0.077, CE₀.₉₅
-> 0.453, 70.6 SE below `log 2`. It has the smallest deployment cost of the three.**
-> medium_diverse is pending.
+> 0.453, 70.6 SE below `log 2`.** **medium_diverse added 2026-10-01 (§4.3.150):
+> THE FIELD, D 0.095 → 0.096, CE₀.₉₅ 0.497, 75.4 SE below `log 2`.** **(d) is
+> now settled for all four winners**: ΔCE 0.08–0.15, and every deployed seed-0
+> reward beats chance by 7–75 SE.
 
 > **Generalisable point, and the reason this amendment exists:** *rank transfer
 > and deployed-level resolution are different claims, and a high rank correlation
@@ -17330,7 +17389,8 @@ blind. Record it as a future-round candidate.
    (0.731) is above `log 2`, and seed 3 is near it. §7 disclosure. **Run the same command on the medium
    winners after their escalations.** → **medium_play DONE 2026-10-01
    (§4.3.148): THE FIELD, D 0.077, CE₀.₉₅ 70.6 SE below `log 2`.**
-   medium_diverse pending its escalation.
+   **medium_diverse DONE (§4.3.150): THE FIELD, D 0.096, 75.4 SE. 16a is
+   complete for all four winners.**
 16a. ✅ **READING DECLARED (§4.3.123)** — written before round 5 has a winner and
     before any escalation run exists, so it cannot be steered by the numbers.
     Primary statistic `D(N) = CE_0.95 − CE_0.75` on the same draws, over a
