@@ -15685,7 +15685,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 - *All four BNN large sweeps pick index 3* (2026-10-01). Index 2 is the
   runner-up in all four, but at last-20 large_play mean's runner-up is index 1.
   Two picks are clear (2.0 and 4.0 noise units) and two are not (0.76, 0.83),
-  though last-20 agrees in every case. large_diverse at 0.75 conservatism is
+  though last-20 agrees in every case. large_diverse's CVaR reward (α 0.95) is
   **index 3 or nothing**: every other index scores ≤ 0.038. The mean reward
   (α=0) scores **below** the CVaR reward on both large variants at the
   winning index (0.510 vs 0.614, 0.220 vs 0.378). That is seed 0 only, a single
