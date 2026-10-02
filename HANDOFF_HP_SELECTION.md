@@ -15007,6 +15007,57 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.151 Queue 1 COMPLETE (8 stage-4 winners); evaluation lineage written for them; queue 2 planned
+
+2026-10-02. Queue 1 ran 8 sweeps, 64 runs, every run complete with 200
+evaluation points. Winners (§6's table has the grids):
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| BNN CVaR | queue 2 | queue 2 | **3** | **3** |
+| BNN mean | queue 2 | queue 2 | **3** | **3** |
+| MR best | **0** (three-way tie) | **2** | **3** | **3** |
+
+#### 1. Evaluation lineage written for all eight
+
+`phase2_sweeps.py eval --winners phase2_winners.json --write`, run on the Mac
+and committed: the four BNN large and four MR files are now **seeds 1–10 at the
+winning index**. `check`: **24/24 match the spec** (8 eval, 16 stage 4). BNN
+large_play CVaR was already in that state from the user's 09-29 commit, and the
+generator reports it unchanged, so the hand-run and the generator agree.
+`phase2_winners.json` is left **untracked** on both machines: committing it
+would make the box's `git pull` refuse over its own untracked copy. The winners
+are recorded here and in §6.
+
+**Every reward model these 80 runs read is verified:** BNN large seeds 1–10
+(§4.3.146), MR seeds 1–10 (§4.3.138). **The BNN large labels are cached**
+(§4.3.150), so no run relabels.
+
+#### 2. `stage4_queue.sh` gained a lineage guard
+
+A stage-4 sweep and its evaluation sweep are **the same file name**. If the box
+had not pulled, a queue item meant as evaluation would launch the old stage-4
+grid again, silently. Items now take an optional tag,
+`family:sweep@stage4` or `@eval`, checked against the `Lineage:` header
+`phase2_sweeps.py` writes. The whole queue is validated before anything
+launches. Tested: the right lineage passes, the wrong one is refused in both
+directions, and an unknown tag is refused.
+
+#### 3. Queue 2 (GPUs 0–1, 4 concurrent) and queue 3 (GPUs 2–5, from ~10-05)
+
+**Queue 2, in this order:**
+1. **BNN medium stage 4 ×4** (`@stage4`). Critical path: its winners gate the
+   BNN medium evaluation, the last thing to finish.
+2. **BNN large evaluation ×4** (`@eval`, 10 runs each).
+3. **MR evaluation ×4** (`@eval`).
+
+Estimate: a stage-4 sweep is 2 waves (~10 h); an evaluation sweep is 10 runs
+on 4 agents, 3 waves with 2 slots idle in the last (~15–18 h). So ~40 h + ~70 h
++ ~60 h ≈ **7 days**. **Queue 3** takes PT ×4 and ensemble ×8 stage 4 onto GPUs
+2–5 once the medium seeds 1–10 finish (~10-05). With no BNN training running,
+the CPU allows up to 10 IQL runs at once across both queues (10 × 25 = 250 of
+255), so queue 3 gets **6 agents at most** alongside queue 2's 4.
+
 ### 4.3.150 16a for medium_diverse — THE FIELD on all four; label-caching cost measured, and the order it sets
 
 2026-10-01.
@@ -15726,20 +15777,20 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | bnn medium_diverse mean | — | | | | | | queue 2 |
 | mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
 | mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
-| mr large_play | — | | | | | | queue 1 |
-| mr large_diverse | — | | | | | | queue 1 |
-| ensemble medium_play cvar | — | | | | | | queue 2 |
-| ensemble medium_play mean | — | | | | | | queue 2 |
-| ensemble medium_diverse cvar | — | | | | | | queue 2 |
-| ensemble medium_diverse mean | — | | | | | | queue 2 |
-| ensemble large_play cvar | — | | | | | | queue 2 |
-| ensemble large_play mean | — | | | | | | queue 2 |
-| ensemble large_diverse cvar | — | | | | | | queue 2 |
-| ensemble large_diverse mean | — | | | | | | queue 2 |
-| pt medium_play | — | | | | | | queue 2 |
-| pt medium_diverse | — | | | | | | queue 2 |
-| pt large_play | — | | | | | | queue 2 |
-| pt large_diverse | — | | | | | | queue 2 |
+| mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
+| mr large_diverse | `3ibbsds8` | .077 .104 .064 **.251** .005 .013 .026 .005 | **3** (0.251) | 1 (0.104) | 0.147 (1.7) | 3 ✓ | 2026-10-02 |
+| ensemble medium_play cvar | — | | | | | | queue 3 |
+| ensemble medium_play mean | — | | | | | | queue 3 |
+| ensemble medium_diverse cvar | — | | | | | | queue 3 |
+| ensemble medium_diverse mean | — | | | | | | queue 3 |
+| ensemble large_play cvar | — | | | | | | queue 3 |
+| ensemble large_play mean | — | | | | | | queue 3 |
+| ensemble large_diverse cvar | — | | | | | | queue 3 |
+| ensemble large_diverse mean | — | | | | | | queue 3 |
+| pt medium_play | — | | | | | | queue 3 |
+| pt medium_diverse | — | | | | | | queue 3 |
+| pt large_play | — | | | | | | queue 3 |
+| pt large_diverse | — | | | | | | queue 3 |
 
 **Notes, per row:**
 - *bnn large_play cvar:* all 8 runs complete (200 evaluation points each).
@@ -15760,6 +15811,9 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   units, and index 3 is 0.027 behind. That is a **three-way tie** (indices 0,
   2, 3 within 0.31 noise units), decided by the argmax as pre-registered.
   last-20 agrees (0 over 2 by 0.0025). Disclose as tied in §7.
+- *mr large_play, large_diverse* (2026-10-02): both index 3, runner-up index 1,
+  gaps 1.6 and 1.7 noise units, last-20 agrees. **On the large variants index 3
+  wins all six finished grids** (4 BNN, 2 MR). The medium MR grids pick 0 and 2.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
