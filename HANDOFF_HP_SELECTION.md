@@ -15058,6 +15058,14 @@ on 4 agents, 3 waves with 2 slots idle in the last (~15–18 h). So ~40 h + ~70 
 the CPU allows up to 10 IQL runs at once across both queues (10 × 25 = 250 of
 255), so queue 3 gets **6 agents at most** alongside queue 2's 4.
 
+**Queue 2 LAUNCHED 2026-10-02 17:12 UTC** (user: pull, `check`, dry run, launch).
+The first sweep is **`xjojqlss`** (BNN medium_play CVaR, stage 4). Its 4 runs
+match the spec: seed 0, `bnn_alpha` 0.95, `bnn_n_samples` −1, `centre_draws`
+True, `gauge_reward` max0, `normalize_reward` 0–3, reading
+`…antmaze_medium_play_bnn_eval`. They were at step ~40,000 after 11 minutes.
+Relabelling alone takes ~18 min (§4.3.150), so the labels came **from the
+cache**.
+
 ### 4.3.150 16a for medium_diverse — THE FIELD on all four; label-caching cost measured, and the order it sets
 
 2026-10-01.
@@ -15771,7 +15779,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | bnn large_play mean | `sxrmkdyc` | .326 .438 .445 **.510** .000 .000 .017 .128 | **3** (0.510) | 2 (0.445) | 0.065 (0.76) | 3 ✓ | 2026-09-29 |
 | bnn large_diverse cvar | `oasb22i7` | .010 .015 .038 **.378** .017 .009 .017 .031 | **3** (0.378) | 2 (0.038) | 0.340 (**4.0**) | 3 ✓ | 2026-09-30 |
 | bnn large_diverse mean | `658tch22` | .017 .013 .149 **.220** .036 .021 .025 .038 | **3** (0.220) | 2 (0.149) | 0.071 (0.83) | 3 ✓ | 2026-09-30 |
-| bnn medium_play cvar | — | | | | | | queue 2 |
+| bnn medium_play cvar | `xjojqlss` | | | | | | running |
 | bnn medium_play mean | — | | | | | | queue 2 |
 | bnn medium_diverse cvar | — | | | | | | queue 2 |
 | bnn medium_diverse mean | — | | | | | | queue 2 |
