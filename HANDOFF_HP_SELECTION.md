@@ -21,6 +21,12 @@
 > Companion documents: `HANDOFF.md` (project + map-informed prior),
 > `HANDOFF_CVAR_SAMPLER_2026-08.md` (sampler fixes and CVaR diagnostics),
 > `fsghmc_sampler_fixes_handoff.md` (the external review those fixes came from).
+>
+> **Added 2026-10-02 — §11 specifies the held-out split design for the LABEL-NOISE
+> experiment** (dissertation Ch. 3, Experiment 2). It is a design for runs that do
+> not exist yet, written before any of them. Read §11 before building a noise
+> launcher: the corrupted *validation* files already in `noise/` belong to a
+> superseded design and must NOT be passed to a run.
 
 ---
 
@@ -18186,3 +18192,166 @@ implicit.
 This does not affect any selection result — throughput is not an input to any
 stopping rule or metric — but it does affect every schedule estimate in this
 document.
+
+---
+
+## 11. Label-noise experiment (Ch. 3, Experiment 2): held-out split design
+
+**DECIDED 2026-10-02 (user), written BEFORE any label-noise run exists.** Nothing
+here is implemented yet. This section is the specification; the dissertation
+states the same design in `chapters/03-risk-sensitive-offline.tex`, Experiment 2.
+It concerns the *evaluation* experiments, not hyperparameter selection, and it
+changes nothing in §1–§10.
+
+### 11.1 What the experiment is
+
+At full data, flip a fraction `p ∈ {0.1, 0.2, 0.3, 0.4, 0.45}` of the binary
+preference labels and measure how each method degrades. `p = 0` is the main
+evaluation already running (§6, §4.3.151). The flips are **nested** within a seed
+(`scripts_bnn/make_noise_sets.py`): one permutation per partition, the first
+`round(p·N)` labels flipped, so each level is a superset of the one below.
+
+**Everything selected is frozen at its anchor (p = 0, full data) value**: stage-1
+winners, the BNN production budget (128 chains), `centre_draws`, `gauge_reward`
+max0, the conservatism (0.95 / 0), and each family × variant's stage-4
+normalization index. **Nothing is re-selected under noise**, so there is no
+seed-0 lineage in this experiment — it runs at the evaluation seeds 1–10 only.
+
+### 11.2 The rule, and why the two held-out splits are treated differently
+
+> **Measure on uncorrupted labels; make decisions on what a practitioner would
+> actually have.**
+
+The goal is to see how much of the *original* signal a model retains as its
+training labels are corrupted. The two held-out splits do different jobs:
+
+| split | its job in this experiment | treatment | why |
+|---|---|---|---|
+| **validation** | **measurement only** — reward-model metrics. It ranks nothing here, because hyperparameters are frozen. | **UNCORRUPTED** (the base `pref_val_<seed>` file) | Only the original labels measure retention of the original signal. Against flipped labels, accuracy is compressed toward 0.5 by a factor `(1 − 2p)` — 10× at `p = 0.45`, on 54–110 pairs — and cross-entropy penalises a model for being confidently *right*, so it rewards under-confidence and confounds calibration. |
+| **test** | **a training-time decision** — it picks the MR/PT checkpoint saved as `best_model.pt` (`select_split: test`, §1, §4.3.107). | **CORRUPTED at the same `p`** as the training labels, in the PRIMARY arm | An annotator who mislabels the training pairs mislabels held-out pairs too. A clean selection split is an oracle: early stopping against clean labels is a strong defence against memorising label noise, which is the failure this experiment exists to expose. |
+
+The objection "you would not have clean labels in practice" applies to
+*decisions*, not to *measurement*. We built the corruption, so scoring against the
+labels we started from is legitimate.
+
+### 11.3 The two arms
+
+| | PRIMARY — "noisy selection" | SENSITIVITY — "oracle selection" |
+|---|---|---|
+| training labels | corrupted at `p` | corrupted at `p` (identical) |
+| checkpoint-selection split (test) | **corrupted at `p`** | **uncorrupted** |
+| measurement split (validation) | uncorrupted | uncorrupted |
+| which families differ between arms | — | **MR best-model and PT only** |
+| purpose | how each method degrades under noise it cannot see past | answers "the baselines were handicapped": what they achieve even with an oracle |
+
+**The BNN (CVaR and mean) selects no checkpoint**, so it is trained **once** per
+(variant, seed, `p`) and is the same model in both arms. The same holds for the
+**MR snapshot ensemble**, which averages every snapshot past `mr_burn_in` and does
+not use the selection (§7.5-B).
+
+The sensitivity arm is the **more favourable** condition for the baselines. Report
+it beside the primary result and label it as such.
+
+> ⚠️ **Scope of the sensitivity arm is NOT yet decided** (user to fix before the
+> runs): all four variants, or one variant named in advance. It doubles the MR/PT
+> IQL cost at every noise level. Whatever is chosen must be chosen **before any
+> primary-arm result is seen**, or it is a result-driven choice (§9).
+
+### 11.4 Exact split arguments, per family
+
+All three training scripts take `train_dataset` / `val_dataset` / `test_dataset`
+as per-run overrides and derive the uncorrupted defaults from `antmaze_variant` +
+`seed` when left unset. With `N = data/antmaze/<variant>/eval/seed_<s>/noise` and
+`<pp>` the level suffix (`01`, `02`, `03`, `04`, `045`):
+
+| family | arm | `train_dataset` | `val_dataset` | `test_dataset` |
+|---|---|---|---|---|
+| MR, PT | PRIMARY | `N/<variant>_pref_train_<s>_<pp>.hdf5` | **leave unset** (uncorrupted) | `N/<variant>_pref_test_<s>_<pp>.hdf5` ← **does not exist yet, §11.5** |
+| MR, PT | SENSITIVITY | `N/<variant>_pref_train_<s>_<pp>.hdf5` | **leave unset** | **leave unset** (uncorrupted) |
+| BNN | (one model, both arms) | `N/<variant>_pref_train_<s>_<pp>.hdf5` | **leave unset** | **leave unset** |
+
+`select_split` stays at its default `"test"` everywhere. Do **not** switch it to
+`"val"`.
+
+> ⛔ **Never pass `N/<variant>_pref_val_<s>_<pp>.hdf5` as `val_dataset`.** Those
+> files exist and are **genuinely corrupted** — checked 2026-10-02 on all 4
+> variants × 11 seeds × 5 levels: **0 of 220** are identical to the base
+> validation split, labels are flipped at the same rate as the matching training
+> file, and states/actions are unchanged. They were produced by
+> `make_noise_sets.py` for an **earlier design** (corrupt validation, keep test
+> clean) that §11 supersedes. Passing one silently runs the old design, and the
+> only symptom would be validation metrics that look worse than they should.
+> Leave the files on disk; just do not load them.
+
+### 11.5 What has to be built
+
+1. **Corrupted test files.** `make_noise_sets.py` loops over
+   `("train", "val")`; the test partition needs the same treatment, written to
+   `N/<variant>_pref_test_<s>_<pp>.hdf5`. `process_partition` already does the
+   right thing for any partition (seed-matched permutation, nested prefix, one-hot
+   columns swapped).
+   - **Do not regenerate the existing train files as a side effect** unless you
+     verify they come out bit-identical. The generator is deterministic in
+     `(seed, partition)`, so they should — but the training files are the ones
+     every noise run reads, so checksum them before and after, or restrict the new
+     invocation to the test partition.
+   - The default seed list is 1–10; that is the right set (§11.1 — no seed-0
+     lineage here).
+2. **A launcher for the reward models**, per (family, variant, seed, `p`, arm),
+   passing §11.4's overrides and nothing else that differs from the production
+   configs.
+   - **Every run needs its own output directory.** The scripts append `_<seed>`
+     to `checkpoints_path` / `OUT_DIR` and nothing else, so two noise levels, or
+     the two arms, launched with the same base path **overwrite each other**. The
+     level and the arm must be in the path.
+   - For MR the two arms could in principle come from **one** training run — the
+     test split affects only which epoch is copied to `best_model.pt`, and MR
+     saves every `checkpoint_<epoch>.pt`. **PT saves only `best_model.pt`**, so it
+     cannot. The simple, symmetric implementation is two runs with two output
+     directories for both families; reward-model training is the cheap part.
+3. **IQL evaluation runs** at each level, reading those reward models, with the
+   **anchor's** stage-4 normalization index for that family × variant — the same
+   index the `p = 0` evaluation lineage uses (§6, `phase2_winners.json`). Statistic:
+   last-10 mean (§5).
+
+### 11.6 Checks before any result is quoted
+
+- **Each corrupted test file differs from its base file in labels only**, at a
+  flipped fraction within one pair of `p`, and the levels are nested (every label
+  flipped at `p` is also flipped at every higher level). The same check that
+  §11.4's 220-file comparison ran on validation.
+- **Each run's logged config shows the intended three paths.** The MR and PT
+  scripts print `[split roles] checkpoint selection on …`; confirm from wandb `config`, not from
+  the launcher, that `val_dataset` is the base file in every run and that
+  `test_dataset` is the noise file in PRIMARY and the base file in SENSITIVITY.
+  This is the config-verification discipline of §4.3.109 — its absence caused
+  §4.3.90, §4.3.96 and §4.3.98.
+- **At a given (variant, seed, `p`) the two arms' MR runs have identical training
+  curves** (same data, same seed; only the selected epoch differs). If they do
+  not, something other than the selection split changed.
+- **The BNN is unaffected by the arm.** Its `test_dataset` is the uncorrupted
+  default; its test metrics are a clean held-out read and may be reported.
+
+### 11.7 What to expect, and what to disclose
+
+- **Checkpoint selection gets very noisy at high `p`.** The selection split is
+  54–110 pairs; at `p = 0.45` the selection signal is nearly gone and the saved
+  epoch is close to arbitrary. That is the realistic consequence of noisy
+  held-out labels, not a bug — report it, and report the selected epoch's
+  distribution across seeds in both arms.
+- **Disclose both arms**, with the sensitivity arm identified as the baselines'
+  favourable condition, and state that the BNN is identical in both.
+- **Disclose that the validation metrics are against the original human labels**,
+  which carry their own noise: "uncorrupted" means not corrupted *by us*.
+- **Disclose that the earlier protocol note specified the opposite** (corrupt
+  validation, clean test), that the files for it exist, and that the design was
+  changed before any noise run — for the reasons in §11.2.
+
+### 11.8 Do-NOTs for this experiment
+
+- Do not pass a `noise/…_pref_val_…` file to any run.
+- Do not re-select anything under noise — no stage-1 search, no stage-4 grid.
+- Do not change `select_split`.
+- Do not decide the sensitivity arm's scope after seeing primary-arm results.
+- Do not compare a noisy-selection baseline against an oracle-selection baseline
+  from a different seed or level; the arms are paired within (variant, seed, `p`).
