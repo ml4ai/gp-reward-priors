@@ -18214,7 +18214,8 @@ evaluation already running (§6, §4.3.151). The flips are **nested** within a s
 **Everything selected is frozen at its anchor (p = 0, full data) value**: stage-1
 winners, the BNN production budget (128 chains), `centre_draws`, `gauge_reward`
 max0, the conservatism (0.95 / 0), and each family × variant's stage-4
-normalization index. **Nothing is re-selected under noise**, so there is no
+normalization index (**confirmed by the user 2026-10-02: the index is NOT
+re-selected per noise level**). **Nothing is re-selected under noise**, so there is no
 seed-0 lineage in this experiment — it runs at the evaluation seeds 1–10 only.
 
 ### 11.2 The rule, and why the two held-out splits are treated differently
@@ -18252,10 +18253,12 @@ not use the selection (§7.5-B).
 The sensitivity arm is the **more favourable** condition for the baselines. Report
 it beside the primary result and label it as such.
 
-> ⚠️ **Scope of the sensitivity arm is NOT yet decided** (user to fix before the
-> runs): all four variants, or one variant named in advance. It doubles the MR/PT
-> IQL cost at every noise level. Whatever is chosen must be chosen **before any
-> primary-arm result is seen**, or it is a result-driven choice (§9).
+> ✅ **Scope DECIDED 2026-10-02 (user), before any primary-arm result exists: the
+> sensitivity arm runs on `antmaze-medium-play-v2` ONLY** — MR best-model and PT,
+> seeds 1–10, all five noise levels. The PRIMARY arm runs on all four variants.
+> The sensitivity arm doubles the MR/PT IQL cost at every level, which is why it is
+> confined to one variant. Do not extend it to another variant after primary
+> results are seen (§9).
 
 ### 11.4 Exact split arguments, per family
 
