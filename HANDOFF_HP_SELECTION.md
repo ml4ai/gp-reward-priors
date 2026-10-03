@@ -15785,8 +15785,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | bnn large_play mean | `sxrmkdyc` | .326 .438 .445 **.510** .000 .000 .017 .128 | **3** (0.510) | 2 (0.445) | 0.065 (0.76) | 3 ✓ | 2026-09-29 |
 | bnn large_diverse cvar | `oasb22i7` | .010 .015 .038 **.378** .017 .009 .017 .031 | **3** (0.378) | 2 (0.038) | 0.340 (**4.0**) | 3 ✓ | 2026-09-30 |
 | bnn large_diverse mean | `658tch22` | .017 .013 .149 **.220** .036 .021 .025 .038 | **3** (0.220) | 2 (0.149) | 0.071 (0.83) | 3 ✓ | 2026-09-30 |
-| bnn medium_play cvar | `xjojqlss` | | | | | | running |
-| bnn medium_play mean | — | | | | | | queue 2 |
+| bnn medium_play cvar | `xjojqlss` | .648 .668 **.759** .651 .000 .003 .526 .526 | **2** (0.759) | 1 (0.668) | 0.091 (1.1) | 2 ✓ | 2026-10-03 |
+| bnn medium_play mean | `fd8k31w2` | | | | | | running |
 | bnn medium_diverse cvar | — | | | | | | queue 2 |
 | bnn medium_diverse mean | — | | | | | | queue 2 |
 | mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
@@ -15828,6 +15828,12 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 - *mr large_play, large_diverse* (2026-10-02): both index 3, runner-up index 1,
   gaps 1.6 and 1.7 noise units, last-20 agrees. **On the large variants index 3
   wins all six finished grids** (4 BNN, 2 MR). The medium MR grids pick 0 and 2.
+- *bnn medium_play cvar* (2026-10-03): index 2 at 0.759, a gap of 1.1 noise
+  units over index 1, and last-20 agrees (0.745 vs 0.695). It is the first BNN
+  grid not to pick index 3, which here scores 0.651, level with the identity
+  (0.648). On medium_play indices 0–3 all score 0.65–0.76, and 6–7 reach 0.53.
+  That is a flat grid, as in MR medium_play, unlike the large variants where
+  index 3 stands alone.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
