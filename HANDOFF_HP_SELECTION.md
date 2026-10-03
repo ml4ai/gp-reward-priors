@@ -15787,8 +15787,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | bnn large_diverse mean | `658tch22` | .017 .013 .149 **.220** .036 .021 .025 .038 | **3** (0.220) | 2 (0.149) | 0.071 (0.83) | 3 ✓ | 2026-09-30 |
 | bnn medium_play cvar | `xjojqlss` | .648 .668 **.759** .651 .000 .003 .526 .526 | **2** (0.759) | 1 (0.668) | 0.091 (1.1) | 2 ✓ | 2026-10-03 |
 | bnn medium_play mean | `fd8k31w2` | .740 .620 **.791** .665 .018 .010 .431 .465 | **2** (0.791) | 0 (0.740) | 0.051 (0.59) | 2 ✓ (by 0.016) | 2026-10-03 |
-| bnn medium_diverse cvar | `svryk4wg` | | | | | | running |
-| bnn medium_diverse mean | — | | | | | | queue 2 |
+| bnn medium_diverse cvar | `svryk4wg` | .665 .565 **.697** .652 .021 .014 .501 .379 | **2** (0.697) | 0 (0.665) | 0.032 (0.37) | 2 ✓ | 2026-10-04 |
+| bnn medium_diverse mean | `qp7svo5z` | | | | | | running |
 | mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
 | mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
 | mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
@@ -15841,6 +15841,13 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   rewards pick index 2. At seed 0 the mean reward (0.791) scores above the CVaR
   reward (0.759), the reverse of the large variants. Like those, it is a single
   run each and **not a result**.
+- *bnn medium_diverse cvar* (2026-10-04): index 2 at 0.697, over the identity at
+  0.665 and index 3 at 0.652. The gap is 0.37 noise units, so this is a
+  **three-way tie** (0, 2, 3 within 0.52 units), decided by the argmax. last-20
+  agrees (0.681 vs 0.642). **Index 2 has now won all four finished medium grids
+  bar one** (BNN medium_play ×2, BNN medium_diverse CVaR, MR medium_diverse;
+  MR medium_play picked 0 over 2 by 0.001), and index 3 all six large ones. The
+  winning index tracks the **maze size**, not the reward family.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
