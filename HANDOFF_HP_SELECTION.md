@@ -15844,9 +15844,9 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 - *bnn medium_diverse cvar* (2026-10-04): index 2 at 0.697, over the identity at
   0.665 and index 3 at 0.652. The gap is 0.37 noise units, so this is a
   **three-way tie** (0, 2, 3 within 0.52 units), decided by the argmax. last-20
-  agrees (0.681 vs 0.642). **Index 2 has now won all four finished medium grids
-  bar one** (BNN medium_play ×2, BNN medium_diverse CVaR, MR medium_diverse;
-  MR medium_play picked 0 over 2 by 0.001), and index 3 all six large ones. The
+  agrees (0.681 vs 0.642). **Index 2 has now won four of the five finished medium
+  grids** (BNN medium_play ×2, BNN medium_diverse CVaR, MR medium_diverse; MR
+  medium_play picked 0 over 2 by 0.001), and index 3 all six large ones. The
   winning index tracks the **maze size**, not the reward family.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
