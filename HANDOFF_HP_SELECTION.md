@@ -15013,6 +15013,36 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.152 BNN stage 4 COMPLETE — index 2 on medium, index 3 on large, at both conservatism levels
+
+2026-10-04. All eight BNN stage-4 grids are scored (§6's table). 12 of 24
+winners are known.
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| BNN CVaR | **2** (0.759) | **2** (0.697) | **3** (0.614) | **3** (0.378) |
+| BNN mean | **2** (0.791) | **2** (0.638) | **3** (0.510) | **3** (0.220) |
+| MR best | **0** (0.674) | **2** (0.631) | **3** (0.504) | **3** (0.251) |
+| gap, noise units (CVaR / mean / MR) | 1.1 / 0.59 / 0.01 | 0.37 / 0.50 / 0.66 | 2.0 / 0.76 / 1.6 | 4.0 / 0.83 / 1.7 |
+
+- **The pick is by maze size.** 11 of 12 grids pick index 2 (medium) or 3
+  (large); the exception is MR medium_play's 0-over-2 by 0.001.
+- **Most picks are not resolved by one run per index.** 7 of 12 gaps are under
+  one noise unit, and last-20 agrees in all 12. That is §4.3.107's known
+  limitation (P(correct) ≈ 0.78 at the median gap). It is disclosed, not
+  repaired. **For §7:** report each pick with its gap, and say that on the
+  medium variants indices 0, 2 and 3 are near-equivalent.
+- **Seed-0 scores are not results.** CVaR scores above the mean on three
+  variants and below it on medium_play, one run each. The comparison is the
+  seeds 1–10 evaluation.
+
+**Queue 2 has moved on to evaluation.** `x7mpih67` (BNN large_play CVaR, seeds
+1–10, index 3) started 2026-10-04 07:26 UTC; its first four runs are seeds 1–4
+at `bnn_alpha` 0.95. **BNN medium seeds 1–10: 14 of 20 trained** (medium_play
+done, medium_diverse at seed 5), so they finish ~10-05. The four BNN medium
+evaluation files are generated after `production_readout.py` verifies those
+models.
+
 ### 4.3.151 Queue 1 COMPLETE (8 stage-4 winners); evaluation lineage written for them; queue 2 planned
 
 2026-10-02. Queue 1 ran 8 sweeps, 64 runs, every run complete with 200
@@ -15781,14 +15811,14 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 
 | file | sweep | idx 0–7 (last-10) | **winner** | runner-up | gap (noise units) | last-20 pick | done |
 |---|---|---|---|---|---|---|---|
-| bnn large_play cvar | `cu5o0tv4` | .427 .294 .444 **.614** .000 .000 .078 .095 | **3** (0.614) | 2 (0.444) | 0.170 (**2.0**) | 3 ✓ | 2026-09-29 |
+| bnn large_play cvar | `cu5o0tv4` (eval: `x7mpih67`) | .427 .294 .444 **.614** .000 .000 .078 .095 | **3** (0.614) | 2 (0.444) | 0.170 (**2.0**) | 3 ✓ | 2026-09-29 |
 | bnn large_play mean | `sxrmkdyc` | .326 .438 .445 **.510** .000 .000 .017 .128 | **3** (0.510) | 2 (0.445) | 0.065 (0.76) | 3 ✓ | 2026-09-29 |
 | bnn large_diverse cvar | `oasb22i7` | .010 .015 .038 **.378** .017 .009 .017 .031 | **3** (0.378) | 2 (0.038) | 0.340 (**4.0**) | 3 ✓ | 2026-09-30 |
 | bnn large_diverse mean | `658tch22` | .017 .013 .149 **.220** .036 .021 .025 .038 | **3** (0.220) | 2 (0.149) | 0.071 (0.83) | 3 ✓ | 2026-09-30 |
 | bnn medium_play cvar | `xjojqlss` | .648 .668 **.759** .651 .000 .003 .526 .526 | **2** (0.759) | 1 (0.668) | 0.091 (1.1) | 2 ✓ | 2026-10-03 |
 | bnn medium_play mean | `fd8k31w2` | .740 .620 **.791** .665 .018 .010 .431 .465 | **2** (0.791) | 0 (0.740) | 0.051 (0.59) | 2 ✓ (by 0.016) | 2026-10-03 |
 | bnn medium_diverse cvar | `svryk4wg` | .665 .565 **.697** .652 .021 .014 .501 .379 | **2** (0.697) | 0 (0.665) | 0.032 (0.37) | 2 ✓ | 2026-10-04 |
-| bnn medium_diverse mean | `qp7svo5z` | | | | | | running |
+| bnn medium_diverse mean | `qp7svo5z` | .415 .426 **.638** .595 .016 .023 .463 .532 | **2** (0.638) | 3 (0.595) | 0.043 (0.50) | 2 ✓ | 2026-10-04 |
 | mr medium_play | `r3idp15t` | **.674** .609 .673 .647 .013 .000 .421 .416 | **0** (0.674) | 2 (0.673) | 0.001 (**0.01**) | 0 ✓ | 2026-10-01 |
 | mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
 | mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
@@ -15848,6 +15878,12 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   grids** (BNN medium_play ×2, BNN medium_diverse CVaR, MR medium_diverse; MR
   medium_play picked 0 over 2 by 0.001), and index 3 all six large ones. The
   winning index tracks the **maze size**, not the reward family.
+- *bnn medium_diverse mean* (2026-10-04): index 2 at 0.638 over index 3 at
+  0.595, 0.50 noise units, and last-20 agrees with a wider gap (0.642 vs 0.577).
+  Here the identity is well behind (0.415), unlike the CVaR grid on the same
+  variant. **BNN stage 4 is complete: index 2 on both medium variants, index 3
+  on both large, at both conservatism levels.** So the mean-vs-CVaR comparison
+  at seeds 1–10 is made at the **same normalization** within each variant.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
