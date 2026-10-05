@@ -15057,8 +15057,8 @@ Rank of seed 0 among the 11 seeds, 1 = highest loss:
 - **Unexplained, and not strong**: four variants, z ≈ −2.2 on one of two
   metrics. Recorded as a descriptive fact for §7. It has one practical
   consequence: **the seed-0 escalation numbers quoted in §7.3/16a (CE₀.₉₅ 0.453,
-  0.497, 0.629, 0.494) overstate the typical seed's CE** on three variants
-  (seeds 1–10 means 0.389, 0.478, 0.512, 0.476).
+  0.497, 0.629, 0.494) overstate the typical seed's CE** on all four variants
+  (seeds 1–10 means 0.389, 0.478, 0.512, 0.476), by 0.02–0.12.
 
 #### 4. Next: cache the medium labels, then the last queues
 
