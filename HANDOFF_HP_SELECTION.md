@@ -15013,6 +15013,66 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.153 BNN medium production models (seeds 0–10) VERIFIED — all 44 BNN models done; no medium seed near chance
+
+2026-10-05. The user reports the 20 medium seeds 1–10 jobs are done.
+
+#### 1. `production_readout.py bnn --variants medium_play,medium_diverse --since 2026-09-30T00:00:00`: VERIFIED, 22 of 22
+
+Complete, every run the winner's configuration apart from seed, split and path,
+and **every seed passes all four gates at 128 chains** (`|log r|` 0.077–0.098 on
+medium_play, 0.030–0.057 on medium_diverse, against 0.1151; ESS 288–424).
+**All 44 BNN production models (4 variants × seeds 0–10) are now trained and
+verified** (§4.3.146 for large). Phase 1 is complete for all three families.
+
+#### 2. §7.4 E for medium: the deployed reward beats chance on every seed
+
+| 11 seeds, own validation split | CE₀ | CE₀.₇₅ | **CE₀.₉₅** | D | seeds ≥ `log 2` | smallest margin below `log 2` |
+|---|---|---|---|---|---|---|
+| medium_play | 0.271 ± 0.030 | 0.330 ± 0.034 | **0.394 ± 0.040** (0.326–0.453) | 0.065 ± 0.012 | **0** | 0.240 |
+| medium_diverse | 0.289 ± 0.027 | 0.376 ± 0.022 | **0.479 ± 0.028** (0.432–0.536) | 0.103 ± 0.015 | **0** | 0.157 |
+| large_play (§4.3.146) | 0.327 ± 0.038 | 0.428 ± 0.073 | 0.523 ± 0.112 (0.352–0.731) | 0.096 ± 0.042 | **1** | −0.038 |
+| large_diverse (§4.3.146) | 0.309 ± 0.028 | 0.387 ± 0.037 | 0.478 ± 0.055 (0.380–0.549) | 0.090 ± 0.020 | 0 | 0.144 |
+
+**large_play is the only variant where the deployment tail reaches chance**, on
+1 of 11 splits. Its across-seed spread at 0.95 (sd 0.112) is 2–4× the others'.
+§7.4 E is final with these numbers.
+
+#### 3. Seed 0 is on the PESSIMISTIC side for the BNN — the opposite of selection optimism
+
+Rank of seed 0 among the 11 seeds, 1 = highest loss:
+
+| | medium_play | medium_diverse | large_play | large_diverse | rank-sum z (expected 24, sd 6.3) |
+|---|---|---|---|---|---|
+| BNN CE₀.₇₅ | **1** | **1** | 3 | 5 | **−2.2** |
+| BNN CE₀ | 2 | 2 | 4 | 6 | −1.6 |
+| MR `eval_loss_at_selected` | 10 | 4 | 3 | 7 | 0.0 |
+| PT `eval_loss_at_selected` | 8 | 4 | 7 | 10 | +0.8 |
+
+- **No selection optimism for the BNN**, which is the direction that would have
+  mattered: the configuration was chosen to minimise seed 0's CE, and seed 0
+  still scores *worse* than the typical seed.
+- **It is not a harder split.** MR and PT show no such pattern on the same
+  splits (MR medium_play's seed 0 is among its easiest).
+- **Unexplained, and not strong**: four variants, z ≈ −2.2 on one of two
+  metrics. Recorded as a descriptive fact for §7. It has one practical
+  consequence: **the seed-0 escalation numbers quoted in §7.3/16a (CE₀.₉₅ 0.453,
+  0.497, 0.629, 0.494) overstate the typical seed's CE** on three variants
+  (seeds 1–10 means 0.389, 0.478, 0.512, 0.476).
+
+#### 4. Next: cache the medium labels, then the last queues
+
+- **Labels**: the 20 medium seeds 1–10 models on **GPUs 4–5**, 10 per GPU
+  (~3.3 h). Expected cache count after: **88**.
+- **Evaluation lineage written** for the four BNN medium files (seeds 1–10,
+  index 2), on the Mac, committed. `check`: 24/24 (12 eval, 12 stage 4).
+- **CPU**: with BNN training finished, 10 IQL runs fit (250 of 255 cores).
+  Queue 2 holds 4. So:
+  - **Queue 3a, GPUs 2–3 × 2 = 4 agents, now**: PT ×4 then ensemble ×8 stage 4.
+    8-run grids on 4 agents waste no slots.
+  - **Queue 3b, GPUs 4–5 × 1 = 2 agents, after the caching**: BNN medium
+    evaluation ×4. 10-run sweeps on 2 agents waste no slots.
+
 ### 4.3.152 BNN stage 4 COMPLETE — index 2 on medium, index 3 on large, at both conservatism levels
 
 2026-10-04. All eight BNN stage-4 grids are scored (§6's table). 12 of 24
@@ -16787,8 +16847,7 @@ sweep then walked down to its current w5×d1 leader.
 ---
 
 **E. At the deployment conservatism, the reward is worse than chance for one
-large_play data split.** (§4.3.146; large variants **final**, medium pending
-their seeds 1–10)
+large_play data split.** (§4.3.146, §4.3.153; **final for all four variants**)
 
 Across the 11 production seeds, CE₀.₉₅ on each seed's own validation pairs is
 0.523 ± 0.112 (large_play) and 0.478 ± 0.055 (large_diverse), against
@@ -16799,8 +16858,15 @@ the variation is data-split variation that the tail amplifies. It is not a
 sampler failure: all 11 seeds pass all gates. **Report it**: the conservative
 reward's informativeness varies with the split, and at 0.95 it can fall to
 chance. The IQL result for seed 7 is reported unchanged, and the conservatism is
-not revisited (§4.3.123 §5). Re-run `production_readout.py` and §4.3.146's
-per-seed query for the medium variants once their seeds 1–10 exist.
+not revisited (§4.3.123 §5).
+
+**Medium, added 2026-10-05 (§4.3.153):** CE₀.₉₅ is 0.394 ± 0.040 (medium_play)
+and 0.479 ± 0.028 (medium_diverse), and **all 22 medium seeds beat chance**, the
+closest by 0.157. So large_play is the only variant affected, on 1 of 11 splits.
+Also report that **seed 0 is on the pessimistic side for the BNN** (highest
+CE₀.₇₅ of 11 seeds on both medium variants; no such pattern for MR/PT): the
+selection seed shows no optimism, and seed-0 figures overstate the typical
+seed's CE.
 
 ### 7.5 Procedure changes of 2026-09-15 that govern every reported winner
 
@@ -17438,7 +17504,10 @@ blind. Record it as a future-round candidate.
    is the escalation, already verified by `escalation_readout.py`. Gate verdicts
    for seeds 1–10 are REPORTED, not enforced, since eligibility is decided at
    sweep budget (§3.2.9).
-12c. 🔄 **BNN medium seeds 1–10 LAUNCHED 2026-10-01 (§4.3.150)**: 20 jobs on
+12c. ✅ **VERIFIED 2026-10-05 (§4.3.153)**: 22/22 medium models, all gates pass,
+   no seed near chance at 0.95. **All 44 BNN production models are done.**
+   Remaining: cache the 20 medium seeds 1–10 labels (88 entries expected).
+   Original entry: 🔄 **BNN medium seeds 1–10 LAUNCHED 2026-10-01 (§4.3.150)**: 20 jobs on
    GPUs 2–5, first job's `--check-run` PASS, done ~10-05. **When finished:**
    `production_readout.py bnn --variants medium_play,medium_diverse --since 2026-09-30T00:00:00`,
    the §4.3.146 cross-seed CE₀.₉₅ query for §7.4 E, then cache their labels (40
