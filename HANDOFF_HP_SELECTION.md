@@ -15013,6 +15013,29 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.154 All ten IQL slots running; label cache complete (88); FIRST evaluation results
+
+2026-10-05. User-confirmed: the 20 medium seeds 1–10 labels are cached,
+**`reward_label_cache.py --list` counts 88** = 2 alphas × 44 BNN models, the
+whole production set. Queues 3a and 3b are launched.
+
+**Ten IQL runs are live, the CPU ceiling (250 of 255 cores), and every sweep
+matches its spec** (wandb, 2026-10-05 22:40 UTC):
+
+| queue | GPUs × agents | running now | checked |
+|---|---|---|---|
+| 2 | 0–1 × 2 | `ucd752vz` BNN large_diverse CVaR **evaluation**, seeds 5–8, index 3 | `bnn_alpha` 0.95, `bnn_n_samples` −1, `centre_draws` True |
+| 3a | 2–3 × 2 | `2qpsg7t7` PT medium_play **stage 4**, seed 0, indices 0–3 | `query_length` 100, PT root |
+| 3b | 4–5 × 1 | `tuw2u1wl` BNN medium_play CVaR **evaluation**, seeds 1–2, index 2 | step 14,750 after 5 min, so labels from cache |
+
+**Queue 2 is ahead of §4.3.151's estimate.** An evaluation sweep takes ~15 h,
+not ~18, and two are already complete.
+
+**First evaluation results, BNN large_play (§6's new evaluation table):** CVaR
+**0.534 ± 0.060**, mean **0.481 ± 0.070** (last-10, mean ± sd over seeds 1–10).
+CVaR is higher on 8 of 10 seeds. That is descriptive and one variant; see the
+table's notes, including seed 7.
+
 ### 4.3.153 BNN medium production models (seeds 0–10) VERIFIED — all 44 BNN models done; no medium seed near chance
 
 2026-10-05. The user reports the 20 medium seeds 1–10 jobs are done.
@@ -15752,7 +15775,7 @@ be reportable, not because those hyperparameters are in use. No BNN result in
 this document is currently valid.
 
 > **Stage 4 is live below** ("Stage 4 — output normalization"), a table filled
-> in as each IQL sweep finishes. The stage-1 tables in this section predate
+> in as each IQL sweep finishes, followed by the **seeds 1–10 evaluation table**. The stage-1 tables in this section predate
 > rounds 3–5 and the MR/PT round-2 baselines. The current winners are in
 > §4.3.108 (MR/PT) and §4.3.144 (BNN).
 
@@ -15891,7 +15914,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble large_play mean | — | | | | | | queue 3 |
 | ensemble large_diverse cvar | — | | | | | | queue 3 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
-| pt medium_play | — | | | | | | queue 3 |
+| pt medium_play | `2qpsg7t7` | | | | | | running (queue 3a) |
 | pt medium_diverse | — | | | | | | queue 3 |
 | pt large_play | — | | | | | | queue 3 |
 | pt large_diverse | — | | | | | | queue 3 |
@@ -15950,6 +15973,46 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 seeds 1–10 **reward models to be verified** (`production_readout.py`). For BNN
 large that is ~09-30. For BNN medium it follows the medium escalations and
 seeds 1–10. MR and PT are verified already (§4.3.138).
+
+### Evaluation — seeds 1–10 at the stage-4 index (project `IQL-pref`) — LIVE, filled in as sweeps finish
+
+Started 2026-10-04. One IQL run per seed, each on that seed's own reward model
+and data split. Score = **last-10 mean** (`results/iql_score.py`), reported as
+mean ± sd over the 10 seeds; last-20 is the robustness check and the legacy max
+is given for disclosure only. Fill a row with
+`python results/iql_score.py [--n 20 | --statistic max] champlin-university-of-arizona/IQL-pref/<sweep_id>`.
+
+| file | idx | sweep | **last-10** (mean ± sd, n) | last-20 | legacy max | done |
+|---|---|---|---|---|---|---|
+| bnn large_play cvar | 3 | `x7mpih67` | **0.534 ± 0.060** (10) | 0.541 ± 0.052 | 0.670 ± 0.054 | 2026-10-05 |
+| bnn large_play mean | 3 | `3rv6olwb` | **0.481 ± 0.070** (10) | 0.488 ± 0.059 | 0.607 ± 0.050 | 2026-10-05 |
+| bnn large_diverse cvar | 3 | `ucd752vz` | | | | running (queue 2) |
+| bnn large_diverse mean | 3 | — | | | | queue 2 |
+| bnn medium_play cvar | 2 | `tuw2u1wl` | | | | running (queue 3b) |
+| bnn medium_play mean | 2 | — | | | | queue 3b |
+| bnn medium_diverse cvar | 2 | — | | | | queue 3b |
+| bnn medium_diverse mean | 2 | — | | | | queue 3b |
+| mr medium_play | 0 | — | | | | queue 2 |
+| mr medium_diverse | 2 | — | | | | queue 2 |
+| mr large_play | 3 | — | | | | queue 2 |
+| mr large_diverse | 3 | — | | | | queue 2 |
+| pt ×4, ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
+
+**Notes, per row:**
+- *bnn large_play, CVaR vs mean* (2026-10-05). CVaR 0.534 vs mean 0.481,
+  **+0.053**. The two sweeps share seeds, splits and reward models, so the
+  difference can be read seed by seed: CVaR is higher on **8 of 10 seeds**,
+  paired difference 0.053 ± 0.022 (SE), **t = 2.4**; unpaired Welch t = 1.8.
+  last-20 agrees (0.541 vs 0.488). **Descriptive only, and one variant of four.**
+  The reported comparisons are made once, over all variants and families, by
+  `results/results_table.ipynb` with the convention fixed in §4.3.107.
+- *Seed 7, the split flagged in §7.4 E* (deployed reward worse than chance on
+  its validation pairs, CE₀.₉₅ 0.731): its CVaR policy scores **0.524**, level
+  with the 10-seed mean (0.534) and **above** its own mean-reward policy
+  (0.404). Seed 3 (near chance) scores 0.534. **Validation CE at 0.95 did not
+  predict a worse policy here.** Add this to §7.4 E when the write-up is drafted:
+  the disclosure stands, but it should not be read as "that seed's policy is
+  uninformed".
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
