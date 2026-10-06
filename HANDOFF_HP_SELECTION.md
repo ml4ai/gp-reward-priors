@@ -15915,8 +15915,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble large_diverse cvar | — | | | | | | queue 3 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
-| pt medium_diverse | `300h8u4b` | | | | | | running (queue 3a) |
-| pt large_play | — | | | | | | queue 3 |
+| pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
+| pt large_play | `j3mcf3to` | | | | | | running (queue 3a) |
 | pt large_diverse | — | | | | | | queue 3 |
 
 **Notes, per row:**
@@ -15971,6 +15971,9 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   noise units, a tie**; last-20 agrees (0.674 vs 0.662). The first medium grid
   to pick index 3, by a margin that cannot distinguish it from 2. Evaluation
   file written (seeds 1–10, index 3); it waits for a free slot.
+- *pt medium_diverse* (2026-10-06): index 2 at 0.625 over the identity at 0.538,
+  1.0 noise units, and last-20 agrees with a wider gap (0.618 vs 0.509).
+  Evaluation file written (seeds 1–10, index 2).
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -15990,8 +15993,8 @@ is given for disclosure only. Fill a row with
 |---|---|---|---|---|---|---|
 | bnn large_play cvar | 3 | `x7mpih67` | **0.534 ± 0.060** (10) | 0.541 ± 0.052 | 0.670 ± 0.054 | 2026-10-05 |
 | bnn large_play mean | 3 | `3rv6olwb` | **0.481 ± 0.070** (10) | 0.488 ± 0.059 | 0.607 ± 0.050 | 2026-10-05 |
-| bnn large_diverse cvar | 3 | `ucd752vz` | | | | running (queue 2) |
-| bnn large_diverse mean | 3 | — | | | | queue 2 |
+| bnn large_diverse cvar | 3 | `ucd752vz` | **0.291 ± 0.137** (10) | 0.306 ± 0.146 | 0.487 ± 0.117 | 2026-10-06 |
+| bnn large_diverse mean | 3 | `lashr9nz` | | | | running (queue 2) |
 | bnn medium_play cvar | 2 | `tuw2u1wl` | | | | running (queue 3b) |
 | bnn medium_play mean | 2 | — | | | | queue 3b |
 | bnn medium_diverse cvar | 2 | — | | | | queue 3b |
@@ -16017,6 +16020,11 @@ is given for disclosure only. Fill a row with
   predict a worse policy here.** Add this to §7.4 E when the write-up is drafted:
   the disclosure stands, but it should not be read as "that seed's policy is
   uninformed".
+- *bnn large_diverse cvar* (2026-10-06): 0.291 ± 0.137, by far the widest spread
+  so far (range **0.066–0.517**; seed 1 is the low one). Its seed-0 stage-4 run
+  scored 0.378, inside that range. The sd is 2.3× large_play's. Whether that is
+  the variant or the reward is answered by the mean-reward sweep (`lashr9nz`,
+  running) and the MR/PT rows. **No comparison is drawn from one row.**
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
