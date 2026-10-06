@@ -15914,8 +15914,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble large_play mean | — | | | | | | queue 3 |
 | ensemble large_diverse cvar | — | | | | | | queue 3 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
-| pt medium_play | `2qpsg7t7` | | | | | | running (queue 3a) |
-| pt medium_diverse | — | | | | | | queue 3 |
+| pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
+| pt medium_diverse | `300h8u4b` | | | | | | running (queue 3a) |
 | pt large_play | — | | | | | | queue 3 |
 | pt large_diverse | — | | | | | | queue 3 |
 
@@ -15967,6 +15967,10 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   variant. **BNN stage 4 is complete: index 2 on both medium variants, index 3
   on both large, at both conservatism levels.** So the mean-vs-CVaR comparison
   at seeds 1–10 is made at the **same normalization** within each variant.
+- *pt medium_play* (2026-10-06): index 3 at 0.698 over index 2 at 0.684, **0.16
+  noise units, a tie**; last-20 agrees (0.674 vs 0.662). The first medium grid
+  to pick index 3, by a margin that cannot distinguish it from 2. Evaluation
+  file written (seeds 1–10, index 3); it waits for a free slot.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
