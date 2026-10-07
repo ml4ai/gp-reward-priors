@@ -15916,8 +15916,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble large_diverse mean | — | | | | | | queue 3 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
 | pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
-| pt large_play | `j3mcf3to` | | | | | | running (queue 3a) |
-| pt large_diverse | — | | | | | | queue 3 |
+| pt large_play | `j3mcf3to` | .301 .259 .158 **.376** .000 .000 .041 .068 | **3** (0.376) | 0 (0.301) | 0.075 (0.87) | 3 ✓ | 2026-10-07 |
+| pt large_diverse | `knib4hja` | | | | | | running (queue 3a) |
 
 **Notes, per row:**
 - *bnn large_play cvar:* all 8 runs complete (200 evaluation points each).
@@ -15974,6 +15974,10 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 - *pt medium_diverse* (2026-10-06): index 2 at 0.625 over the identity at 0.538,
   1.0 noise units, and last-20 agrees with a wider gap (0.618 vs 0.509).
   Evaluation file written (seeds 1–10, index 2).
+- *pt large_play* (2026-10-07): index 3 at 0.376 over the identity at 0.301,
+  0.87 noise units, and last-20 agrees (0.379 vs 0.288). **Index 3 has now won
+  all seven finished large grids.** Evaluation file written (seeds 1–10,
+  index 3).
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -15994,12 +15998,12 @@ is given for disclosure only. Fill a row with
 | bnn large_play cvar | 3 | `x7mpih67` | **0.534 ± 0.060** (10) | 0.541 ± 0.052 | 0.670 ± 0.054 | 2026-10-05 |
 | bnn large_play mean | 3 | `3rv6olwb` | **0.481 ± 0.070** (10) | 0.488 ± 0.059 | 0.607 ± 0.050 | 2026-10-05 |
 | bnn large_diverse cvar | 3 | `ucd752vz` | **0.291 ± 0.137** (10) | 0.306 ± 0.146 | 0.487 ± 0.117 | 2026-10-06 |
-| bnn large_diverse mean | 3 | `lashr9nz` | | | | running (queue 2) |
-| bnn medium_play cvar | 2 | `tuw2u1wl` | | | | running (queue 3b) |
-| bnn medium_play mean | 2 | — | | | | queue 3b |
+| bnn large_diverse mean | 3 | `lashr9nz` | **0.252 ± 0.113** (10) | 0.262 ± 0.115 | 0.484 ± 0.093 | 2026-10-06 |
+| bnn medium_play cvar | 2 | `tuw2u1wl` | **0.734 ± 0.048** (10) | 0.730 ± 0.056 | 0.853 ± 0.036 | 2026-10-06 |
+| bnn medium_play mean | 2 | `b4q2djyu` | | | | running (queue 3b) |
 | bnn medium_diverse cvar | 2 | — | | | | queue 3b |
 | bnn medium_diverse mean | 2 | — | | | | queue 3b |
-| mr medium_play | 0 | — | | | | queue 2 |
+| mr medium_play | 0 | `7lzll81d` | | | | running (queue 2) |
 | mr medium_diverse | 2 | — | | | | queue 2 |
 | mr large_play | 3 | — | | | | queue 2 |
 | mr large_diverse | 3 | — | | | | queue 2 |
@@ -16025,6 +16029,16 @@ is given for disclosure only. Fill a row with
   scored 0.378, inside that range. The sd is 2.3× large_play's. Whether that is
   the variant or the reward is answered by the mean-reward sweep (`lashr9nz`,
   running) and the MR/PT rows. **No comparison is drawn from one row.**
+- *bnn large_diverse, CVaR vs mean* (2026-10-07): CVaR 0.291 vs mean 0.252,
+  +0.039, CVaR higher on 7 of 10 seeds, but **paired t = 0.8** (difference
+  0.039 ± 0.051 SE). **Not distinguishable.** The per-seed scores barely
+  correlate between the two rewards (r = 0.19), and seed 1 swings the other
+  way by 0.32 (CVaR 0.066, mean 0.383). **The wide spread belongs to the
+  variant**: the mean reward's sd is 0.113, close to CVaR's 0.137. Both are
+  far below the legacy max (0.48), which is §4.3.107's "28% of large_diverse
+  runs peak in the first 10% of training" showing up again.
+- *bnn medium_play cvar* (2026-10-07): 0.734 ± 0.048, the tightest row so far
+  (range 0.670–0.826). Its seed-0 stage-4 run scored 0.759.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
