@@ -15032,6 +15032,10 @@ The `[.]` keeps the waiting shell from matching its own command line (tested).
 The queue's own lineage check runs when the wait ends, so a box that has not
 pulled fails loudly then, not silently.
 
+**Queue 4 LAUNCHED and waiting (user-confirmed, 2026-10-07).** It starts the
+four PT evaluation sweeps on GPUs 0–1 when queue 2 exits. Log:
+`~/iqlpref/stage4_queue4.log`, which stays empty until then.
+
 **Evaluation so far (§6):** BNN large_play CVaR 0.534 / mean 0.481; BNN
 large_diverse 0.291 / 0.252; BNN medium_play CVaR 0.734; MR medium_play 0.642.
 
