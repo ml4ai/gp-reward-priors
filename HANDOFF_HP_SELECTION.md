@@ -15013,6 +15013,28 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.155 PT stage 4 COMPLETE (16 of 24 winners); queue 4 = PT evaluation, chained behind queue 2
+
+2026-10-07. PT picks **3, 2, 3, 0** (medium_play, medium_diverse, large_play,
+large_diverse); gaps 0.16, 1.0, 0.87 and 0.36 noise units, last-20 agreeing on
+all four. All four PT evaluation files are written (`check` 24/24: 16 eval, 8
+stage 4). Only the eight ensemble grids remain in stage 4 (queue 3a, the first
+running since 17:30 UTC).
+
+**Slots.** All ten are in use, and nothing frees until queue 2 finishes its last
+three MR evaluations (~45 h) or queue 3b its last BNN medium ones (~2 days). To
+avoid GPUs 0–1 idling until someone notices, **queue 4 is launched now and waits
+for queue 2's process to exit**:
+
+`while pgrep -f 'stage4_queue[.]sh 0 1 2 ' …; do sleep 300; done; ./stage4_queue.sh "0 1" 2 pt:…@eval ×4`
+
+The `[.]` keeps the waiting shell from matching its own command line (tested).
+The queue's own lineage check runs when the wait ends, so a box that has not
+pulled fails loudly then, not silently.
+
+**Evaluation so far (§6):** BNN large_play CVaR 0.534 / mean 0.481; BNN
+large_diverse 0.291 / 0.252; BNN medium_play CVaR 0.734; MR medium_play 0.642.
+
 ### 4.3.154 All ten IQL slots running; label cache complete (88); FIRST evaluation results
 
 2026-10-05. User-confirmed: the 20 medium seeds 1–10 labels are cached,
