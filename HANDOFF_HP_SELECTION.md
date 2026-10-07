@@ -15906,7 +15906,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
 | mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
 | mr large_diverse | `3ibbsds8` | .077 .104 .064 **.251** .005 .013 .026 .005 | **3** (0.251) | 1 (0.104) | 0.147 (1.7) | 3 ✓ | 2026-10-02 |
-| ensemble medium_play cvar | — | | | | | | queue 3 |
+| ensemble medium_play cvar | `51j9du3l` | | | | | | running (queue 3a) |
 | ensemble medium_play mean | — | | | | | | queue 3 |
 | ensemble medium_diverse cvar | — | | | | | | queue 3 |
 | ensemble medium_diverse mean | — | | | | | | queue 3 |
@@ -15917,7 +15917,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
 | pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
 | pt large_play | `j3mcf3to` | .301 .259 .158 **.376** .000 .000 .041 .068 | **3** (0.376) | 0 (0.301) | 0.075 (0.87) | 3 ✓ | 2026-10-07 |
-| pt large_diverse | `knib4hja` | | | | | | running (queue 3a) |
+| pt large_diverse | `knib4hja` | **.240** .209 .123 .155 .018 .017 .035 .001 | **0** (0.240) | 1 (0.209) | 0.031 (0.36) | 0 ✓ | 2026-10-07 |
 
 **Notes, per row:**
 - *bnn large_play cvar:* all 8 runs complete (200 evaluation points each).
@@ -15978,6 +15978,16 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   0.87 noise units, and last-20 agrees (0.379 vs 0.288). **Index 3 has now won
   all seven finished large grids.** Evaluation file written (seeds 1–10,
   index 3).
+- *pt large_diverse* (2026-10-07): the **identity** (index 0) at 0.240 over
+  index 1 at 0.209, 0.36 noise units, a tie; last-20 agrees (0.234 vs 0.214).
+  **The first large grid not to pick index 3**, which scores 0.155 here. So
+  index 3 has won 7 of 8 large grids. Every index is low on this cell (best
+  0.24), as for MR and BNN mean on the same variant. Evaluation file written
+  (seeds 1–10, index 0). **PT stage 4 is complete: 3, 2, 3, 0.**
+- *ensemble medium_play cvar* (`51j9du3l`, started 2026-10-07 17:30 UTC): the
+  first ensemble sweep. Config checked on its 4 runs: `mr_ensemble` True,
+  `mr_alpha` 0.95, `mr_burn_in` 100, `centre_draws` True, MR root, seed 0,
+  indices 0–3.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -16003,8 +16013,8 @@ is given for disclosure only. Fill a row with
 | bnn medium_play mean | 2 | `b4q2djyu` | | | | running (queue 3b) |
 | bnn medium_diverse cvar | 2 | — | | | | queue 3b |
 | bnn medium_diverse mean | 2 | — | | | | queue 3b |
-| mr medium_play | 0 | `7lzll81d` | | | | running (queue 2) |
-| mr medium_diverse | 2 | — | | | | queue 2 |
+| mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
+| mr medium_diverse | 2 | `nr1ceqlk` | | | | running (queue 2) |
 | mr large_play | 3 | — | | | | queue 2 |
 | mr large_diverse | 3 | — | | | | queue 2 |
 | pt ×4, ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
@@ -16039,6 +16049,11 @@ is given for disclosure only. Fill a row with
   runs peak in the first 10% of training" showing up again.
 - *bnn medium_play cvar* (2026-10-07): 0.734 ± 0.048, the tightest row so far
   (range 0.670–0.826). Its seed-0 stage-4 run scored 0.759.
+- *mr medium_play* (2026-10-07): 0.642 ± 0.042 (range 0.549–0.682). **The first
+  cross-family pair on shared seeds:** BNN CVaR 0.734 vs MR best 0.642, +0.092,
+  BNN higher on **10 of 10 seeds**, Welch t = 4.6. Descriptive, one variant, and
+  the BNN mean row for this variant is still running. Recorded because it is the
+  first baseline number, not as a conclusion.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
