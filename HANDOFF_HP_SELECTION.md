@@ -15028,10 +15028,11 @@ seed-0 oracle run exists, so the reading cannot be steered by the numbers.
   **four distinct transformations**. Running 4–7 as well would give indices 2
   and 3 **two noisy draws each** in an argmax, biasing the pick toward them.
   That would be a flaw, not symmetry.
-- ⚠️ **This rests on `min_ret` = 0, which is not yet verified.** D4RL is not
-  installed on the analysis Mac. The user runs the one-line check on the box
-  before launch. If any variant has `min_ret` ≠ 0, the grid goes back to 0–7
-  for that variant (one constant, `ORACLE_INDICES`).
+- ✅ **`min_ret` = 0.0 on all four variants, verified on the box 2026-10-07**
+  (user-run: `iql.return_reward_range` on `d4rl.qlearning_dataset`, the same
+  function `modify_reward` calls). So the equivalences hold exactly and the
+  0–3 grid is the complete set of distinct transformations. *(Before the check
+  this read "not yet verified"; D4RL is not installed on the analysis Mac.)*
 - **`iql.py`, no reward model**, so no gauge, no centring, no label cache.
   Seed 0 changes only IQL's own randomness here: the oracle has no seed-specific
   data split. It is used anyway, to keep the selection run out of seeds 1–10.
@@ -15072,7 +15073,8 @@ files (seeds 1–10 at index 1) are in git history, and their sweeps are the one
 16 runs. They go **first on GPUs 0–1 when queue 2 ends** (~10-10 01:30 UTC),
 ahead of the PT evaluation: one wave of 4 per variant with no idle slot, ~24 h.
 Early, because any re-run in §2 depends on them. The waiting queue 4 is killed
-and relaunched as oracle ×4 then PT ×4. **Estimate moves from ~10-14 to
+and relaunched as oracle ×4 then PT ×4. **Done 2026-10-07 (user-confirmed):
+the new queue 4 is launched and waiting on queue 2.** **Estimate moves from ~10-14 to
 10-14/15**: +0.4 day for the 16 runs, and up to +1 day if all four variants need
 their 10 evaluation runs.
 
