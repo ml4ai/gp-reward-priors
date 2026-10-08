@@ -15018,6 +15018,30 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.159 Sweep check, 2026-10-08 17:35 UTC — 18 of 24 stage-4 winners, 12 of 28 cells registered; queue 5 chained on GPUs 4–5
+
+**Finished since §4.3.158:** ensemble medium_play CVaR and mean stage 4 (both
+index 2), BNN medium_play mean evaluation (0.779 ± 0.028), MR medium_diverse
+evaluation (0.647 ± 0.057). All scored, their evaluation files written
+(`check` 28/28), and the two evaluation sweeps registered in the notebook.
+
+**CVaR vs mean for the BNN, three variants in:** CVaR ahead on large_play
+(+0.053, t 2.4), mean ahead on medium_play (+0.045, t 2.6), undecided on
+large_diverse (t 0.8). No uniform direction.
+
+**Running:** queue 2 `dqsfjy7h` (MR large_play evaluation), queue 3a `bzrqrkf5`
+(ensemble medium_diverse CVaR stage 4), queue 3b `qs64gidp` (BNN medium_diverse
+CVaR evaluation, 4 of 10 done). Queue 4 waits on queue 2.
+
+**Queue 3b is running ~28 h per sweep**, not 27.5, so GPUs 4–5 free up at about
+**10-10 13:30 UTC**. **Queue 5 is chained behind it now**, with the two ensemble
+evaluation sweeps that are ready (medium_play CVaR and mean, index 2), on GPUs
+4–5 × 1. Only ready sweeps are listed: the queue validates every item's lineage
+when its wait ends, so listing a file whose evaluation lineage had not been
+pulled by then would abort the whole queue and leave the GPUs idle. The other
+six ensemble evaluation sweeps are queued behind queue 3a (GPUs 2–3, free at
+~10-11 18:00) and queue 4 as their stage 4 finishes.
+
 ### 4.3.158 Evaluation sweeps are now REGISTERED in the results notebook as they finish — by a tool, not by hand
 
 2026-10-07. **User request: register every evaluation sweep id in
@@ -16137,8 +16161,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
 | mr large_diverse | `3ibbsds8` | .077 .104 .064 **.251** .005 .013 .026 .005 | **3** (0.251) | 1 (0.104) | 0.147 (1.7) | 3 ✓ | 2026-10-02 |
 | ensemble medium_play cvar | `51j9du3l` | .553 .577 **.656** .597 .007 .017 .493 .404 | **2** (0.656) | 3 (0.597) | 0.059 (0.69) | 2 ✓ | 2026-10-08 |
-| ensemble medium_play mean | `zi63kl9c` | | | | | | running (queue 3a) |
-| ensemble medium_diverse cvar | — | | | | | | queue 3 |
+| ensemble medium_play mean | `zi63kl9c` | .517 .527 **.631** .579 .062 .007 .497 .440 | **2** (0.631) | 3 (0.579) | 0.052 (0.60) | 2 ✓ | 2026-10-08 |
+| ensemble medium_diverse cvar | `bzrqrkf5` | | | | | | running (queue 3a) |
 | ensemble medium_diverse mean | — | | | | | | queue 3 |
 | ensemble large_play cvar | — | | | | | | queue 3 |
 | ensemble large_play mean | — | | | | | | queue 3 |
@@ -16220,6 +16244,10 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   indices 0–3. **Result (2026-10-08): index 2** at 0.656 over index 3 at 0.597,
   0.69 noise units, last-20 agreeing (0.644 vs 0.574). Evaluation file written
   (seeds 1–10, index 2). Index 2 has now won 6 of the 8 finished medium grids.
+- *ensemble medium_play mean* (`zi63kl9c`, 2026-10-08): index 2 at 0.631 over
+  index 3 at 0.579, 0.60 noise units, last-20 agreeing (0.625 vs 0.549). The
+  same index as the CVaR ensemble on this variant, so its mean-vs-CVaR
+  comparison is also at one normalization. Evaluation file written.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -16246,8 +16274,8 @@ is given for disclosure only. Fill a row with
 | bnn medium_diverse cvar | 2 | `qs64gidp` | | | | running (queue 3b) |
 | bnn medium_diverse mean | 2 | — | | | | queue 3b |
 | mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
-| mr medium_diverse | 2 | `nr1ceqlk` | | | | running (queue 2) |
-| mr large_play | 3 | — | | | | queue 2 |
+| mr medium_diverse | 2 | `nr1ceqlk` | **0.647 ± 0.057** (10) | 0.654 ± 0.055 | 0.813 ± 0.048 | 2026-10-08 |
+| mr large_play | 3 | `dqsfjy7h` | | | | running (queue 2) |
 | mr large_diverse | 3 | — | | | | queue 2 |
 | pt ×4 | 3, 2, 3, 0 | — | | | | queue 4 (waiting on queue 2) |
 | ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
@@ -16301,6 +16329,9 @@ is given for disclosure only. Fill a row with
   t = 7.5; CVaR +0.091, 10 of 10) and the conventional oracle (0.648).
   Still descriptive: medium_diverse is running, and the pre-specified
   comparison is the notebook's, over all cells.
+- *mr medium_diverse* (2026-10-08): 0.647 ± 0.057 (range 0.549–0.702), above
+  the conventional oracle's 0.607 ± 0.055 on this variant. MR best is nearly
+  identical on the two medium variants (0.642, 0.647).
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
