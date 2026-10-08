@@ -15013,6 +15013,77 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.158 Evaluation sweeps are now REGISTERED in the results notebook as they finish — by a tool, not by hand
+
+2026-10-07. **User request: register every evaluation sweep id in
+`results/results_table.ipynb` as it becomes available**, not once at the end.
+That is item 12's last step, made continuous.
+
+#### 1. What was wrong with the notebook
+
+- **Its MR, PT and ensemble ids no longer exist.** The `IQL-pref` project now
+  holds 29 sweeps: the 4 August oracle sweeps and the redesigned ones from
+  2026-09-28 on. The pre-redesign ids the notebook registered (`75ekrcmg`,
+  `zc5buhoq`, `midu01bi`, …) are gone from W&B, so the notebook as committed
+  would have failed to load them.
+- **The BNN and ENS-CVaR columns were commented out.**
+
+#### 2. `phase2_sweeps.py register [--write]`
+
+Generates the notebook's two registry cells from W&B. For every sweep in the
+project it requires **all** of:
+
+1. an **exact** parameter match to one of the 28 spec files (the same
+   `match_entry` as `winners`), and the right program;
+2. the **evaluation lineage** (seeds 1–10, a single index);
+3. the index equal to the **stage-4 winner** in `phase2_winners.json`;
+4. **completeness**: exactly 10 runs, seeds 1–10, all finished at 1,000,000
+   steps.
+
+A sweep that is still running is listed as such and left unregistered. A sweep
+at the wrong index, a second complete sweep for the same cell, or one with no
+winner on record is **reported and not registered**. The command then exits
+non-zero.
+
+**The oracle** follows §4.3.157's reading. Until its stage 4 has a winner, the
+index-1 sweeps are registered and labelled "conventional; oracle stage 4
+pending". If stage 4 picks another index, that sweep becomes `task_reward` and
+the index-1 sweep moves to a second column, `task_reward_r1`
+("r - 1 (conventional)"), so both are tabulated.
+
+Self-tested: the classification in every case above, the duplicate check, and
+that the generated cell is valid Python giving the expected `SWEEPS` and
+`METHOD_COLUMNS`. A second run reports the notebook unchanged.
+
+#### 3. First registration: 10 of 28 cells
+
+| | task reward | MR | BNN mean | BNN CVaR |
+|---|---|---|---|---|
+| medium_play | `nv89vprk` | `7lzll81d` | running (`b4q2djyu`, 8/10) | `tuw2u1wl` |
+| medium_diverse | `9pbsrxod` | running (`nr1ceqlk`, 4/10) | — | — |
+| large_play | `xnafxwa2` | — | `3rv6olwb` | `x7mpih67` |
+| large_diverse | `ezttwir0` | — | `lashr9nz` | `ucd752vz` |
+
+**The notebook was then executed end to end** (into a scratch copy; the
+committed file carries no outputs): **no errors, no excluded runs**, and Table 1
+reproduces §6's hand-scored numbers exactly (e.g. BNN CVaR large_play
+53.41 ± 5.98, oracle medium_play 64.78 ± 4.81). Its `None` entries render as
+blank cells, as designed. The user's own uncommitted notebook edits (a formatter
+pass, and the column labels "BNN w/ MEAN" / "BNN w/ CVaR") are kept and
+committed with it.
+
+**New in Table 2 (steps-to-goal, success-weighted, last-10 window):** BNN CVaR
+reaches the goal in fewer steps than the oracle on all three variants scored so
+far (360 vs 423, 665 vs 754, 736 vs 758). Descriptive, like every number here
+until all 28 cells are in.
+
+#### 4. Standing procedure for each sweep check
+
+1. `phase2_sweeps.py winners <id>` for each newly finished **stage-4** sweep.
+2. `phase2_sweeps.py eval --winners phase2_winners.json --write`, then `check`.
+3. `phase2_sweeps.py register --write`, then commit the notebook.
+4. Fill §6's two tables.
+
 ### 4.3.157 DECIDED: measure the oracle's normalization — PRE-REGISTERED before any oracle stage-4 run exists
 
 2026-10-07. **User decision (§4.3.156 §2): measure it.** Written before any
