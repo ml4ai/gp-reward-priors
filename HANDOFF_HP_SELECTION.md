@@ -15013,6 +15013,66 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.156 The oracle baselines stand as run; time-to-done estimate; one comparability point to decide
+
+2026-10-07 (evening). The user asked for an estimate, and stated that the
+oracle sweeps (`nv89vprk`, `9pbsrxod`, `xnafxwa2`, `ezttwir0`) need no re-run.
+
+#### 1. The oracle sweeps are valid as they are — checked
+
+- **Complete:** each has seeds 1–10, all finished at 1,000,000 steps with 200
+  evaluation points, `normalize_reward` 1, `iql.py`, no reward model (run
+  2026-08-13 to 08-16, commit `9b26f965`).
+- **Same IQL configuration as today's evaluation runs.** A field-by-field diff
+  against a current run finds two differences, `gauge_reward` and
+  `centre_draws`, both fields that did not exist in August.
+- **Neither touches the oracle path.** `gauge_reward()` is called only inside
+  the learned-reward branch of `train()`; the task-reward branch is
+  `d4rl.qlearning_dataset(env)` followed by `modify_reward`, as it was. Every
+  change to `iql.py` since `9b26f965` is in the config fields, the new gauge
+  function, the BNN/ensemble labelling functions, or that learned-reward branch.
+
+Scored with the current statistic, they are in §6's evaluation table: **0.648,
+0.607, 0.367, 0.272** (last-10). Item 12's "register the new sweep ids" keeps
+these four ids as they are.
+
+#### 2. ⚠️ A comparability point, NOT yet in §7: the oracle's normalization is fixed, the learned rewards' is selected
+
+Every learned reward gets its `normalize_reward` chosen from 8 indices on seed 0
+(stage 4). The oracle runs at index 1 (`r − 1`, the convention), never selected.
+So **"a learned reward matches or beats the oracle" is partly a statement about
+normalization selection**. It matters now that the first numbers show it:
+BNN CVaR 0.534 vs oracle 0.367 on large_play, 0.734 vs 0.648 on medium_play.
+Two options, **the user's call**:
+- **Disclose only.** The oracle is a reference at its standard setting, and the
+  text says so wherever a learned reward exceeds it.
+- **Measure it.** An oracle stage-4 grid at seed 0 (4 × 8 = 32 runs, ~2 days on
+  4 slots), and evaluation re-runs for any variant whose winner is not index 1.
+  Indices 2–7 are defined for the task reward too, since their constants come
+  from the labelled returns.
+
+#### 3. Estimate: all evaluations done in ~6 days, about 2026-10-14 UTC
+
+**Measured under the current 10-run load: every run takes 5.5–6.1 h, whatever
+the family.** PT took 3.6–4.2 h when the box was quieter, and BNN medium 4.3 h
+at 4 concurrent, so the box is CPU-bound at 10 runs. Throughput is ~1.7 runs/h
+either way, so there is nothing to gain by changing the concurrency.
+
+| queue | remaining | ends (UTC) |
+|---|---|---|
+| 2 (GPUs 0–1, 4 agents) | MR evaluation ×3 | ~10-10 01:30 |
+| 4 (GPUs 0–1, chained) | PT evaluation ×4 | ~10-13 00:30 |
+| 3a (GPUs 2–3, 4 agents) | ensemble stage 4 ×8 | ~10-11 16:30 |
+| 3b (GPUs 4–5, 2 agents) | BNN medium evaluation, 2 more sweeps after the current one | ~10-10 12:30 |
+| (to launch) | ensemble evaluation ×8, 80 runs | **~10-14** |
+
+About 230 runs remain, ~1,350 run-hours, so **5.6 days is the floor** at 10
+slots. The ensemble is the long pole: its stage 4 has to finish before its 80
+evaluation runs can start, and those only get 2 slots from 10-10, 6 from 10-11
+and all 10 from 10-13. **The estimate assumes no failed runs and no idle slots at
+the three hand-offs** (10-10 ~12:30, 10-11 ~16:30, 10-13 ~00:30). Chain each one
+behind its predecessor, as queue 4 was, or add about a day.
+
 ### 4.3.155 PT stage 4 COMPLETE (16 of 24 winners); queue 4 = PT evaluation, chained behind queue 2
 
 2026-10-07. PT picks **3, 2, 3, 0** (medium_play, medium_diverse, large_play,
@@ -16043,7 +16103,12 @@ is given for disclosure only. Fill a row with
 | mr medium_diverse | 2 | `nr1ceqlk` | | | | running (queue 2) |
 | mr large_play | 3 | — | | | | queue 2 |
 | mr large_diverse | 3 | — | | | | queue 2 |
-| pt ×4, ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
+| pt ×4 | 3, 2, 3, 0 | — | | | | queue 4 (waiting on queue 2) |
+| ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
+| **oracle** medium_play | 1 (fixed) | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
+| **oracle** medium_diverse | 1 (fixed) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
+| **oracle** large_play | 1 (fixed) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
+| **oracle** large_diverse | 1 (fixed) | `ezttwir0` | **0.272 ± 0.045** (10) | 0.272 ± 0.049 | 0.468 ± 0.062 | 2026-08-16 |
 
 **Notes, per row:**
 - *bnn large_play, CVaR vs mean* (2026-10-05). CVaR 0.534 vs mean 0.481,
