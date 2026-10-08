@@ -27,6 +27,11 @@
 > not exist yet, written before any of them. Read §11 before building a noise
 > launcher: the corrupted *validation* files already in `noise/` belong to a
 > superseded design and must NOT be passed to a run.
+>
+> **Added 2026-10-07 — §12 pre-registers how the seeds 1–10 EVALUATION on unaltered
+> data is read** (the proposal's preliminary result): margin 0.10, comparators MR
+> and PT, three-way verdict. Written before those runs finished. Build the readout
+> to §12 and do not look at the comparison before the readout exists.
 
 ---
 
@@ -18817,3 +18822,188 @@ as per-run overrides and derive the uncorrupted defaults from `antmaze_variant` 
 - Do not decide the sensitivity arm's scope after seeing primary-arm results.
 - Do not compare a noisy-selection baseline against an oracle-selection baseline
   from a different seed or level; the arms are paired within (variant, seed, `p`).
+
+---
+
+## 12. Reading the unaltered-data evaluation (the proposal's preliminary result)
+
+**FIXED 2026-10-07 (user), while the seeds 1–10 evaluation was still running —
+but NOT fully blind: see §12.7 for exactly what had already been seen.** One of
+the eight verdict cells was complete when the rule was set. Nothing here may be
+adjusted after this date. The same rule is stated in the dissertation
+(`chapters/07-research-plan.tex`, Preliminary Results; committed 2026-10-07).
+
+### 12.1 What is being read, and why
+
+The **anchor condition**: the full evaluation procedure on **unaltered data** — no
+data reduction, no label flipping — for all six learned-reward types (MR
+best-model, PT, MR ensemble mean, MR ensemble CVaR, BNN mean, BNN CVaR) on all
+four antmaze variants, seeds 1–10, each at its family × variant's stage-4
+normalization index.
+
+**The question:** how large is the gap between the proposed method, **BNN CVaR**
+(conservatism 0.95), and the baselines when the data has not been made harder? The
+dissertation's main hypothesis predicts that conservatism helps most under
+scarcity and noise, so **parity at the anchor is the expected result** and no
+advantage is claimed here. If BNN CVaR lags far behind at the anchor, that
+hypothesis would need the methods' curves to *cross* as data degrade, not merely
+separate — a stronger claim. This readout is a feasibility check on the planned
+sparsity and label-noise experiments (§11).
+
+### 12.2 The rule
+
+| | |
+|---|---|
+| **statistic** | last-10 mean of the 100-episode evaluation means, on the normalized 0–1 scale (`results/iql_score.py`, §5). Requires all 200 evaluation points. |
+| **quantity** | per-seed difference **BNN CVaR − comparator**, paired by seed, seeds 1–10 |
+| **interval** | 95% paired bootstrap interval, **resampling seeds**, computed **exactly** by enumeration (§12.5) |
+| **comparators** | **MR best-model** and **PT**, each read separately. Named in advance. |
+| **margin** | **0.10**, the same on every variant |
+
+Verdict, **per (variant, comparator)** — eight in all:
+
+| verdict | criterion |
+|---|---|
+| **NOT BEHIND** | interval's **lower** end > −0.10 |
+| **TOO FAR BEHIND** | interval's **upper** end < −0.10 |
+| **INCONCLUSIVE** | anything else |
+
+**All eight verdicts are reported. There is NO overall rule combining them**
+(user, 2026-10-07) — do not invent one in the readout or the write-up.
+
+**Why pairing by seed is right:** `seed` selects the data files (§1), so seed *s*
+of BNN CVaR and seed *s* of a comparator were trained on the same train split.
+Pairing removes that shared component.
+
+**Why "the best baseline" is NOT the comparator:** the best of several noisy means
+is biased upward by roughly one standard error, which would inflate the gap
+against the proposed method. The comparators are fixed by name instead.
+
+**Not part of any verdict, but reported alongside** as mechanism comparisons, with
+the same paired difference and interval: BNN CVaR − BNN mean (the risk functional
+alone); BNN CVaR − MR ensemble CVaR (how the spread was obtained); BNN CVaR − MR
+ensemble mean; and every method against the D4RL task reward.
+
+### 12.3 Why 0.10
+
+It is about the smallest gap this design can resolve on its noisiest variant —
+derived from noise already measured, not from the result:
+
+- Single-run IQL noise on the last-10 statistic: σ ≈ **0.061** (Experiment 1,
+  §4.3.107; one cell).
+- Seeds 1–10 SD, earlier baseline runs: ≈ 0.03–0.07 (medium), ≈ 0.07
+  (large_play), ≈ 0.11–0.14 (large_diverse) (§4.3.107's table, max statistic,
+  with its last-10 ratio).
+- Half-width of a 95% interval for a difference of two ten-seed means
+  (`2·√2·SD/√10`): ≈ **0.05** medium, **0.07** large_play, **0.12** large_diverse.
+  Pairing can shrink it, but not below the IQL-noise floor `2·√2·0.061/√10` ≈
+  **0.055**.
+
+A smaller margin would return verdicts driven by noise. **Expect INCONCLUSIVE to
+be common on large_diverse**, where the interval's half-width is about the size of
+the margin; that is the honest outcome there, not a failure of the readout.
+*(These spreads come from pre-redesign baseline runs — old checkpoint rule, index
+selected on max — so they are approximate. The margin is not revised if the new
+runs' spreads differ.)*
+
+### 12.4 What each verdict licenses
+
+- **NOT BEHIND** → the anchor does not threaten the planned experiments; say so
+  in one sentence. It is **not** evidence that the method is better.
+- **TOO FAR BEHIND** → **reported as a risk** to the main hypothesis (user
+  decision). It does **not** change the planned experiments, the deployment
+  conservatism (§4.3.123 §5), the stage-4 indices, or anything selected.
+- **INCONCLUSIVE** → reported as such, with the interval.
+
+> ⛔ **No verdict licenses re-selecting anything.** In particular, do not re-run
+> stage 4, change `bnn_alpha`, or swap a normalization index because a variant
+> came out badly. That would be selecting on evaluation seeds (§9).
+
+### 12.5 Readout specification
+
+- **Inputs:** the `@eval` sweeps of the evaluation lineage (§4.3.151,
+  `phase2_sweeps.py eval`), one run per (type, variant, seed), seeds 1–10.
+- **Completeness gate, applied first:** a (variant, comparator) cell is read only
+  if **all ten seeds** of **both** arms are finished with all 200 evaluation
+  points. Otherwise the cell is **INCOMPLETE** — not read, not estimated from the
+  seeds that exist.
+- **Config audit before any number is quoted** (the §4.3.109 discipline): every
+  run's wandb `config` shows the intended reward-model path for its seed, the
+  family × variant's stage-4 index from `phase2_winners.json`, `gauge_reward`
+  max0, and for the BNN `bnn_alpha` 0.95 / 0.0, `bnn_n_samples` −1,
+  `centre_draws` True.
+- **Bootstrap: EXACT, by enumeration — no random resampling** (user,
+  2026-10-07). With ten seeds the bootstrap distribution of the mean paired
+  difference can be computed exactly, so there is no resample count and no RNG
+  seed to choose, and the interval is the same on every run by construction.
+  - A resample of ten seeds drawn with replacement is fully described by its
+    **count vector** `c = (c_1, …, c_10)`, `c_i ≥ 0`, `Σ c_i = 10` — how many
+    times each seed appears. There are **C(19, 10) = 92,378** of them.
+  - Its probability is the multinomial `10! / (c_1! ⋯ c_10!) / 10^10`, and its
+    statistic is the resampled mean `Σ c_i · d_i / 10`, with `d_i` the paired
+    difference at seed *i*.
+  - The interval is the **percentile interval** of that exact distribution:
+    sort the 92,378 values, accumulate their probabilities, and take
+    **lower = the smallest value whose cumulative probability is ≥ 0.025** and
+    **upper = the smallest value whose cumulative probability is ≥ 0.975**. This
+    quantile convention is fixed here because the distribution is discrete and
+    the endpoints decide the verdict.
+  - **Self-checks the readout must make and print:** the number of count
+    vectors is 92,378; the probabilities sum to 1 (to floating-point tolerance);
+    and the probability-weighted mean of the resampled means equals the plain
+    mean of the ten differences.
+  - Do **not** substitute a Monte-Carlo bootstrap "for speed"; the enumeration
+    is a fraction of a second.
+- **Report beside the bootstrap interval, as a check only:** the paired-*t* 95%
+  interval on the same ten differences. With ten seeds a percentile bootstrap
+  tends to run slightly narrow — enumerating it exactly removes the resampling
+  jitter, not that small-sample bias — so if the two intervals would give
+  **different verdicts**, say so explicitly. **The verdict is the bootstrap's,
+  as registered.**
+- **Output, per cell:** the two arms' means and SDs, the mean paired difference,
+  both intervals, the verdict, and the number of seeds on which BNN CVaR was
+  ahead.
+
+### 12.6 Do-NOTs
+
+- Do not read any seeds 1–10 cross-family comparison before the readout exists.
+- Do not pick the comparator after seeing the scores.
+- Do not combine the eight verdicts into one.
+- Do not use the max-over-evaluations statistic, or the last-20 window, for the
+  verdict. Last-20 may be reported as the robustness check §5 already names.
+- Do not treat a seed-0 stage-4 score as part of this result (§6: "seed 0 only,
+  a single run each, and not a result").
+
+### 12.7 What had already been seen when the rule was fixed — disclose this
+
+The rule was set on 2026-10-07. §6's evaluation table on that date already held
+(last-10, mean ± sd over seeds 1–10):
+
+| row | score | bears on |
+|---|---|---|
+| BNN CVaR, medium_play | 0.734 ± 0.048 | **verdict cell (vs MR): one arm** |
+| **MR, medium_play** | 0.642 ± 0.042 | **verdict cell (vs BNN CVaR): the other arm — this cell was COMPLETE** |
+| BNN CVaR / BNN mean, large_play | 0.534 ± 0.060 / 0.481 ± 0.070 | BNN CVaR arm of two verdict cells; mechanism comparison |
+| BNN CVaR / BNN mean, large_diverse | 0.291 ± 0.137 / 0.252 ± 0.113 | BNN CVaR arm of two verdict cells; mechanism comparison |
+| oracle, all four variants | 0.648 / 0.607 / 0.367 / 0.272 | context only |
+
+So, of the **eight** verdict cells:
+
+- **1 was complete and visible**: medium_play, BNN CVaR vs MR (means 0.734 vs
+  0.642; the paired interval had not been computed).
+- **2 had the BNN CVaR arm only**: large_play and large_diverse vs MR.
+- **PT had no evaluation run at all**, so all four PT cells were blind in the
+  comparator; medium_diverse was blind in both arms.
+
+**What this does and does not undermine.** The margin (0.10) was derived from the
+noise figures of §12.3, which come from Experiment 1 and the pre-redesign
+baseline runs, and the assistant that proposed it had not read §6's evaluation
+table. But the user had access to these rows, so **the medium_play-vs-MR cell is
+not a blind test and must be marked as such wherever its verdict is reported**.
+The one visible cell favours the proposed method, so the rule was not set to
+rescue a bad result; that is context, not an excuse. The other seven cells were
+blind in at least one arm.
+
+*(A check on §12.3, which these rows allow: the new runs' seed-to-seed SDs are
+0.04–0.05 on medium_play, 0.06–0.07 on large_play and 0.11–0.14 on
+large_diverse — in line with the earlier figures the margin was derived from.)*
