@@ -15013,6 +15013,69 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.157 DECIDED: measure the oracle's normalization — PRE-REGISTERED before any oracle stage-4 run exists
+
+2026-10-07. **User decision (§4.3.156 §2): measure it.** Written before any
+seed-0 oracle run exists, so the reading cannot be steered by the numbers.
+
+#### 1. Design: the same stage 4 every learned reward got, on the distinct transformations
+
+- **Seed 0, one IQL run per index, last-10 mean, argmax, exact ties to the
+  lowest index.** Identical to §5 and `iql_score.select_normalization`.
+- **Indices 0–3 only, and why.** The task reward is 0/1. If the minimum
+  trajectory return `min_ret` is 0, `modify_reward` gives index 4 ≡ 2 (subtract
+  0, then scale), 6 ≡ 2 (subtract 0 / length), 5 ≡ 3 and 7 ≡ 3. So 0–3 are the
+  **four distinct transformations**. Running 4–7 as well would give indices 2
+  and 3 **two noisy draws each** in an argmax, biasing the pick toward them.
+  That would be a flaw, not symmetry.
+- ⚠️ **This rests on `min_ret` = 0, which is not yet verified.** D4RL is not
+  installed on the analysis Mac. The user runs the one-line check on the box
+  before launch. If any variant has `min_ret` ≠ 0, the grid goes back to 0–7
+  for that variant (one constant, `ORACLE_INDICES`).
+- **`iql.py`, no reward model**, so no gauge, no centring, no label cache.
+  Seed 0 changes only IQL's own randomness here: the oracle has no seed-specific
+  data split. It is used anyway, to keep the selection run out of seeds 1–10.
+
+#### 2. The reading, fixed now
+
+| outcome per variant | action | what is reported |
+|---|---|---|
+| **index 1 wins** | nothing is re-run | the existing seeds 1–10 sweep, unchanged |
+| **another index wins** | seeds 1–10 at that index (10 runs) | **headline oracle = the selected index**, the same procedure as every learned reward; the conventional `r − 1` result is reported beside it |
+
+- **The gap is reported whatever it is**, in §6's noise units (0.086), with the
+  same caveat as every other grid: one run per index does not resolve a gap
+  under ~1 unit.
+- **Both oracle numbers are disclosed when they differ.** A reader can then see
+  how much of "learned vs oracle" is normalization.
+- ⛔ **No learned-reward result changes**, whatever this shows. It moves the
+  reference line only.
+
+#### 3. Tooling
+
+`phase2_sweeps.py` now covers the four `tr_sweeps` files (28 in all): program
+`iql.py`, grid 0–3, `config_path` as the only fixed parameter. New `--only
+PREFIX`, because **`stage4 --write` with no filter would flip all 16 evaluation
+files back to stage 4**. `winners` checks the sweep's program and passes the
+oracle's own grid to `select_normalization`. Self-test extended: the oracle
+round-trips in both lineages, maps to itself alone, an 8-index grid is rejected
+as its stage 4, index 5 is rejected as a winner, and the wrong program fails
+the audit. `check`: **28/28**. The eval dry run leaves all 16 evaluation files
+unchanged and skips the oracle.
+
+The four oracle files are now in the **stage-4 lineage**. The old hand-made
+files (seeds 1–10 at index 1) are in git history, and their sweeps are the ones
+§4.3.156 verified.
+
+#### 4. Schedule
+
+16 runs. They go **first on GPUs 0–1 when queue 2 ends** (~10-10 01:30 UTC),
+ahead of the PT evaluation: one wave of 4 per variant with no idle slot, ~24 h.
+Early, because any re-run in §2 depends on them. The waiting queue 4 is killed
+and relaunched as oracle ×4 then PT ×4. **Estimate moves from ~10-14 to
+10-14/15**: +0.4 day for the 16 runs, and up to +1 day if all four variants need
+their 10 evaluation runs.
+
 ### 4.3.156 The oracle baselines stand as run; time-to-done estimate; one comparability point to decide
 
 2026-10-07 (evening). The user asked for an estimate, and stated that the
@@ -15050,6 +15113,9 @@ Two options, **the user's call**:
   4 slots), and evaluation re-runs for any variant whose winner is not index 1.
   Indices 2–7 are defined for the task reward too, since their constants come
   from the labelled returns.
+
+> ✅ **DECIDED 2026-10-07: measure it (§4.3.157).** The grid is 16 runs, not 32:
+> only indices 0–3 are distinct for a 0/1 reward.
 
 #### 3. Estimate: all evaluations done in ~6 days, about 2026-10-14 UTC
 
