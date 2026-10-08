@@ -16136,8 +16136,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | mr medium_diverse | `5hxmtx6j` | .541 .453 **.631** .574 .016 .032 .450 .490 | **2** (0.631) | 3 (0.574) | 0.057 (0.66) | 2 ✓ | 2026-10-01 |
 | mr large_play | `mmpj6k1g` | .259 .370 .246 **.504** .000 .000 .062 .074 | **3** (0.504) | 1 (0.370) | 0.134 (1.6) | 3 ✓ | 2026-10-02 |
 | mr large_diverse | `3ibbsds8` | .077 .104 .064 **.251** .005 .013 .026 .005 | **3** (0.251) | 1 (0.104) | 0.147 (1.7) | 3 ✓ | 2026-10-02 |
-| ensemble medium_play cvar | `51j9du3l` | | | | | | running (queue 3a) |
-| ensemble medium_play mean | — | | | | | | queue 3 |
+| ensemble medium_play cvar | `51j9du3l` | .553 .577 **.656** .597 .007 .017 .493 .404 | **2** (0.656) | 3 (0.597) | 0.059 (0.69) | 2 ✓ | 2026-10-08 |
+| ensemble medium_play mean | `zi63kl9c` | | | | | | running (queue 3a) |
 | ensemble medium_diverse cvar | — | | | | | | queue 3 |
 | ensemble medium_diverse mean | — | | | | | | queue 3 |
 | ensemble large_play cvar | — | | | | | | queue 3 |
@@ -16217,7 +16217,9 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 - *ensemble medium_play cvar* (`51j9du3l`, started 2026-10-07 17:30 UTC): the
   first ensemble sweep. Config checked on its 4 runs: `mr_ensemble` True,
   `mr_alpha` 0.95, `mr_burn_in` 100, `centre_draws` True, MR root, seed 0,
-  indices 0–3.
+  indices 0–3. **Result (2026-10-08): index 2** at 0.656 over index 3 at 0.597,
+  0.69 noise units, last-20 agreeing (0.644 vs 0.574). Evaluation file written
+  (seeds 1–10, index 2). Index 2 has now won 6 of the 8 finished medium grids.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -16240,8 +16242,8 @@ is given for disclosure only. Fill a row with
 | bnn large_diverse cvar | 3 | `ucd752vz` | **0.291 ± 0.137** (10) | 0.306 ± 0.146 | 0.487 ± 0.117 | 2026-10-06 |
 | bnn large_diverse mean | 3 | `lashr9nz` | **0.252 ± 0.113** (10) | 0.262 ± 0.115 | 0.484 ± 0.093 | 2026-10-06 |
 | bnn medium_play cvar | 2 | `tuw2u1wl` | **0.734 ± 0.048** (10) | 0.730 ± 0.056 | 0.853 ± 0.036 | 2026-10-06 |
-| bnn medium_play mean | 2 | `b4q2djyu` | | | | running (queue 3b) |
-| bnn medium_diverse cvar | 2 | — | | | | queue 3b |
+| bnn medium_play mean | 2 | `b4q2djyu` | **0.779 ± 0.028** (10) | 0.778 ± 0.025 | 0.899 ± 0.021 | 2026-10-08 |
+| bnn medium_diverse cvar | 2 | `qs64gidp` | | | | running (queue 3b) |
 | bnn medium_diverse mean | 2 | — | | | | queue 3b |
 | mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
 | mr medium_diverse | 2 | `nr1ceqlk` | | | | running (queue 2) |
@@ -16289,6 +16291,16 @@ is given for disclosure only. Fill a row with
   BNN higher on **10 of 10 seeds**, Welch t = 4.6. Descriptive, one variant, and
   the BNN mean row for this variant is still running. Recorded because it is the
   first baseline number, not as a conclusion.
+- *bnn medium_play mean* (2026-10-08): **0.779 ± 0.028**, the highest and
+  tightest row so far (range 0.724–0.806). **On medium_play the mean reward
+  beats the CVaR reward**: +0.045, higher on **9 of 10 seeds**, paired t = 2.6.
+  That is the **reverse of large_play** (CVaR +0.053, 8 of 10, t = 2.4), with
+  large_diverse undecided (t = 0.8). So after three variants there is **no
+  uniform CVaR-vs-mean direction**; each sign is about 2.5 SE on its own
+  variant. Both BNN rewards beat MR best here (mean +0.137, 10 of 10 seeds,
+  t = 7.5; CVaR +0.091, 10 of 10) and the conventional oracle (0.648).
+  Still descriptive: medium_diverse is running, and the pre-specified
+  comparison is the notebook's, over all cells.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
