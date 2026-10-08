@@ -15042,6 +15042,9 @@ pulled by then would abort the whole queue and leave the GPUs idle. The other
 six ensemble evaluation sweeps are queued behind queue 3a (GPUs 2–3, free at
 ~10-11 18:00) and queue 4 as their stage 4 finishes.
 
+**Queue 5 LAUNCHED and waiting on queue 3b (user-confirmed, 2026-10-08).** Log:
+`~/iqlpref/stage4_queue5.log`, empty until the wait ends.
+
 ### 4.3.158 Evaluation sweeps are now REGISTERED in the results notebook as they finish — by a tool, not by hand
 
 2026-10-07. **User request: register every evaluation sweep id in
