@@ -15044,6 +15044,10 @@ while it runs, and queue 3a. Tested locally: the tagged waiter is visible by its
 tag, a follow-up on that pattern waits, and the bracketed pattern does not match
 the follow-up's own command line.
 
+**Queue 6 LAUNCHED, tagged `QID=six`, waiting on queue 3a (user-confirmed,
+2026-10-09).** Log: `~/iqlpref/stage4_queue6.log`, empty until the wait ends.
+All three GPU pairs now have a queue waiting behind the running one.
+
 ### 4.3.160 Sweep check, 2026-10-09 08:41 UTC — 19 of 24 stage-4 winners, 13 of 28 cells; the first last-20 disagreement; plan for the last ensemble evaluations
 
 **Finished since §4.3.159:** ensemble medium_diverse CVaR stage 4 (**index 3**;
