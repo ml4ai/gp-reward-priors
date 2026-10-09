@@ -15018,6 +15018,32 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.161 Sweep check, 2026-10-09 18:27 UTC — 20 of 24 stage-4 winners, 14 of 28 cells; queue 6 chained on GPUs 2–3 with a tag
+
+**Finished since §4.3.160:** ensemble medium_diverse mean stage 4 (**index 3**,
+1.0 noise units, last-20 agrees) and the BNN medium_diverse CVaR evaluation
+(**0.637 ± 0.053**, level with MR best's 0.647). Scored, evaluation file written
+(`check` 28/28), registered.
+
+**Running:** queue 2 `pio60aa6` (MR large_diverse evaluation, 4 of 10), queue 3a
+`xkdh3c7x` (ensemble large_play CVaR stage 4), queue 3b `jh3myntz` (BNN
+medium_diverse mean evaluation, 2 of 10). Queues 4 and 5 wait.
+
+**Queue 6 is handed over now, not tomorrow**, with the two ensemble evaluation
+sweeps that are ready (medium_diverse CVaR and mean, both index 3), on GPUs
+2–3 × 2, waiting on queue 3a. That removes the time-critical step at the
+~10-11 17:15 hand-off.
+
+**The waiting shell carries a tag, `QID=six`**, so that a later queue for the
+same GPUs can wait on *it* and not just on the queue that is running. Without
+the tag, a second waiter on the generic pattern would wake at the same moment
+as queue 6 when queue 3a exits, and both would launch (§4.3.160's rule). The
+follow-up (ensemble large_play CVaR and mean) waits on
+`QID=si[x]|stage4_queue[.]sh 2 3 2 `, which covers queue 6 while it waits and
+while it runs, and queue 3a. Tested locally: the tagged waiter is visible by its
+tag, a follow-up on that pattern waits, and the bracketed pattern does not match
+the follow-up's own command line.
+
 ### 4.3.160 Sweep check, 2026-10-09 08:41 UTC — 19 of 24 stage-4 winners, 13 of 28 cells; the first last-20 disagreement; plan for the last ensemble evaluations
 
 **Finished since §4.3.159:** ensemble medium_diverse CVaR stage 4 (**index 3**;
@@ -16194,8 +16220,8 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble medium_play cvar | `51j9du3l` | .553 .577 **.656** .597 .007 .017 .493 .404 | **2** (0.656) | 3 (0.597) | 0.059 (0.69) | 2 ✓ | 2026-10-08 |
 | ensemble medium_play mean | `zi63kl9c` | .517 .527 **.631** .579 .062 .007 .497 .440 | **2** (0.631) | 3 (0.579) | 0.052 (0.60) | 2 ✓ | 2026-10-08 |
 | ensemble medium_diverse cvar | `bzrqrkf5` | .506 .494 .616 **.653** .014 .010 .411 .458 | **3** (0.653) | 2 (0.616) | 0.037 (0.43) | **2 ✗** (by 0.009) | 2026-10-09 |
-| ensemble medium_diverse mean | `o9ynvjdh` | | | | | | running (queue 3a) |
-| ensemble large_play cvar | — | | | | | | queue 3 |
+| ensemble medium_diverse mean | `o9ynvjdh` | .538 .531 .615 **.705** .010 .021 .396 .561 | **3** (0.705) | 2 (0.615) | 0.090 (1.0) | 3 ✓ | 2026-10-09 |
+| ensemble large_play cvar | `xkdh3c7x` | | | | | | running (queue 3a) |
 | ensemble large_play mean | — | | | | | | queue 3 |
 | ensemble large_diverse cvar | — | | | | | | queue 3 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
@@ -16286,6 +16312,12 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   stands**, and the evaluation file is written at index 3. **§7 disclosure:**
   for this cell the two end-of-training windows pick different indices, both by
   margins far inside the noise. 18 of 19 scored grids agree across windows.
+- *ensemble medium_diverse mean* (`o9ynvjdh`, 2026-10-09): index 3 at 0.705 over
+  index 2 at 0.615, 1.0 noise units, and last-20 agrees with a wider gap (0.711
+  vs 0.599). Both medium_diverse ensemble rewards are at index 3, so their
+  mean-vs-CVaR comparison is at one normalization. **The ensemble picks index 3
+  on medium_diverse, where BNN, MR and PT pick 2**: "index by maze size" is a
+  tendency (15 of 20 grids), not a rule. Evaluation file written.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -16309,8 +16341,8 @@ is given for disclosure only. Fill a row with
 | bnn large_diverse mean | 3 | `lashr9nz` | **0.252 ± 0.113** (10) | 0.262 ± 0.115 | 0.484 ± 0.093 | 2026-10-06 |
 | bnn medium_play cvar | 2 | `tuw2u1wl` | **0.734 ± 0.048** (10) | 0.730 ± 0.056 | 0.853 ± 0.036 | 2026-10-06 |
 | bnn medium_play mean | 2 | `b4q2djyu` | **0.779 ± 0.028** (10) | 0.778 ± 0.025 | 0.899 ± 0.021 | 2026-10-08 |
-| bnn medium_diverse cvar | 2 | `qs64gidp` | | | | running (queue 3b) |
-| bnn medium_diverse mean | 2 | — | | | | queue 3b |
+| bnn medium_diverse cvar | 2 | `qs64gidp` | **0.637 ± 0.053** (10) | 0.648 ± 0.051 | 0.777 ± 0.024 | 2026-10-09 |
+| bnn medium_diverse mean | 2 | `jh3myntz` | | | | running (queue 3b) |
 | mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
 | mr medium_diverse | 2 | `nr1ceqlk` | **0.647 ± 0.057** (10) | 0.654 ± 0.055 | 0.813 ± 0.048 | 2026-10-08 |
 | mr large_play | 3 | `dqsfjy7h` | **0.425 ± 0.055** (10) | 0.426 ± 0.051 | 0.564 ± 0.065 | 2026-10-09 |
@@ -16375,6 +16407,12 @@ is given for disclosure only. Fill a row with
   on 8 of 10 (+0.056, t 2.1). MR itself sits above the conventional oracle
   (0.367). On the two variants where both exist, BNN CVaR beats MR best on
   **20 of 20 seeds**. Still descriptive.
+- *bnn medium_diverse cvar* (2026-10-09): 0.637 ± 0.053 (range 0.536–0.703).
+  **Level with MR best here** (0.647): BNN CVaR is higher on 5 of 10 seeds,
+  −0.010, paired t = −0.4. So the "20 of 20" above does **not** extend to a
+  third variant. BNN CVaR vs MR best now reads: ahead on medium_play and
+  large_play, tied on medium_diverse, large_diverse pending. This is why no
+  conclusion was drawn at two variants.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
