@@ -15033,6 +15033,11 @@ medium_play the oracle does not care which of indices 1–3 it gets**, so the
 asymmetry §4.3.156 raised is, for this variant, about a normalization choice
 that barely matters. The 10 runs will show that directly.
 
+> ✅ **Confirmed by the user 2026-10-10: keep the oracle rule as written.** The
+> option of skipping the re-run when the gap is a tie was offered and declined.
+> So every oracle variant whose stage-4 argmax is not index 1 gets its 10
+> evaluation runs at the selected index, however small the gap.
+
 **Also finished:** ensemble large_play CVaR stage 4, **index 3**, 3.3 noise
 units. 22 winners known (21 of 24 learned-reward grids, 1 of 4 oracle).
 Evaluation files written for both (`check` 28/28).
