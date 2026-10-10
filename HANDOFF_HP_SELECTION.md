@@ -15018,6 +15018,51 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.164 Sweep check, 2026-10-10 17:55 UTC — BNN evaluation COMPLETE (8 of 8); 24 winners; the oracle keeps `r − 1` on medium_diverse
+
+**Second chained hand-off worked:** queue 3b exited and queue 5 started the
+ensemble medium_play CVaR evaluation (`cvsthmuf`) at 13:35 UTC.
+
+**Finished since §4.3.163:**
+- **BNN medium_diverse mean evaluation: 0.612 ± 0.052.** All eight BNN cells are
+  now scored and registered. §6's note has the complete CVaR-vs-mean table:
+  no consistent advantage either way.
+- **Ensemble large_play mean stage 4: index 3** (1.3 noise units).
+- **Oracle medium_diverse stage 4: index 1, the conventional one** (1.1 noise
+  units). No re-run; `9pbsrxod` stands as the selected oracle.
+
+**Winners: 24 known** = 22 of 24 learned-reward grids and 2 of 4 oracle. Left:
+ensemble large_diverse CVaR (running) and mean, oracle large_play (running) and
+large_diverse. Evaluation files written for the two new learned/oracle winners
+(`check` 28/28). The notebook has 15 of 28 headline cells: every BNN and MR
+cell, and 3 of 4 oracle cells (medium_play's waits for its index-3 sweep).
+
+**The oracle, two variants in:** medium_play → index 3 by a tie (re-run owed),
+medium_diverse → index 1 clearly (nothing owed). So far at most one of the four
+oracle evaluations needs running.
+
+**Running:** queue 4 `oghrks69` (oracle large_play stage 4), queue 3a `pv3oa49a`
+(ensemble large_diverse CVaR stage 4), queue 5 `cvsthmuf` (ensemble medium_play
+CVaR evaluation). Queue 6 waits on 3a.
+
+**Projected hand-offs (UTC), and the one launch still owed:**
+
+| GPUs | now | then (already queued) | free at |
+|---|---|---|---|
+| 0–1 | queue 4: oracle large_play, large_diverse stage 4 | PT evaluation ×4 | ~10-13 23:45 |
+| 2–3 | queue 3a: ensemble large_diverse CVaR, mean stage 4 | queue 6: ensemble medium_diverse ×2 evaluation | ~10-13 03:00 |
+| 4–5 | queue 5: ensemble medium_play CVaR, mean evaluation | — | **~10-12 22:30** |
+
+**Not yet queued (5 to 7 sweeps):** ensemble large_play CVaR and mean (ready),
+oracle medium_play at index 3 (ready), ensemble large_diverse CVaR and mean
+(stage 4 ends ~10-11 16:15), and oracle large_play / large_diverse **if** their
+stage 4 picks another index (known ~10-11 00:30). **They are allocated in one
+pass at a check between ~10-11 17:00 and ~10-12 22:00 UTC**, when every one of
+them is known and before the first GPU pair frees up. Planned split: GPUs 4–5
+take ensemble large_play CVaR; GPUs 2–3 take ensemble large_play mean and both
+large_diverse; GPUs 0–1 take the oracle evaluation(s). **Projected end: about
+2026-10-15 09:00–12:00 UTC.**
+
 ### 4.3.163 Sweep check, 2026-10-10 08:17 UTC — the first oracle stage 4: a three-way tie that the rule sends to index 3
 
 **Oracle medium_play (`2u597y8g`): index 3 by 0.005.** Last-10 scores for
@@ -16284,12 +16329,12 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble medium_diverse cvar | `bzrqrkf5` | .506 .494 .616 **.653** .014 .010 .411 .458 | **3** (0.653) | 2 (0.616) | 0.037 (0.43) | **2 ✗** (by 0.009) | 2026-10-09 |
 | ensemble medium_diverse mean | `o9ynvjdh` | .538 .531 .615 **.705** .010 .021 .396 .561 | **3** (0.705) | 2 (0.615) | 0.090 (1.0) | 3 ✓ | 2026-10-09 |
 | ensemble large_play cvar | `xkdh3c7x` | .122 .156 .276 **.562** .000 .000 .093 .121 | **3** (0.562) | 2 (0.276) | 0.286 (**3.3**) | 3 ✓ | 2026-10-10 |
-| ensemble large_play mean | `6ke7d4w0` | | | | | | running (queue 3a) |
+| ensemble large_play mean | `6ke7d4w0` | .363 .315 .322 **.478** .000 .000 .063 .116 | **3** (0.478) | 0 (0.363) | 0.115 (1.3) | 3 ✓ | 2026-10-10 |
 | **oracle** medium_play (grid 0–3) | `2u597y8g` | .001 .655 .654 **.660** | **3** (0.660) | 1 (0.655) | 0.005 (**0.06**) | **2 ✗** | 2026-10-10 |
-| **oracle** medium_diverse (grid 0–3) | `roqkr3sl` | | | | | | running (queue 4) |
-| **oracle** large_play (grid 0–3) | — | | | | | | queue 4 |
+| **oracle** medium_diverse (grid 0–3) | `roqkr3sl` | .114 **.648** .530 .551 | **1** (0.648) | 3 (0.551) | 0.097 (1.1) | 1 ✓ | 2026-10-10 |
+| **oracle** large_play (grid 0–3) | `oghrks69` | | | | | | running (queue 4) |
 | **oracle** large_diverse (grid 0–3) | — | | | | | | queue 4 |
-| ensemble large_diverse cvar | — | | | | | | queue 3 |
+| ensemble large_diverse cvar | `pv3oa49a` | | | | | | running (queue 3a) |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
 | pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
@@ -16398,6 +16443,16 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   expected difference is nil: this stage 4 says the oracle is **insensitive to
   normalization among indices 1–3** on medium_play, which is itself the answer
   to §4.3.156's question for this variant.
+- *ensemble large_play mean* (`6ke7d4w0`, 2026-10-10): index 3 at 0.478 over the
+  identity at 0.363, 1.3 noise units, last-20 agreeing (0.492 vs 0.376). Both
+  large_play ensemble rewards are at index 3. Index 3 has won 9 of 10 large
+  grids. Evaluation file written.
+- ***oracle* medium_diverse** (`roqkr3sl`, 2026-10-10): **the conventional
+  index 1 wins**, 0.648 over index 3 at 0.551, 1.1 noise units, and last-20
+  agrees (0.659 vs 0.526). **Nothing is re-run**: the August sweep `9pbsrxod`
+  is the stage-4-selected oracle for this variant. The raw reward (index 0)
+  scores 0.114. Unlike medium_play, here the scaled indices 2 and 3 are
+  *worse* than `r − 1` by ~0.1, so the oracle is not uniformly insensitive.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
@@ -16422,7 +16477,7 @@ is given for disclosure only. Fill a row with
 | bnn medium_play cvar | 2 | `tuw2u1wl` | **0.734 ± 0.048** (10) | 0.730 ± 0.056 | 0.853 ± 0.036 | 2026-10-06 |
 | bnn medium_play mean | 2 | `b4q2djyu` | **0.779 ± 0.028** (10) | 0.778 ± 0.025 | 0.899 ± 0.021 | 2026-10-08 |
 | bnn medium_diverse cvar | 2 | `qs64gidp` | **0.637 ± 0.053** (10) | 0.648 ± 0.051 | 0.777 ± 0.024 | 2026-10-09 |
-| bnn medium_diverse mean | 2 | `jh3myntz` | | | | running (queue 3b) |
+| bnn medium_diverse mean | 2 | `jh3myntz` | **0.612 ± 0.052** (10) | 0.619 ± 0.048 | 0.756 ± 0.041 | 2026-10-10 |
 | mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
 | mr medium_diverse | 2 | `nr1ceqlk` | **0.647 ± 0.057** (10) | 0.654 ± 0.055 | 0.813 ± 0.048 | 2026-10-08 |
 | mr large_play | 3 | `dqsfjy7h` | **0.425 ± 0.055** (10) | 0.426 ± 0.051 | 0.564 ± 0.065 | 2026-10-09 |
@@ -16501,6 +16556,22 @@ is given for disclosure only. Fill a row with
   elsewhere, so large_diverse will resolve few comparisons whatever the means.
   **BNN CVaR vs MR best, all four variants:** ahead on medium_play (t 4.7) and
   large_play (t 4.5), tied on medium_diverse (t −0.4) and large_diverse (t 0.9).
+- *bnn medium_diverse mean* (2026-10-10): 0.612 ± 0.052 (range 0.527–0.683).
+  **All eight BNN cells are in.** On this variant CVaR vs mean is +0.025 (6 of
+  10 seeds, paired t 1.2), undecided, and BNN mean vs MR best is −0.035 (4 of
+  10, t −1.3), also undecided. **CVaR vs mean for the BNN, complete:**
+
+  | | CVaR | mean | CVaR − mean | CVaR higher on | paired t |
+  |---|---|---|---|---|---|
+  | medium_play | 0.734 | 0.779 | −0.045 | 1 of 10 | −2.6 |
+  | medium_diverse | 0.637 | 0.612 | +0.025 | 6 of 10 | 1.2 |
+  | large_play | 0.534 | 0.481 | +0.053 | 8 of 10 | 2.4 |
+  | large_diverse | 0.291 | 0.252 | +0.039 | 7 of 10 | 0.8 |
+
+  CVaR is ahead on three variants and behind on one, and only two of the four
+  differences reach |t| > 2, with **opposite signs**. Descriptively: **no
+  consistent advantage for either conservatism level.** The notebook's
+  comparison over all cells is the one to report.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
