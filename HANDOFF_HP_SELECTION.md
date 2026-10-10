@@ -15018,6 +15018,42 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.163 Sweep check, 2026-10-10 08:17 UTC — the first oracle stage 4: a three-way tie that the rule sends to index 3
+
+**Oracle medium_play (`2u597y8g`): index 3 by 0.005.** Last-10 scores for
+indices 0–3: 0.001, 0.655, 0.654, **0.660**. Indices 1, 2 and 3 are
+indistinguishable (0.06 noise units), and last-20 would pick index 2.
+
+**The pre-registered rule is applied as written (§4.3.157 §2):** the argmax is
+index 3, so the oracle is evaluated at seeds 1–10 at index 3 (10 runs), the
+selected index is the headline, and the existing `r − 1` sweep `nv89vprk` is
+reported beside it. Nothing about this was decided after seeing the scores. The
+reading of the *result* is unchanged by which of the three wins: **on
+medium_play the oracle does not care which of indices 1–3 it gets**, so the
+asymmetry §4.3.156 raised is, for this variant, about a normalization choice
+that barely matters. The 10 runs will show that directly.
+
+**Also finished:** ensemble large_play CVaR stage 4, **index 3**, 3.3 noise
+units. 22 winners known (21 of 24 learned-reward grids, 1 of 4 oracle).
+Evaluation files written for both (`check` 28/28).
+
+**`register` refined.** Once any oracle variant's stage 4 picks a
+non-conventional index, the notebook's "r − 1 (conventional)" column now holds
+the index-1 sweep for **every** variant, including those where index 1 also
+wins, so that column is the conventional oracle throughout and the first column
+is the selected one. Self-tested. Until its index-3 sweep exists, medium_play's
+headline oracle cell is blank and its `r − 1` cell shows `nv89vprk`.
+
+**Running:** queue 4 `roqkr3sl` (oracle medium_diverse stage 4), queue 3a
+`6ke7d4w0` (ensemble large_play mean stage 4), queue 3b `jh3myntz` (BNN
+medium_diverse mean evaluation, 8 of 10). Queues 5 and 6 wait.
+
+**Not yet queued:** ensemble large_play CVaR evaluation (ready), ensemble
+large_play mean and large_diverse ×2 (stage 4 pending), oracle medium_play
+evaluation at index 3 (ready), and up to three more oracle evaluations. They are
+allocated in one pass once the oracle's last three grids finish (~10-11 01:15
+UTC), since the first free slots are on GPUs 4–5 at ~10-12 21:30.
+
 ### 4.3.162 Sweep check, 2026-10-10 03:35 UTC — the first chained hand-off worked; the oracle's stage 4 is running; MR column complete (15 of 28 cells)
 
 **Queue 2 exited and queue 4 started on its own**, as designed: the oracle
@@ -16242,8 +16278,12 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble medium_play mean | `zi63kl9c` | .517 .527 **.631** .579 .062 .007 .497 .440 | **2** (0.631) | 3 (0.579) | 0.052 (0.60) | 2 ✓ | 2026-10-08 |
 | ensemble medium_diverse cvar | `bzrqrkf5` | .506 .494 .616 **.653** .014 .010 .411 .458 | **3** (0.653) | 2 (0.616) | 0.037 (0.43) | **2 ✗** (by 0.009) | 2026-10-09 |
 | ensemble medium_diverse mean | `o9ynvjdh` | .538 .531 .615 **.705** .010 .021 .396 .561 | **3** (0.705) | 2 (0.615) | 0.090 (1.0) | 3 ✓ | 2026-10-09 |
-| ensemble large_play cvar | `xkdh3c7x` | | | | | | running (queue 3a) |
-| ensemble large_play mean | — | | | | | | queue 3 |
+| ensemble large_play cvar | `xkdh3c7x` | .122 .156 .276 **.562** .000 .000 .093 .121 | **3** (0.562) | 2 (0.276) | 0.286 (**3.3**) | 3 ✓ | 2026-10-10 |
+| ensemble large_play mean | `6ke7d4w0` | | | | | | running (queue 3a) |
+| **oracle** medium_play (grid 0–3) | `2u597y8g` | .001 .655 .654 **.660** | **3** (0.660) | 1 (0.655) | 0.005 (**0.06**) | **2 ✗** | 2026-10-10 |
+| **oracle** medium_diverse (grid 0–3) | `roqkr3sl` | | | | | | running (queue 4) |
+| **oracle** large_play (grid 0–3) | — | | | | | | queue 4 |
+| **oracle** large_diverse (grid 0–3) | — | | | | | | queue 4 |
 | ensemble large_diverse cvar | — | | | | | | queue 3 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
@@ -16339,6 +16379,20 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   mean-vs-CVaR comparison is at one normalization. **The ensemble picks index 3
   on medium_diverse, where BNN, MR and PT pick 2**: "index by maze size" is a
   tendency (15 of 20 grids), not a rule. Evaluation file written.
+- *ensemble large_play cvar* (`xkdh3c7x`, 2026-10-10): index 3 at 0.562 over
+  index 2 at 0.276, **3.3 noise units**, the second-clearest pick of the 21.
+  last-20 agrees. Index 3 has won 8 of 9 large grids. Evaluation file written.
+- ***oracle* medium_play** (`2u597y8g`, 2026-10-10, the first oracle grid):
+  **index 3** at 0.660, over the conventional index 1 at 0.655 and index 2 at
+  0.654. **A three-way tie: 0.006 covers all three, 0.06 noise units.** last-20
+  picks index 2 (0.653) over 3 (0.636) and 1 (0.631), the second grid where the
+  windows disagree. **Index 0, the raw 0/1 reward, scores 0.001**: IQL fails
+  outright without a shift or a scale, which is the known reason for `r − 1`.
+  **By §4.3.157's rule, fixed before this run, index 3 wins and the oracle is
+  re-run at seeds 1–10 there**, with the `r − 1` sweep reported beside it. The
+  expected difference is nil: this stage 4 says the oracle is **insensitive to
+  normalization among indices 1–3** on medium_play, which is itself the answer
+  to §4.3.156's question for this variant.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
