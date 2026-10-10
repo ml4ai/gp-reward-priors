@@ -15018,6 +15018,23 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.162 Sweep check, 2026-10-10 03:35 UTC — the first chained hand-off worked; the oracle's stage 4 is running; MR column complete (15 of 28 cells)
+
+**Queue 2 exited and queue 4 started on its own**, as designed: the oracle
+medium_play stage-4 sweep **`2u597y8g`** began at 01:13 UTC. Config checked on
+its 4 runs: program `iql.py`, seed 0, `normalize_reward` 0–3, **no reward
+model** (`reward_model_path` empty, `reward_model_root` None, neither
+`bnn_reward_model` nor `mr_ensemble`), 1,000,000 steps, evaluation every 5,000
+on 100 episodes. That is §4.3.157's design.
+
+**Finished since §4.3.161:** the MR large_diverse evaluation,
+**0.241 ± 0.098**. Scored and registered. MR is the first learned-reward family
+with all four cells in.
+
+**Running:** queue 4 `2u597y8g` (oracle medium_play stage 4), queue 3a
+`xkdh3c7x` (ensemble large_play CVaR stage 4, 4 of 8), queue 3b `jh3myntz` (BNN
+medium_diverse mean evaluation, 6 of 10). Queues 5 and 6 wait.
+
 ### 4.3.161 Sweep check, 2026-10-09 18:27 UTC — 20 of 24 stage-4 winners, 14 of 28 cells; queue 6 chained on GPUs 2–3 with a tag
 
 **Finished since §4.3.160:** ensemble medium_diverse mean stage 4 (**index 3**,
@@ -16350,7 +16367,7 @@ is given for disclosure only. Fill a row with
 | mr medium_play | 0 | `7lzll81d` | **0.642 ± 0.042** (10) | 0.647 ± 0.040 | 0.772 ± 0.043 | 2026-10-07 |
 | mr medium_diverse | 2 | `nr1ceqlk` | **0.647 ± 0.057** (10) | 0.654 ± 0.055 | 0.813 ± 0.048 | 2026-10-08 |
 | mr large_play | 3 | `dqsfjy7h` | **0.425 ± 0.055** (10) | 0.426 ± 0.051 | 0.564 ± 0.065 | 2026-10-09 |
-| mr large_diverse | 3 | `pio60aa6` | | | | running (queue 2) |
+| mr large_diverse | 3 | `pio60aa6` | **0.241 ± 0.098** (10) | 0.254 ± 0.098 | 0.437 ± 0.113 | 2026-10-10 |
 | pt ×4 | 3, 2, 3, 0 | — | | | | queue 4 (waiting on queue 2) |
 | ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
 | **oracle** medium_play | 1 (fixed) | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
@@ -16417,6 +16434,14 @@ is given for disclosure only. Fill a row with
   third variant. BNN CVaR vs MR best now reads: ahead on medium_play and
   large_play, tied on medium_diverse, large_diverse pending. This is why no
   conclusion was drawn at two variants.
+- *mr large_diverse* (2026-10-10): 0.241 ± 0.098 (range 0.088–0.391). **The MR
+  column is complete: 0.642, 0.647, 0.425, 0.241.** On large_diverse nothing
+  separates: BNN CVaR vs MR +0.050 (5 of 10 seeds, paired t 0.9), BNN mean vs MR
+  +0.011 (4 of 10, t 0.2), and all three sit around the conventional oracle
+  (0.272). Every method's sd on this variant is 0.10–0.14, against 0.03–0.08
+  elsewhere, so large_diverse will resolve few comparisons whatever the means.
+  **BNN CVaR vs MR best, all four variants:** ahead on medium_play (t 4.7) and
+  large_play (t 4.5), tied on medium_diverse (t −0.4) and large_diverse (t 0.9).
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
