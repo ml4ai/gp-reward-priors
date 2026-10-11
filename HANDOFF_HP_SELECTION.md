@@ -15087,6 +15087,11 @@ dry-run on the Mac. **With these three launched, nothing remains unqueued**: 13
 evaluation sweeps are running or waiting, and **the last one ends about
 2026-10-15 08:35 UTC**.
 
+**Queues 7, 8 and 9 LAUNCHED and waiting (user-confirmed, 2026-10-11).** Logs:
+`~/iqlpref/stage4_queue{7,8,9}.log`, each empty until its wait ends. **Nothing
+is left to launch.** The remaining work is to score and register each
+evaluation sweep as it finishes.
+
 ### 4.3.165 Notebook layout decided: the main table shows the oracle at its WINNING index only; winning-vs-conventional is a separate section at the end
 
 2026-10-10. **User instruction:** in `results/results_table.ipynb`, the "IQL with
