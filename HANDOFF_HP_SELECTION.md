@@ -16376,9 +16376,9 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | ensemble large_play mean | `6ke7d4w0` | .363 .315 .322 **.478** .000 .000 .063 .116 | **3** (0.478) | 0 (0.363) | 0.115 (1.3) | 3 ✓ | 2026-10-10 |
 | **oracle** medium_play (grid 0–3) | `2u597y8g` | .001 .655 .654 **.660** | **3** (0.660) | 1 (0.655) | 0.005 (**0.06**) | **2 ✗** | 2026-10-10 |
 | **oracle** medium_diverse (grid 0–3) | `roqkr3sl` | .114 **.648** .530 .551 | **1** (0.648) | 3 (0.551) | 0.097 (1.1) | 1 ✓ | 2026-10-10 |
-| **oracle** large_play (grid 0–3) | `oghrks69` | | | | | | running (queue 4) |
-| **oracle** large_diverse (grid 0–3) | — | | | | | | queue 4 |
-| ensemble large_diverse cvar | `pv3oa49a` | | | | | | running (queue 3a) |
+| **oracle** large_play (grid 0–3) | `oghrks69` | .008 **.348** .201 .200 | **1** (0.348) | 2 (0.201) | 0.147 (1.7) | 1 ✓ | 2026-10-11 |
+| **oracle** large_diverse (grid 0–3) | `2wapx6dv` | .051 **.346** .167 .114 | **1** (0.346) | 2 (0.167) | 0.179 (**2.1**) | 1 ✓ | 2026-10-11 |
+| ensemble large_diverse cvar | `pv3oa49a` | .002 .000 .043 **.099** .028 .017 .026 .056 | **3** (0.099) | 7 (0.056) | 0.043 (0.50) | 3 ✓ | 2026-10-11 |
 | ensemble large_diverse mean | — | | | | | | queue 3 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
 | pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
@@ -16497,6 +16497,24 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   is the stage-4-selected oracle for this variant. The raw reward (index 0)
   scores 0.114. Unlike medium_play, here the scaled indices 2 and 3 are
   *worse* than `r − 1` by ~0.1, so the oracle is not uniformly insensitive.
+- ***oracle* large_play and large_diverse** (`oghrks69`, `2wapx6dv`,
+  2026-10-11): **index 1 wins both, clearly**: 0.348 vs 0.201 (1.7 noise units)
+  and 0.346 vs 0.167 (2.1), last-20 agreeing on both. No re-run. **The oracle's
+  stage 4 is complete: 3, 1, 1, 1.** The conventional `r − 1` is the selected
+  normalization on three of four variants, by margins of 1.1–2.1 noise units,
+  and on the fourth it is 0.005 behind a three-way tie. **So §4.3.156's
+  asymmetry is answered: the oracle was not handicapped by its fixed index.**
+  Only medium_play's 10 evaluation runs at index 3 are owed. The scaled indices
+  2 and 3 cost the oracle 0.10–0.23 on the three variants where they lose,
+  which is the opposite of the learned rewards, where scaling (2 or 3) wins 21
+  of 23 grids: the task reward is already on a usable scale once shifted, and
+  the learned rewards are not.
+- *ensemble large_diverse cvar* (`pv3oa49a`, 2026-10-11): index 3 at **0.099**,
+  over index 7 at 0.056, 0.50 noise units, last-20 agreeing. **Every index is
+  near failure here** (the grid's best is 0.099, against 0.378 for BNN CVaR and
+  0.251 for MR best on the same variant). The pick is the argmax as always, and
+  the evaluation file is written at index 3, but this cell selects among
+  near-zero scores. Expect a low and noisy evaluation row.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
