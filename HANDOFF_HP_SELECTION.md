@@ -15018,6 +15018,75 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.166 STAGE 4 COMPLETE — 28 of 28 winners; the last five evaluation sweeps allocated (queues 7, 8, 9)
+
+2026-10-11 17:17 UTC. Every stage-4 grid is finished and scored: 24
+learned-reward grids (8 runs each) and 4 oracle grids (4 runs each), **208 runs,
+every one complete with 200 evaluation points.** All 28 sweep files are in the
+evaluation lineage (`check` 28/28). `phase2_winners.json` is final and is now
+**committed** (it was untracked while it was still growing).
+
+#### 1. The winning indices
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| BNN CVaR | 2 | 2 | 3 | 3 |
+| BNN mean | 2 | 2 | 3 | 3 |
+| MR best | 0 | 2 | 3 | 3 |
+| PT | 3 | 2 | 3 | 0 |
+| Ensemble CVaR | 2 | 3 | 3 | 3 |
+| Ensemble mean | 2 | 3 | 3 | 3 |
+| **Oracle** (grid 0–3) | **3** | **1** | **1** | **1** |
+
+**For §7, stated once:**
+
+- **Learned rewards:** 22 of 24 grids pick a *scaled* index (2 or 3). Index 3
+  wins 11 of 12 large grids; index 2 wins 8 of 12 medium grids. MR medium_play
+  and PT large_diverse pick the identity (0), each inside a tie.
+- **Resolution:** the winner's gap over the runner-up is under one noise unit
+  (0.086) in **15 of 24** learned grids, and two or more in only 3. The picks are the
+  pre-registered argmax throughout. That is §4.3.107's known limit of one run
+  per index, disclosed and not repaired.
+- **Window robustness:** last-20 names the same index in **26 of 28** grids. The
+  two exceptions (ensemble medium_diverse CVaR, oracle medium_play) differ by
+  0.009 and 0.017 and are ties under either window.
+- **The oracle was not handicapped by its fixed index.** `r − 1` is the stage-4
+  winner on three variants by 1.1–2.1 noise units, and is 0.005 behind in a
+  three-way tie on the fourth. Only medium_play is re-evaluated (index 3).
+  Scaling *hurts* the task reward where it loses (by 0.10–0.18 against the
+  better scaled index) and *helps*
+  nearly every learned reward.
+- **Two cells select among failures:** both ensemble rewards on large_diverse
+  have a best grid score of 0.10–0.12.
+
+#### 2. Evaluation status
+
+**Complete and registered (15 of 28):** BNN ×8, MR ×4, oracle ×3 (medium_diverse,
+large_play, large_diverse, all at index 1).
+
+| GPUs | running now | then, already queued | free at (UTC) |
+|---|---|---|---|
+| 0–1 | queue 4: PT medium_play (8 of 10) | PT medium_diverse, large_play, large_diverse | ~10-14 00:00 |
+| 2–3 | queue 6: ensemble medium_diverse CVaR (just started), then mean | — | ~10-13 04:10 |
+| 4–5 | queue 5: ensemble medium_play CVaR (8 of 10), then mean | — | ~10-12 22:05 |
+
+#### 3. The last five evaluation sweeps, allocated to finish together
+
+A sweep takes ~18 h on 4 agents and ~29–30 h on 2. The split below is the one
+that ends earliest (~10-15 08:35); every alternative ends 2–4 h later.
+
+| queue | tag | waits on | GPUs × agents | sweeps, in order | ends (UTC) |
+|---|---|---|---|---|---|
+| 7 | `QID=seven` | queue 5 | 4–5 × 1 | **oracle medium_play at index 3**, then ensemble large_diverse mean | ~10-15 08:35 |
+| 8 | `QID=eight` | queue 6 (tag `six`, or running) | 2–3 × 2 | ensemble large_play CVaR, then mean | ~10-14 16:30 |
+| 9 | `QID=nine` | queue 4 | 0–1 × 2 | ensemble large_diverse CVaR | ~10-14 18:10 |
+
+The oracle sweep goes first on its pair, so the notebook's winning-vs-conventional
+comparison gets its data by ~10-14 02:35. All three queues' lineage tags were
+dry-run on the Mac. **With these three launched, nothing remains unqueued**: 13
+evaluation sweeps are running or waiting, and **the last one ends about
+2026-10-15 08:35 UTC**.
+
 ### 4.3.165 Notebook layout decided: the main table shows the oracle at its WINNING index only; winning-vs-conventional is a separate section at the end
 
 2026-10-10. **User instruction:** in `results/results_table.ipynb`, the "IQL with
@@ -16379,7 +16448,7 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
 | **oracle** large_play (grid 0–3) | `oghrks69` | .008 **.348** .201 .200 | **1** (0.348) | 2 (0.201) | 0.147 (1.7) | 1 ✓ | 2026-10-11 |
 | **oracle** large_diverse (grid 0–3) | `2wapx6dv` | .051 **.346** .167 .114 | **1** (0.346) | 2 (0.167) | 0.179 (**2.1**) | 1 ✓ | 2026-10-11 |
 | ensemble large_diverse cvar | `pv3oa49a` | .002 .000 .043 **.099** .028 .017 .026 .056 | **3** (0.099) | 7 (0.056) | 0.043 (0.50) | 3 ✓ | 2026-10-11 |
-| ensemble large_diverse mean | — | | | | | | queue 3 |
+| ensemble large_diverse mean | `1bi9q05p` | .067 .022 .085 **.124** .006 .006 .010 .004 | **3** (0.124) | 2 (0.085) | 0.039 (0.45) | 3 ✓ | 2026-10-11 |
 | pt medium_play | `2qpsg7t7` | .549 .606 .684 **.698** .002 .029 .407 .419 | **3** (0.698) | 2 (0.684) | 0.014 (0.16) | 3 ✓ | 2026-10-06 |
 | pt medium_diverse | `300h8u4b` | .538 .494 **.625** .524 .024 .029 .465 .453 | **2** (0.625) | 0 (0.538) | 0.087 (1.0) | 2 ✓ | 2026-10-06 |
 | pt large_play | `j3mcf3to` | .301 .259 .158 **.376** .000 .000 .041 .068 | **3** (0.376) | 0 (0.301) | 0.075 (0.87) | 3 ✓ | 2026-10-07 |
@@ -16515,6 +16584,10 @@ This is **descriptive**: the pre-registered rule is the argmax, whatever the gap
   0.251 for MR best on the same variant). The pick is the argmax as always, and
   the evaluation file is written at index 3, but this cell selects among
   near-zero scores. Expect a low and noisy evaluation row.
+- *ensemble large_diverse mean* (`1bi9q05p`, 2026-10-11, **the last stage-4
+  grid**): index 3 at 0.124 over index 2 at 0.085, 0.45 noise units, last-20
+  agreeing. Also near failure at every index, like the CVaR ensemble on this
+  variant. Evaluation file written.
 
 **Gate on the next step:** a row's seeds 1–10 IQL runs (`phase2_sweeps.py eval
 --winners phase2_winners.json --write`, then launch) wait for that family's
