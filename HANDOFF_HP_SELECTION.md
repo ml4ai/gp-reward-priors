@@ -15018,6 +15018,50 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.165 Notebook layout decided: the main table shows the oracle at its WINNING index only; winning-vs-conventional is a separate section at the end
+
+2026-10-10. **User instruction:** in `results/results_table.ipynb`, the "IQL with
+task reward" column of the main table and charts shows the **stage-4 winning
+index only**. The comparison between the winning and the conventional index,
+where they differ, is **a new chart at the end of the notebook**.
+
+This supersedes §4.3.158 §2's and §4.3.163's second oracle column
+(`task_reward_r1`), which no longer exists.
+
+**What `register` now writes:**
+
+- **`SWEEPS[dataset]["task_reward"]`**: the oracle sweep at the stage-4 winning
+  index, and only once stage 4 has **named** that index. A conventional index-1
+  sweep is no longer shown there while the oracle's stage 4 is pending, or when
+  stage 4 picked another index. Until the winning-index sweep is complete the
+  cell is blank.
+- **`METHOD_COLUMNS`**: always the same seven columns.
+- **`ORACLE_INDEX[dataset]`** (the winning index, `None` while stage 4 runs) and
+  **`ORACLE_CONVENTIONAL[dataset]`** (the complete index-1 sweep), for the new
+  section only.
+- **Two cells appended at the end of the notebook** (ids `0c1e5e1a`,
+  `0c1e5e1b`, created if missing and kept in sync): a markdown explanation, and
+  a code cell that, for each variant whose winning index is not 1 and whose
+  winning-index sweep is complete, tabulates winning vs conventional (last-10,
+  last-20, difference of means) and draws a box plot with the per-seed scores
+  as dots, in `plot_box`'s style. Variants where index 1 won are listed as
+  "winning = conventional", not plotted.
+
+**Checked.** Self-test extended (index 1 never enters the main table unless it
+is the named winner; no `task_reward_r1` anywhere; the appended cells are
+created once and then updated, not duplicated; the comparison cell compiles).
+The real notebook executes with no errors: its last cell reports medium_play
+"index 3 won; its seeds 1–10 sweep is not complete yet", medium_diverse
+"winning = conventional", and the two large variants "stage 4 not finished".
+**The chart's code path was exercised on a scratch copy with stand-in sweeps**
+(two complete sweeps per variant, standing in for winning and conventional),
+since no real variant has both yet. It rendered correctly; that scratch output
+is not a result and was not kept.
+
+**State now: 13 of 28 headline cells** (8 BNN, 4 MR, oracle medium_diverse).
+The oracle column is blank for medium_play (index-3 sweep not run yet) and for
+the two large variants (stage 4 in progress, ~10-11 00:30 UTC).
+
 ### 4.3.164 Sweep check, 2026-10-10 17:55 UTC — BNN evaluation COMPLETE (8 of 8); 24 winners; the oracle keeps `r − 1` on medium_diverse
 
 **Second chained hand-off worked:** queue 3b exited and queue 5 started the
