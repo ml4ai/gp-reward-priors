@@ -15018,6 +15018,22 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.167 Sweep check, 2026-10-11 18:50 UTC — first PT and ensemble evaluation rows; 17 of 28 cells
+
+**All queues handed off cleanly.** Queue 6 started on GPUs 2–3 when queue 3a
+exited (ensemble medium_diverse CVaR, `u0rb33xp`, 17:17 UTC). Queue 5 moved to
+its second sweep (ensemble medium_play mean, `txrrif36`) and queue 4 to its
+second PT sweep (medium_diverse, `qdbtemcq`). Ten runs live. Queues 7, 8 and 9
+wait.
+
+**Finished:** PT medium_play, **0.690 ± 0.060**, and ensemble medium_play CVaR,
+**0.683 ± 0.029**. Both scored and registered: **17 of 28 cells**.
+
+**§6's evaluation table now has one row per cell.** The oracle rows are
+relabelled: `r − 1` is the **stage-4 winner** on medium_diverse, large_play and
+large_diverse; medium_play's `nv89vprk` is the conventional sweep, **not the
+headline**, and the headline row (index 3) is queued in queue 7.
+
 ### 4.3.166 STAGE 4 COMPLETE — 28 of 28 winners; the last five evaluation sweeps allocated (queues 7, 8, 9)
 
 2026-10-11 17:17 UTC. Every stage-4 grid is finished and scored: 24
@@ -16622,12 +16638,23 @@ is given for disclosure only. Fill a row with
 | mr medium_diverse | 2 | `nr1ceqlk` | **0.647 ± 0.057** (10) | 0.654 ± 0.055 | 0.813 ± 0.048 | 2026-10-08 |
 | mr large_play | 3 | `dqsfjy7h` | **0.425 ± 0.055** (10) | 0.426 ± 0.051 | 0.564 ± 0.065 | 2026-10-09 |
 | mr large_diverse | 3 | `pio60aa6` | **0.241 ± 0.098** (10) | 0.254 ± 0.098 | 0.437 ± 0.113 | 2026-10-10 |
-| pt ×4 | 3, 2, 3, 0 | — | | | | queue 4 (waiting on queue 2) |
-| ensemble ×8 | — | — | | | | after their stage 4 (queue 3a) |
-| **oracle** medium_play | 1 (fixed) | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
-| **oracle** medium_diverse | 1 (fixed) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
-| **oracle** large_play | 1 (fixed) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
-| **oracle** large_diverse | 1 (fixed) | `ezttwir0` | **0.272 ± 0.045** (10) | 0.272 ± 0.049 | 0.468 ± 0.062 | 2026-08-16 |
+| pt medium_play | 3 | `v13djkou` | **0.690 ± 0.060** (10) | 0.689 ± 0.060 | 0.803 ± 0.047 | 2026-10-11 |
+| pt medium_diverse | 2 | `qdbtemcq` | | | | running (queue 4) |
+| pt large_play | 3 | — | | | | queue 4 |
+| pt large_diverse | 0 | — | | | | queue 4 |
+| ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
+| ensemble medium_play mean | 2 | `txrrif36` | | | | running (queue 5) |
+| ensemble medium_diverse cvar | 3 | `u0rb33xp` | | | | running (queue 6) |
+| ensemble medium_diverse mean | 3 | — | | | | queue 6 |
+| ensemble large_play cvar | 3 | — | | | | queue 8 |
+| ensemble large_play mean | 3 | — | | | | queue 8 |
+| ensemble large_diverse cvar | 3 | — | | | | queue 9 |
+| ensemble large_diverse mean | 3 | — | | | | queue 7 |
+| **oracle** medium_play at the winning index | 3 | — | | | | queue 7 |
+| oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
+| **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
+| **oracle** large_play | 1 (stage-4 winner) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
+| **oracle** large_diverse | 1 (stage-4 winner) | `ezttwir0` | **0.272 ± 0.045** (10) | 0.272 ± 0.049 | 0.468 ± 0.062 | 2026-08-16 |
 
 **Notes, per row:**
 - *bnn large_play, CVaR vs mean* (2026-10-05). CVaR 0.534 vs mean 0.481,
@@ -16712,6 +16739,23 @@ is given for disclosure only. Fill a row with
   differences reach |t| > 2, with **opposite signs**. Descriptively: **no
   consistent advantage for either conservatism level.** The notebook's
   comparison over all cells is the one to report.
+- *pt medium_play* and *ensemble medium_play cvar* (2026-10-11): **0.690 ± 0.060**
+  and **0.683 ± 0.029**, the first PT and ensemble rows. They are level with
+  each other (PT − ensemble +0.007, t 0.3) and both ahead of MR best (0.642) on
+  8 of 10 seeds (t 2.0 and 2.3). **medium_play, five learned rewards in**
+  (paired on seeds 1–10, descriptive):
+
+  | | last-10 | vs MR best | vs PT | vs ensemble CVaR |
+  |---|---|---|---|---|
+  | BNN mean | 0.779 | +0.137 (10/10, t 7.5) | +0.089 (10/10, t 5.3) | +0.096 (10/10, t 6.6) |
+  | BNN CVaR | 0.734 | +0.091 (10/10, t 4.7) | +0.044 (7/10, t 2.0) | +0.051 (8/10, t 2.7) |
+  | PT | 0.690 | +0.047 (8/10, t 2.0) | | +0.007 (5/10, t 0.3) |
+  | ensemble CVaR | 0.683 | +0.041 (8/10, t 2.3) | | |
+  | MR best | 0.642 | | | |
+
+  On this variant the BNN mean reward is ahead of every baseline on all 10
+  seeds. One variant; the same table is owed for the other three before
+  anything is claimed.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
