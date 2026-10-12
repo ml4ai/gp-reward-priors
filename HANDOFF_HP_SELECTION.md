@@ -15018,6 +15018,86 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.171 To-do 15 CLOSED — coverage on the live mazes, and the geometry is FLAT on all four production models (with a prediction of mine corrected)
+
+2026-10-12. The user ran both commands on the box: `exp/coverage_table.txt` and
+`exp/geometry_round5_{medium_play,medium_diverse,large_play,large_diverse}.txt`.
+
+#### 1. Coverage: validation pairs cover 72–98% of the free cells
+
+All four variants on the **live** layouts (26 free cells for medium, 46 for
+large), every seed, full splits. The table is in §7.3. In short: validation
+covers a median of 22, 22, 37 and 41 cells; training covers 88–100%. The medium
+rows equal the ones computed on the analysis machine, and the seed-0 subset
+figures of 2026-09-19 are reproduced exactly (21, 23, 31, 31).
+
+Two facts surfaced that §7.3 now states: about a third of the large mazes'
+cells are thinly visited even in training, and **large_play has half the
+preference pairs of large_diverse** (254 / 54 against 514 / 110). The second is
+the likelier companion of large_play's wide across-seed CE spread than coverage
+is, since its below-chance seed has the maximum coverage of the eleven.
+
+#### 2. Geometry, correct basis, the four round-5 seed-0 production models
+
+| | cells in the basis | τ, widest third | τ, stiffest third | ratio | spread over all directions | verdict |
+|---|---|---|---|---|---|---|
+| medium_play | 21 of 26 | 23.2 | 27.0 | 1.16 | 2.23× | **FLAT** |
+| medium_diverse | 23 of 26 | 17.3 | 18.5 | 1.07 | 2.36× | **FLAT** |
+| large_play | 31 of 46 | 21.4 | 27.2 | 1.27 | 2.48× | **FLAT** |
+| large_diverse | 31 of 46 | 24.4 | 23.8 | 0.98 | 1.65× | **FLAT** |
+
+τ is in draws, of 60 per chain. The basis is built from the live layout with its
+own offset, as the run builds it (the tool prints "live env …, offset (1.0,
+1.0)"), so this is §4.3.110's fix in use. A ~2× spread over all directions is
+what a flat profile shows at this many directions (§4.3.69's control).
+
+**§4.3.70's qualitative conclusion holds on the models the paper reports:** no
+prior direction is slow relative to another, so preconditioning has nothing to
+work with. **Cite this table, not §4.3.70's**, which was in the wrong basis and
+described the round-2 sampler.
+
+#### 3. What the τ of ~20 is — and a prediction of mine that was wrong
+
+§4.3.169 predicted the tool would print "no direction is slow", on the argument
+that draws 2,000 steps apart are near independent within a chain. **It printed
+τ ≈ 17–27 instead.** The prediction was wrong, and the reason matters for how
+the table is read.
+
+The tool's τ is `D / (ESS / C)`, with a **multi-chain** ESS. With chains that do
+not mix, that ESS is dominated by the chains disagreeing, whatever happens
+within them. Checked against the production runs' own logged statistics:
+
+| | between-chain variance share | centred R-hat | ESS measured | ESS predicted from the between-chain share alone | ratio | within-chain τ implied |
+|---|---|---|---|---|---|---|
+| medium_play | 0.369 | 1.405 | 303 | 337 | 0.90 | ~5 draws |
+| medium_diverse | 0.265 | 1.259 | 409 | 461 | 0.89 | ~4 |
+| large_play | 0.422 | 1.456 | 282 | 297 | 0.95 | ~3 |
+| large_diverse | 0.353 | 1.376 | 317 | 352 | 0.90 | ~5 |
+
+The prediction is `C / (ρ + (1 − ρ)/D)` with ρ the between-chain share: what
+128 chains of 60 **independent** draws would give if only their means
+disagreed. It accounts for **89–95%** of the measured inefficiency. The rest
+implies a within-chain autocorrelation time of about 3–5 draws.
+
+- **So the geometry table's τ of ~20 is mostly not autocorrelation.** It is the
+  pooled ESS, restated per direction. The tool's τ matches the logged pooled
+  centred ESS on every variant (25.3, 18.8, 27.2, 24.2 against the table's
+  23–27, 17–19, 21–27, 24), exactly as §4.3.70 cross-checked.
+- **The guess behind the prediction was roughly right; the prediction was
+  not.** Within-chain draws are close to independent (τ of 3–5, not 20 and not
+  1). What I failed to carry through is that this tool cannot show that: it
+  reports the pooled figure, and its "is anything slow at all" guard
+  (`mean τ ≥ max(2, D/25)`) is tripped by between-chain disagreement alone.
+- **The decomposition is a model, not a measurement.** It uses a two-component
+  variance formula, not arviz's rank-normalised estimator, and the logged share
+  is a median over points. Read "3–5 draws" as an order of magnitude.
+
+**For the write-up (now §7.6 A):** the inefficiency is isotropic in the prior
+basis, and it is ~90–95% between-chain. Both point the same way as §4.5 and the
+escalation: precision comes from more chains, and a preconditioner would not
+help. Whether a longer horizon would shrink the between-chain share is **not**
+measured here; the horizon is fixed by §4.5's rule.
+
 ### 4.3.170 A missed `git pull` on the box — every sweep that RAN is correct; one waiting queue was stopped by its lineage guard
 
 2026-10-12 23:13 UTC. Pulling on the box, the user saw edits arrive for the
@@ -15152,6 +15232,13 @@ closed independently by §4.3.72's `v_hat_min` ladder, which used no maze basis.
   independent *within* a chain. That is a different statement from §7.6 A's
   "chains do not mix *with each other*" (centred R-hat 1.26–1.46), and the
   write-up should keep the two apart.
+
+> ❌ **This prediction was WRONG about what the tool would print (§4.3.171).** It
+> prints τ of 17–27 draws and "FLAT", not "no direction is slow". The reason is
+> the one this bullet warned about and then failed to apply: the tool's τ is
+> the *pooled multi-chain* ESS, which counts chains disagreeing as
+> autocorrelation. The underlying guess, that draws are close to independent
+> within a chain, is roughly right (implied within-chain τ of 3–5 draws).
 
 ### 4.3.168 Sweep check, 2026-10-12 17:52 UTC — 19 of 28 cells; PT medium_diverse has a failed seed
 
@@ -17535,17 +17622,34 @@ rather than restate it with better numbers.
 > splits, both segments, all 11 seeds** (`scripts_bnn/coverage_table.py`), medium
 > coverage is:
 >
-> | of 26 free cells | train | **validation** | test |
-> |---|---|---|---|
-> | medium_play | 23–24 (88–92%) | **21–23 (81–88%)**, median 22 | 20–23 (77–88%) |
-> | medium_diverse | 23–24 (88–92%) | **21–24 (81–92%)**, median 22 | 22–24 (85–92%) |
+> | free cells occupied, range over seeds 0–10 | pairs per seed (train / val) | train | **validation** | test |
+> |---|---|---|---|---|
+> | medium_play (26 cells) | 358 / 77 | 23–24 (88–92%) | **21–23 (81–88%)**, median 22 | 20–23 (77–88%) |
+> | medium_diverse (26) | 498 / 107 | 23–24 (88–92%) | **21–24 (81–92%)**, median 22 | 22–24 (85–92%) |
+> | large_play (46) | **254 / 54** | 43–45 (93–98%) | **33–39 (72–85%)**, median 37 | 36–43 (78–93%) |
+> | large_diverse (46) | 514 / 110 | 45–46 (98–100%) | **37–45 (80–98%)**, median 41 | 37–44 (80–96%) |
 >
-> The subset figures are reproduced exactly (21 and 23 at seed 0), which checks
-> the new tool against the 2026-09-19 recomputation. Two to four of the occupied
-> cells hold under a quarter of a uniform share of the points, so "covered" does
-> not mean "well sampled". **Large is PENDING the same command on the box**: the
-> live large maze is not available on the analysis machine, and the tool refuses
-> the hardcoded one.
+> **FINAL 2026-10-12**, all four on the **live** layouts, run on the box
+> (`exp/coverage_table.txt`). The medium rows are identical to the ones first
+> computed on the analysis machine, which confirms that the hardcoded medium map
+> is the live one. The 2026-09-19 subset figures are reproduced exactly (21, 23,
+> 31 and 31 cells at seed 0).
+>
+> **What to state:**
+> - **The validation pairs cover 72–98% of each maze's free cells**, 81–92% on
+>   medium. The subset table above understates it for large (67% against
+>   72–98%), because it reads only the first 64 pairs' first segment.
+> - **"Covered" is not "well sampled".** On validation 3, 3, 7 and 10 of the
+>   occupied cells (median over seeds) hold under a quarter of a uniform share of
+>   the points; on train, 5, 4, 14 and 15. On the large mazes about a third of
+>   the cells are thinly visited even in training.
+> - **large_play has half the preference pairs of large_diverse** (254 against
+>   514 for training, 54 against 110 for validation). That is a property of the
+>   data, and it sits beside large_play being the variant with the widest
+>   across-seed spread in validation CE (§7.4 E) and the one seed below chance.
+>   Its validation CE is estimated on 54 pairs. **This is a data-size fact, not a
+>   coverage one**: seed 7, the below-chance seed, has the *maximum* validation
+>   coverage (39 of 46 cells, shared with two other seeds).
 
 ---
 
@@ -18009,6 +18113,18 @@ cost in IQL return.
   Centred R-hat is 1.26–1.46 at 128 chains, against 1.25–1.44 at 32. This was
   pre-stated (§4.5): chains buy precision, not mixing. The posterior is a
   128-chain ensemble at the sweep horizon, and is reported as that.
+- **The sampling inefficiency has no direction, and it is almost all
+  between-chain.** Projected onto the map prior's eigendirections (a basis
+  fixed by the maze, not by the sample), the effective sample size is **2–4
+  draws per 60-draw chain in every direction**, on all four production models.
+  The ratio between the prior's stiffest third and its widest third is
+  0.98–1.27, so nothing is slow *relative* to anything else and a
+  preconditioner has nothing to exploit. **About 90–95% of that inefficiency is
+  the chains disagreeing with each other**: the between-chain variance share
+  (0.27–0.42) alone predicts an ESS of 297–461, against 282–409 measured. The
+  remainder corresponds to a within-chain autocorrelation time of roughly 3–5
+  draws. So precision is bought with chains, which is what the escalation did
+  (§4.3.171).
 - **All 44 BNN models pass all four gates at 128 chains.** Reported, not
   enforced: eligibility was decided at the sweep budget (§3.2.9).
 - **MR reproduces bit-exactly; PT does not.** Retraining each MR winner at seed
@@ -18151,7 +18267,6 @@ them.** (19 of 28 cells; the three items below are **FINAL**)
 | Ensemble: 7 of 8 cells | queues 5–9, last ~10-15 08:35 | D, E; check B's "selects among failures" against the evaluation rows |
 | Oracle medium_play at index 3 | queue 7, ~10-14 02:35 | C: fill the comparison; the notebook's last chart |
 | Cross-family statements in E | all 28 cells | rewrite E from the notebook's tables |
-| Large-variant coverage on all seeds and full splits | `coverage_table.py` on the box (seconds) | §7.3's coverage table |
 
 ## 8. Tooling
 
@@ -18753,13 +18868,11 @@ blind. Record it as a future-round candidate.
     the width ceiling (2 at the floor), every stopping-rule winner also the best
     of all trials, trial counts 17–66, two sweeps improving late, and no
     cross-variant depth story.
-15. 🟡 **MOSTLY DONE (§4.3.169).** Coverage: corrected for all four variants in
-    §7.3 since 2026-09-19 (diagnostic subset), and for the **full splits on all
-    seeds** for medium (21–24 of 26 cells on validation). **Owed, both on the
-    box:** `python scripts_bnn/coverage_table.py --variants large_play,large_diverse`
-    (seconds), and `--geometry-prior` on the four round-5 seed-0 production
-    models (CPU, minutes) for the τ table in the correct basis. §4.3.70 itself
-    is not to be cited. Original entry:
+15. ✅ **DONE 2026-10-12 (§4.3.169, §4.3.171).** Coverage on the full splits,
+    all seeds, live layouts: validation covers 72–98% of free cells (§7.3).
+    Geometry in the correct basis on the four production models: FLAT on all
+    four, and the inefficiency is ~90–95% between-chain (§7.6 A). §4.3.70 is
+    superseded by §4.3.171 and is not to be cited. Original entry:
     **Recompute large's cell coverage and re-run §4.3.70's geometry table**
     under the fixed basis (§4.3.110), then write §7.4's corrected coverage
     disclosure. `--geometry-prior` runs on saved chains, so it is compute-free
