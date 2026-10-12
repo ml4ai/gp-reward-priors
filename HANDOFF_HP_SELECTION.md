@@ -15069,6 +15069,14 @@ creates a sweep, so queue 7 almost certainly exited on
 
 **Fix:** relaunch queue 7 directly, with no wait, since its GPUs are free.
 
+> ✅ **Done 2026-10-12 23:29 UTC (user-confirmed).** The log showed the lineage
+> error, as predicted; nothing else was on GPUs 4–5; the box's files check
+> 28/28, all 28 in the evaluation lineage; all three queues dry-run clean on the
+> box; queues 8 and 9 are still waiting. Queue 7 was relaunched directly and its
+> first sweep is **`79ke5lc3`**: the oracle on medium_play at **index 3**, seeds
+> 1 and 2 running, program `iql.py`, no reward model, parameters identical to
+> the repo file. **GPUs 4–5 were idle for 2 h 10 min** (21:19 → 23:29).
+
 **Lesson, for the next hand-over.** The guard caught it, but only at the moment
 the wait ended, hours after the launch. A queue launched with a waiter should
 have its lineage **dry-run at launch time as well** (`DRY_RUN=1` with the same
@@ -16793,7 +16801,7 @@ is given for disclosure only. Fill a row with
 | ensemble large_play mean | 3 | — | | | | queue 8 |
 | ensemble large_diverse cvar | 3 | — | | | | queue 9 |
 | ensemble large_diverse mean | 3 | — | | | | queue 7 |
-| **oracle** medium_play at the winning index | 3 | — | | | | queue 7 |
+| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7) |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
 | **oracle** large_play | 1 (stage-4 winner) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
