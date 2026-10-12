@@ -16793,7 +16793,7 @@ is given for disclosure only. Fill a row with
   BNN CVaR 0.637, ensemble CVaR 0.621, BNN mean 0.612, PT 0.550. **Nothing
   separates on this variant.** The largest paired |t| among BNN, MR and
   ensemble is 1.3; against PT every difference is t ≤ 1.8, and t ≤ 1.5 without
-  PT's failed seed. All sit at or above the oracle's 0.607. Contrast with
+  PT's failed seed. All but PT sit at or above the oracle's 0.607. Contrast with
   medium_play, where the same five span 0.642–0.779 and most pairs resolve.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
