@@ -15018,6 +15018,69 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.170 A missed `git pull` on the box — every sweep that RAN is correct; one waiting queue was stopped by its lineage guard
+
+2026-10-12 23:13 UTC. Pulling on the box, the user saw edits arrive for the
+ensemble large-variant sweep files and all four `tr_sweeps` files, and asked
+whether a pull had been missed and whether anything was running on wrong
+settings.
+
+**A pull was missed.** Those files changed in commits of 2026-10-10 and 10-11
+(evaluation lineage for ensemble large ×4 and oracle ×4). So the box was last
+pulled before 10-10 08:17 UTC, and **queues 7, 8 and 9 were launched on
+10-11 with those eight files still in their stage-4 form.**
+
+#### 1. Everything that has run, or is running, is correct — checked field by field
+
+For every sweep in the project, from W&B: an exact parameter match to one of the
+28 spec files, the right program, the right lineage, the index equal to the
+stage-4 winner, the parameters equal to the generated file now in the repo, and
+every run's own config carrying the sweep's values.
+
+- **23 evaluation sweeps: 0 problems.** 21 complete, 2 running (PT large_play,
+  ensemble medium_diverse mean).
+- **28 stage-4 sweeps: all match the spec.**
+
+**Why the miss could not corrupt a result.** A queue item tagged `@eval` is
+checked against the file's `Lineage:` header when the queue starts
+(`stage4_queue.sh`, added 2026-10-02 for exactly this case: "a box that had not
+pulled would silently launch the wrong lineage"). A stale stage-4 file fails
+that check and the queue exits. Queues 4, 5 and 6 each started, so each passed
+it on files that had been pulled.
+
+#### 2. The one casualty: queue 7 did not start
+
+Queue 5 finished at **~21:19 UTC**. Queue 7 was waiting on it, with the oracle
+medium_play evaluation (index 3) and ensemble large_diverse mean, both among the
+un-pulled files. **No such sweep exists on W&B, and only 6 runs are live (GPUs
+4–5 are idle).** The guard is the only thing that stops a queue before it
+creates a sweep, so queue 7 almost certainly exited on
+"not in the @eval lineage" when its wait ended, before the user's pull.
+`stage4_queue7.log` on the box will say so.
+
+- **Had the guard not been there**, queue 7 would have re-run two stage-4 grids
+  (12 runs) on files meant for evaluation, and their results would have sat on
+  W&B beside the real ones.
+- **Cost:** GPUs 4–5 idle from ~21:20 until the relaunch. Queue 7's end moves
+  from ~10-15 08:35 to about 10-15 11:00.
+- **Queues 8 and 9 are still waiting** (on queue 6, ~10-13 03:10, and queue 4,
+  ~10-14 00:00). The box has now pulled, so their files are correct and their
+  guards will pass.
+
+**Fix:** relaunch queue 7 directly, with no wait, since its GPUs are free.
+
+**Lesson, for the next hand-over.** The guard caught it, but only at the moment
+the wait ended, hours after the launch. A queue launched with a waiter should
+have its lineage **dry-run at launch time as well** (`DRY_RUN=1` with the same
+items), so that a stale box fails immediately and visibly. The 10-11
+instructions listed a pull and a `check`, but no dry run of the three queues on
+the box.
+
+#### 3. Also finished
+
+Ensemble medium_play mean (`txrrif36`): **0.712 ± 0.025**. Registered: **20 of
+28 cells**.
+
 ### 4.3.169 Used the wait: §7.6 written (Phase-2 disclosures); to-do 15 found mostly done, and its tooling finished
 
 2026-10-12. The user asked what of the queued write-up and the §4.3.70 geometry
@@ -16723,7 +16786,7 @@ is given for disclosure only. Fill a row with
 | pt large_play | 3 | `rpfaj2xr` | | | | running (queue 4) |
 | pt large_diverse | 0 | — | | | | queue 4 |
 | ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
-| ensemble medium_play mean | 2 | `txrrif36` | | | | running (queue 5) |
+| ensemble medium_play mean | 2 | `txrrif36` | **0.712 ± 0.025** (10) | 0.710 ± 0.024 | 0.836 ± 0.025 | 2026-10-12 |
 | ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
 | ensemble medium_diverse mean | 3 | `75dkk4js` | | | | running (queue 6) |
 | ensemble large_play cvar | 3 | — | | | | queue 8 |
