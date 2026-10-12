@@ -15018,6 +15018,22 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.168 Sweep check, 2026-10-12 17:52 UTC — 19 of 28 cells; PT medium_diverse has a failed seed
+
+**Finished:** PT medium_diverse, **0.550 ± 0.172** (seed 10 failed outright at
+0.112; see §6's note, including why it is not excluded), and ensemble
+medium_diverse CVaR, **0.621 ± 0.057**. Both registered: **19 of 28 cells**.
+
+**medium_diverse resolves nothing.** Five learned rewards sit within 0.55–0.65
+and no pair reaches |t| = 2. On medium_play the same five span 0.64–0.78 and
+most pairs resolve. The two `diverse` variants are where the comparisons are
+weakest, as §4.3.162 already found for BNN vs MR.
+
+**Running:** queue 4 `rpfaj2xr` (PT large_play, 4 of 10), queue 6 `75dkk4js`
+(ensemble medium_diverse mean, 4 of 10), queue 5 `txrrif36` (ensemble
+medium_play mean, 8 of 10). Ten runs live. Queues 7, 8 and 9 wait. **On
+schedule for ~10-15 08:35 UTC.**
+
 ### 4.3.167 Sweep check, 2026-10-11 18:50 UTC — first PT and ensemble evaluation rows; 17 of 28 cells
 
 **All queues handed off cleanly.** Queue 6 started on GPUs 2–3 when queue 3a
@@ -16639,13 +16655,13 @@ is given for disclosure only. Fill a row with
 | mr large_play | 3 | `dqsfjy7h` | **0.425 ± 0.055** (10) | 0.426 ± 0.051 | 0.564 ± 0.065 | 2026-10-09 |
 | mr large_diverse | 3 | `pio60aa6` | **0.241 ± 0.098** (10) | 0.254 ± 0.098 | 0.437 ± 0.113 | 2026-10-10 |
 | pt medium_play | 3 | `v13djkou` | **0.690 ± 0.060** (10) | 0.689 ± 0.060 | 0.803 ± 0.047 | 2026-10-11 |
-| pt medium_diverse | 2 | `qdbtemcq` | | | | running (queue 4) |
-| pt large_play | 3 | — | | | | queue 4 |
+| pt medium_diverse | 2 | `qdbtemcq` | **0.550 ± 0.172** (10) | 0.552 ± 0.178 | 0.712 ± 0.173 | 2026-10-12 |
+| pt large_play | 3 | `rpfaj2xr` | | | | running (queue 4) |
 | pt large_diverse | 0 | — | | | | queue 4 |
 | ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
 | ensemble medium_play mean | 2 | `txrrif36` | | | | running (queue 5) |
-| ensemble medium_diverse cvar | 3 | `u0rb33xp` | | | | running (queue 6) |
-| ensemble medium_diverse mean | 3 | — | | | | queue 6 |
+| ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
+| ensemble medium_diverse mean | 3 | `75dkk4js` | | | | running (queue 6) |
 | ensemble large_play cvar | 3 | — | | | | queue 8 |
 | ensemble large_play mean | 3 | — | | | | queue 8 |
 | ensemble large_diverse cvar | 3 | — | | | | queue 9 |
@@ -16756,6 +16772,29 @@ is given for disclosure only. Fill a row with
   On this variant the BNN mean reward is ahead of every baseline on all 10
   seeds. One variant; the same table is owed for the other three before
   anything is claimed.
+- *pt medium_diverse* (2026-10-12): **0.550 ± 0.172**, with **one failed seed**.
+  Seed 10 (`d6a8tixf`) scores **0.112**; the other nine are 0.467–0.699 (mean
+  0.599, sd 0.082). **It is a complete run and it stays in**: the only exclusion
+  rule is an incomplete curve (§5), and removing a low run after seeing it would
+  be selecting on results. What is known about it:
+  - **The policy never learned.** Its score peaks at 0.26 at evaluation 53 and
+    averages ≤ 0.10 in every quarter of training. It is not a late collapse.
+  - **Its reward model validates normally.** Seed 10's PT model has
+    `eval_loss_at_selected` 0.259, *better* than the seeds 1–10 mean of 0.317
+    (z = −0.9), and accuracy 0.899. So validation loss did not flag it.
+  - This is the family §4.3.138 flagged for non-determinism on this variant,
+    and whose stage-1 winner sits at the learning-rate floor (§6).
+
+  **§7 disclosure:** report 0.550 ± 0.172, state that one of ten seeds failed
+  outright with a reward model that validated normally, and give the
+  nine-seed figure (0.599 ± 0.082) beside it, labelled as such.
+- *ensemble medium_diverse cvar* (2026-10-12): 0.621 ± 0.057 (range
+  0.520–0.693). **medium_diverse, five learned rewards in:** MR best 0.647,
+  BNN CVaR 0.637, ensemble CVaR 0.621, BNN mean 0.612, PT 0.550. **Nothing
+  separates on this variant.** The largest paired |t| among BNN, MR and
+  ensemble is 1.3; against PT every difference is t ≤ 1.8, and t ≤ 1.5 without
+  PT's failed seed. All sit at or above the oracle's 0.607. Contrast with
+  medium_play, where the same five span 0.642–0.779 and most pairs resolve.
 
 ### ROUND 1 (superseded) — BNN warm-up tier, metric `warmup_final_nll`
 
