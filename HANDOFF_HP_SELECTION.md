@@ -15018,6 +15018,70 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.169 Used the wait: §7.6 written (Phase-2 disclosures); to-do 15 found mostly done, and its tooling finished
+
+2026-10-12. The user asked what of the queued write-up and the §4.3.70 geometry
+re-run could be done while the last evaluation sweeps run.
+
+#### 1. §7.6 written — most of the Phase-2 write-up needs no more data
+
+New **§7.6 "Production models, stage 4 and evaluation (Phase 2)"**, six parts,
+each marked FINAL or PENDING:
+
+| part | content | status |
+|---|---|---|
+| A | production reward models: 32 → 128 chains, 15/15 reproduction, MR bit-exact and PT not, no seed-0 optimism | FINAL |
+| B | stage 4: one run per index, 15 of 24 picks under one noise unit, the borrowed noise unit, window robustness, the two failing cells | FINAL |
+| C | the oracle's normalization: the asymmetry, the pre-registered fix, `r − 1` selected on three variants | stage 4 FINAL; medium_play at index 3 PENDING |
+| D | evaluation: what a cell is, the centring fix, PT's failed seed, seed 7's ordinary policy, large_diverse | the items FINAL; 9 cells PENDING |
+| E | what Phase 2 does not license (no consistent CVaR-vs-mean winner; `diverse` variants unresolved) | on 19 cells; rewrite at 28 |
+| F | the pending list, with what closes each item | — |
+
+Also: §7.4 E now carries seed 7's policy outcome. **Three §7 gaps were found
+while doing this and are closed in §7.6 A**: nothing in §7 said that the BNN is
+deployed at four times its selection chain count, that the reported CE is the
+production one, or that PT does not reproduce bit-exactly. All three had been
+flagged "for §7" in §4.3.134 and §4.3.138 and not carried over.
+
+#### 2. To-do 15: the coverage half was ALREADY done; the tooling is now finished
+
+- **§7.3 has carried corrected coverage for all four variants since
+  2026-09-19** (81%, 88%, 67%, 67%), computed on the live layouts. To-do 15 was
+  never ticked, so it kept being listed as open. Its coverage half is done.
+- **Those figures are the diagnostic subset** (first 64 validation pairs, first
+  segment, seed 0). New `scripts_bnn/coverage_table.py` reports the **full
+  splits, both segments, every seed**, for train, validation and test. It needs
+  the split files and the maze layout only: no chains, no GPU, seconds.
+  `--geometry-prior` now prints the same full-split figure, and both use one
+  shared `_live_prior` helper, so a diagnostic can no longer rebuild the prior
+  differently from the run (§4.3.110's failure).
+- **Medium is done from the analysis machine**, where the hardcoded medium maze
+  is identical to the live one: validation covers **21–24 of 26 cells
+  (81–92%)** across the 11 seeds, median 22. The tool reproduces the 09-19
+  subset figures exactly (21 and 23). **Large is refused here**, by design: the
+  hardcoded large maze is a different maze. One command on the box closes it.
+
+#### 3. The geometry half: one decision, and it is the user's
+
+§4.3.70's table (τ per prior eigendirection: FLAT, so preconditioning cannot
+help) was computed in the wrong basis (§4.3.110). It "probably survives" but is
+unsupported, and **nothing downstream depends on it**: the preconditioner was
+closed independently by §4.3.72's `v_hat_min` ladder, which used no maze basis.
+
+- **It described the round-2 sampler** (1,200 draws per run, the `stage3_*`
+  directories). The paper's models are round 5: 128 chains × 60 draws, one draw
+  per 2,000 steps. Re-running on round-2 chains, if they still exist, would
+  re-support a diagnostic of a discarded configuration.
+- **Recommended: run `--geometry-prior` on the four round-5 seed-0 production
+  models.** That states, in the correct basis and for the reported models,
+  whether any prior direction is autocorrelated across draws. It is CPU-only, a
+  few minutes per variant. Then **do not cite §4.3.70**; cite §4.3.72 for the
+  preconditioner and the new table for the deployed sampler.
+- Expect "no direction is slow": draws 2,000 steps apart are likely near
+  independent *within* a chain. That is a different statement from §7.6 A's
+  "chains do not mix *with each other*" (centred R-hat 1.26–1.46), and the
+  write-up should keep the two apart.
+
 ### 4.3.168 Sweep check, 2026-10-12 17:52 UTC — 19 of 28 cells; PT medium_diverse has a failed seed
 
 **Finished:** PT medium_diverse, **0.550 ± 0.172** (seed 10 failed outright at
@@ -17395,6 +17459,23 @@ variants have identical coverage and opposite behaviour. **Whatever drives
 large_play's width/signal ratio, it is not eval-set coverage.** Drop the argument
 rather than restate it with better numbers.
 
+> **Extended 2026-10-12 (§4.3.169).** The table above is the diagnostic subset
+> at seed 0: the first 64 validation pairs, first segment only. On the **full
+> splits, both segments, all 11 seeds** (`scripts_bnn/coverage_table.py`), medium
+> coverage is:
+>
+> | of 26 free cells | train | **validation** | test |
+> |---|---|---|---|
+> | medium_play | 23–24 (88–92%) | **21–23 (81–88%)**, median 22 | 20–23 (77–88%) |
+> | medium_diverse | 23–24 (88–92%) | **21–24 (81–92%)**, median 22 | 22–24 (85–92%) |
+>
+> The subset figures are reproduced exactly (21 and 23 at seed 0), which checks
+> the new tool against the 2026-09-19 recomputation. Two to four of the occupied
+> cells hold under a quarter of a uniform share of the points, so "covered" does
+> not mean "well sampled". **Large is PENDING the same command on the box**: the
+> live large maze is not available on the analysis machine, and the tool refuses
+> the hardcoded one.
+
 ---
 
 **`map_amp2` was fixed on a derivation, and the derived value disagrees with the
@@ -17713,6 +17794,10 @@ CE₀.₇₅ of 11 seeds on both medium variants; no such pattern for MR/PT): th
 selection seed shows no optimism, and seed-0 figures overstate the typical
 seed's CE.
 
+**Policy outcome, added 2026-10-12 (§7.6 D):** seed 7's CVaR policy scores
+0.524, level with the ten-seed mean (0.534), and seed 3's scores 0.534. The
+below-chance validation CE did not produce a worse policy.
+
 ### 7.5 Procedure changes of 2026-09-15 that govern every reported winner
 
 Both changes were made **before** the reported selection rounds ran: round 2 of
@@ -17821,6 +17906,181 @@ cost in IQL return.
   flattered most, and the reordering is 18–48% against 22–49%. What the full
   data add is the winner change, **measured directly** in all 8 sweeps where
   §4.3.108 had inferred it from pair flips, and the two missing PT sweeps.
+
+### 7.6 Production models, stage 4 and evaluation (Phase 2) — disclosures
+
+> **Written 2026-10-12, with 19 of 28 evaluation cells in.** Each item is marked
+> **FINAL** or **PENDING**. Nothing marked FINAL depends on a run that has not
+> finished. The PENDING items are listed again in F, with what closes each one.
+> Sources: §4.3.133–§4.3.168 and §6's two live tables.
+
+---
+
+**A. The production reward models.** (**FINAL**)
+
+- **What was trained.** 132 reward models: 3 families × 4 variants × seeds
+  0–10. Every one was checked against its winner's recorded configuration,
+  apart from seed, split and output path (§4.3.138, §4.3.146, §4.3.153).
+- **The BNN was selected at 32 chains and deployed at 128.** This is §3.2.9's
+  escalation, decided before any escalated run existed (§4.3.129). Chains are
+  deterministic in (seed, index), so chains 0–31 of each seed-0 production model
+  are the selected trial: they reproduce it on **15 of 15 statistics, on all
+  four variants**. The extra chains bought precision (centred ESS ×3.9, jackknife
+  SE roughly halved, 14–20 effective tail draws at 0.95 against 3.6–5.3) and did
+  not
+  move the estimand: the validation CE shifted by −0.0025, +0.0092, +0.0027 and
+  −0.0005, each within 2 SE of its trial.
+- **Report the 128-chain validation CE, not the selection value.** The selected
+  trial is the minimum of a statistically tied set (§7.4 A), so its own CE is
+  optimistic by construction. The production figure is a partly independent
+  re-measurement.
+- **The chains do not mix with each other, and more chains do not fix that.**
+  Centred R-hat is 1.26–1.46 at 128 chains, against 1.25–1.44 at 32. This was
+  pre-stated (§4.5): chains buy precision, not mixing. The posterior is a
+  128-chain ensemble at the sweep horizon, and is reported as that.
+- **All 44 BNN models pass all four gates at 128 chains.** Reported, not
+  enforced: eligibility was decided at the sweep budget (§3.2.9).
+- **MR reproduces bit-exactly; PT does not.** Retraining each MR winner at seed
+  0 returns its sweep trial exactly. PT differs through GPU non-determinism: by
+  2e-4 or less on three variants, and on medium_diverse by enough to move the
+  test-selected checkpoint from epoch 18 to 13 (validation loss 0.3524 →
+  0.3611, 0.13 of the across-seed sd). No remedy is warranted. **State it**, so
+  that nobody expects the PT numbers to be reproducible to the last digit.
+- **No selection optimism at seed 0.** For the BNN, seed 0 scores *worse* than
+  the typical seed (it has the highest CE of 11 seeds on both medium variants;
+  rank-sum z ≈ −2.2 over four variants). MR and PT show no pattern either way
+  (§4.3.153). The seed-0 figures quoted in §7.3's 16a result therefore overstate
+  the typical seed's CE on all four variants, by 0.02–0.12.
+
+---
+
+**B. Stage 4: the normalization index is chosen from one run per index.**
+(**FINAL** — all 28 grids, 208 runs, every run complete)
+
+- **Design.** For each (family × variant), one IQL run at seed 0 for each of
+  the 8 `normalize_reward` indices; the score is the last-10 mean; the highest
+  score wins; exact ties go to the lowest index. Seed 0 is never an evaluation
+  seed. §6 has every grid.
+- **Most picks are not resolved.** The winner's gap over the runner-up is under
+  one noise unit in **15 of 24** learned-reward grids, and two or more in only
+  3. Four picks are outright ties: MR medium_play (index 0 over 2 by 0.001), PT
+  medium_play (3 over 2 by 0.014), PT large_diverse (0 over 1 by 0.031), and
+  BNN medium_diverse CVaR (2 over 0 and 3 by 0.03–0.05). **So each method is
+  evaluated at a normalization that is plausibly, not certainly, its best.**
+  §4.3.107 put the chance of a correct pick at ~0.78 at the median gap.
+- **The noise unit is borrowed from one cell.** 0.086 is √2 × the run-to-run
+  sd of the last-10 score measured in Experiment 1 (0.061, 90% CI 0.045–0.097,
+  12 runs, one variant and one reward family). It is applied to every grid as a
+  yardstick. It is not a per-cell measurement, and evaluation sds across seeds
+  range from 0.03 to 0.17 by cell.
+- **The window barely matters.** Scoring on the last 20 evaluations names the
+  same index in **26 of 28** grids. The two exceptions (ensemble medium_diverse
+  CVaR, oracle medium_play) are ties under either window.
+- **The pattern.** 22 of 24 learned-reward grids choose a *scaled* index (2 or
+  3): index 3 on 11 of 12 large grids, index 2 on 8 of 12 medium grids. Within
+  each BNN variant the mean and CVaR rewards share an index, as do the
+  ensemble's, so mean-vs-CVaR comparisons are not confounded by normalization.
+  Indices 4 and 5 score at or near zero in every grid (0.06 at most).
+- **Two cells select among failures.** Both ensemble rewards on large_diverse
+  have a best grid score of 0.10–0.12, where BNN CVaR reaches 0.38 and MR best
+  0.25 on the same variant. The argmax is applied as everywhere else.
+
+---
+
+**C. The oracle's normalization was fixed while the learned rewards' was
+selected.** (stage 4 **FINAL**; one evaluation sweep **PENDING**)
+
+- **The asymmetry, found on 2026-10-07 after the first evaluation numbers.** The
+  task-reward baseline had been run only at the conventional index 1
+  (`r − 1`). Every learned reward had its index selected on seed 0. A learned
+  reward exceeding the oracle was therefore partly a statement about
+  normalization selection.
+- **The fix, pre-registered before any oracle seed-0 run existed (§4.3.157).**
+  The oracle gets the same stage 4, over indices 0–3. Those are the four
+  transformations that are *distinct* for a 0/1 reward whose minimum trajectory
+  return is 0 (verified 0.0 on all four datasets): indices 4–7 reduce to 2, 3,
+  2 and 3, and including them would have given indices 2 and 3 two draws each
+  in an argmax. If another index won, the oracle would be re-evaluated there
+  and both numbers reported.
+- **Result: `r − 1` is the selected index on three of four variants**, by 1.1,
+  1.7 and 2.1 noise units (medium_diverse, large_play, large_diverse). On
+  medium_play, index 3 is ahead of indices 1 and 2 by 0.005, a three-way tie;
+  the rule sends it to index 3 and the user confirmed the rule stands. **The
+  oracle was not handicapped by its fixed index.** The raw 0/1 reward (index 0)
+  fails on every variant (0.00–0.11).
+- **Scaling hurts the task reward and helps the learned ones.** Where the
+  scaled indices lose for the oracle they lose by 0.10–0.18; for the learned
+  rewards they win 22 of 24 grids. The task reward is on a usable scale once
+  shifted, and the learned rewards are not.
+- **How it is reported.** The main table and charts show the oracle at its
+  stage-4 winning index only (user, 2026-10-10). The winning-vs-conventional
+  comparison is a separate table and chart at the end of
+  `results/results_table.ipynb`. **PENDING:** medium_play at index 3, seeds
+  1–10 (queue 7, ~10-14). Until then that variant's oracle cell is blank, and
+  its conventional `r − 1` sweep scored 0.648 ± 0.048.
+
+---
+
+**D. Evaluation: what the seeds 1–10 runs are, and three things to say about
+them.** (19 of 28 cells; the three items below are **FINAL**)
+
+- **What a cell is.** Ten IQL runs, seeds 1–10. Seed *s* uses the reward model
+  trained on seed *s*'s data split, so each run pairs a policy with its own
+  reward model. The score is the last-10 mean; the cell is mean ± sd over the
+  ten. Runs without all 200 evaluation points are excluded, and none has been.
+- **The BNN and ensemble rewards are centred before the tail reduction, in
+  selection and in deployment.** On 2026-09-25 the deployment side was found
+  unwired: no Phase-2 sweep file set `centre_draws`, so the deployed CVaR would
+  have been taken on raw draws while selection used centred ones (§4.3.139). It
+  was fixed before any deployment run, and the 24 sweep files have been
+  generated from one spec since. The BNN labels are computed once per model and
+  conservatism level and cached; the cache was verified bit-identical to
+  recomputation (§4.3.124).
+- **One PT seed failed outright, and it is kept.** PT medium_diverse scores
+  0.550 ± 0.172; its seed 10 scores 0.112 where the other nine are 0.47–0.70
+  (0.599 ± 0.082 without it). The policy never learned. Its reward model
+  validates normally (validation loss 0.259 against a seeds 1–10 mean of
+  0.317). **Report the ten-seed figure, say that one seed failed with a
+  normally validating reward model, and give the nine-seed figure beside it,
+  labelled.** The only exclusion rule is an incomplete curve.
+- **A reward that looked worse than chance on validation produced an ordinary
+  policy.** §7.4 E reports that large_play's deployed (CVaR, 0.95) reward is
+  worse than chance on seed 7's validation pairs. Its policy scores **0.524**,
+  level with the ten-seed mean of 0.534 and above the same seed's mean-reward
+  policy (0.404). Seed 3, near chance on validation, scores 0.534. **Validation
+  CE at the deployment level did not predict policy quality here.** The §7.4 E
+  disclosure stands, and should not be read as "that seed's policy is
+  uninformed".
+- **large_diverse resolves little.** Every learned reward's across-seed sd on
+  that variant is 0.10–0.14, against 0.03–0.08 elsewhere, and all scored methods sit
+  between 0.24 and 0.29. The legacy max statistic is 0.44–0.49 there, about
+  0.2 above the last-10 mean: these runs peak and fall back (§4.3.107).
+
+---
+
+**E. What Phase 2 does not license, on the numbers so far.**
+
+- **No consistent CVaR-vs-mean winner for the BNN** (all eight cells in). CVaR
+  is ahead on large_play (+0.053, paired t 2.4) and behind on medium_play
+  (−0.045, t −2.6), with the two `diverse` variants undecided.
+- **The `play` variants separate methods and the `diverse` ones do not.** On
+  medium_play the BNN mean reward beats MR best, PT and ensemble CVaR on all ten
+  seeds each. On medium_diverse no pair of learned rewards reaches |t| = 2.
+- **The paired t values in §6 are descriptive.** They pair by seed because the
+  sweeps share seeds and data splits. They are not the reported analysis, which
+  is made once over all cells with the convention fixed in §4.3.107.
+
+---
+
+**F. PENDING — what closes each open item.**
+
+| item | closes when | then |
+|---|---|---|
+| PT large_play, large_diverse | queue 4, ~10-14 00:00 UTC | D, E: complete the PT column |
+| Ensemble: 7 of 8 cells | queues 5–9, last ~10-15 08:35 | D, E; check B's "selects among failures" against the evaluation rows |
+| Oracle medium_play at index 3 | queue 7, ~10-14 02:35 | C: fill the comparison; the notebook's last chart |
+| Cross-family statements in E | all 28 cells | rewrite E from the notebook's tables |
+| Large-variant coverage on all seeds and full splits | `coverage_table.py` on the box (seconds) | §7.3's coverage table |
 
 ## 8. Tooling
 
@@ -18422,7 +18682,14 @@ blind. Record it as a future-round candidate.
     the width ceiling (2 at the floor), every stopping-rule winner also the best
     of all trials, trial counts 17–66, two sweeps improving late, and no
     cross-variant depth story.
-15. **Recompute large's cell coverage and re-run §4.3.70's geometry table**
+15. 🟡 **MOSTLY DONE (§4.3.169).** Coverage: corrected for all four variants in
+    §7.3 since 2026-09-19 (diagnostic subset), and for the **full splits on all
+    seeds** for medium (21–24 of 26 cells on validation). **Owed, both on the
+    box:** `python scripts_bnn/coverage_table.py --variants large_play,large_diverse`
+    (seconds), and `--geometry-prior` on the four round-5 seed-0 production
+    models (CPU, minutes) for the τ table in the correct basis. §4.3.70 itself
+    is not to be cited. Original entry:
+    **Recompute large's cell coverage and re-run §4.3.70's geometry table**
     under the fixed basis (§4.3.110), then write §7.4's corrected coverage
     disclosure. `--geometry-prior` runs on saved chains, so it is compute-free
     if the four `stage3_*` final run dirs still exist on the box; otherwise
