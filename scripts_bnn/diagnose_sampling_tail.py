@@ -1847,6 +1847,99 @@ def geometry_diagnostics(pred_chains, n_comp=8, deep=(15, 31, 63, 127, 255)):
             "tau": _t, "tau_spread": spread, "comps": idx}
 
 
+def _live_prior(cfg, quiet=False):
+    """(prior, free_mask, is_live): the map prior built EXACTLY as
+    run_bnn_training_antmaze_eval.py builds it -- from the live D4RL env when the
+    config names one, and with that layout's own scaling/offset.  Both mattered
+    (handoff 4.3.110):
+      * offset is ADDED TO THE GRID INDEX (map_informed_prior.cell_of), so the
+        (0.0, 0.0) once hardcoded here shifted every point a whole row and
+        column -- 0.1% of pool points landed in the right cell.
+      * the hardcoded LARGE fallback is a different maze from the live one
+        ((9,9)/33 free cells vs (9,12)/46), so large runs were read against a
+        prior basis the run never used.
+    is_live is False when the hardcoded fallback had to be used.
+    """
+    from optbnn.gp.maze_layouts import get_antmaze_layout
+    from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
+
+    _env = cfg.get("map_env_name")
+    _size = cfg.get("map_size", "medium")
+    is_live = True
+    try:
+        fm, scaling, offset = get_antmaze_layout(_size, env_name=_env)
+        _src = f"live env {_env!r}" if _env else f"hardcoded {_size!r}"
+        is_live = bool(_env)
+    except Exception as _e:
+        fm, scaling, offset = get_antmaze_layout(_size)
+        _src = f"HARDCODED {_size!r} FALLBACK"
+        is_live = False
+        print(f"  !! could not load the live layout ({type(_e).__name__}: {_e}).")
+        print(f"  !! Falling back to the hardcoded {_size!r} map.  For LARGE this is a "
+              f"DIFFERENT MAZE and the result is not comparable to the run.")
+    fm = np.asarray(fm, dtype=bool)
+    if not quiet:
+        print(f"  prior basis: {_src} -- {int(fm.sum())} free cells, "
+              f"scaling {scaling}, offset {offset}")
+    prior = MapInformedGPPrior(
+        free_mask=fm, scaling=float(scaling), offset=offset,
+        eta=float(cfg.get("map_eta", 1.0)), sig_c2=float(cfg.get("map_sig_c2", 1.0)),
+        sig_g2=float(cfg.get("map_sig_g2", 1.0)), sig_n2=float(cfg.get("map_sig_n2", 1e-3)),
+        amp2=float(cfg.get("map_amp2", 1.0)))
+    return prior, fm, is_live
+
+
+def cell_occupancy(cells, n_cells):
+    """(n_occupied, share_per_cell, n_outside) for free-cell indices `cells`.
+
+    share_per_cell[c] is the fraction of the in-range points that fall in free
+    cell c.  n_outside counts indices outside [0, n_cells), which would mean a
+    point was not assigned to a free cell.
+    """
+    cells = np.asarray(cells, dtype=int).ravel()
+    inside = (cells >= 0) & (cells < n_cells)
+    counts = np.bincount(cells[inside], minlength=n_cells).astype(float)
+    total = max(counts.sum(), 1.0)
+    return int((counts > 0).sum()), counts / total, int((~inside).sum())
+
+
+def split_cell_coverage(dataset, cfg, label="split"):
+    """Maze-cell coverage of an ENTIRE preference split (handoff to-do 15).
+
+    Every valid timestep of BOTH segments of every pair, not the b_rhat-pair
+    diagnostic subset.  This is the coverage the split's CVaR / CE numbers are
+    computed over, so it is the figure a write-up should quote.
+    """
+    prior, fm, is_live = _live_prior(cfg, quiet=True)
+    n_cells = int(fm.sum())
+    X, _ = util.load_pref_data(dataset, training_ratio=1.0)
+    obs_dim = X.shape[-1] - 1
+    blk = np.asarray(X).reshape(-1, X.shape[-1])
+    valid = blk[:, obs_dim] > 0.5
+    pts = blk[valid][:, :obs_dim].astype(np.float32)
+    cells = np.asarray(prior.cell_of(torch.from_numpy(pts)), dtype=int).ravel()
+    n_occ, share, n_out = cell_occupancy(cells, n_cells)
+    print(f"\n=== MAZE-CELL COVERAGE of the full {label} split (handoff to-do 15) ===")
+    print(f"  {dataset}")
+    print(f"  {X.shape[0]} pairs x {X.shape[1]} segments, {pts.shape[0]} valid points; "
+          f"layout {'LIVE' if is_live else 'HARDCODED FALLBACK'}, {n_cells} free cells")
+    print(f"  occupied: {n_occ} of {n_cells} free cells ({100.0 * n_occ / n_cells:.0f}%)")
+    if n_out:
+        print(f"  !! {n_out} point(s) were not assigned to a free cell")
+    occ = share[share > 0]
+    if occ.size:
+        print(f"  share of points per occupied cell: min {100 * occ.min():.2f}%  "
+              f"median {100 * np.median(occ):.2f}%  max {100 * occ.max():.2f}%  "
+              f"(uniform would be {100.0 / n_cells:.2f}%)")
+        thin = int((share[share > 0] < 0.25 / n_cells).sum())
+        print(f"  cells holding under a quarter of the uniform share: {thin}")
+    if not is_live:
+        print("  !! computed on the hardcoded layout: valid for MEDIUM (identical to the "
+              "live map), NOT for large.")
+    return {"n_occupied": n_occ, "n_cells": n_cells, "share": share, "n_outside": n_out,
+            "n_points": int(pts.shape[0]), "is_live": is_live}
+
+
 def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     """tau per PRIOR eigendirection -- a basis fixed independently of the chains.
 
@@ -1868,37 +1961,9 @@ def geometry_prior_basis(pred_chains, x_rhat, cfg, n_show=10):
     1/sqrt(v_hat_min)=100 bounds it).  If tau is flat in this basis, no
     rescaling of directions can help and the cost is total compute.
     """
-    from optbnn.gp.maze_layouts import get_antmaze_layout, build_maze_graph, heat_kernel
-    from optbnn.gp.models.map_informed_prior import MapInformedGPPrior
+    from optbnn.gp.maze_layouts import build_maze_graph, heat_kernel
 
-    # Build the prior EXACTLY as run_bnn_training_antmaze_eval.py does: from the
-    # live D4RL env when the config names one, and with that layout's own
-    # scaling/offset.  Both mattered (handoff 4.3.110):
-    #   * offset is ADDED TO THE GRID INDEX (map_informed_prior.cell_of), so the
-    #     (0.0, 0.0) hardcoded here shifted every point a whole row and column --
-    #     0.1% of pool points landed in the right cell.
-    #   * the hardcoded LARGE fallback is a different maze from the live one
-    #     ((9,9)/33 free cells vs (9,12)/46), so large runs were read against a
-    #     prior basis the run never used.
-    _env = cfg.get("map_env_name")
-    _size = cfg.get("map_size", "medium")
-    try:
-        fm, scaling, offset = get_antmaze_layout(_size, env_name=_env)
-        _src = f"live env {_env!r}" if _env else f"hardcoded {_size!r}"
-    except Exception as _e:
-        fm, scaling, offset = get_antmaze_layout(_size)
-        _src = f"HARDCODED {_size!r} FALLBACK"
-        print(f"  !! could not load the live layout ({type(_e).__name__}: {_e}).")
-        print(f"  !! Falling back to the hardcoded {_size!r} map.  For LARGE this is a "
-              f"DIFFERENT MAZE and the result is not comparable to the run.")
-    fm = np.asarray(fm, dtype=bool)
-    print(f"  prior basis: {_src} -- {int(fm.sum())} free cells, "
-          f"scaling {scaling}, offset {offset}")
-    prior = MapInformedGPPrior(
-        free_mask=fm, scaling=float(scaling), offset=offset,
-        eta=float(cfg.get("map_eta", 1.0)), sig_c2=float(cfg.get("map_sig_c2", 1.0)),
-        sig_g2=float(cfg.get("map_sig_g2", 1.0)), sig_n2=float(cfg.get("map_sig_n2", 1e-3)),
-        amp2=float(cfg.get("map_amp2", 1.0)))
+    prior, fm, _live = _live_prior(cfg)
     cells = np.asarray(prior.cell_of(torch.from_numpy(np.asarray(x_rhat, np.float32))),
                        dtype=int).ravel()
 
@@ -2491,6 +2556,7 @@ def main():
         if x_rhat is None:
             sys.exit("--geometry-prior needs the eval inputs (x_rhat)")
         geometry_prior_basis(pred_chains, x_rhat, cfg)
+        split_cell_coverage(dataset, cfg, label=args.split)
 
     if args.cvar_ce:
         sweep = None
