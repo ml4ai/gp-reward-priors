@@ -20440,6 +20440,20 @@ once. **About 37 days in all**, in line with §13.3's 5.5 weeks. The BNN time fo
 Steps 1–2 need nothing from the anchor's remaining sweeps except GPUs 0–1, which
 are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 
+> **Step 1 LAUNCHED 2026-10-13 23:46 UTC (user):** MR, then PT, all four levels,
+> on GPUs 0–1, log `exp/train_sparsity_mrpt.log`. **The first six MR models
+> (r16, medium_play, seeds 1–6) were checked while training and again when
+> finished, ~3 minutes later:** training file `reduction/…_pref_train_<s>_16.hdf5`,
+> validation and test the base files, output `antmaze_medium_play_mr_r16_eval_<s>`,
+> every other key equal to the anchor winner's, `reload_check_ok` = 1.
+>
+> **A trap in the verifier, found on this first read and fixed:**
+> `production_readout.py` checks the configuration of *finished* runs only, and
+> it printed `config OK   health OK` for a variant with none, which is an OK for
+> nothing. It now prints `config --   health --   (no finished run to check)`.
+> To check runs that are still training, compare their logged configs directly
+> (`expected_run_paths`, `check_run`), as was done here.
+
 ### 13.9 Still to build: the experiment's readout
 
 Not needed until a level is complete for all seven methods (~10 days after

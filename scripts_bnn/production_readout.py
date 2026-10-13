@@ -169,6 +169,10 @@ def report(family, prod, win, variants, cond=None):
         if v not in win:
             continue
         bad_cfg, bad_h = [], []
+        if not any(r["state"] == "finished" for s in SEEDS for r in c.get((v, s), [])):
+            # Nothing was checked, so do not print OK for it.
+            print(f"   {v:15s} config --   health --   (no finished run to check)")
+            continue
         for s in SEEDS:
             rs = [r for r in c.get((v, s), []) if r["state"] == "finished"]
             if not rs:
