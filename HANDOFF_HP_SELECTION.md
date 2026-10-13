@@ -32,6 +32,12 @@
 > data is read** (the proposal's preliminary result): margin 0.10, comparators MR
 > and PT, three-way verdict. Written before those runs finished. Build the readout
 > to §12 and do not look at the comparison before the readout exists.
+> **§12.8 (2026-10-12) discloses that six of the eight cells WERE read informally
+> before the readout existed.**
+>
+> **Added 2026-10-12 — §13 tracks the set-up of Experiments 1 (sparsity) and 2
+> (label noise)**: what data exists and is verified, the directory-naming rule
+> the label cache imposes, the cost, and the decisions still open.
 
 ---
 
@@ -16856,6 +16862,15 @@ seeds 1–10. MR and PT are verified already (§4.3.138).
 
 ### Evaluation — seeds 1–10 at the stage-4 index (project `IQL-pref`) — LIVE, filled in as sweeps finish
 
+> ⚠️ **The cross-family comparisons in the notes below are NOT the registered
+> reading, and should not have been made (§12.8).** §12 fixes how this
+> evaluation is read: per-seed differences BNN CVaR − {MR, PT}, an exact
+> bootstrap interval, a 0.10 margin, eight verdicts. The paired-*t* figures and
+> "ahead on k of 10 seeds" remarks in these notes were written between
+> 2026-10-07 and 2026-10-12 by a session that had not read §12. They are kept as
+> a record of what was shown, and are **superseded by the §12.5 readout**. Do not
+> quote them. Each row's own mean ± sd is unaffected.
+
 Started 2026-10-04. One IQL run per seed, each on that seed's own reward model
 and data split. Score = **last-10 mean** (`results/iql_score.py`), reported as
 mean ± sd over the 10 seeds; last-20 is the robustness check and the legacy max
@@ -19964,3 +19979,168 @@ blind in at least one arm.
 *(A check on §12.3, which these rows allow: the new runs' seed-to-seed SDs are
 0.04–0.05 on medium_play, 0.06–0.07 on large_play and 0.11–0.14 on
 large_diverse — in line with the earlier figures the margin was derived from.)*
+
+### 12.8 A breach of §12.6 between 2026-10-07 and 2026-10-12 — disclose this too
+
+Added 2026-10-12. **Nothing in §12.1–§12.7 is changed by this subsection.** It
+records what was read, and by whom, before the readout existed.
+
+**What happened.** §12 was added to this document on 2026-10-07. The assistant
+session running the sweep checks had last read the document on 2026-09-27 and
+did not re-read it. From 2026-10-07 to 2026-10-12 its sweep-check reports, and
+the notes under §6's evaluation table, **computed and showed the user informal
+cross-family comparisons on seeds 1–10**: means, the number of seeds on which
+BNN CVaR was ahead, and paired-*t* values. That is exactly what §12.6's first
+Do-NOT forbids ("do not read any seeds 1–10 cross-family comparison before the
+readout exists"). The session found §12 on 2026-10-12, when asked to set up the
+sparsity and label-noise experiments, and stopped.
+
+**Which verdict cells were read informally, and when** (BNN CVaR against the
+named comparator; "read" means both arms' means and a paired comparison were
+reported to the user):
+
+| | vs MR best-model | vs PT |
+|---|---|---|
+| medium_play | 2026-10-07 (already visible, §12.7) | **2026-10-11** |
+| medium_diverse | **2026-10-09** | **2026-10-12** |
+| large_play | **2026-10-09** | not read: PT arm unfinished |
+| large_diverse | **2026-10-10** | not read: PT arm unfinished |
+
+So **six of the eight verdict cells were read informally before the readout
+existed**; two (the large variants against PT) were not. The mechanism
+comparisons §12.2 lists (BNN CVaR against BNN mean, against the ensemble's CVaR,
+and against the task reward) were read the same way.
+
+**What this does and does not undermine.**
+
+- **The rule was not touched.** Statistic, quantity, interval, comparators,
+  margin and verdict criteria are as committed on 2026-10-07 (`13f1360`), before
+  any of the dates in the table. The readout is mechanical: an exact enumeration
+  with no free choices. Nothing seen since can move a verdict.
+- **What is lost is the blindness of the reader, not of the rule.** The user has
+  now seen, for six cells, roughly which way each will come out. Any *later*
+  decision that could be influenced by that knowledge is therefore not blind:
+  in particular the scope and order of the sparsity and label-noise experiments,
+  and any wording of the preliminary result drafted before the readout runs.
+  **Say so wherever those are reported.**
+- **The informal figures are not the registered ones.** They used a paired *t*,
+  not the exact bootstrap interval, and no margin. Do not quote them. §6's notes
+  keep them as a record of what was shown, marked as superseded by the readout.
+- **The remedy** is the one §12.6 implies: build the §12.5 readout, and read
+  every cell from it and from nothing else. Until it exists, sweep checks report
+  each cell's own mean ± sd and completeness only, with **no cross-family
+  comparison**.
+
+---
+
+## 13. Experiments 1 (data sparsity) and 2 (label noise): set-up status
+
+**Started 2026-10-12, at the user's request, while the anchor evaluation's last
+sweeps run.** The designs are §11 (label noise) and the dissertation's
+`chapters/03-risk-sensitive-offline.tex` §"Experimental Design" (both). This
+section tracks what exists, what is built and verified, and what is still to be
+decided or built. **Nothing here has been launched.**
+
+### 13.1 The data: complete and verified
+
+| set | files | status |
+|---|---|---|
+| noise, **train** (5 levels × 4 variants × seeds 1–10) | 200 | existed; re-derived bit-identically by the rewritten generator |
+| noise, **test** (same grid) | 200 | **built 2026-10-12** (§11.5 item 1) on the analysis machine; **to build on the box** |
+| noise, validation | 200 | exist, **not used** (§11.4); left on disk |
+| reduction, train (16, 32, 64, 128 pairs × 4 × seeds 1–10) | 160 | existed |
+
+- **`make_noise_sets.py` was rewritten so that it cannot damage a file a run
+  reads.** It builds each output in memory and writes it only if absent; an
+  existing file is compared and reported "unchanged" or "DIFFERENT", never
+  rewritten. Default `--parts test`. The flip rule is unchanged (one
+  `default_rng(seed).permutation(N)` per partition, first `round(p·N)`).
+  Self-tested, including that a tampered file is reported and left alone.
+  **Re-deriving `train` and `val` reproduced all 400 existing files exactly**,
+  which is the check §11.5 asked for before trusting the generator.
+- **`verify_experiment_sets.py`** checks, independently of the generators, every
+  file the two experiments read: for noise, that only `labels` differs from the
+  base split, that exactly `round(p·N)` rows are swapped, that levels nest, and
+  that the flipped rows are the seeded permutation's prefix; for reduction, that
+  each set is rows `perm[:n]` of the base training split in base order.
+  **VERIFIED on the analysis machine: 400 noise files (train + test), 160
+  reduction files.** It prints one digest per experiment over the label arrays:
+  **noise `40c78cb39e79f7e6`, reduction `01e7cc82ae61699f`**. The box must print
+  the same two.
+
+**Pool sizes and flip counts** (pairs; identical for every seed of a variant):
+
+| | train pool | test | train flips at 0.1 / 0.2 / 0.3 / 0.4 / 0.45 | test flips |
+|---|---|---|---|---|
+| medium_play | 358 | 77 | 36 / 72 / 107 / 143 / 161 | 8 / 15 / 23 / 31 / 35 |
+| medium_diverse | 498 | 107 | 50 / 100 / 149 / 199 / 224 | 11 / 21 / 32 / 43 / 48 |
+| large_play | 254 | 55 | 25 / 51 / 76 / 102 / 114 | 6 / 11 / 16 / 22 / 25 |
+| large_diverse | 514 | 110 | 51 / 103 / 154 / 206 / 231 | 11 / 22 / 33 / 44 / 50 |
+
+**A wording mismatch to fix in the dissertation, not in the data:** Chapter 3
+says the first ⌊pN⌋ labels are flipped. The files, and §11.1, use `round(p·N)`.
+They differ wherever p·N has a fractional part of 0.5 or more (for example 8
+against 7 flips on medium_play's test split at 0.1). The training files that
+exist were made with `round`, so the text should say `round`.
+
+### 13.2 A constraint the launchers must respect: unique model directory names
+
+The BNN label cache keys an entry on the reward-model directory's **basename**
+(`reward_label_cache.make_key`), so that a cache survives the tree being moved.
+The anchor models are `antmaze_<variant>_bnn_eval_<seed>`. **An experiment model
+written to a directory with that same basename, under a different parent, would
+share the anchor's cache key.** The weights inventory would then reject the
+entry and relabel, so no wrong label would be served, but each condition would
+overwrite the others' entries and the anchor's.
+
+**Rule: the condition goes into the name**, for every family:
+`antmaze_<variant>_<family>_<cond>_eval_<seed>`, with `<cond>` one of `n01`,
+`n02`, `n03`, `n04`, `n045` (noise, PRIMARY), `n01o` … `n045o` (noise,
+SENSITIVITY, MR/PT on medium_play only), `r16`, `r32`, `r64`, `r128`
+(reduction). This also satisfies §11.5 item 2: the level and the arm are in the
+path, so no two runs can overwrite each other.
+
+### 13.3 Cost, before anything is launched
+
+Counts follow from the designs as written. Rates are the ones measured in this
+campaign: a 128-chain BNN model takes ~4.2–5.5 h on 4 GPUs and ~128 cores; an
+IQL run takes ~5.8 h and up to 25 cores, and the box is CPU-bound at 10 of them
+(§4.3.156).
+
+| | BNN models | MR / PT models (each) | IQL runs | box-time, CPU-bound estimate |
+|---|---|---|---|---|
+| **Experiment 2, label noise** (5 levels; sensitivity arm on medium_play) | 200 | 200 + 50 | 1,200 + 100 | **~7 weeks** |
+| **Experiment 1, sparsity** (4 levels: 16, 32, 64, 128) | 160 | 160 | 960 | **~5.5 weeks** |
+
+The estimate is `(models × 128 cores × 4.8 h + runs × 25 cores × 5.8 h) / 255
+cores`. It assumes a saturated box and no failed run, so it is a floor. **Both
+experiments together are about three months of the box.** That is a planning
+fact to settle before the first launch, because trimming levels after seeing
+results is not available (§9, §11.8).
+
+### 13.4 To build (no decision needed)
+
+1. **The §12.5 readout** (exact-enumeration paired bootstrap, completeness gate,
+   config audit). Owed regardless (§12.8), and the same paired machinery serves
+   both experiments, per level.
+2. **Reward-model launcher** for (family, variant, seed, condition), passing
+   §11.4's split overrides and §13.2's directory names and nothing else that
+   differs from the production configs. BNN at 128 chains, 32 per GPU.
+3. **A verifier** for those models, reading wandb `config` (§11.6): the three
+   split paths per arm, and every other key equal to the anchor's.
+4. **IQL sweep files** per condition, generated by `phase2_sweeps.py` from the
+   same spec, each at the **anchor's** stage-4 index (`phase2_winners.json`),
+   seeds 1–10, with `reward_model_root` pointing at §13.2's names.
+5. **Label caching** for the experiment's BNN models before their IQL runs.
+
+### 13.5 To decide (the user's, before the first launch)
+
+1. **Which experiment runs first.**
+2. **The sparsity levels.** Files exist for 16, 32, 64 and 128 pairs. Chapter 3
+   writes the ladder as "32 ⊂ 64 ⊂ 128 ⊂ ⋯", capped at each pool, with each
+   curve ending at its own maximum (the anchor). So: is **16** in, and is a
+   **256** level added for the three variants whose pool allows it (358, 498,
+   514; large_play's is 254)?
+3. **Whether the cost in §13.3 is accepted as designed**, or the design is
+   trimmed now, before any result exists. The BNN's 128 chains are frozen by
+   §11.1 and are not a candidate.
