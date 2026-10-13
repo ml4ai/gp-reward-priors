@@ -15024,6 +15024,79 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.172 The §12 readout is built, and run on the evaluation so far — six of eight cells read, all NOT BEHIND
+
+2026-10-12, with the user's go-ahead. `~/iqlpref/results/eval_readout.py`,
+self-tested. Its latest output is committed as `results/eval_readout_latest.txt`.
+
+#### 1. What it implements, clause by clause from §12
+
+| §12 | in the tool |
+|---|---|
+| statistic: last-10 mean, all 200 points | `iql_score.run_curve` + `score_curve`; a run short of 200 points makes its cell INCOMPLETE |
+| paired by seed, seeds 1–10 | differences `d_s` taken seed by seed |
+| exact bootstrap, no Monte Carlo | all **92,378** count vectors with their multinomial probabilities; lower/upper = the smallest value whose cumulative probability is ≥ 0.025 / ≥ 0.975 |
+| the three self-checks | vector count, probabilities sum to 1, weighted mean = plain mean; a failure withholds the cell |
+| comparators MR, PT; margin 0.10; three verdicts; no combined rule | constants; all eight printed, nothing aggregated |
+| completeness gate | a cell is read only if both arms have all ten seeds scored |
+| config audit | per run: reward-model path = spec root + `_<seed>`, index = `phase2_winners.json`, `gauge_reward` max0, and every spec key (BNN: `bnn_alpha`, `bnn_n_samples` −1, `centre_draws`) |
+| paired-*t* beside it, as a check | printed; a disagreement in verdict would be flagged, the verdict stays the bootstrap's |
+| last-20 as the robustness check | printed under each verdict, labelled "not a verdict" |
+| mechanism comparisons, not verdicts | BNN CVaR − BNN mean, − ensemble CVaR, − ensemble mean; every method − task reward |
+| §12.7 / §12.8 | each non-blind cell carries its "NOT A BLIND CELL" line and the reason |
+
+**Tested against brute force.** For n = 3, 4, 5 the enumerated interval equals
+the one from all nⁿ ordered resamples. Also tested: the single "each seed once"
+vector has probability 10!/10¹⁰; a constant difference gives a degenerate
+interval; a shift moves both ends equally; the verdict boundaries are strict;
+and the audit rejects each of the seven things §12.5 names.
+
+**One addition §12 could not have specified.** §12 was written with the oracle
+at `r − 1`. Since §4.3.157 the oracle has a stage-4 winning index. Section C of
+the readout compares against the oracle **at its winning index**, and, where
+that differs from `r − 1` (medium_play only), against the conventional one as
+well, labelled. No verdict involves the oracle.
+
+#### 2. First run: every cell that could be read
+
+**Config audit: clean on every run of every evaluation sweep. Self-checks:
+passed on every interval.**
+
+| BNN CVaR − … | difference | 95% exact bootstrap | paired-*t* (check) | ahead on | **verdict** | blind? |
+|---|---|---|---|---|---|---|
+| medium_play, MR | +0.091 | [+0.059, +0.130] | [+0.047, +0.135] | 10/10 | **NOT BEHIND** | no (§12.7) |
+| medium_play, PT | +0.044 | [+0.004, +0.084] | [−0.005, +0.093] | 7/10 | **NOT BEHIND** | no (§12.8) |
+| medium_diverse, MR | −0.009 | [−0.056, +0.035] | [−0.065, +0.046] | 5/10 | **NOT BEHIND** | no (§12.8) |
+| medium_diverse, PT | +0.087 | [+0.002, +0.201] | [−0.036, +0.210] | 6/10 | **NOT BEHIND** | no (§12.8) |
+| large_play, MR | +0.109 | [+0.064, +0.154] | [+0.054, +0.164] | 10/10 | **NOT BEHIND** | no (§12.8) |
+| large_play, PT | — | — | — | — | INCOMPLETE (PT 8/10) | **yes** |
+| large_diverse, MR | +0.050 | [−0.049, +0.156] | [−0.076, +0.176] | 5/10 | **NOT BEHIND** | no (§12.8) |
+| large_diverse, PT | — | — | — | — | INCOMPLETE (no sweep yet) | **yes** |
+
+- **Six read, six NOT BEHIND, and the paired-*t* check agrees on all six.** The
+  closest lower end to the margin is −0.056 (bootstrap) and −0.076 (*t*), on the
+  two `diverse` variants against MR.
+- **What NOT BEHIND licenses (§12.4):** the anchor does not threaten the planned
+  experiments. It is **not** evidence that the method is better. §12.3 expected
+  INCONCLUSIVE to be common on large_diverse; the one large_diverse cell read so
+  far is not, though its interval is the widest (half-width ~0.10).
+- **The two blind cells are the two still to come**, both against PT on the
+  large variants. They are the only cells whose verdict was not foreshadowed.
+- **The exact bootstrap runs narrower than the paired *t*** on every cell, by
+  0.005–0.04 at each end, which is the small-sample behaviour §12.5 warns of.
+  It changes no verdict here.
+
+The mechanism comparisons and the comparisons with the task reward are in the
+committed output; they carry no verdict and are not summarised here, to keep
+the registered result uncluttered. They are rewritten into §7.6 E from the final
+readout once all 28 cells are in.
+
+#### 3. Also finished
+
+Ensemble medium_diverse mean (`75dkk4js`): 0.683 ± 0.037, registered. **21 of 28
+cells.** Queue 8 has started (`ncb3zdmx`, ensemble large_play CVaR): the fourth
+chained hand-off, and the first since the box's files were confirmed.
+
 ### 4.3.171 To-do 15 CLOSED — coverage on the live mazes, and the geometry is FLAT on all four production models (with a prediction of mine corrected)
 
 2026-10-12. The user ran both commands on the box: `exp/coverage_table.txt` and
@@ -16898,8 +16971,8 @@ is given for disclosure only. Fill a row with
 | ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
 | ensemble medium_play mean | 2 | `txrrif36` | **0.712 ± 0.025** (10) | 0.710 ± 0.024 | 0.836 ± 0.025 | 2026-10-12 |
 | ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
-| ensemble medium_diverse mean | 3 | `75dkk4js` | | | | running (queue 6) |
-| ensemble large_play cvar | 3 | — | | | | queue 8 |
+| ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
+| ensemble large_play cvar | 3 | `ncb3zdmx` | | | | running (queue 8) |
 | ensemble large_play mean | 3 | — | | | | queue 8 |
 | ensemble large_diverse cvar | 3 | — | | | | queue 9 |
 | ensemble large_diverse mean | 3 | — | | | | queue 7 |
@@ -20031,6 +20104,10 @@ and against the task reward) were read the same way.
   each cell's own mean ± sd and completeness only, with **no cross-family
   comparison**.
 
+> ✅ **The readout exists as of 2026-10-12: `~/iqlpref/results/eval_readout.py`**
+> (§4.3.172 has what it implements and its first run). From here on every
+> comparison on these runs comes from it.
+
 ---
 
 ## 13. Experiments 1 (data sparsity) and 2 (label noise): set-up status
@@ -20133,7 +20210,24 @@ results is not available (§9, §11.8).
    seeds 1–10, with `reward_model_root` pointing at §13.2's names.
 5. **Label caching** for the experiment's BNN models before their IQL runs.
 
-### 13.5 To decide (the user's, before the first launch)
+### 13.5 Decided 2026-10-12 (user), before any experiment run exists
+
+| question | decision |
+|---|---|
+| which experiment first | **Experiment 1, data sparsity** |
+| sparsity levels | **16, 32, 64, 128 pairs**, as the files on disk. No 256 level. Each curve ends at the anchor (full data). |
+| cost (§13.3) | **accepted as designed**: ~5.5 weeks for sparsity, ~7 for label noise |
+| the §12 readout | build it next: **done, §4.3.172** |
+
+**These were decided after six of the eight §12 verdict cells had been read
+informally (§12.8), and are not blind to them.** None of the three depends on
+which way a cell fell: the order is logistical, the levels are the ones already
+on disk, and the cost is taken as designed with nothing trimmed. Disclose it
+with the experiment all the same.
+
+Chapter 3's "32 ⊂ 64 ⊂ 128 ⊂ ⋯" should be edited to list **16**, 32, 64, 128.
+
+*The questions as they were put:*
 
 1. **Which experiment runs first.**
 2. **The sparsity levels.** Files exist for 16, 32, 64 and 128 pairs. Chapter 3
