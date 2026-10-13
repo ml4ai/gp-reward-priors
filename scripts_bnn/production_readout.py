@@ -18,8 +18,16 @@ labelled or evaluated on them, check the whole set:
                  means GPU non-determinism and is reported as such.
   5. SPREAD      the selection metric across seeds, as descriptive context for §7.
 
+With `--cond <condition>` it verifies an ABLATION-EXPERIMENT model set instead
+(handoff §11.6, §13): seeds 1-10 only, the same configuration check against the
+anchor winner, plus the condition's own contract from experiment_conditions.py --
+the training file is the reduced or corrupted one, VALIDATION IS THE BASE FILE,
+the test file is the one the arm prescribes, and the output directory carries
+the condition in its name.  There is no seed-0 reproduction to check.
+
 Usage:
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/production_readout.py mr
+    /opt/anaconda3/envs/irl/bin/python scripts_bnn/production_readout.py bnn --cond r16
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/production_readout.py pt [--since 2026-09-25]
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/production_readout.py --selftest
 """
@@ -60,11 +68,35 @@ def variant_of(cfg):
     return v.replace("-", "_")
 
 
-def cells(runs):
-    """{(variant, seed): [runs]} for non-sweep runs."""
+OUT_KEYS = ("OUT_DIR", "checkpoints_path")
+
+
+def out_basename(cfg):
+    for k in OUT_KEYS:
+        if cfg.get(k):
+            return os.path.basename(os.path.normpath(str(cfg[k])))
+    return ""
+
+
+def cells(runs, family=None, cond=None):
+    """{(variant, seed): [runs]} for non-sweep runs.
+
+    A run belongs to the set being read by its OUTPUT DIRECTORY NAME, which is
+    where the condition lives (antmaze_<variant>_<family>_<cond>_eval_<seed>,
+    §13.2).  So anchor runs never fall into a condition's cells, nor one
+    condition's into another's, whatever else their configs share."""
+    import experiment_conditions as E
     out = collections.defaultdict(list)
     for r in runs:
-        out[(variant_of(r["config"]), r["config"].get("seed"))].append(r)
+        v, s = variant_of(r["config"]), r["config"].get("seed")
+        if family is not None:
+            try:
+                want = f"{E.model_base(v, family, cond)}_{s}"
+            except ValueError:
+                continue
+            if out_basename(r["config"]) != want:
+                continue
+        out[(v, s)].append(r)
     return out
 
 
@@ -107,13 +139,17 @@ def fetch(family, since):
     return prod, win
 
 
-def report(family, prod, win, variants):
+def report(family, prod, win, variants, cond=None):
     from make_production_config import check_run
+    import experiment_conditions as E
     import selection_gates as G
     fails = []
-    c = cells(prod)
+    c = cells(prod, family, cond)
     m = METRIC[family]
-    print(f"=== {family.upper()} production models: {len(prod)} non-sweep runs\n")
+    SEEDS = tuple(E.EVAL_SEEDS) if cond else globals()["SEEDS"]
+    what = f"condition {cond}" if cond else "production"
+    print(f"=== {family.upper()} {what} models: {sum(len(x) for x in c.values())} run(s) "
+          f"in this set, of {len(prod)} non-sweep runs fetched\n")
 
     print("1. COMPLETE")
     for v in variants:
@@ -125,7 +161,7 @@ def report(family, prod, win, variants):
                        ("D" if len(rs) > 1 else ("X" if rs else "-")))
             if row[-1] != ".":
                 fails.append(f"complete:{v}:{s}:{row[-1]}")
-        print(f"   {v:15s} seeds 0-10: {''.join(row)}")
+        print(f"   {v:15s} seeds {SEEDS[0]}-{SEEDS[-1]}: {''.join(row)}")
     print("   (. = one finished run, - = missing, D = duplicate, X = not finished)")
 
     print("\n2. CONFIG vs winner   3. HEALTH")
@@ -140,6 +176,10 @@ def report(family, prod, win, variants):
             r = rs[0]
             rows = check_run(r["config"], win[v]["config"], 128, 32, family=family)
             u = [k for k, *_, verdict in rows if verdict == "UNEXPECTED"]
+            if cond:
+                # check_run accepts ANY split or output path on a seed other than
+                # the winner's.  A condition's contract is exact, so check it here.
+                u += E.check_run_paths(r["config"], family, v, s, cond)
             if u:
                 bad_cfg.append(f"s{s}:{u}")
             sm = r["summary"]
@@ -156,7 +196,9 @@ def report(family, prod, win, variants):
         if family != "bnn":
             fails += [f"health:{v}:{x}" for x in bad_h]
 
-    if family in ("mr", "pt"):
+    if cond:
+        print("\n4. REPRODUCE: not applicable -- a condition has no seed-0 model (§11.1)")
+    elif family in ("mr", "pt"):
         print("\n4. REPRODUCE: seed-0 production run vs the sweep winner (same config, same seed)")
         for v in variants:
             rs = [r for r in c.get((v, 0), []) if r["state"] == "finished"]
@@ -181,9 +223,9 @@ def report(family, prod, win, variants):
             print(f"   {v:15s} n={len(vals):2d}  mean {sp[0]:.4f}  sd {sp[1]:.4f}  "
                   f"range {sp[2]:.4f}-{sp[3]:.4f}")
 
-    print("\nVERDICT: " + ("VERIFIED -- complete, every run is the winner's "
-                           "configuration, and healthy" if not fails
-                           else f"NOT VERIFIED -- {fails}"))
+    ok = ("VERIFIED -- complete, every run is the winner's configuration"
+          + (f" on the {cond} splits and paths" if cond else "") + ", and healthy")
+    print("\nVERDICT: " + (ok if not fails else f"NOT VERIFIED -- {fails}"))
     return 0 if not fails else 1
 
 
@@ -199,6 +241,18 @@ def selftest():
     assert all(x for *_, x in r) and len(r) == 2
     r = repro({"eval_loss_at_selected": 0.1475}, {"eval_loss_at_selected": 0.1474})
     assert not r[0][3]
+    # a condition's cells are picked out by the output directory name alone
+    mk = lambda out, s: {"config": {"antmaze_variant": "antmaze-large-play-v2", "seed": s,
+                                    "OUT_DIR": out}}
+    rs = [mk("./exp/reward_learning/antmaze_large_play_bnn_eval_3", 3),          # anchor
+          mk("./exp/reward_learning/antmaze_large_play_bnn_r16_eval_3", 3),
+          mk("/abs/exp/reward_learning/antmaze_large_play_bnn_r32_eval_3/", 3),
+          mk("./exp/reward_learning/antmaze_large_play_bnn_r16_eval_4", 4)]
+    assert sorted(cells(rs, "bnn", "r16")) == [("large_play", 3), ("large_play", 4)]
+    assert sorted(cells(rs, "bnn", "r32")) == [("large_play", 3)]
+    assert sorted(cells(rs, "bnn", None)) == [("large_play", 3)]                 # anchor only
+    assert len(cells(rs)[("large_play", 3)]) == 3                                # unfiltered
+    assert out_basename({"checkpoints_path": "~/x/antmaze_a_mr_n01o_eval_2"}) == "antmaze_a_mr_n01o_eval_2"
     assert spread([0.1, 0.2, None, float("nan")])[0] == 0.15000000000000002 or \
         abs(spread([0.1, 0.2])[0] - 0.15) < 1e-12
     print("selftest OK")
@@ -211,15 +265,27 @@ def main():
     ap.add_argument("family", nargs="?", choices=("mr", "pt", "bnn"))
     ap.add_argument("--since", default="2026-09-25T00:00:00",
                     help="only runs created after this (excludes older production sets)")
-    ap.add_argument("--variants", default=",".join(VARIANTS))
+    ap.add_argument("--variants", default=None,
+                    help="comma-separated; default all four (medium_play only for a "
+                         "sensitivity-arm condition)")
+    ap.add_argument("--cond", default=None,
+                    help="verify an experiment condition's models (r16, n02, n02o, ...)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if not a.family:
         ap.error("family required")
+    variants = [v for v in (a.variants or ",".join(VARIANTS)).split(",") if v]
+    if a.cond:
+        import experiment_conditions as E
+        if E.parse(a.cond)["arm"] == "oracle":
+            if a.family not in E.ORACLE_FAMILIES:
+                ap.error(f"{a.cond}: the sensitivity arm is MR and PT only")
+            if a.variants is None:
+                variants = list(E.ORACLE_VARIANTS)
     prod, win = fetch(a.family, a.since)
-    return report(a.family, prod, win, [v for v in a.variants.split(",") if v])
+    return report(a.family, prod, win, variants, a.cond)
 
 
 if __name__ == "__main__":

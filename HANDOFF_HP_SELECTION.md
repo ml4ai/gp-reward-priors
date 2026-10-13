@@ -15024,6 +15024,25 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.173 Sweep check, 2026-10-13 21:19 UTC — 22 of 28 cells; the sparsity experiment is ready to launch
+
+- **PT large_play (`rpfaj2xr`) is complete: 0.386 ± 0.073** over seeds 1–10
+  (last-20 0.393 ± 0.069; legacy max 0.541 ± 0.048). All ten runs at index 3
+  with 200 evaluation points. Registered in the results notebook
+  (`register --write`): **22 of 28 cells**. Its own mean and sd only; the
+  large_play PT verdict is read by `results/eval_readout.py` once all 28 cells
+  are in (§12.5, §12.8).
+- **Three sweeps running, all healthy, none with a missing or crashed run:**
+  ensemble large_play CVaR `ncb3zdmx` (8 finished, seeds 9–10 at step ~950k),
+  PT large_diverse `03tyo1up` (8 finished, seeds 9–10 at step ~590k), oracle
+  medium_play at index 3 `79ke5lc3` (6 finished, seeds 7–8 at step ~790k,
+  seeds 9–10 not started). Still to start: ensemble large_play mean, ensemble
+  large_diverse CVaR and mean.
+- **Experiment 1's set-up is complete (§13.6–§13.8)**: the box dry run passed,
+  the 96 IQL sweep files are generated, the queue and the verifier take a
+  condition, and the label-caching commands come from the conditions module.
+  Nothing is launched.
+
 ### 4.3.172 The §12 readout is built, and run on the evaluation so far — six of eight cells read, all NOT BEHIND
 
 2026-10-12, with the user's go-ahead. `~/iqlpref/results/eval_readout.py`,
@@ -16966,17 +16985,17 @@ is given for disclosure only. Fill a row with
 | mr large_diverse | 3 | `pio60aa6` | **0.241 ± 0.098** (10) | 0.254 ± 0.098 | 0.437 ± 0.113 | 2026-10-10 |
 | pt medium_play | 3 | `v13djkou` | **0.690 ± 0.060** (10) | 0.689 ± 0.060 | 0.803 ± 0.047 | 2026-10-11 |
 | pt medium_diverse | 2 | `qdbtemcq` | **0.550 ± 0.172** (10) | 0.552 ± 0.178 | 0.712 ± 0.173 | 2026-10-12 |
-| pt large_play | 3 | `rpfaj2xr` | | | | running (queue 4) |
-| pt large_diverse | 0 | — | | | | queue 4 |
+| pt large_play | 3 | `rpfaj2xr` | **0.386 ± 0.073** (10) | 0.393 ± 0.069 | 0.541 ± 0.048 | 2026-10-13 |
+| pt large_diverse | 0 | `03tyo1up` | | | | running (queue 4), 8 of 10 at 10-13 21:19 UTC |
 | ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
 | ensemble medium_play mean | 2 | `txrrif36` | **0.712 ± 0.025** (10) | 0.710 ± 0.024 | 0.836 ± 0.025 | 2026-10-12 |
 | ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
 | ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
-| ensemble large_play cvar | 3 | `ncb3zdmx` | | | | running (queue 8) |
+| ensemble large_play cvar | 3 | `ncb3zdmx` | | | | running (queue 8), 8 of 10 at 10-13 21:19 UTC |
 | ensemble large_play mean | 3 | — | | | | queue 8 |
 | ensemble large_diverse cvar | 3 | — | | | | queue 9 |
 | ensemble large_diverse mean | 3 | — | | | | queue 7 |
-| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7) |
+| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7), 6 of 10 at 10-13 21:19 UTC |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
 | **oracle** large_play | 1 (stage-4 winner) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
@@ -20197,9 +20216,12 @@ results is not available (§9, §11.8).
 
 ### 13.4 To build (no decision needed)
 
-> **Status 2026-10-13.** Item 1 (the §12.5 readout) is done, §4.3.172. **Item 2
-> (the reward-model launcher) is built, §13.6, and awaits a dry run on the
-> box.** Items 3–5 are next, in that order.
+> **Status 2026-10-13, end of day: all five are built.** Item 1 (the §12.5
+> readout) is §4.3.172. Item 2 (the reward-model launcher) is §13.6, and its
+> dry run on the box passed. Items 3–5 (the verifier, the IQL sweep files and
+> the label-caching commands) are §13.7. The launch schedule is §13.8.
+> **Nothing has been launched.** Still to build, and not needed before the
+> first results exist: the experiment's readout (§13.9).
 
 1. **The §12.5 readout** (exact-enumeration paired bootstrap, completeness gate,
    config audit). Owed regardless (§12.8), and the same paired machinery serves
@@ -20296,3 +20318,147 @@ loaders without `drop_last`, so 16 pairs under a batch size of 64 is one full
 batch per epoch. The BNN's loader is the same, and its likelihood scaling uses
 the true pair count (`num_datapoints = x_train.shape[0]`), so the posterior
 tempering is right at every level.
+
+**Dry run on the box, 2026-10-13: passed.** The user ran `DRY_RUN=1
+COND="r16 r32 r64 r128"` for all three families
+(`exp/dryrun_sparsity_{bnn,mr,pt}.txt`). Each file was checked against the
+module, command by command: **480 commands, 160 per family, 160 distinct output
+directories per family, 0 problems.** Every command carries exactly the
+module's arguments for its (variant, seed, condition), and no command names a
+validation file. `verify_experiment_sets.py` on the box ended **VERIFIED** with
+both digests equal to §13.1's (noise `40c78cb39e79f7e6`, reduction
+`01e7cc82ae61699f`), so the box trains on the same label arrays that were
+checked here.
+
+### 13.7 The IQL side for a condition (built 2026-10-13)
+
+**Sweep files: `phase2_sweeps.py exp --conds "r16 r32 r64 r128" [--write]`.**
+A condition's IQL sweep is the anchor's evaluation sweep with **one** change,
+`reward_model_root`. The generator renders each file from the same spec as the
+anchor's, at the anchor's stage-4 index from `phase2_winners.json`, seeds 1–10,
+and **asserts on the rendered text** that it differs from the anchor's
+evaluation file in `reward_model_root` and nothing else. Files go one directory
+down, `<family>_sweeps/<cond>/sweep_antmaze_<variant>[_cvar|_mean].yaml`, with
+the header `Lineage: EXPERIMENT <cond>, seeds 1-10, normalize_reward <k>.`
+
+| per level | files | IQL runs |
+|---|---|---|
+| BNN (CVaR, mean × 4 variants) | 8 | 80 |
+| snapshot ensemble (CVaR, mean × 4), reading the level's **MR** models | 8 | 80 |
+| MR best model | 4 | 40 |
+| PT | 4 | 40 |
+| **total** | **24** | **240** |
+
+**96 files written for the four sparsity levels**, 960 runs. The oracle has no
+reward model, so it has no condition sweeps: its anchor result is the reference
+at every level. For a SENSITIVITY-arm noise condition the generator writes only
+MR best-model and PT on medium_play (§11.3). `check` still reports 28/28 anchor
+files unchanged.
+
+**Queue: `stage4_queue.sh` accepts `<family>:<cond>/<sweep>@<cond>`**, for
+example `bnn:r32/sweep_antmaze_large_play_cvar@r32`. The tag is checked against
+the file's header exactly as `@stage4` and `@eval` are, so a sweep from the
+wrong level, or an anchor file, is refused before anything launches. Anchor
+items behave as before (tested with `DRY_RUN=1`: condition items pass, a wrong
+tag is refused, existing items unchanged).
+
+**Verifier: `production_readout.py <family> --cond <cond>`** (§13.4 item 3).
+It files a run under a condition by the basename of its output directory, so
+anchor and condition runs cannot be confused, and for each model it checks:
+
+- the three split paths against `experiment_conditions.expected_run_paths`
+  (training from the condition's file; test from the condition's file only for
+  MR and PT under noise; **validation always the base file**, and an altered
+  validation file is a named problem of its own);
+- the output directory's basename and the seed;
+- **every other key against the anchor winner**, through the same `check_run`
+  the anchor models passed, so anything else that differs is reported.
+
+It reports no seed-0 reproduction for a condition, because there is no seed 0.
+Checked on real anchor run configs: an unmodified anchor config read as `r32`
+gives exactly two problems (training file, output basename); the same config
+with the condition's two changes gives none. The anchor readouts are unchanged
+(MR 44, PT 44, BNN 44, all still VERIFIED).
+
+**Label caching: `experiment_conditions.py labels --conds r16 [--gpu N]`**
+(§13.4 item 5) prints one command per (condition, variant), to be run from
+`~/iqlpref`. Each covers that cell's ten models, names every run directory
+explicitly (a glob on `_eval_1*` would also match seed 10), and caches **both**
+levels the evaluation reads, α 0.95 and α 0.0, at `--n-samples -1
+--centre-draws`, the evaluation's own settings. The self-test asserts that the
+directories named are exactly the ones the launcher writes and that no anchor
+model is named. One command at a time per GPU: labelling peaks near 61 GB of
+host RAM per model at 128 chains (§4.3.129).
+
+**`register` ignores experiment sweeps silently.** A condition's sweep matches
+no anchor cell, by design, and is recognised by its `reward_model_root`
+(`…_<family>_<cond>_eval`). Any other sweep that matches nothing is still
+reported. The results notebook is the anchor's and holds no experiment cell.
+
+### 13.8 Launch schedule for Experiment 1 (planned 2026-10-13, not launched)
+
+**Measured on the anchor's production models** (wandb `_runtime`, 11 per cell):
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR, per model | 7 min | 9 min | 6 min | 10 min |
+| PT, per model | 24 min | 16 min | 11 min | 19 min |
+| BNN, 128 chains on 4 GPUs | 4.1 h | 4.1 h | 5.7 h | 4.1 h |
+
+The box has 6 GPUs and 255 cores. A BNN job holds GPUs 2–5 and ~128 cores, which
+leaves room for **4 IQL runs at once** (§4.3.145 §2). With no BNN job the box
+carries 10 (§4.3.156).
+
+| step | what | where | how long |
+|---|---|---|---|
+| 1 | MR, then PT, all four levels: 160 + 160 models | GPUs 0–1 | ~3.5 h + ~12 h |
+| 2 | verify them: `production_readout.py mr --cond r<N>`, then `pt` | analysis machine | minutes |
+| 3 | BNN, all four levels: 160 models, one at a time, level by level | GPUs 2–5 | **~30 days** |
+| 4 | IQL, level by level: MR ×4, PT ×4, ensemble ×8 | GPUs 0–1, 2 agents each | ~7 days per level |
+| 5 | per BNN cell (one level × one variant, 10 models, ~2 days): verify, cache labels (~3.3 h), queue its 2 sweeps behind step 4 | GPU 0 for caching | as cells finish |
+| 6 | when the BNN models are done: the remaining IQL runs at 10 at once | all GPUs | ~7 days |
+
+**BNN training is the critical path, and the IQL slots are never idle.** One
+level's 160 MR, PT and ensemble runs take ~7.2 days at 4 at once, and that
+level's BNN models take ~7.5 days to train, so each level's BNN sweeps are ready
+about when the queue reaches them. Over the ~30 days of BNN training the four
+slots finish ~670 of the 960 runs; the remaining ~290 take ~7 days at 10 at
+once. **About 37 days in all**, in line with §13.3's 5.5 weeks. The BNN time for
+16–128 pairs is **not measured**: the first model sets it.
+
+**Three rules for the launch, each from something that went wrong before:**
+
+- **Never queue a BNN sweep before its ten models are verified and cached.** The
+  queue's guard reads the sweep file, not the model directory. A sweep whose
+  models are missing would burn its ten grid points on crashes.
+- **Check the first model of each family while it is still training.** wandb
+  logs the config at the start of a run, so a wrong split path is visible
+  within minutes, before 159 more models repeat it.
+- **Dry-run every waiting queue on the box at the time it is launched**
+  (§4.3.170): the dry run reads the box's files, which is what will run.
+
+Steps 1–2 need nothing from the anchor's remaining sweeps except GPUs 0–1, which
+are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
+
+### 13.9 Still to build: the experiment's readout
+
+Not needed until a level is complete for all seven methods (~10 days after
+launch). **Most of the reading rule is already registered**, in Chapter 3's
+"Statistical and Reporting Protocol":
+
+- the **Wilcoxon signed-rank test over seed × level** is the significance test
+  for the superiority claims;
+- the **exact-enumeration paired bootstrap** on the per-seed difference, 95%,
+  resampling seeds and not seed × level cells, is the effect size, with the
+  paired-*t* interval beside it;
+- H1 is read as a **method × regime interaction**, not only cell by cell;
+- the H3 calibration diagnostics are read **first**.
+
+`results/eval_readout.py` already has the bootstrap, the completeness gate and
+the config audit, and they apply per level unchanged. To add: the Wilcoxon test
+across levels, the interaction term, and the per-level grouping. **What the
+chapter leaves open must be fixed with the user before any level is read**:
+which method pairs enter the Wilcoxon test, one- or two-sided, and how the four
+variants are combined or kept apart. Until that readout exists, a sweep check
+reports each experiment cell's own mean ± sd and nothing across families
+(§12.6, §12.8).

@@ -153,6 +153,70 @@ def cli_args(family, variant, seed, cond, data_root, out_parent="./exp/reward_le
     return args
 
 
+def expected_run_paths(family, variant, seed, cond):
+    """What a finished run's wandb config must show (handoff §11.6), as path
+    TAILS, so that the check does not depend on where the data root is mounted.
+
+    {"train_dataset": tail, "val_dataset": tail, "test_dataset": tail, "out": basename}
+    """
+    env = env_of(variant)
+    base = f"{env}/eval/seed_{seed}/{env}_pref_{{}}_{seed}.hdf5"
+    ov = split_overrides(family, variant, seed, cond, "")
+    want = {"val_dataset": base.format("val")}          # ALWAYS the base file
+    for part in ("train", "test"):
+        k = f"{part}_dataset"
+        want[k] = ov[k].lstrip("/") if k in ov else base.format(part)
+    want["out"] = f"{model_base(variant, family, cond)}_{seed}"
+    return want
+
+
+def check_run_paths(run_cfg, family, variant, seed, cond):
+    """[problems] comparing a run's logged paths with expected_run_paths."""
+    want = expected_run_paths(family, variant, seed, cond)
+    probs = []
+    for k in ("train_dataset", "val_dataset", "test_dataset"):
+        got = str(run_cfg.get(k) or "")
+        if not got.endswith("/" + want[k]) and got != want[k]:
+            probs.append(f"{k} is {got!r}, expected .../{want[k]}")
+    val = str(run_cfg.get("val_dataset") or "")
+    if "/noise/" in val or "/reduction/" in val:
+        probs.append(f"val_dataset is an ALTERED file ({val!r}); validation must be the base split")
+    out = os.path.basename(os.path.normpath(str(run_cfg.get(OUT_KEY[family]) or "")))
+    if out != want["out"]:
+        probs.append(f"{OUT_KEY[family]} basename is {out!r}, expected {want['out']!r}")
+    if run_cfg.get("seed") != seed:
+        probs.append(f"seed is {run_cfg.get('seed')!r}, expected {seed}")
+    return probs
+
+
+# The IQL evaluation reads a BNN model at two conservatism levels, CVaR at 0.95
+# and the posterior mean at 0.0, and alpha is cache-key material (§3.2.9).  Both
+# are cached in one pass, at the evaluation's own n_samples and centring.
+LABEL_ALPHAS = "0.95,0.0"
+
+
+def label_commands(variants, seeds, conds, gpu=0, models_parent="exp/reward_learning"):
+    """One caching command per (condition, variant), to be run from ~/iqlpref.
+
+    Each covers that cell's seeds, which is one IQL sweep's worth of models, and
+    names every run dir explicitly (no glob: `_eval_1*` would also match seed
+    10).  One command at a time per GPU: labelling peaks near 61 GB of host RAM
+    per model at 128 chains (§4.3.129)."""
+    out = []
+    for c in conds:
+        parse(c)
+        for v in variants:
+            for s in seeds:
+                check_allowed("bnn", v, s, c)
+            dirs = " ".join(f"--run-dir {models_parent}/{model_base(v, 'bnn', c)}_{s}" for s in seeds)
+            out.append(
+                f"CUDA_VISIBLE_DEVICES={gpu} OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 "
+                f"python gp_reward-priors/precompute_labels.py --env {env_of(v)} "
+                f"--alphas {LABEL_ALPHAS} --n-samples -1 --centre-draws --device cuda "
+                f"{dirs} > exp/precompute_{v}_{c}.log 2>&1")
+    return out
+
+
 def config_num_chains(family, variant):
     """num_chains from the BNN production config, or None for MR/PT."""
     if family != "bnn":
@@ -289,6 +353,35 @@ def selftest():
     except ValueError:
         pass
     assert config_num_chains("bnn", "large_play") == 128 and config_num_chains("mr", "large_play") is None
+    # what a run's logged config must show
+    w = expected_run_paths("bnn", "large_play", 3, "r32")
+    assert w == {"val_dataset": "antmaze-large-play-v2/eval/seed_3/antmaze-large-play-v2_pref_val_3.hdf5",
+                 "train_dataset": "antmaze-large-play-v2/eval/seed_3/reduction/"
+                                  "antmaze-large-play-v2_pref_train_3_32.hdf5",
+                 "test_dataset": "antmaze-large-play-v2/eval/seed_3/antmaze-large-play-v2_pref_test_3.hdf5",
+                 "out": "antmaze_large_play_bnn_r32_eval_3"}
+    B = "/home/x/gp/data/antmaze/"
+    good = {"seed": 3, "train_dataset": B + w["train_dataset"], "val_dataset": B + w["val_dataset"],
+            "test_dataset": B + w["test_dataset"],
+            "OUT_DIR": "./exp/reward_learning/antmaze_large_play_bnn_r32_eval_3"}
+    assert check_run_paths(good, "bnn", "large_play", 3, "r32") == []
+    base_train = B + "antmaze-large-play-v2/eval/seed_3/antmaze-large-play-v2_pref_train_3.hdf5"
+    for k, v in (("train_dataset", base_train),                              # full data, not reduced
+                 ("train_dataset", B + w["train_dataset"].replace("_32.", "_64.")),  # wrong level
+                 ("val_dataset", B + w["val_dataset"].replace("seed_3/", "seed_3/noise/")),
+                 ("test_dataset", B + w["test_dataset"].replace("seed_3", "seed_4")),
+                 ("OUT_DIR", "./exp/reward_learning/antmaze_large_play_bnn_eval_3"),  # the anchor's dir
+                 ("OUT_DIR", "./exp/reward_learning/antmaze_large_play_bnn_r64_eval_3"),
+                 ("seed", 4)):
+        assert check_run_paths(dict(good, **{k: v}), "bnn", "large_play", 3, "r32"), (k, v)
+    # noise: PRIMARY wants a corrupted test for MR, the base test for the BNN and for the oracle arm
+    wp = expected_run_paths("mr", "medium_play", 2, "n045")
+    wo = expected_run_paths("mr", "medium_play", 2, "n045o")
+    wb = expected_run_paths("bnn", "medium_play", 2, "n045")
+    assert "/noise/" in wp["test_dataset"] and "/noise/" not in wo["test_dataset"]
+    assert "/noise/" not in wb["test_dataset"] and wp["train_dataset"] == wo["train_dataset"]
+    assert all("/noise/" not in x["val_dataset"] for x in (wp, wo, wb))
+    assert wp["out"] != wo["out"]
     # preflight: missing files, an occupied directory, and the chain-budget trap
     with tempfile.TemporaryDirectory() as d:
         dr, mr = os.path.join(d, "data"), os.path.join(d, "models")
@@ -317,6 +410,32 @@ def selftest():
         assert probs and "no jobs" in probs[0]
         _, probs = preflight("mr", ["large_play"], [0], ["r16"], dr, mr)
         assert probs and "seeds 1-10 only" in probs[0]
+
+    # ---- label caching ----
+    lc = label_commands(VARIANTS, EVAL_SEEDS, SPARSITY, gpu=3)
+    assert len(lc) == 16 and len(set(lc)) == 16
+    one = lc[0]
+    assert one.startswith("CUDA_VISIBLE_DEVICES=3 ")
+    assert "--alphas 0.95,0.0 --n-samples -1 --centre-draws" in one
+    assert "--env antmaze-medium-play-v2" in one and one.endswith("> exp/precompute_medium_play_r16.log 2>&1")
+    assert one.count("--run-dir ") == 10 and "--glob" not in one
+    for s in EVAL_SEEDS:                                  # every seed's dir, by its §13.2 name
+        assert f"--run-dir exp/reward_learning/antmaze_medium_play_bnn_r16_eval_{s} " in one + " "
+    assert "_bnn_eval_" not in "".join(lc)                # never an anchor model
+    # the dirs named are exactly the ones the launcher writes
+    for c in SPARSITY:
+        for v in VARIANTS:
+            for s in EVAL_SEEDS:
+                want = expected_run_paths("bnn", v, s, c)["out"]
+                assert sum(f"/{want} " in x + " " for x in lc) == 1, want
+    for bad in (lambda: label_commands(VARIANTS, (0,), ("r16",)),          # seed 0
+                lambda: label_commands(VARIANTS, EVAL_SEEDS, ("r256",)),   # unknown level
+                lambda: label_commands(VARIANTS, EVAL_SEEDS, ("n01o",))):  # BNN has no sensitivity arm
+        try:
+            bad()
+            raise AssertionError("label_commands accepted a bad request")
+        except ValueError:
+            pass
     print("selftest OK")
     return 0
 
@@ -345,9 +464,23 @@ def main():
     a3.add_argument("--variants", default=" ".join(VARIANTS))
     a3.add_argument("--seeds", default=" ".join(str(s) for s in EVAL_SEEDS))
     a3.add_argument("--conds", required=True)
+    a4 = sub.add_parser("labels", help="print the BNN label-caching commands, one per "
+                                       "(condition, variant); run them from ~/iqlpref")
+    a4.add_argument("--variants", default=" ".join(VARIANTS))
+    a4.add_argument("--seeds", default=" ".join(str(s) for s in EVAL_SEEDS))
+    a4.add_argument("--conds", required=True)
+    a4.add_argument("--gpu", type=int, default=0)
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.cmd == "labels":
+        try:
+            print("\n".join(label_commands(a.variants.split(), [int(s) for s in a.seeds.split()],
+                                           a.conds.split(), a.gpu)))
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        return 0
     if a.cmd == "args":
         try:
             print("\n".join(cli_args(a.family, a.variant, a.seed, a.cond, a.data_root)))
