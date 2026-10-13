@@ -34,6 +34,19 @@
 #             Seed 0 is the hyperparameter-selection lineage; 1-10 are the
 #             evaluation lineages (see HANDOFF_HP_SELECTION.md).
 #   NUM_CHAINS  bnn chains per run (must match the config). Default: 8
+#   COND      experiment condition(s), space-separated.  Empty (the default) trains
+#             the production (anchor) models, exactly as before.
+#               r16 r32 r64 r128      Experiment 1, data sparsity
+#               n01 n02 n03 n04 n045  Experiment 2, label noise, PRIMARY arm
+#               n01o ... n045o        Experiment 2, SENSITIVITY arm (mr/pt, medium_play)
+#             A condition changes only the split files a run reads and the
+#             directory it writes, both defined in scripts_bnn/experiment_conditions.py
+#             (handoff sections 11 and 13).  With COND set, SEEDS defaults to 1..10
+#             (seed 0 is refused: nothing is re-selected under a condition), jobs
+#             run condition by condition, and a preflight checks every split file,
+#             every output directory and the BNN chain budget before anything starts.
+#   ALLOW_EXISTING=1  with COND: allow writing into a non-empty model directory.
+#   DRY_RUN=1   print every job's full command, in order, and launch nothing.
 #
 # Examples:
 #   ./train_rewards.sh mr                       # MR, 6 GPUs, 3 jobs/GPU (18 concurrent)
@@ -41,6 +54,9 @@
 #   ./train_rewards.sh bnn                      # BNN, 1 GPU/job (6 concurrent)
 #   ./train_rewards.sh bnn "0 1 2 3 4 5" 3      # BNN, 3 GPUs/job (2 concurrent, all 6 used)
 #   SEEDS="1 2 3" ./train_rewards.sh mr         # only seeds 1-3
+#   COND="r16 r32 r64 r128" NUM_CHAINS=128 ./train_rewards.sh bnn "2 3 4 5" 4
+#                                               # sparsity BNN models, seeds 1-10
+#   DRY_RUN=1 COND="r16" ./train_rewards.sh mr  # show the commands only
 set -euo pipefail
 
 # Needs bash >= 4.3 for `wait -n` and associative arrays (the job pool).
@@ -97,8 +113,14 @@ METHOD="${1:-}"
 GPU_LIST="${2:-0 1 2 3 4 5}"
 PACK_ARG="${3:-}"
 VARIANTS="${VARIANTS:-medium_play medium_diverse large_play large_diverse}"
-SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10}"
+COND="${COND:-}"     # experiment condition(s); empty = the production (anchor) models
+if [[ -n "$COND" ]]; then
+  SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10}"   # no seed-0 lineage under a condition
+else
+  SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10}"
+fi
 NUM_CHAINS="${NUM_CHAINS:-8}"
+COND_PY="scripts_bnn/experiment_conditions.py"
 
 case "$METHOD" in
   bnn) SCRIPT="scripts_bnn/run_bnn_training_antmaze_eval.py"; CFG_DIR="scripts_bnn"; CFG_SUF="_bnn_antmaze_eval.yaml" ;;
@@ -149,7 +171,7 @@ abs_meas() {  # $1 = config file
 }
 
 # --- enumerate jobs (and preflight the measurement set for BNN) ---
-JOBS=()   # each element: "variant seed"
+JOBS=()   # each element: "cond variant seed"; cond is "-" for the anchor models
 MISSING_MEAS=()
 SUPERSEDED=()
 for v in $VARIANTS; do
@@ -161,7 +183,7 @@ for v in $VARIANTS; do
   grep -q 'SUPERSEDED-ROUND1' "$cfg" && SUPERSEDED+=("$v -> $cfg")
   meas=$(abs_meas "$cfg")
   [[ -n "$meas" && ! -f "$meas" ]] && MISSING_MEAS+=("$v -> $meas")
-  for s in $SEEDS; do JOBS+=("$v $s"); done
+  for s in $SEEDS; do JOBS+=("- $v $s"); done
 done
 if (( ${#SUPERSEDED[@]} > 0 )) && [[ "${ALLOW_SUPERSEDED:-0}" != "1" ]]; then
   echo "ERROR: config(s) marked SUPERSEDED-ROUND1 -- refusing to train:" >&2
@@ -179,6 +201,24 @@ if (( ${#MISSING_MEAS[@]} > 0 )); then
   echo "of data/, are gitignored -- copy them to the box (or set measurement_dataset)." >&2
   exit 1
 fi
+if [[ -n "$COND" ]]; then
+  # Experiment conditions: the job list, its order and every check come from
+  # experiment_conditions.py, so the launcher and the verifier cannot disagree.
+  pf=("$COND_PY" preflight "$METHOD" --variants "$VARIANTS" --seeds "$SEEDS"
+      --conds "$COND" --data-root "${ROOT}/data/antmaze"
+      --models-root "${ROOT}/../exp/reward_learning" --num-chains "$NUM_CHAINS")
+  [[ "${ALLOW_EXISTING:-0}" == "1" ]] && pf+=(--allow-existing)
+  echo "Condition(s): $COND"
+  if ! "$PY" "${pf[@]}"; then
+    echo "ERROR: experiment preflight failed -- nothing was launched." >&2
+    exit 1
+  fi
+  JOBS=()
+  while read -r c v s; do
+    [[ -n "$c" ]] && JOBS+=("$c $v $s")
+  done < <("$PY" "$COND_PY" jobs "$METHOD" --variants "$VARIANTS" --seeds "$SEEDS" --conds "$COND")
+  (( ${#JOBS[@]} > 0 )) || { echo "ERROR: no jobs for COND='$COND'" >&2; exit 1; }
+fi
 echo "Root (cwd): $ROOT   data_root: ${ROOT}/data/antmaze"
 echo "Method: $METHOD   variants: $VARIANTS   seeds: $SEEDS"
 echo "Total jobs: ${#JOBS[@]}   slots: $NSLOTS   log dir: $LOGDIR"
@@ -188,24 +228,40 @@ echo
 declare -A SLOT_PID=()      # slot index -> pid of running job (unset if free)
 declare -A PID_SLOT=()      # pid -> slot index
 
-launch() {  # $1=slot_index  $2=variant  $3=seed
-  local slot="$1" v="$2" s="$3"
-  local gpus="${SLOTS[$slot]}"
+# Fill CMD (the training command) and LOGF for one job.  $1=cond  $2=variant  $3=seed
+CMD=(); LOGF=""
+job_cmd() {
+  local c="$1" v="$2" s="$3"
   # Absolute path: pyrallis opens config_path relative to the process CWD, so an
   # absolute path makes config loading independent of where the run happens.
   local cfg="${ROOT}/${CFG_DIR}/antmaze_${v}${CFG_SUF}"
-  local logf="$LOGDIR/${v}_seed${s}.log"
-  echo "[gpu ${gpus}] ${METHOD} ${v} seed=${s}  -> ${logf}"
+  LOGF="$LOGDIR/${v}_seed${s}.log"
   # Absolute --data_root as well: the configs build train/val/test paths from it
   # (default "data/antmaze"), and pyrallis/h5py open those relative to the CWD.
   # Passing the absolute root makes the data paths resolve independent of CWD.
   # Same for the BNN measurement_dataset (empty flag for MR/PT, which lack it).
   local meas; meas=$(abs_meas "$cfg")
   local -a mflag=(); [[ -n "$meas" ]] && mflag=(--measurement_dataset "$meas")
-  CUDA_VISIBLE_DEVICES="$gpus" nohup "$PY" "$SCRIPT" \
-      --config_path "$cfg" --data_root "${ROOT}/data/antmaze" "${mflag[@]}" \
-      --seed "$s" "${EXTRA_ARGS[@]}" \
-      > "$logf" 2>&1 &
+  # An experiment condition adds the split overrides and the output directory,
+  # last on the command line.  The anchor models (cond "-") add nothing.
+  local -a cargs=()
+  if [[ "$c" != "-" ]]; then
+    mapfile -t cargs < <("$PY" "$COND_PY" args "$METHOD" "$v" "$s" "$c" --data-root "${ROOT}/data/antmaze")
+    (( ${#cargs[@]} > 0 )) || { echo "ERROR: no arguments for condition $c ($v seed $s)" >&2; exit 1; }
+    LOGF="$LOGDIR/${c}/${v}_seed${s}.log"
+  fi
+  CMD=("$PY" "$SCRIPT" --config_path "$cfg" --data_root "${ROOT}/data/antmaze" "${mflag[@]}"
+       --seed "$s" "${EXTRA_ARGS[@]}" "${cargs[@]}")
+}
+
+launch() {  # $1=slot_index  $2=cond  $3=variant  $4=seed
+  local slot="$1" c="$2" v="$3" s="$4"
+  local gpus="${SLOTS[$slot]}"
+  job_cmd "$c" "$v" "$s"
+  local logf="$LOGF"
+  mkdir -p "$(dirname "$logf")"
+  echo "[gpu ${gpus}] ${METHOD} ${c/#-/anchor} ${v} seed=${s}  -> ${logf}"
+  CUDA_VISIBLE_DEVICES="$gpus" nohup "${CMD[@]}" > "$logf" 2>&1 &
   local pid=$!
   SLOT_PID[$slot]=$pid
   PID_SLOT[$pid]=$slot
@@ -222,6 +278,18 @@ free_slot() {  # echo index of a free slot, or nothing
   return 0
 }
 
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+  echo "DRY RUN -- nothing is launched.  ${#JOBS[@]} job(s), ${NSLOTS} at a time, in this order:"
+  for j in "${JOBS[@]}"; do
+    read -r c v s <<< "$j"
+    job_cmd "$c" "$v" "$s"
+    printf '  [%s %s seed %s] ' "${c/#-/anchor}" "$v" "$s"
+    printf '%q ' "${CMD[@]}"
+    printf '> %s\n' "$LOGF"
+  done
+  exit 0
+fi
+
 FAILED=0
 DONE=0
 ji=0
@@ -231,8 +299,8 @@ while (( ji < NJOBS )) || (( ${#PID_SLOT[@]} > 0 )); do
   while (( ji < NJOBS )); do
     slot=$(free_slot)
     [[ -z "$slot" ]] && break
-    read -r v s <<< "${JOBS[$ji]}"
-    launch "$slot" "$v" "$s"
+    read -r c v s <<< "${JOBS[$ji]}"
+    launch "$slot" "$c" "$v" "$s"
     ji=$(( ji + 1 ))
   done
   # all slots busy (or no jobs left to fill) -> block until one finishes

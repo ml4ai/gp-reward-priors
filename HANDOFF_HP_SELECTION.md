@@ -20197,6 +20197,10 @@ results is not available (§9, §11.8).
 
 ### 13.4 To build (no decision needed)
 
+> **Status 2026-10-13.** Item 1 (the §12.5 readout) is done, §4.3.172. **Item 2
+> (the reward-model launcher) is built, §13.6, and awaits a dry run on the
+> box.** Items 3–5 are next, in that order.
+
 1. **The §12.5 readout** (exact-enumeration paired bootstrap, completeness gate,
    config audit). Owed regardless (§12.8), and the same paired machinery serves
    both experiments, per level.
@@ -20238,3 +20242,57 @@ Chapter 3's "32 ⊂ 64 ⊂ 128 ⊂ ⋯" should be edited to list **16**, 32, 64,
 3. **Whether the cost in §13.3 is accepted as designed**, or the design is
    trimmed now, before any result exists. The BNN's 128 chains are frozen by
    §11.1 and are not a candidate.
+
+### 13.6 The reward-model launcher for a condition (built 2026-10-13)
+
+**One definition of a condition: `scripts_bnn/experiment_conditions.py`.** A
+condition changes exactly two things about a training run, the split files it
+reads and the directory it writes, and both are defined there and nowhere else.
+The launcher, the verifier and the IQL sweep generator all read it.
+
+| condition | `train_dataset` | `test_dataset` | `val_dataset` |
+|---|---|---|---|
+| `r16` `r32` `r64` `r128` | `reduction/…_pref_train_<s>_<N>.hdf5` | base (not passed) | base (not passed) |
+| `n01` … `n045`, MR / PT | `noise/…_pref_train_<s>_<pp>.hdf5` | `noise/…_pref_test_<s>_<pp>.hdf5` | base (not passed) |
+| `n01` … `n045`, BNN | same training file | base (not passed) | base (not passed) |
+| `n01o` … `n045o` (MR / PT, medium_play) | same training file | base (not passed) | base (not passed) |
+
+Output: `./exp/reward_learning/antmaze_<variant>_<family>_<cond>_eval`, to which
+the script appends `_<seed>` (§13.2). The path is relative, as in the production
+configs, so it lands in `~/iqlpref/exp/reward_learning/` where IQL reads.
+
+**What it refuses, each one self-tested:**
+
+- an unknown condition, or a level outside the registered ones (`r256`, `n05`);
+- **seed 0**, or any seed outside 1–10 (§11.1: no selection lineage here);
+- the sensitivity arm for the BNN, or on any variant but medium_play (§11.3);
+- **a validation override of any kind**: the module has no code path that
+  produces one, and the self-test asserts that no condition for any family
+  names a `_pref_val_` file (§11.4's ⛔);
+- a missing split file;
+- **a non-empty output directory** (a run saves its weights only at the end, so
+  a crashed run would leave the old model looking complete, §4.3.130 §3);
+- for the BNN, **`NUM_CHAINS` different from the production config's 128**. The
+  launcher's own default is 8, which is how a mis-budgeted model would otherwise
+  be trained without any error.
+
+**`train_rewards.sh` takes `COND`.** With `COND` empty it behaves as before. With
+it set: `SEEDS` defaults to 1–10; the job list, its order and the preflight come
+from the module; each job's command gains the module's arguments, last on the
+line; logs go to `exp/train_logs/<method>/<cond>/`. Jobs run **condition, then
+variant, then seed**, so one (condition, variant) cell, which is one IQL sweep's
+worth of models, completes before the next starts. **New `DRY_RUN=1`** prints
+every job's full command and launches nothing.
+
+**Checked on the analysis machine:** the module's self-test; its preflight
+against the real local data for all three families at the four sparsity levels
+(160 jobs each, no problems) and for the noise PRIMARY arm; the launcher's
+syntax. **Not checked here: the launcher's execution.** It needs bash ≥ 4.3 and
+macOS has 3.2, so the dry run on the box is the first real execution of the
+changed dispatch path. Read its output before launching anything.
+
+**The trainers need no change for small training sets.** MR and PT build their
+loaders without `drop_last`, so 16 pairs under a batch size of 64 is one full
+batch per epoch. The BNN's loader is the same, and its likelihood scaling uses
+the true pair count (`num_datapoints = x_train.shape[0]`), so the posterior
+tempering is right at every level.
