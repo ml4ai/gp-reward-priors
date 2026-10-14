@@ -20759,3 +20759,66 @@ unchanged by a per-draw constant offset; end to end, informative uncertainty
 PASSes, uninformative FAILs, a missing seed is INCOMPLETE, a seed with no
 error is UNDEFINED). Chapter 3 states the rule (dissertation commit `2dfb208`,
 local, for the user to push).
+
+### 13.11 Experiment 2's reading rule and the gate on the noise axis — FIXED 2026-10-14 (user), before any label-noise result existed
+
+**When it was fixed.** 2026-10-14, after §13.9 and §13.10. As far as this
+handoff records, no Experiment 2 run had been launched (§13.5 orders Experiment 1
+first), so **the rule is blind to every label-noise result it will read.**
+
+**Why it was needed.** §13.9 fixes H1's test on the sparsity axis only: its gap
+averages over r16–r128 and its slope is on log2(pairs). Chapter 3's H1, its
+pre-registration row, and the proposal all claim the noise axis too ("the gap
+widens as labels get scarcer **or noisier**"), so the noise axis needed its own
+rule before any of its numbers exist. The user chose each item on the
+recommended option. Chapter 3 states all of it (dissertation commit `2a7234f`,
+pushed).
+
+| question | decision |
+|---|---|
+| construction | **the same as §13.9**, on the flip fraction instead of the pair count |
+| comparators | **MR best-model, PT, BNN mean**, as §13.9. **The two ensembles are not H1 comparators** on either axis: exact intervals, pooled and per variant, no test (also stated in Chapter 3 now) |
+| verdicts | **one per axis.** H1 claims each axis, so sparsity and noise are read and reported separately; **no verdict pools them**, so nothing is corrected across axes |
+| H3 gate scope | **every flip fraction too**, with validation uncorrupted |
+
+**The rule for the noise axis, in §13.9's terms:**
+
+- **Gap:** d = BNN CVaR − comparator, paired by (variant, seed, p), last-10
+  statistic, 200 points per run, primary arm (§11: training and test labels
+  flipped at the same p, validation uncorrupted).
+- **H1a-noise, the gap:** unit = mean of d over p ∈ {0.1, 0.2, 0.3, 0.4, 0.45}
+  (§11.1's levels). The anchor (p = 0, full data) is not in it, as on the
+  sparsity axis.
+- **H1b-noise, the widening:** unit = per-seed OLS slope of d on **p itself**
+  (linear, not logged) over all six points, p = 0 included. H1 predicts a
+  **positive** slope: the gap grows as p rises. The levels are not evenly
+  spaced (0.4 to 0.45), which OLS handles as it stands.
+- **Test, effect size, conjunction, completeness gates:** exactly §13.9's: the
+  exact one-sided Wilcoxon at α = 0.025 on 40 (variant, seed) units, the
+  exact stratified seed bootstrap, SUPPORTED per comparator iff H1a-noise and
+  H1b-noise both reject, H1 on the noise axis in full iff SUPPORTED against all
+  three, and no test until both arms' 4 variants × 6 points are complete and
+  clean.
+- **Sensitivity arm** (§11: clean selection split, medium-play, MR and PT
+  only): **descriptive only**, reported beside the primary result as the
+  condition more favourable to the baselines. It enters no test.
+
+**The H3 gate on the noise axis (extends §13.10's unit):** unit = **variant ×
+level** now includes each flip fraction. Data, error, spread, penalty and the
+pass rule are §13.10's unchanged. Validation is always the base file, which
+`calibration_gate.py` already enforces by refusing a `noise/` validation path.
+The BNN at each p is the one trained on that p's flipped labels. A failing unit
+makes exactly that cell's policy numbers conditional. Each noise level's gate is
+read when that level's BNN models exist, and before its BNN IQL results are read.
+
+**To build (no decision needed):**
+
+- `results/exp_readout.py`: a noise-axis mode, with x = p on a linear scale,
+  units over the five flip fractions, and the anchor shared with Experiment 1.
+- `scripts_bnn/calibration_gate.py`: accept the noise levels as units; nothing
+  else changes.
+
+**Do-NOTs, as §13.9's:** do not change any of the above after a label-noise IQL
+result has been seen; do not pool the two axes into one verdict; do not add or
+drop a comparator; read the H3 gate for a noise level before that level's BNN
+policy results.
