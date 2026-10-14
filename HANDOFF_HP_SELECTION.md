@@ -20348,6 +20348,11 @@ results is not available (§9, §11.8).
 > the label-caching commands) are §13.7. The launch schedule is §13.8.
 > **Nothing has been launched.** Still to build, and not needed before the
 > first results exist: the experiment's readout (§13.9).
+>
+> **Update 2026-10-14:** the experiment's readout is built
+> (`results/exp_readout.py`) and its rule fixed before any result (§13.9).
+> Experiment 1 is running (§13.8). Still to build: the H3 calibration-gate
+> readout, which Chapter 3 says is read first.
 
 1. **The §12.5 readout** (exact-enumeration paired bootstrap, completeness gate,
    config audit). Owed regardless (§12.8), and the same paired machinery serves
@@ -20609,25 +20614,76 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > were running undisturbed. Expected starts: `s1` ~15:35, `s2` ~18:00 UTC
 > (the anchor runs are taking ~6.0 h each).
 
-### 13.9 Still to build: the experiment's readout
+### 13.9 Experiment 1's reading rule — FIXED 2026-10-14 (user), before any sparsity result existed
 
-Not needed until a level is complete for all seven methods (~10 days after
-launch). **Most of the reading rule is already registered**, in Chapter 3's
-"Statistical and Reporting Protocol":
+**When it was fixed.** On 2026-10-14 ~17:10 UTC. At that time the only
+sparsity numbers that existed were reward-model validation losses (§4.3.175,
+within family). No sparsity IQL run had finished; the first had started 15:31
+UTC. **The rule is blind to every policy result it will read.**
 
-- the **Wilcoxon signed-rank test over seed × level** is the significance test
-  for the superiority claims;
-- the **exact-enumeration paired bootstrap** on the per-seed difference, 95%,
-  resampling seeds and not seed × level cells, is the effect size, with the
-  paired-*t* interval beside it;
-- H1 is read as a **method × regime interaction**, not only cell by cell;
-- the H3 calibration diagnostics are read **first**.
+**Where it comes from.** Chapter 3 registers most of it: H1's text (BNN + CVaR
+"beats both point-estimate reward models and the BNN posterior mean", and "the
+gap widens as labels get scarcer"), its falsifier ("no gap, or a gap that does
+not widen"), the Wilcoxon test for superiority claims, the exact paired
+bootstrap resampling seeds, and the method × regime interaction. **The user
+decided the four details the chapter left open**, each on the recommended
+option:
 
-`results/eval_readout.py` already has the bootstrap, the completeness gate and
-the config audit, and they apply per level unchanged. To add: the Wilcoxon test
-across levels, the interaction term, and the per-level grouping. **What the
-chapter leaves open must be fixed with the user before any level is read**:
-which method pairs enter the Wilcoxon test, one- or two-sided, and how the four
-variants are combined or kept apart. Until that readout exists, a sweep check
-reports each experiment cell's own mean ± sd and nothing across families
-(§12.6, §12.8).
+| question | decision |
+|---|---|
+| sidedness | **one-sided, in H1's direction, at α = 0.025** (what a two-sided 0.05 test spends in that direction) |
+| test unit | **one (variant, seed)**: the gap averaged over the four sparse levels. Not seed × level: levels within a seed share nested data. Chapter 3's "over seed × level" is changed to match |
+| variants | **pooled**: one test per comparator over 40 units (each variant's seed is a separate data draw). Per-variant results are intervals only, with no test |
+| interaction | **per-seed OLS slope of the gap on log2(pairs)** over 16, 32, 64, 128 and the full train-pool; H1 predicts a negative slope; the same one-sided test on the 40 slopes |
+
+**The rule, as `results/exp_readout.py` implements it:**
+
+- **Gap:** d = BNN CVaR − comparator, paired by (variant, seed, level), last-10
+  statistic, 200 points per run. **Comparators: MR best-model, PT, BNN mean**,
+  each tested separately.
+- **H1a, the gap:** unit = mean of d over r16–r128. The anchor is not in it; §12
+  read the anchor, as non-inferiority.
+- **H1b, the widening:** unit = slope of d on log2(pairs) over all five points;
+  the full point is each variant's train-pool (358, 498, 254, 514 pairs).
+- **Test:** Wilcoxon signed-rank on the 40 units, one-sided (H1a: > 0; H1b:
+  < 0), α = 0.025, **exact**: zeros dropped, midranks for ties, the exact
+  sign-flip distribution given those ranks (dynamic programming over doubled
+  ranks). No normal approximation.
+- **Effect size:** pooled mean with a 95% bootstrap that resamples seeds within
+  each variant, **computed exactly**: each variant's 92,378 count vectors, the
+  four distributions convolved. The gap units sit on an exact lattice (scores
+  are multiples of 0.001), so its interval is exact; slopes are put on a 1e-6
+  grid, which moves an endpoint by at most 5e-7.
+- **Per comparator: SUPPORTED** iff H1a **and** H1b reject; otherwise **NOT
+  SUPPORTED**, naming the part that did not. This is Chapter 3's falsifier read
+  literally.
+- **H1 as stated holds in full** iff SUPPORTED against all three. A conjunction
+  of tests each at 0.025 is a valid 0.025 test of the conjunction
+  (intersection–union), so there is no multiplicity correction. Partial support
+  is reported as partial. *This conjunction is read from H1's wording, not one
+  of the four decisions; it is the user's to overturn before results exist.*
+- **Gates (§12.5, unchanged):** every cell complete (10 seeds × 200 points) and
+  config-audited, the anchor's included. A comparator's test runs only when
+  both arms' cells, 4 variants × 5 levels each, are complete and clean. The
+  readout cannot print a partial test.
+- **Descriptive only:** the per-level curves (each level's paired exact
+  interval, the ensemble included) and the per-variant intervals of the gap
+  and slope.
+
+**Do-NOTs, added to §9's spirit:**
+
+- Do not change any of the above after a sparsity IQL result has been seen.
+- Do not re-select anything under a condition because of a result (§11.1).
+- Do not combine comparators other than by the conjunction above; do not drop a
+  comparator.
+- The H3 calibration gate is read **first** (Chapter 3). Its tool is not built
+  yet: it reads reward models, not policies, and is the next item.
+
+**Checked:** the self-test asserts the signed-rank p-value against brute force
+over all 2ⁿ sign flips (n up to 9, with ties and zeros) and against scipy's
+exact test (n = 40); the stratified interval against §12's for one group and
+against brute force for two; determinism and shift-equivariance; and end to end
+on synthetic worlds: a widening gap is SUPPORTED against all three, a uniform
+gap is NOT SUPPORTED (no widening), and one incomplete cell blocks exactly its
+comparator. **Chapter 3 was edited to state the rule** (dissertation commits
+`ce7c618`, `f50331b`, not pushed).
