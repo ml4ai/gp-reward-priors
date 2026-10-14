@@ -20549,6 +20549,14 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > all 96 match no entry of the anchor spec, so `register` and
 > `results/eval_readout.py` skip them, and the 28 anchor files still match
 > exactly their own cell.
+>
+> 🔄 **Queued 2026-10-14 ~03:00 UTC (user), after a pull, the live-queue check
+> and a dry run on the box:** waiter `s1` (GPUs 2–3, behind queue 8):
+> `mr:r16/sweep_antmaze_medium_play@r16`; waiter `s2` (GPUs 0–1, behind
+> queue 9): the other three MR r16 sweeps and the eight ensemble r16 sweeps.
+> At 03:06 UTC no sparsity sweep had started early, and the three anchor sweeps
+> were running undisturbed. Expected starts: `s1` ~15:35, `s2` ~18:00 UTC
+> (the anchor runs are taking ~6.0 h each).
 
 ### 13.9 Still to build: the experiment's readout
 
