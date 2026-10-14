@@ -15024,6 +15024,51 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.175 Sweep check, 2026-10-14 16:32 UTC — 26 of 28 cells; all 320 sparsity MR and PT models VERIFIED; the first sparsity IQL sweep is running and correct
+
+#### 1. Two anchor cells finished
+
+| cell | sweep | idx | last-10 (mean ± sd, n) | last-20 | legacy max |
+|---|---|---|---|---|---|
+| ensemble large_play mean | `n56v005j` | 3 | **0.440 ± 0.064** (10) | 0.444 ± 0.055 | 0.580 ± 0.047 |
+| oracle medium_play, stage-4 index | `79ke5lc3` | 3 | **0.519 ± 0.086** (10) | 0.522 ± 0.085 | 0.658 ± 0.051 |
+
+Both registered: **26 of 28 cells.** Still running: ensemble large_diverse
+CVaR `ub50fhd3` (8 of 10, seeds 9–10 at ~775k, ends ~17:00 UTC) and ensemble
+large_diverse mean `gpyiq4w5` (queue 7, 2 agents, 4 of 10, ends ~10-15
+10:00 UTC). No crashed or missing run.
+
+**The oracle on medium_play, by its own two indices.** The headline is the
+stage-4 index, 3, as the rule fixes (§4.3.157, §4.3.163; "keep the oracle rule
+as written", user). At seeds 1–10 it scores **0.519 ± 0.086**; the conventional
+index 1 (`nv89vprk`) scored **0.648 ± 0.048** on the same seeds. Stage 4 had
+separated them by 0.005 at seed 0 (0.660 against 0.655, a three-way tie within
+noise), so seed 0 did not predict the evaluation's ordering here. Both are
+reported, as planned, and the notebook's end-of-file chart shows them side by
+side. This is a fact about the oracle's normalization, not a comparison with
+any learned reward. **Nothing is re-selected on it.** For §7.6: the oracle
+headline on medium_play is the lower of its two indices, and the text must say
+so wherever a learned reward is set against it.
+
+#### 2. Experiment 1: all 320 MR and PT models VERIFIED
+
+`production_readout.py pt --cond <level>` reads **VERIFIED** at all four
+levels, as MR did (§13.8). Descriptive, within PT only: mean validation loss at
+r16 is **0.52–0.71** across the variants, and **above log 2 = 0.693 on
+large_play (0.709)**, so the 16-pair PT models there predict held-out
+preferences no better than a coin on average. It falls with the pair count on
+every variant (large_play 0.71 → 0.65 → 0.50 → 0.35). This is the regime the
+experiment exists to measure; it is reported, not acted on.
+
+#### 3. The first sparsity IQL sweep
+
+Waiter `s1` fired at **15:31 UTC**, when queue 8 ended: **`edf1tdr4`**, MR
+best-model, medium_play, r16, four agents on GPUs 2–3. Checked against its
+generated file: **identical parameters**, program `iql_eval.py`, index 0 (MR
+medium_play's stage-4 winner). Each run resolves its own seed's model
+(`…/antmaze_medium_play_mr_r16_eval_<seed>`). It matches no anchor cell, and
+`register` skipped it without comment, as built. `s2` waits on queue 9.
+
 ### 4.3.174 Sweep check, 2026-10-13 23:54 UTC — 24 of 28 cells, and ALL EIGHT §12 verdicts are read: eight NOT BEHIND
 
 #### 1. Two cells finished
@@ -17067,10 +17112,10 @@ is given for disclosure only. Fill a row with
 | ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
 | ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
 | ensemble large_play cvar | 3 | `ncb3zdmx` | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 | 2026-10-13 |
-| ensemble large_play mean | 3 | `n56v005j` | | | | running (queue 8), seeds 1–4 at step ~370k at 10-13 23:54 UTC |
-| ensemble large_diverse cvar | 3 | `ub50fhd3` | | | | running (queue 9), started 10-13 23:59 UTC |
-| ensemble large_diverse mean | 3 | — | | | | queue 7 |
-| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7), 8 of 10 at 10-13 23:54 UTC |
+| ensemble large_play mean | 3 | `n56v005j` | **0.440 ± 0.064** (10) | 0.444 ± 0.055 | 0.580 ± 0.047 | 2026-10-14 |
+| ensemble large_diverse cvar | 3 | `ub50fhd3` | | | | running (queue 9), 8 of 10 at 10-14 16:32 UTC |
+| ensemble large_diverse mean | 3 | `gpyiq4w5` | | | | running (queue 7, 2 agents), 4 of 10 at 10-14 16:32 UTC |
+| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | **0.519 ± 0.086** (10) | 0.522 ± 0.085 | 0.658 ± 0.051 | 2026-10-14 |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
 | **oracle** large_play | 1 (stage-4 winner) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
