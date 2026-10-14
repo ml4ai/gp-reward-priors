@@ -33,8 +33,9 @@ THE RULE (fixed 2026-10-14 by the user, before any calibration number existed)
              equal-width bins) and the reliability table, for the predictive
              preference and for the deployed CVaR preference.
 
-Two steps:
+Three steps:
   measure   ON THE BOX (needs the chains): one JSON per model of per-pair arrays.
+            Units: "anchor", r16 ... r128 (§13.10), n01 ... n045 (primary arm, §13.11).
       python scripts_bnn/calibration_gate.py measure --cond anchor --device cuda
       python scripts_bnn/calibration_gate.py measure --cond r16 --device cuda
   check     here (needs wandb): each measurement reproduces the metrics its
@@ -69,6 +70,11 @@ ANCHOR = "anchor"
 
 
 def model_dir_name(variant, cond, seed):
+    """The BNN model directory for a unit.  cond is "anchor", a sparsity level
+    (r16 ... r128) or a noise level of the PRIMARY arm (n01 ... n045, §13.11);
+    the sensitivity arm (n01o ...) has no BNN of its own and is refused."""
+    if cond != ANCHOR:
+        E.check_allowed("bnn", variant, seed, cond)
     return f"{E.model_base(variant, 'bnn', None if cond == ANCHOR else cond)}_{seed}"
 
 
@@ -418,6 +424,13 @@ def selftest():
     # names
     assert model_dir_name("large_play", ANCHOR, 3) == "antmaze_large_play_bnn_eval_3"
     assert model_dir_name("large_play", "r16", 3) == "antmaze_large_play_bnn_r16_eval_3"
+    assert model_dir_name("medium_play", "n045", 10) == "antmaze_medium_play_bnn_n045_eval_10"
+    for bad in (("medium_play", "n02o", 1), ("large_play", "r256", 1), ("large_play", "r16", 0)):
+        try:
+            model_dir_name(*bad)
+            raise AssertionError(f"accepted {bad}")
+        except ValueError:
+            pass
     print("selftest OK")
     return 0
 

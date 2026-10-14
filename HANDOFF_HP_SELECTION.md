@@ -20918,12 +20918,19 @@ The BNN at each p is the one trained on that p's flipped labels. A failing unit
 makes exactly that cell's policy numbers conditional. Each noise level's gate is
 read when that level's BNN models exist, and before its BNN IQL results are read.
 
-**To build (no decision needed):**
+**To build (no decision needed):** ✅ **both BUILT 2026-10-14 ~23:30 UTC**, with
+no noise data in existence.
 
 - `results/exp_readout.py`: a noise-axis mode, with x = p on a linear scale,
   units over the five flip fractions, and the anchor shared with Experiment 1.
+  → **`--axis noise`**. H1b is one-sided `greater` on this axis (`less` on
+  sparsity). The sparsity readout is unchanged to the digit on the same
+  synthetic data. Self-test: a gap growing with p is SUPPORTED against all
+  three comparators; a gap shrinking with p is NOT SUPPORTED (no widening);
+  noise cells read on the sparsity axis are NOT READ.
 - `scripts_bnn/calibration_gate.py`: accept the noise levels as units; nothing
-  else changes.
+  else changes. → `n01` … `n045` accepted; the sensitivity arm (`n01o` …)
+  refused, since the BNN has none (§11.3). Self-tested.
 
 **Do-NOTs, as §13.9's:** do not change any of the above after a label-noise IQL
 result has been seen; do not pool the two axes into one verdict; do not add or
