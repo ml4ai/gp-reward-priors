@@ -20529,6 +20529,27 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > To check runs that are still training, compare their logged configs directly
 > (`expected_run_paths`, `check_run`), as was done here.
 
+> ✅ **MR: all 160 sparsity models VERIFIED, 2026-10-14 02:10 UTC.**
+> `production_readout.py mr --cond <level>` reads **VERIFIED** at r16, r32, r64
+> and r128: one finished run per (variant, seed), every run the anchor winner's
+> configuration on the level's split files and directory, `reload_check_ok` = 1.
+> Training took **1 h 50 min** for the 160, against the ~3.5 h estimated from
+> the anchor's run times. Descriptive only: mean validation loss falls with the
+> pair count on every variant (medium_play 0.42 → 0.36 → 0.31 → 0.28 from r16
+> to r128), which is the direction more data should move it.
+>
+> **PT started 01:37 UTC.** The first 11 PT runs (r16, medium_play seeds 1–10,
+> medium_diverse seed 1) pass the same two checks, 7 of them already finished.
+>
+> **The MR and ensemble IQL sweeps need only MR models, so r16's twelve can be
+> queued now**, behind the anchor's queues: one on GPUs 2–3 (free ~10-14 15:20
+> UTC, ending about when queue 7 does, so it does not delay the BNN launch) and
+> eleven on GPUs 0–1 (free ~10-14 17:40 UTC). PT's four are queued after its
+> models verify. **No sparsity sweep file can be taken for an anchor cell:**
+> all 96 match no entry of the anchor spec, so `register` and
+> `results/eval_readout.py` skip them, and the 28 anchor files still match
+> exactly their own cell.
+
 ### 13.9 Still to build: the experiment's readout
 
 Not needed until a level is complete for all seven methods (~10 days after
