@@ -15024,6 +15024,76 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.174 Sweep check, 2026-10-13 23:54 UTC — 24 of 28 cells, and ALL EIGHT §12 verdicts are read: eight NOT BEHIND
+
+#### 1. Two cells finished
+
+| cell | sweep | idx | last-10 (mean ± sd, n) | last-20 | legacy max |
+|---|---|---|---|---|---|
+| ensemble large_play CVaR | `ncb3zdmx` | 3 | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 |
+| PT large_diverse | `03tyo1up` | 0 | **0.169 ± 0.136** (10) | 0.171 ± 0.129 | 0.290 ± 0.148 |
+
+Both registered (`register --write`): **24 of 28 cells.** PT large_diverse has
+two seeds near zero (seed 6 at 0.008, seed 10 at 0.045). They are kept, as PT
+medium_diverse's seed 10 was (§7.6): a seed is a replicate, not a candidate.
+Seed 10's last evaluation point reached wandb about a minute after the run
+ended; scored before that, the run was correctly excluded at 199 points.
+
+#### 2. The §12 readout, final for the verdicts
+
+With PT complete on both large variants, **every (variant, comparator) cell
+passes §12.5's completeness gate**, so `results/eval_readout.py` was run.
+**Config audit: clean on every run. Self-checks: passed on every interval.**
+Output committed as `results/eval_readout_latest.txt`.
+
+| BNN CVaR − … | difference | 95% exact bootstrap | paired-*t* (check) | ahead on | **verdict** | blind? |
+|---|---|---|---|---|---|---|
+| medium_play, MR | +0.091 | [+0.059, +0.130] | [+0.047, +0.135] | 10/10 | **NOT BEHIND** | no (§12.7) |
+| medium_play, PT | +0.044 | [+0.004, +0.084] | [−0.005, +0.093] | 7/10 | **NOT BEHIND** | no (§12.8) |
+| medium_diverse, MR | −0.009 | [−0.056, +0.035] | [−0.065, +0.046] | 5/10 | **NOT BEHIND** | no (§12.8) |
+| medium_diverse, PT | +0.087 | [+0.002, +0.201] | [−0.036, +0.210] | 6/10 | **NOT BEHIND** | no (§12.8) |
+| large_play, MR | +0.109 | [+0.064, +0.154] | [+0.054, +0.164] | 10/10 | **NOT BEHIND** | no (§12.8) |
+| **large_play, PT** | **+0.148** | **[+0.093, +0.202]** | [+0.081, +0.214] | 9/10 | **NOT BEHIND** | **yes** |
+| large_diverse, MR | +0.050 | [−0.049, +0.156] | [−0.076, +0.176] | 5/10 | **NOT BEHIND** | no (§12.8) |
+| **large_diverse, PT** | **+0.122** | **[+0.006, +0.231]** | [−0.016, +0.260] | 7/10 | **NOT BEHIND** | **yes** |
+
+- **Eight read, eight NOT BEHIND.** The six rows read on 10-12 are unchanged to
+  the digit, as they must be: the enumeration has no random part. There is no
+  rule combining the eight (§12.2), and none is applied here.
+- **The paired-*t* check gives the same verdict on all eight.** Its lowest
+  lower end is −0.076 (large_diverse, MR), inside the margin.
+- **The two blind cells** are the only ones whose verdict was not foreshadowed
+  by an informal read (§12.8). Both were read for the first time by the
+  registered tool, with no number for them compared across families before it.
+- **What NOT BEHIND licenses (§12.4), and what it does not.** The anchor does
+  not threaten the planned experiments. It is **not** a superiority result, and
+  the rule has no verdict that would be one. Where an interval lies above zero,
+  that is a description of this evaluation and is to be reported as the
+  interval, not as a claim the rule was not built to make.
+- **§12.3 expected INCONCLUSIVE to be common on large_diverse.** Neither
+  large_diverse cell is. Their intervals are the widest of the eight
+  (half-width ~0.10–0.11), so the verdicts there rest on less than the others.
+
+**Not final: sections B and C of the readout** (the mechanism comparisons and
+the comparisons with the task reward). They wait for the four cells still
+running: ensemble large_play mean, ensemble large_diverse CVaR and mean, and
+the oracle on medium_play at index 3. §7.6 C, E and F are written from the
+readout once those are in.
+
+#### 3. Still running, all healthy
+
+Oracle medium_play at index 3 `79ke5lc3` (8 finished, seeds 9–10 at step
+~230k); ensemble large_play mean `n56v005j` (seeds 1–4 at step ~370k, started
+21:38 UTC on four agents). No crashed or missing run in any sweep. **Not
+started: ensemble large_diverse CVaR (queue 9) and mean (queue 7).**
+
+#### 4. Experiment 1: MR models at 00:16 UTC on 10-14
+
+**48 of 160 MR models finished in the first 30 minutes** (all of r16, and 8 of
+r32), 6 more training. **All 54 logged configs pass both checks**, running ones
+included: the condition's split paths and directory, and every other key
+against the anchor winner. PT has not started; it follows MR in the same job.
+
 ### 4.3.173 Sweep check, 2026-10-13 21:19 UTC — 22 of 28 cells; the sparsity experiment is ready to launch
 
 - **PT large_play (`rpfaj2xr`) is complete: 0.386 ± 0.073** over seeds 1–10
@@ -15101,6 +15171,7 @@ passed on every interval.**
   far is not, though its interval is the widest (half-width ~0.10).
 - **The two blind cells are the two still to come**, both against PT on the
   large variants. They are the only cells whose verdict was not foreshadowed.
+  *(Read 2026-10-13, §4.3.174: both NOT BEHIND. All eight are in.)*
 - **The exact bootstrap runs narrower than the paired *t*** on every cell, by
   0.005–0.04 at each end, which is the small-sample behaviour §12.5 warns of.
   It changes no verdict here.
@@ -16986,16 +17057,16 @@ is given for disclosure only. Fill a row with
 | pt medium_play | 3 | `v13djkou` | **0.690 ± 0.060** (10) | 0.689 ± 0.060 | 0.803 ± 0.047 | 2026-10-11 |
 | pt medium_diverse | 2 | `qdbtemcq` | **0.550 ± 0.172** (10) | 0.552 ± 0.178 | 0.712 ± 0.173 | 2026-10-12 |
 | pt large_play | 3 | `rpfaj2xr` | **0.386 ± 0.073** (10) | 0.393 ± 0.069 | 0.541 ± 0.048 | 2026-10-13 |
-| pt large_diverse | 0 | `03tyo1up` | | | | running (queue 4), 8 of 10 at 10-13 21:19 UTC |
+| pt large_diverse | 0 | `03tyo1up` | **0.169 ± 0.136** (10) | 0.171 ± 0.129 | 0.290 ± 0.148 | 2026-10-13 |
 | ensemble medium_play cvar | 2 | `cvsthmuf` | **0.683 ± 0.029** (10) | 0.690 ± 0.027 | 0.811 ± 0.035 | 2026-10-11 |
 | ensemble medium_play mean | 2 | `txrrif36` | **0.712 ± 0.025** (10) | 0.710 ± 0.024 | 0.836 ± 0.025 | 2026-10-12 |
 | ensemble medium_diverse cvar | 3 | `u0rb33xp` | **0.621 ± 0.057** (10) | 0.623 ± 0.053 | 0.748 ± 0.059 | 2026-10-12 |
 | ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
-| ensemble large_play cvar | 3 | `ncb3zdmx` | | | | running (queue 8), 8 of 10 at 10-13 21:19 UTC |
-| ensemble large_play mean | 3 | — | | | | queue 8 |
+| ensemble large_play cvar | 3 | `ncb3zdmx` | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 | 2026-10-13 |
+| ensemble large_play mean | 3 | `n56v005j` | | | | running (queue 8), seeds 1–4 at step ~370k at 10-13 23:54 UTC |
 | ensemble large_diverse cvar | 3 | — | | | | queue 9 |
 | ensemble large_diverse mean | 3 | — | | | | queue 7 |
-| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7), 6 of 10 at 10-13 21:19 UTC |
+| **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7), 8 of 10 at 10-13 23:54 UTC |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
 | **oracle** large_play | 1 (stage-4 winner) | `xnafxwa2` | **0.367 ± 0.079** (10) | 0.356 ± 0.079 | 0.540 ± 0.066 | 2026-08-15 |
