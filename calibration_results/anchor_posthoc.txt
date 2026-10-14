@@ -1,0 +1,5 @@
+medium_play     acc pred 0.906 plug 0.906 (signs agree 1.000) | rho(spread,|margin|) +0.38 | AUROC: margin 0.13  spread 0.37  spread/|margin| 0.85  penalty 0.50  penalty/|margin| 0.87
+medium_diverse  acc pred 0.906 plug 0.906 (signs agree 1.000) | rho(spread,|margin|) +0.57 | AUROC: margin 0.11  spread 0.25  spread/|margin| 0.86  penalty 0.70  penalty/|margin| 0.88
+large_play      acc pred 0.883 plug 0.881 (signs agree 0.998) | rho(spread,|margin|) +0.42 | AUROC: margin 0.18  spread 0.42  spread/|margin| 0.82  penalty 0.58  penalty/|margin| 0.82
+large_diverse   acc pred 0.905 plug 0.905 (signs agree 1.000) | rho(spread,|margin|) +0.57 | AUROC: margin 0.16  spread 0.31  spread/|margin| 0.83  penalty 0.74  penalty/|margin| 0.84
+large_play seed 3 plug-in accuracy 0.8148148148148148 (logged val_cvar_acc_c0 = 0.8148)

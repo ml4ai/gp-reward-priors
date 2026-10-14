@@ -15024,6 +15024,18 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.177 The H3 calibration gate at the anchor: measured, checked, and FAIL on all four variants
+
+2026-10-14 22:55 UTC. Full record in §13.10.1. **Registered verdict: FAIL on
+every variant** (the posterior spread's AUROC for errors is 0.25–0.42, every
+interval below 0.5; the CVaR penalty's is 0.58–0.74 and above 0.5 on three
+variants, 0.50 on medium_play). **So every anchor policy number that uses the
+BNN, including the eight §12 verdicts, is reported as conditional (H3).** All 40
+measurements reproduce their training runs' logged metrics first. A post-hoc
+diagnostic, labelled as such and changing nothing, finds the raw spread
+confounded by the pair's margin, and the posterior spread uninformative about
+errors beyond its own mean's margin.
+
 ### 4.3.176 Sweep check, 2026-10-14 18:46 UTC — 27 of 28 cells; `s2` fired; Experiment 1's reading rule confirmed
 
 - **Ensemble large_diverse CVaR (`ub50fhd3`) complete: 0.171 ± 0.080** over
@@ -20758,7 +20770,64 @@ known cases; the penalty is non-negative, larger for the noisier pairs, and
 unchanged by a per-draw constant offset; end to end, informative uncertainty
 PASSes, uninformative FAILs, a missing seed is INCOMPLETE, a seed with no
 error is UNDEFINED). Chapter 3 states the rule (dissertation commit `2dfb208`,
-local, for the user to push).
+pushed by the user).
+
+#### 13.10.1 RESULT at the anchor, 2026-10-14 22:55 UTC: all four variants FAIL
+
+**Measured** on the box (40 models, 128 chains × 60 draws each; log
+`calibration_results/anchor_measure.log`). **`check`: all 40 reproduce the
+values their own training runs logged** on the same split (predictive CE, CVaR
+CE and accuracy at 0.95, within 1e-4; `anchor_check.txt`). The gate was then
+run once, as registered (`anchor_gate.txt`):
+
+| variant | AUROC spread (95% exact) | AUROC penalty (95% exact) | **verdict** | accuracy | ECE |
+|---|---|---|---|---|---|
+| medium_play | 0.371 [0.320, 0.420] | 0.499 [0.441, 0.562] | **FAIL** (both) | 0.906 | 0.124 |
+| medium_diverse | 0.252 [0.208, 0.299] | 0.696 [0.632, 0.755] | **FAIL** (spread) | 0.906 | 0.138 |
+| large_play | 0.422 [0.344, 0.494] | 0.582 [0.542, 0.619] | **FAIL** (spread) | 0.883 | 0.139 |
+| large_diverse | 0.309 [0.257, 0.365] | 0.739 [0.700, 0.775] | **FAIL** (spread) | 0.905 | 0.135 |
+
+- **Under the registered rule, H3 fails at the anchor on every variant, so
+  every anchor policy number that uses the BNN is CONDITIONAL** (Chapter 3:
+  "say so and report that domain's policy numbers as conditional"). That
+  includes the eight §12 verdicts (§4.3.174), which stand as read and are
+  reported with this condition beside them.
+- **The spread is not uninformative but inversely informative.** All four
+  spread intervals lie entirely **below** 0.5: the posterior spread is larger on
+  the pairs the BNN gets right.
+- **The CVaR penalty, the quantity IQL consumes, is informative on three
+  variants** (medium_diverse, large_play, large_diverse, intervals above 0.5)
+  and not on medium_play (0.499).
+- **Reported, not gated: the posterior predictive is UNDER-confident.** In every
+  variant's pooled reliability table, observed frequencies are more extreme than
+  predicted (e.g. predicted 0.06 → observed 0.00; predicted 0.75 → observed
+  0.89–0.94). ECE 0.12–0.14 per seed.
+
+**Post-hoc diagnostic — NOT part of the rule, and it changes no verdict**
+(`scripts_bnn/calibration_posthoc.py`, `anchor_posthoc.txt`). Run once, after
+the gate, to rule out a bug and to explain the inverted spread:
+
+- **No sign error.** Plug-in accuracy from the measured mean logit reproduces the
+  logged `val_cvar_acc_c0` exactly (large_play seed 3: 0.8148), and the
+  predictive and plug-in predictions agree on 99.8–100% of pairs.
+- **The raw spread is confounded by scale.** It rises with the pair's margin
+  |mean logit difference| (Spearman +0.38 to +0.57), and the margin is what
+  predicts errors: small margins are wrong (AUROC of the margin 0.11–0.18).
+  Large-margin pairs are both easy and wide, hence the inversion.
+- **A scale-free uncertainty, spread / |margin|, separates errors well (AUROC
+  0.82–0.86), but no better than 1 / |margin| alone (0.82–0.89).** The
+  posterior's spread adds nothing about held-out preference errors beyond what
+  its own mean already says. That is the substantive H3 finding on this
+  evidence, and it does not depend on the confound.
+- **For the write-up, owned plainly:** the raw-spread statistic was this
+  session's recommendation, and its scale confound was foreseeable (the
+  Spearman option was flagged as partly mechanical; the AUROC's dependence on
+  scale was not). The registered verdict stands regardless. The scale-free
+  analysis is reported as post hoc, labelled so, and is not a second gate.
+
+**What the gate does next:** unchanged. Each sparsity level is gated by the same
+rule when its BNN models exist, before its BNN IQL results are read.
+
 
 ### 13.11 Experiment 2's reading rule and the gate on the noise axis — FIXED 2026-10-14 (user), before any label-noise result existed
 
