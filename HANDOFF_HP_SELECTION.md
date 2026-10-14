@@ -20703,3 +20703,59 @@ on synthetic worlds: a widening gap is SUPPORTED against all three, a uniform
 gap is NOT SUPPORTED (no widening), and one incomplete cell blocks exactly its
 comparator. **Chapter 3 was edited to state the rule** (dissertation commits
 `ce7c618`, `f50331b`, pushed by the user).
+
+### 13.10 The H3 calibration gate — rule FIXED 2026-10-14 (user), before any calibration number existed
+
+Chapter 3: H3 is a **gate**, read **before** any policy result is trusted; a
+domain that fails has its policy numbers reported as conditional. Falsifier:
+"uncertainty uninformative about error". The chapter left the operational rule
+open; **the user fixed it on 2026-10-14 ~19:30 UTC, each on the recommended
+option, before the tool had read any model.**
+
+| question | decision |
+|---|---|
+| statistic | **AUROC** with which a pair's uncertainty separates the pairs the BNN gets **wrong** from those it gets right (0.5 = uninformative) |
+| which uncertainty | **both must pass**: the posterior **spread** of the pair's logit difference, and the **CVaR penalty** the deployed reward applies to the pair (H3 names both) |
+| pass | the **exact 95% seed-bootstrap interval** of the mean AUROC (§12.5's enumeration) lies **entirely above 0.5** |
+| unit | **variant × level**: the anchor and each sparsity level separately; a failing unit makes exactly that cell's policy numbers conditional |
+
+**Definitions, as `scripts_bnn/calibration_gate.py` implements them:**
+
+- **Data:** each model's own seed's **validation** split, always the base file
+  (the tool refuses a `noise/` or `reduction/` validation path). Seeds 1–10.
+  Validation selected nothing at seeds 1–10 and the BNN selects no checkpoint,
+  so these pairs are held out from everything.
+- **Error:** the posterior-predictive preference (mean over all draws of
+  σ(Φ₁ − Φ₂)) puts more than one half on the segment the label does not prefer.
+- **Spread:** sd over draws of Φ₁ − Φ₂. **Penalty:** (mean − CVaR) pooled over
+  segment 1 plus the same over segment 2, CVaR at conservatism 0.95 per (s,a), on
+  centred draws (item F) — the deployed reward, by the same code path and
+  convention as `diagnose_sampling_tail.cvar_ce`.
+- **UNDEFINED:** a seed with no wrong pair (or no right pair) has no AUROC; its
+  unit is UNDEFINED, treated as not passed, and disclosed. With 54–110
+  validation pairs and accuracy ~0.8 this should not occur.
+- **Reported, not gated:** accuracy, predictive CE, ECE (10 equal-width bins),
+  and the reliability table, for both the predictive and the deployed CVaR
+  preference. The falsifier is uninformativeness, not miscalibration.
+
+**Three steps:**
+
+1. `measure` **on the box**, which has the chains: one JSON per model of per-pair
+   arrays, written to `gp_reward-priors/exp/calibration/`. Resumable; skips
+   existing files.
+2. `check` **here**: each measurement must reproduce what its own training run
+   logged on the same split (`val_cvar_predictive_ce`, `val_cvar_ce_c0p95`,
+   `val_cvar_acc_c0p95`, tolerance 1e-4). **Nothing is gated until this passes.**
+3. `gate` **here**: the rule above, per variant × level.
+
+**Order: the anchor's gate first.** The anchor's policy results are already
+known (§12), so the anchor gate is not blind to them; its rule is, which is what
+matters, and it is disclosed. Each sparsity level's gate is read when that
+level's BNN models exist, and before its BNN IQL results are read.
+
+**Checked:** self-test (AUROC against brute force and its edge cases; ECE on
+known cases; the penalty is non-negative, larger for the noisier pairs, and
+unchanged by a per-draw constant offset; end to end, informative uncertainty
+PASSes, uninformative FAILs, a missing seed is INCOMPLETE, a seed with no
+error is UNDEFINED). Chapter 3 states the rule (dissertation commit `2dfb208`,
+local, for the user to push).
