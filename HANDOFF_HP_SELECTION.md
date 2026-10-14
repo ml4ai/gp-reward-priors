@@ -15024,6 +15024,20 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.176 Sweep check, 2026-10-14 18:46 UTC — 27 of 28 cells; `s2` fired; Experiment 1's reading rule confirmed
+
+- **Ensemble large_diverse CVaR (`ub50fhd3`) complete: 0.171 ± 0.080** over
+  seeds 1–10 (last-20 0.175 ± 0.075; legacy max 0.367 ± 0.067). Registered:
+  **27 of 28 cells.** The last, ensemble large_diverse mean `gpyiq4w5`, has
+  seeds 5–6 at ~470k on its two agents and ends ~10-15 10:00 UTC.
+- **Waiter `s2` fired at 18:01 UTC**, ~10 minutes after queue 9 ended:
+  `69e53xjk`, MR r16 medium_diverse, index 2, four agents on GPUs 0–1.
+  **Identical parameters** to its generated file; each run reads its own seed's
+  r16 model; matches no anchor cell. `s1`'s `edf1tdr4` is at ~570k.
+- **§13.9's conjunction confirmed by the user** (both tests, all three
+  comparators), before any sparsity IQL run had finished. The two Chapter 3
+  commits are pushed.
+
 ### 4.3.175 Sweep check, 2026-10-14 16:32 UTC — 26 of 28 cells; all 320 sparsity MR and PT models VERIFIED; the first sparsity IQL sweep is running and correct
 
 #### 1. Two anchor cells finished
@@ -17119,8 +17133,8 @@ is given for disclosure only. Fill a row with
 | ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
 | ensemble large_play cvar | 3 | `ncb3zdmx` | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 | 2026-10-13 |
 | ensemble large_play mean | 3 | `n56v005j` | **0.440 ± 0.064** (10) | 0.444 ± 0.055 | 0.580 ± 0.047 | 2026-10-14 |
-| ensemble large_diverse cvar | 3 | `ub50fhd3` | | | | running (queue 9), 8 of 10 at 10-14 16:32 UTC |
-| ensemble large_diverse mean | 3 | `gpyiq4w5` | | | | running (queue 7, 2 agents), 4 of 10 at 10-14 16:32 UTC |
+| ensemble large_diverse cvar | 3 | `ub50fhd3` | **0.171 ± 0.080** (10) | 0.175 ± 0.075 | 0.367 ± 0.067 | 2026-10-14 |
+| ensemble large_diverse mean | 3 | `gpyiq4w5` | | | | running (queue 7, 2 agents), 4 of 10 at 10-14 18:46 UTC |
 | **oracle** medium_play at the winning index | 3 | `79ke5lc3` | **0.519 ± 0.086** (10) | 0.522 ± 0.085 | 0.658 ± 0.051 | 2026-10-14 |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
@@ -20660,8 +20674,10 @@ option:
 - **H1 as stated holds in full** iff SUPPORTED against all three. A conjunction
   of tests each at 0.025 is a valid 0.025 test of the conjunction
   (intersection–union), so there is no multiplicity correction. Partial support
-  is reported as partial. *This conjunction is read from H1's wording, not one
-  of the four decisions; it is the user's to overturn before results exist.*
+  is reported as partial. *Read from H1's wording, then **confirmed by the
+  user 2026-10-14 ~18:45 UTC**, still before any sparsity IQL run had
+  finished: both tests, all three comparators.* Chapter 3 states it (commits
+  `ce7c618`, `f50331b`, pushed by the user).
 - **Gates (§12.5, unchanged):** every cell complete (10 seeds × 200 points) and
   config-audited, the anchor's included. A comparator's test runs only when
   both arms' cells, 4 variants × 5 levels each, are complete and clean. The
@@ -20686,4 +20702,4 @@ against brute force for two; determinism and shift-equivariance; and end to end
 on synthetic worlds: a widening gap is SUPPORTED against all three, a uniform
 gap is NOT SUPPORTED (no widening), and one incomplete cell blocks exactly its
 comparator. **Chapter 3 was edited to state the rule** (dissertation commits
-`ce7c618`, `f50331b`, not pushed).
+`ce7c618`, `f50331b`, pushed by the user).
