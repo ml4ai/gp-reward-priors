@@ -15084,8 +15084,12 @@ readout once those are in.
 
 Oracle medium_play at index 3 `79ke5lc3` (8 finished, seeds 9–10 at step
 ~230k); ensemble large_play mean `n56v005j` (seeds 1–4 at step ~370k, started
-21:38 UTC on four agents). No crashed or missing run in any sweep. **Not
-started: ensemble large_diverse CVaR (queue 9) and mean (queue 7).**
+21:38 UTC on four agents); **ensemble large_diverse CVaR `ub50fhd3`, queue 9,
+which started by itself at 23:59 UTC** on GPUs 0–1 with four agents, about ten
+minutes after queue 4 ended (seeds 1–4 at step ~50k; `mr_alpha` 0.95, index 3,
+`centre_draws` True, `gauge_reward` max0). No crashed or missing run in any
+sweep. **Not started: ensemble large_diverse mean (queue 7, behind the
+oracle).** Ten IQL runs are now running at once, plus the MR training.
 
 #### 4. Experiment 1: MR models at 00:16 UTC on 10-14
 
@@ -17064,7 +17068,7 @@ is given for disclosure only. Fill a row with
 | ensemble medium_diverse mean | 3 | `75dkk4js` | **0.683 ± 0.037** (10) | 0.673 ± 0.035 | 0.772 ± 0.038 | 2026-10-12 |
 | ensemble large_play cvar | 3 | `ncb3zdmx` | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 | 2026-10-13 |
 | ensemble large_play mean | 3 | `n56v005j` | | | | running (queue 8), seeds 1–4 at step ~370k at 10-13 23:54 UTC |
-| ensemble large_diverse cvar | 3 | — | | | | queue 9 |
+| ensemble large_diverse cvar | 3 | `ub50fhd3` | | | | running (queue 9), started 10-13 23:59 UTC |
 | ensemble large_diverse mean | 3 | — | | | | queue 7 |
 | **oracle** medium_play at the winning index | 3 | `79ke5lc3` | | | | running (queue 7), 8 of 10 at 10-13 23:54 UTC |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
