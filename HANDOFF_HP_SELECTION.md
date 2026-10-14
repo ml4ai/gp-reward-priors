@@ -18518,6 +18518,44 @@ them.** (19 of 28 cells; the three items below are **FINAL**)
 
 ---
 
+**G. The H3 calibration gate FAILS at the anchor, on all four variants.**
+(**FINAL**; §13.10.1. **How it is reported was decided by the user on
+2026-10-14: the FAIL as registered, with the post-hoc diagnostic beside it.**)
+
+What the write-up says, in this order:
+
+1. **The rule, and that it was fixed before any calibration number existed**
+   (§13.10): per-seed AUROC with which the posterior spread, and separately the
+   CVaR penalty, separates validation pairs the BNN gets wrong from those it
+   gets right; a variant passes when both exact 95% seed intervals lie above
+   0.5. Chapter 3 states it.
+2. **The verdict: FAIL on every variant.** Spread AUROC 0.25–0.42, every
+   interval below 0.5; penalty AUROC 0.70, 0.58, 0.74 on medium_diverse,
+   large_play, large_diverse (intervals above 0.5) and 0.50 on medium_play.
+3. **The consequence, as Chapter 3 prescribes: every anchor policy number that
+   uses the BNN is conditional.** That covers the eight §12 verdicts, the BNN
+   rows of the evaluation table, and the BNN mechanism comparisons. They are
+   reported as measured, with the condition stated beside them, not withheld.
+4. **The diagnostic, labelled post hoc, beside the verdict and not in place of
+   it:** the raw spread rises with the pair's margin (Spearman +0.38 to +0.57),
+   which inverts its AUROC; the scale-free spread / |margin| separates errors
+   well (0.82–0.86), but no better than 1 / |margin| alone (0.82–0.89). So the
+   posterior's spread carries no information about held-out preference errors
+   beyond its own mean's margin. That is the substantive reading, and it does
+   not depend on the confound.
+5. **Also reported:** the posterior predictive is under-confident (observed
+   frequencies more extreme than predicted; ECE 0.12–0.14), and the CVaR
+   penalty — the quantity IQL consumes — does carry error information on three
+   variants of four.
+6. **Owned:** the raw-spread statistic was recommended in the analysis session
+   and its scale dependence was foreseeable; the verdict is reported as
+   registered regardless, and the gate is not re-specified after the fact.
+
+Framing (Chapter 3's own): a failed gate is "the honest seam" of the chapter
+and the motivation for Chapter 4. The same rule gates every sparsity level.
+
+---
+
 **F. PENDING — what closes each open item.**
 
 | item | closes when | then |
