@@ -15069,6 +15069,12 @@ medium_play's stage-4 winner). Each run resolves its own seed's model
 (`…/antmaze_medium_play_mr_r16_eval_<seed>`). It matches no anchor cell, and
 `register` skipped it without comment, as built. `s2` waits on queue 9.
 
+**Waiter `s3` launched ~16:55 UTC (user), dry run passed:** PT r16 ×4 on GPUs
+0–1, behind `s2`. It waits on both the queue pattern and the `s2` waiter
+itself (`pgrep -f "stage4_queue[.]sh 0 1 2 |QID=s[2]"`), so it cannot start in
+the gap between queue 9 ending and `s2` firing. At 16:59 UTC queue 9's last two
+runs were at step ~830k (end ~18:00 UTC), so `s2` fires then.
+
 ### 4.3.174 Sweep check, 2026-10-13 23:54 UTC — 24 of 28 cells, and ALL EIGHT §12 verdicts are read: eight NOT BEHIND
 
 #### 1. Two cells finished
