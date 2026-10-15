@@ -20936,3 +20936,15 @@ no noise data in existence.
 result has been seen; do not pool the two axes into one verdict; do not add or
 drop a comparator; read the H3 gate for a noise level before that level's BNN
 policy results.
+
+### 13.12 What "conditional" means for a cell that fails the H3 gate — FIXED 2026-10-14 (user), before any sparsity or noise result
+
+§13.10 says a failing unit "makes exactly that cell's policy numbers
+conditional" but did not say what that does to H1's pooled tests. **The user
+decided: flagged, not dropped.** A failed cell's policy results are still
+reported and **still enter H1's pooled tests unchanged** (§13.9 on sparsity,
+§13.11 on noise), so the registered tests and their completeness gates stay
+exactly as they are. The readout prints the list of conditional cells beside
+each verdict, because a gain in such a cell cannot be credited to the model's
+uncertainty. Do not drop, down-weight or re-run a cell because it failed the
+gate. Chapter 3 states it (dissertation commit `bde6842`).
