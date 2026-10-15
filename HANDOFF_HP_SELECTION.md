@@ -15024,6 +15024,26 @@ Move this one to `~/iqlpref/exp/reward_learning/`. 16a is runnable
    3.5 days at the medium wall-clock). Caching is only needed before the BNN
    large IQL evaluation runs, which also wait for large_diverse's stage 4.
 
+### 4.3.178 Sweep check, 2026-10-15 17:58 UTC — the anchor evaluation is COMPLETE (28 of 28); GPUs 2–5 idle since ~10:00
+
+- **Ensemble large_diverse mean (`gpyiq4w5`), the last anchor cell: 0.283 ±
+  0.078** (last-20 0.292 ± 0.081; legacy max 0.466 ± 0.083), all ten runs with
+  200 points, finished ~09:50 UTC. Registered: **28 of 28 cells** (the notebook
+  is written with outputs empty).
+- **The §12 readout is final** (`results/eval_readout_latest.txt`): every
+  section read, no audit or self-check failure; the eight verdicts are
+  unchanged, and sections B and C are complete. §7.6 C, D, E and F are
+  rewritten from it.
+- **Experiment 1, own means only (§12.6, §13.9):** MR r16 medium_play
+  `edf1tdr4` 0.606 ± 0.090; MR r16 medium_diverse `69e53xjk` 0.649 ± 0.064 (both
+  complete, 200 points each; table in §13.8). `s2`'s third sweep, MR r16
+  large_play `ldr9p7ug`, has 4 of 10 finished.
+- ⚠️ **GPUs 2–5 have been idle since ~10:00 UTC** (`s1` ended ~08:20, queue 7
+  ~09:50). The BNN sparsity launch (§13.8 step 3) is due.
+- **New user section §13.12 read**: an H3-failing cell is flagged, not dropped,
+  and stays in H1's pooled tests; the experiment readout must list the
+  conditional cells beside each verdict (built in this check, §13.12).
+
 ### 4.3.177 The H3 calibration gate at the anchor: measured, checked, and FAIL on all four variants
 
 2026-10-14 22:55 UTC. Full record in §13.10.1. **Registered verdict: FAIL on
@@ -17146,7 +17166,7 @@ is given for disclosure only. Fill a row with
 | ensemble large_play cvar | 3 | `ncb3zdmx` | **0.391 ± 0.070** (10) | 0.398 ± 0.067 | 0.561 ± 0.053 | 2026-10-13 |
 | ensemble large_play mean | 3 | `n56v005j` | **0.440 ± 0.064** (10) | 0.444 ± 0.055 | 0.580 ± 0.047 | 2026-10-14 |
 | ensemble large_diverse cvar | 3 | `ub50fhd3` | **0.171 ± 0.080** (10) | 0.175 ± 0.075 | 0.367 ± 0.067 | 2026-10-14 |
-| ensemble large_diverse mean | 3 | `gpyiq4w5` | | | | running (queue 7, 2 agents), 4 of 10 at 10-14 18:46 UTC |
+| ensemble large_diverse mean | 3 | `gpyiq4w5` | **0.283 ± 0.078** (10) | 0.292 ± 0.081 | 0.466 ± 0.083 | 2026-10-15 |
 | **oracle** medium_play at the winning index | 3 | `79ke5lc3` | **0.519 ± 0.086** (10) | 0.522 ± 0.085 | 0.658 ± 0.051 | 2026-10-14 |
 | oracle medium_play, conventional (not the headline) | 1 | `nv89vprk` | **0.648 ± 0.048** (10) | 0.652 ± 0.041 | 0.802 ± 0.030 | 2026-08-14 |
 | **oracle** medium_diverse | 1 (stage-4 winner) | `9pbsrxod` | **0.607 ± 0.055** (10) | 0.603 ± 0.042 | 0.808 ± 0.034 | 2026-08-15 |
@@ -18434,7 +18454,7 @@ cost in IQL return.
 ---
 
 **C. The oracle's normalization was fixed while the learned rewards' was
-selected.** (stage 4 **FINAL**; one evaluation sweep **PENDING**)
+selected.** (**FINAL**, 2026-10-15)
 
 - **The asymmetry, found on 2026-10-07 after the first evaluation numbers.** The
   task-reward baseline had been run only at the conventional index 1
@@ -18461,14 +18481,22 @@ selected.** (stage 4 **FINAL**; one evaluation sweep **PENDING**)
 - **How it is reported.** The main table and charts show the oracle at its
   stage-4 winning index only (user, 2026-10-10). The winning-vs-conventional
   comparison is a separate table and chart at the end of
-  `results/results_table.ipynb`. **PENDING:** medium_play at index 3, seeds
-  1–10 (queue 7, ~10-14). Until then that variant's oracle cell is blank, and
-  its conventional `r − 1` sweep scored 0.648 ± 0.048.
+  `results/results_table.ipynb`.
+- **medium_play at its selected index 3 (`79ke5lc3`): 0.519 ± 0.086**, against
+  **0.648 ± 0.048** at the conventional index 1 (`nv89vprk`), same seeds. The
+  seed-0 tie (0.005) did not predict the evaluation's ordering. **The headline
+  oracle on medium_play is the lower of its two indices**, so every learned
+  reward on that variant clears the headline oracle by 0.12–0.26, while against
+  the conventional index the margins are −0.01 to +0.13 (readout section C).
+  **Both are reported, beside each other, wherever a learned reward is set
+  against the oracle on medium_play**; the text must not quote only the
+  headline margin. The rule was applied as fixed in advance and is not
+  revisited (user, 2026-10-07 and 2026-10-10).
 
 ---
 
 **D. Evaluation: what the seeds 1–10 runs are, and three things to say about
-them.** (19 of 28 cells; the three items below are **FINAL**)
+them.** (**FINAL**: all 28 cells, 2026-10-15)
 
 - **What a cell is.** Ten IQL runs, seeds 1–10. Seed *s* uses the reward model
   trained on seed *s*'s data split, so each run pairs a policy with its own
@@ -18497,24 +18525,56 @@ them.** (19 of 28 cells; the three items below are **FINAL**)
   CE at the deployment level did not predict policy quality here.** The §7.4 E
   disclosure stands, and should not be read as "that seed's policy is
   uninformed".
-- **large_diverse resolves little.** Every learned reward's across-seed sd on
-  that variant is 0.10–0.14, against 0.03–0.08 elsewhere, and all scored methods sit
-  between 0.24 and 0.29. The legacy max statistic is 0.44–0.49 there, about
-  0.2 above the last-10 mean: these runs peak and fall back (§4.3.107).
+- **PT large_diverse has two seeds near zero, and both are kept** (seed 6
+  0.008, seed 10 0.045; cell 0.169 ± 0.136), as PT medium_diverse's seed 10 is.
+- **large_diverse resolves little.** The learned rewards' across-seed sds there
+  are 0.08–0.14, against 0.03–0.07 elsewhere (PT medium_diverse's 0.17, item
+  above, aside). The cells span 0.17 (PT, ensemble CVaR) to 0.28–0.29
+  (ensemble mean, BNN CVaR), with the task reward at 0.27. The legacy max
+  statistic sits 0.12–0.23 above the last-10 mean there: these runs peak and
+  fall back (§4.3.107).
 
 ---
 
-**E. What Phase 2 does not license, on the numbers so far.**
+**E. What Phase 2 shows and does not license.** (**FINAL**, 2026-10-15,
+written from `results/eval_readout_latest.txt`, the registered §12 readout over
+all 28 cells. Every number below is from it. The informal paired-*t* remarks of
+the earlier draft are withdrawn; see §12.8.)
 
-- **No consistent CVaR-vs-mean winner for the BNN** (all eight cells in). CVaR
-  is ahead on large_play (+0.053, paired t 2.4) and behind on medium_play
-  (−0.045, t −2.6), with the two `diverse` variants undecided.
-- **The `play` variants separate methods and the `diverse` ones do not.** On
-  medium_play the BNN mean reward beats MR best, PT and ensemble CVaR on all ten
-  seeds each. On medium_diverse no pair of learned rewards reaches |t| = 2.
-- **The paired t values in §6 are descriptive.** They pair by seed because the
-  sweeps share seeds and data splits. They are not the reported analysis, which
-  is made once over all cells with the convention fixed in §4.3.107.
+1. **The registered result: eight of eight NOT BEHIND** (BNN CVaR against MR
+   best-model and PT, four variants, margin 0.10; §4.3.174). Six cells were not
+   blind (§12.7, §12.8) and the two that were are both NOT BEHIND. **What it
+   licenses (§12.4): the anchor does not threaten the experiments. It is not a
+   superiority claim, and there is no rule combining the eight.**
+2. **Every BNN number here is conditional (H3, item G).** The calibration gate
+   fails on all four variants at the anchor. Under §13.12 the numbers are
+   reported unchanged with the condition beside them; a gain cannot be credited
+   to the posterior's uncertainty.
+3. **The risk functional alone (BNN CVaR − BNN mean) has no consistent sign.**
+   Above zero on large_play (+0.053 [+0.011, +0.093]), below zero on
+   medium_play (−0.045 [−0.077, −0.012]), and intervals crossing zero on both
+   `diverse` variants. Descriptive (§12.2), but it bounds the reading of item
+   1: the anchor does not show CVaR helping by itself.
+4. **How the spread is obtained (BNN CVaR − ensemble CVaR) favours the BNN on
+   three variants** (medium_play +0.051 [+0.016, +0.086]; large_play +0.143
+   [+0.105, +0.180]; large_diverse +0.120 [+0.016, +0.205]) and crosses zero on
+   medium_diverse. Against the ensemble's **mean** the picture is mixed (above
+   zero on large_play, below on medium_diverse, crossing on the other two).
+   Descriptive.
+5. **Against the task reward (headline index; readout section C):**
+   - large_play: BNN CVaR (+0.167), BNN mean (+0.114), MR (+0.058) and ensemble
+     mean (+0.073) have intervals above zero; PT and ensemble CVaR cross.
+   - large_diverse: **no learned reward's interval is above the task reward**;
+     PT (−0.103) and ensemble CVaR (−0.101) are below it.
+   - medium_diverse: only the ensemble mean is above (+0.076).
+   - medium_play: every learned reward is above the **headline** oracle, which
+     is the lower of its two indices (item C). Against the conventional index,
+     BNN mean, BNN CVaR, ensemble mean and (narrowly) PT and ensemble CVaR are
+     above; MR is level.
+   Learned rewards beating the task reward is a statement about reward shaping
+   under IQL on these datasets, not about preference-label quality; say so.
+6. **None of 3–5 is a verdict** (§12.2). They are the same paired difference and
+   exact interval, reported so the registered result is read in context.
 
 ---
 
@@ -18558,12 +18618,18 @@ and the motivation for Chapter 4. The same rule gates every sparsity level.
 
 **F. PENDING — what closes each open item.**
 
-| item | closes when | then |
+> ✅ **All closed 2026-10-15**: all 28 cells are in and registered, the §12
+> readout is final, and C, D and E above are rewritten from it. One open check
+> remains for the write-up: B's "selects among failures" against the evaluation
+> rows. The notebook's final tables and charts are the user's to run (it is
+> committed with outputs empty).
+
+| item | closed | where |
 |---|---|---|
-| PT large_play, large_diverse | queue 4, ~10-14 00:00 UTC | D, E: complete the PT column |
-| Ensemble: 7 of 8 cells | queues 5–9, last ~10-15 08:35 | D, E; check B's "selects among failures" against the evaluation rows |
-| Oracle medium_play at index 3 | queue 7, ~10-14 02:35 | C: fill the comparison; the notebook's last chart |
-| Cross-family statements in E | all 28 cells | rewrite E from the notebook's tables |
+| PT large_play, large_diverse | 10-13 | D, E |
+| Ensemble: 8 of 8 cells | 10-15 (`gpyiq4w5`, the last) | D, E |
+| Oracle medium_play at index 3 | 10-14 (`79ke5lc3`) | C |
+| Cross-family statements in E | 10-15 | E, from the registered readout |
 
 ## 8. Tooling
 
@@ -20670,6 +20736,15 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > `results/eval_readout.py` skip them, and the 28 anchor files still match
 > exactly their own cell.
 >
+> **Experiment 1 IQL cells — each cell's OWN mean ± sd only (§12.6, §13.9).**
+> Nothing across families or levels is read here; that is `results/exp_readout.py`'s.
+>
+> | level | cell | sweep | last-10 (mean ± sd, n) | last-20 | done |
+> |---|---|---|---|---|---|
+> | r16 | MR medium_play | `edf1tdr4` | 0.606 ± 0.090 (10) | 0.620 ± 0.084 | 2026-10-15 |
+> | r16 | MR medium_diverse | `69e53xjk` | 0.649 ± 0.064 (10) | 0.653 ± 0.066 | 2026-10-15 |
+> | r16 | MR large_play | `ldr9p7ug` | | | running (`s2`) |
+>
 > 🔄 **Queued 2026-10-14 ~03:00 UTC (user), after a pull, the live-queue check
 > and a dry run on the box:** waiter `s1` (GPUs 2–3, behind queue 8):
 > `mr:r16/sweep_antmaze_medium_play@r16`; waiter `s2` (GPUs 0–1, behind
@@ -20948,3 +21023,17 @@ exactly as they are. The readout prints the list of conditional cells beside
 each verdict, because a gain in such a cell cannot be credited to the model's
 uncertainty. Do not drop, down-weight or re-run a cell because it failed the
 gate. Chapter 3 states it (dissertation commit `bde6842`).
+
+✅ **Built 2026-10-15** in `results/exp_readout.py` (both axes):
+
+- An **H3 GATE** block before section A lists the conditional units (not PASS)
+  and the units with no gate result yet. **Every verdict line repeats the
+  conditional list.** The per-level curve marks a conditional unit with `*`.
+- **Flagged, not dropped:** the self-test asserts that the H1a and H1b lines are
+  identical with and without a failed unit.
+- **Gate first (§13.10):** while any unit of the axis has no gate result, no H1
+  verdict is printed ("NOT READ -- the H3 gate is read first") and the curve
+  shows "H3 unread" for that unit. This enforces the order the chapter and
+  §13.10 already state; it adds no criterion.
+- On the real data today: the four anchor units are conditional (§13.10.1), and
+  the 16 sparsity units are unread, as no sparsity BNN exists yet.
