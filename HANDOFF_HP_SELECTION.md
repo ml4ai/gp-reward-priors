@@ -20738,6 +20738,13 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 >
 > **Experiment 1 IQL cells — each cell's OWN mean ± sd only (§12.6, §13.9).**
 > Nothing across families or levels is read here; that is `results/exp_readout.py`'s.
+> The figures (user's request, 2026-10-15) are in `results/experiments_results.ipynb`:
+> one panel per variant, one series per model, full data on the left, mean ± sd
+> over seeds, the task reward's anchor as a dashed reference. It draws only
+> complete, config-audited cells, found through the readouts' own code; a
+> BNN point whose H3 unit is not PASS is hollow (§13.12), and one whose gate is
+> unread is not drawn (§13.10). Descriptive, not a test. Committed with outputs
+> empty; checked end to end on the real data on 2026-10-15.
 >
 > | level | cell | sweep | last-10 (mean ± sd, n) | last-20 | done |
 > |---|---|---|---|---|---|
