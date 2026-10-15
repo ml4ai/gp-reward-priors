@@ -20745,6 +20745,17 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > | r16 | MR medium_diverse | `69e53xjk` | 0.649 ± 0.064 (10) | 0.653 ± 0.066 | 2026-10-15 |
 > | r16 | MR large_play | `ldr9p7ug` | | | running (`s2`) |
 >
+> 🔄 **Step 3 LAUNCHED 2026-10-15 ~18:36 UTC (user): BNN, all four levels, GPUs
+> 2–5**, `COND="r16 r32 r64 r128" NUM_CHAINS=128 train_rewards.sh bnn "2 3 4 5" 4`,
+> log `exp/train_sparsity_bnn.log`. GPUs 2–5 had been idle since ~10:00 UTC.
+> **The first model (`b960d857`, r16 medium_play seed 1) was checked while
+> training:** training file `reduction/…_pref_train_1_16.hdf5`, validation and
+> test the base files, output `antmaze_medium_play_bnn_r16_eval_1`; every other
+> key equal to the anchor winner's, with 128 chains at 32 per GPU, width 64
+> (2⁶; the winner's config logs the exponent 6), depth 1, 60 samples, 20,000
+> burn-in steps, `n_meas` 256, `map_amp2` 6848, `centre_draws` True, map-informed
+> prior. r16 medium_play's ten models end ~10-17 08:00 UTC at the anchor's 4.1 h.
+>
 > 🔄 **Queued 2026-10-14 ~03:00 UTC (user), after a pull, the live-queue check
 > and a dry run on the box:** waiter `s1` (GPUs 2–3, behind queue 8):
 > `mr:r16/sweep_antmaze_medium_play@r16`; waiter `s2` (GPUs 0–1, behind
