@@ -18572,6 +18572,28 @@ the earlier draft are withdrawn; see §12.8.)
    blind (§12.7, §12.8) and the two that were are both NOT BEHIND. **What it
    licenses (§12.4): the anchor does not threaten the experiments. It is not a
    superiority claim, and there is no rule combining the eight.**
+
+   **How the verdict is described, as a test** (wording agreed with the user
+   2026-10-16; use it as written):
+
+   > Each verdict is a one-sided non-inferiority test at nominal α = 0.025 with
+   > margin 0.10, in confidence-interval form, using an exact-enumeration
+   > percentile bootstrap over seeds. Percentile intervals tend to under-cover
+   > at n = 10, so the nominal level is approximate; the paired-t interval is
+   > reported as a check and agrees on every cell. The eight tests are reported
+   > separately, without multiplicity correction.
+
+   Behind that wording, for the methods text: NOT BEHIND rejects H₀: μ ≤ −0.10
+   (μ the expected paired difference) when the lower end of the two-sided 95%
+   interval exceeds −0.10; TOO FAR BEHIND is the mirror test of H₀: μ ≥ −0.10;
+   INCONCLUSIVE means neither rejected and is not evidence of equivalence. The
+   level is eroded by the percentile interval's small-sample under-coverage,
+   by the shared evaluation seeds (item D), and, for six cells, by their not
+   being blind (§12.7, §12.8). With eight uncorrected tests, if every cell sat
+   at the margin the chance of at least one false NOT BEHIND would be about
+   1 − 0.975⁸ ≈ 18%, treating the cells as independent. An exactly-sized
+   sign-flip test on dₛ + 0.10 exists under symmetry, but would be post hoc
+   and is not run.
 2. **Every BNN number here is conditional (H3, item G).** The calibration gate
    fails on all four variants at the anchor. Under §13.12 the numbers are
    reported unchanged with the condition beside them; a gain cannot be credited
