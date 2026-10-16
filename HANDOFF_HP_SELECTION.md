@@ -20763,6 +20763,16 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > burn-in steps, `n_meas` 256, `map_amp2` 6848, `centre_draws` True, map-informed
 > prior. r16 medium_play's ten models end ~10-17 08:00 UTC at the anchor's 4.1 h.
 >
+> **Measured 2026-10-16:** the first model took **4.02 h**, the same as the
+> anchor's medium models (4.1 h), so the training set's size does not set the
+> cost and §13.8's ~30 days for the BNN stands. `production_readout.py bnn
+> --cond r16`: config OK, health OK. **One IQL inefficiency, noted, not acted
+> on:** a 10-run sweep on 4 agents runs as 4 + 4 + 2, so for the last ~5.3 h of
+> every sweep two agents sit idle (the queue starts the next sweep only when the
+> current one ends). About one slot-wave in six is lost, a day or two over the
+> IQL tail. A fifth agent would fill it but leaves no CPU headroom beside the
+> BNN job (§4.3.145 §2).
+>
 > 🔄 **Queued 2026-10-14 ~03:00 UTC (user), after a pull, the live-queue check
 > and a dry run on the box:** waiter `s1` (GPUs 2–3, behind queue 8):
 > `mr:r16/sweep_antmaze_medium_play@r16`; waiter `s2` (GPUs 0–1, behind
