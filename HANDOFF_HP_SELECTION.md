@@ -21168,3 +21168,35 @@ as shaping on top. That would explain both the floor-versus-policy decoupling
 and the learned rewards' strength against the task reward. **The semantics of
 antmaze-v2 `terminals` must be measured on the box** (D4RL is not installed on
 the analysis machine). The IQL control (next) is designed after that.
+
+#### 13.13.1 MEASURED on the box, 2026-10-16: antmaze `terminals` are exactly the goal arrivals
+
+| dataset | transitions | terminals | reward > 0 | both | timeouts |
+|---|---|---|---|---|---|
+| antmaze-medium-play-v2 | 1,000,000 | 9,787 | 9,787 | 9,787 | 999 |
+| antmaze-medium-diverse-v2 | 1,000,000 | 1,959 | 1,959 | 1,959 | 999 |
+| antmaze-large-play-v2 | 1,000,000 | 12,517 | 12,517 | 12,517 | 999 |
+| antmaze-large-diverse-v2 | 1,000,000 | 6,189 | 6,189 | 6,189 | 999 |
+
+**Every terminal is a goal arrival and every goal arrival is a terminal**, on all
+four datasets. Consequences, which hold for every IQL result in this campaign:
+
+- **The goal reaches every learned-reward IQL run through the terminals.** With
+  `max0` and the winning normalizations every learned reward is ≤ 0 per step, so
+  a terminal (which stops bootstrapping) is worth reaching whatever the learned
+  reward says. The learned reward shapes the path; the terminals set the
+  destination.
+- **The task-reward oracle at index 1 is the "terminals only" baseline.** r − 1 is
+  −1 on every step and 0 on the goal steps, which are terminal: a constant
+  reward plus the dataset's terminals, except on the goal step itself. Learned
+  rewards beating it (§7.6 E item 5) means shaping on top of the terminals helps;
+  it is not evidence that preference labels beat the task reward.
+- **This explains the decoupling of §13.13** (preference accuracy falls below the
+  floor at r16 while MR's IQL scores do not fall), and it bounds what any
+  reward-model comparison on this benchmark can show: all methods share the
+  terminals, so differences between rewards are differences in shaping.
+- **It is the standard setup**: the same `qlearning_dataset` terminals as CORL's
+  IQL and, as far as known here, the Preference Transformer's antmaze
+  evaluation. Nothing in this campaign is unfair between methods. **But the
+  write-up must say it**, beside every policy result and in Chapter 3's scope
+  statement.
