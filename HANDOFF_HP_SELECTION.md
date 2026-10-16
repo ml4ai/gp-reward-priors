@@ -18549,6 +18549,8 @@ them.** (**FINAL**: all 28 cells, 2026-10-15)
   would have to roughly double to change the verdict. **Disclose it with the
   evaluation.** The experiments use the same seeding, which keeps them
   comparable with the anchor, and it is not changed mid-campaign.
+  **DECIDED 2026-10-16 (user): disclose only; the ~20-run measurement
+  (one cell pair re-run with disjoint evaluation seeds) is not made.**
 - **PT large_diverse has two seeds near zero, and both are kept** (seed 6
   0.008, seed 10 0.045; cell 0.169 ± 0.136), as PT medium_diverse's seed 10 is.
 - **large_diverse resolves little.** The learned rewards' across-seed sds there
