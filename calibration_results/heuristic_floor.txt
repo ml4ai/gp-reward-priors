@@ -1,0 +1,71 @@
+====================================================================================================
+TRIVIAL-HEURISTIC FLOOR (Chapter 3): torso path length vs the human label, per pair,
+on each seed's base validation split.  margin = model accuracy - floor accuracy.
+Mean over seeds 1-10, exact 10-seed bootstrap 95% interval.  DESCRIPTIVE: no verdict.
+====================================================================================================
+
+THE FLOOR (identical at every level: validation never shrinks)
+  medium_play     0.786  (seeds 0.753-0.844; 77 pairs per seed)
+  medium_diverse  0.878  (seeds 0.822-0.925; 107 pairs per seed)
+  large_play      0.807  (seeds 0.704-0.889; 54 pairs per seed)
+  large_diverse   0.888  (seeds 0.845-0.936; 110 pairs per seed)
+
+[anchor]
+  medium_play     MR        accuracy 0.918   margin +0.132  [+0.117, +0.148]   above the floor on 10/10 seeds
+  medium_play     PT        accuracy 0.897   margin +0.112  [+0.086, +0.140]   above the floor on 10/10 seeds
+  medium_play     BNN mean  accuracy 0.906   margin +0.121  [+0.095, +0.147]   above the floor on 10/10 seeds
+  medium_play     BNN CVaR  accuracy 0.829   margin +0.043  [+0.013, +0.071]   above the floor on 7/10 seeds
+  medium_diverse  MR        accuracy 0.903   margin +0.025  [+0.004, +0.046]   above the floor on 7/10 seeds
+  medium_diverse  PT        accuracy 0.864   margin -0.013  [-0.050, +0.018]   above the floor on 4/10 seeds
+  medium_diverse  BNN mean  accuracy 0.906   margin +0.028  [+0.008, +0.049]   above the floor on 7/10 seeds
+  medium_diverse  BNN CVaR  accuracy 0.789   margin -0.089  [-0.121, -0.054]   above the floor on 1/10 seeds
+  large_play      MR        accuracy 0.948   margin +0.141  [+0.091, +0.191]   above the floor on 9/10 seeds
+  large_play      PT        accuracy 0.913   margin +0.106  [+0.080, +0.133]   above the floor on 10/10 seeds
+  large_play      BNN mean  accuracy 0.881   margin +0.074  [+0.039, +0.109]   above the floor on 8/10 seeds
+  large_play      BNN CVaR  accuracy 0.772   margin -0.035  [-0.063, -0.000]   above the floor on 1/10 seeds
+  large_diverse   MR        accuracy 0.909   margin +0.021  [-0.001, +0.044]   above the floor on 5/10 seeds
+  large_diverse   PT        accuracy 0.859   margin -0.029  [-0.045, -0.013]   above the floor on 2/10 seeds
+  large_diverse   BNN mean  accuracy 0.905   margin +0.016  [-0.004, +0.037]   above the floor on 5/10 seeds
+  large_diverse   BNN CVaR  accuracy 0.815   margin -0.074  [-0.104, -0.043]   above the floor on 1/10 seeds
+
+[r16]
+  medium_play     MR        accuracy 0.834   margin +0.048  [+0.027, +0.070]   above the floor on 9/10 seeds
+  medium_play     PT        accuracy 0.771   margin -0.014  [-0.047, +0.018]   above the floor on 4/10 seeds
+  medium_diverse  MR        accuracy 0.750   margin -0.127  [-0.177, -0.076]   above the floor on 1/10 seeds
+  medium_diverse  PT        accuracy 0.666   margin -0.211  [-0.260, -0.160]   above the floor on 0/10 seeds
+  large_play      MR        accuracy 0.759   margin -0.048  [-0.111, +0.013]   above the floor on 4/10 seeds
+  large_play      PT        accuracy 0.585   margin -0.222  [-0.285, -0.157]   above the floor on 0/10 seeds
+  large_diverse   MR        not read -- seed 10: 2 totals fit the logged 0.520380437374115 over batches [64, 46]
+  large_diverse   PT        not read -- seed 1: 2 totals fit the logged 0.503057062625885 over batches [64, 46]
+
+[r32]
+  medium_play     MR        accuracy 0.886   margin +0.100  [+0.075, +0.127]   above the floor on 10/10 seeds
+  medium_play     PT        accuracy 0.809   margin +0.023  [-0.013, +0.058]   above the floor on 6/10 seeds
+  medium_diverse  MR        accuracy 0.833   margin -0.045  [-0.083, -0.011]   above the floor on 3/10 seeds
+  medium_diverse  PT        accuracy 0.778   margin -0.100  [-0.150, -0.050]   above the floor on 1/10 seeds
+  large_play      MR        accuracy 0.841   margin +0.033  [-0.013, +0.080]   above the floor on 6/10 seeds
+  large_play      PT        accuracy 0.709   margin -0.098  [-0.167, -0.041]   above the floor on 0/10 seeds
+  large_diverse   MR        accuracy 0.788   margin -0.100  [-0.135, -0.061]   above the floor on 1/10 seeds
+  large_diverse   PT        accuracy 0.715   margin -0.173  [-0.202, -0.140]   above the floor on 0/10 seeds
+
+[r64]
+  medium_play     MR        accuracy 0.884   margin +0.099  [+0.075, +0.121]   above the floor on 10/10 seeds
+  medium_play     PT        accuracy 0.858   margin +0.073  [+0.039, +0.105]   above the floor on 8/10 seeds
+  medium_diverse  MR        accuracy 0.874   margin -0.004  [-0.035, +0.028]   above the floor on 5/10 seeds
+  medium_diverse  PT        accuracy 0.787   margin -0.091  [-0.121, -0.060]   above the floor on 0/10 seeds
+  large_play      MR        accuracy 0.893   margin +0.085  [+0.031, +0.133]   above the floor on 9/10 seeds
+  large_play      PT        accuracy 0.789   margin -0.019  [-0.085, +0.035]   above the floor on 7/10 seeds
+  large_diverse   MR        accuracy 0.835   margin -0.054  [-0.081, -0.027]   above the floor on 2/10 seeds
+  large_diverse   PT        accuracy 0.762   margin -0.126  [-0.161, -0.093]   above the floor on 0/10 seeds
+
+[r128]
+  medium_play     MR        accuracy 0.904   margin +0.118  [+0.101, +0.134]   above the floor on 10/10 seeds
+  medium_play     PT        accuracy 0.873   margin +0.087  [+0.058, +0.114]   above the floor on 10/10 seeds
+  medium_diverse  MR        accuracy 0.896   margin +0.019  [-0.009, +0.047]   above the floor on 6/10 seeds
+  medium_diverse  PT        accuracy 0.846   margin -0.032  [-0.053, -0.009]   above the floor on 2/10 seeds
+  large_play      MR        accuracy 0.909   margin +0.102  [+0.059, +0.141]   above the floor on 9/10 seeds
+  large_play      PT        accuracy 0.878   margin +0.070  [+0.044, +0.098]   above the floor on 10/10 seeds
+  large_diverse   MR        accuracy 0.873   margin -0.015  [-0.039, +0.007]   above the floor on 3/10 seeds
+  large_diverse   PT        accuracy 0.799   margin -0.089  [-0.121, -0.061]   above the floor on 0/10 seeds
+
+BNN rows appear at a sparsity level once its ten models are finished.

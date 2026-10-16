@@ -21115,3 +21115,56 @@ gate. Chapter 3 states it (dissertation commit `bde6842`).
   §13.10 already state; it adds no criterion.
 - On the real data today: the four anchor units are conditional (§13.10.1), and
   the 16 sparsity units are unread, as no sparsity BNN exists yet.
+
+### 13.13 The trivial-heuristic floor (Chapter 3), run 2026-10-16 — and an open question about terminals
+
+**Asked by the user** after noticing that MR's IQL scores barely fell, or rose,
+at r16. Chapter 3 registers this floor as a reference line on reward-model
+metrics ("run it against every model family on the identical split ... and
+report the margin"); it reads no policy result.
+
+**The statistic, identified rather than assumed.** "Distance travelled" was never
+written down as a formula. **Path length of the torso (x, y) over the segment**
+reproduces Chapter 4's quick pass on the pooled tie-free files exactly (0.789,
+0.882, 0.793, 0.880); net displacement does not (0.73–0.80). Tool:
+`scripts_bnn/heuristic_floor.py` (`--pooled` re-prints the check). Output:
+`calibration_results/heuristic_floor.txt`.
+
+**Like for like.** MR and PT log `eval_acc_reloaded` as an UNWEIGHTED mean over
+unshuffled batches of 64 (e.g. 64 + 13 pairs), not a per-pair accuracy (medium_play
+seed 3: logged 0.853, per pair 70/77 = 0.909). The tool recovers the exact
+per-pair count as the unique integers fitting the logged mean, and reports a
+cell as not read where two totals fit (two large_diverse r16 runs: MR seed 10, PT
+seed 1). BNN logs per-pair accuracies already. Every margin is per pair, on the
+same seed's base validation split, mean over seeds 1–10 with the exact 10-seed
+interval. **Descriptive: Chapter 3 registers no margin.**
+
+**What it shows** (from the output; reward-model metrics, not policy results):
+
+- **The floor is high: 0.79–0.89** per seed's validation split (medium_play 0.786,
+  medium_diverse 0.878, large_play 0.807, large_diverse 0.888).
+- **At full data, the play variants clear it and the diverse variants barely
+  do.** medium_play and large_play: MR, PT and BNN mean +0.07 to +0.14. medium_diverse
+  and large_diverse: MR +0.025 and +0.021, BNN mean +0.028 and +0.016, PT −0.013 and
+  −0.029. On the diverse variants **no reward model has been shown to learn
+  more than gross motion**: Chapter 3's scope limitation, now measured.
+- **The deployed BNN CVaR reward is below the floor on three variants** (−0.089,
+  −0.035, −0.074; +0.043 on medium_play). The tail reorders preferences, as §7.4 E
+  found at the reward level.
+- **At r16 most MR and PT models are below the floor** (only MR medium_play is
+  above, +0.048); by r128 the margins are back near the anchor's. **Yet MR's IQL
+  scores at r16 did not fall** (own means, §13.8). Policy quality and preference
+  accuracy look decoupled on this benchmark. That is suggestive, not a reading.
+
+**An open question this raises — not yet verified, and it matters for every
+IQL result.** Every IQL run on a learned reward keeps D4RL's own `terminals`
+(`qlearning_dataset_*`). `gauge_reward max0` subtracts the dataset maximum, so
+every learned reward is ≤ 0 per step, and the winning normalizations shift it
+lower still (index 3: scale, then −1). **If antmaze's `terminals` mark arrival at
+the goal, a run is rewarded for reaching a terminal whatever its learned reward
+says**, because a terminal ends the stream of non-positive rewards. The task's
+goal would then reach IQL through the terminals, and the learned reward would act
+as shaping on top. That would explain both the floor-versus-policy decoupling
+and the learned rewards' strength against the task reward. **The semantics of
+antmaze-v2 `terminals` must be measured on the box** (D4RL is not installed on
+the analysis machine). The IQL control (next) is designed after that.
