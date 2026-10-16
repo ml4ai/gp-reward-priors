@@ -18525,6 +18525,30 @@ them.** (**FINAL**: all 28 cells, 2026-10-15)
   CE at the deployment level did not predict policy quality here.** The §7.4 E
   disclosure stands, and should not be read as "that seed's policy is
   uninformed".
+- **What a seed shares across methods, and one way the seeds are not independent**
+  (found 2026-10-16 from the code, on the user's question; nothing re-run).
+  At a given seed every method shares the data split, the IQL network
+  initialization and minibatch stream (`set_seed` seeds torch, NumPy and Python),
+  and the evaluation start states. These are common random numbers: they make
+  the methods' scores positively correlated within a seed, the paired
+  difference cancels the shared part, and the paired intervals are rightly
+  narrower than unpaired ones. They do not bias the mean difference.
+  **But the evaluation envs are seeded `seed + i`, i = 0…24**
+  (`iql_eval.eval_actor`). So consecutive IQL seeds share 24 of their 25
+  evaluation env streams, seeds 1 and 10 share 16, and all ten seeds draw on
+  env seeds 1–34 only. Every evaluation point of a run also reuses the same 100
+  starts, so a last-10 score is 100 start states × 10 policy snapshots, not
+  1,000 independent episodes. The paired *t* and the exact bootstrap both
+  assume independent seeds, so **to the extent the start states interact with
+  the method, the intervals run somewhat narrow.** The training side (split,
+  reward model, IQL run) is independent across seeds and likely dominates; the
+  start-state share is **unmeasured**, and no IQL policy was saved
+  (`checkpoints_path: null`), so it cannot be measured after the fact. The §12
+  verdicts stand as registered. The closest margin is medium_diverse vs MR,
+  lower end −0.056 against −0.10, with a half-width of ~0.045; that interval
+  would have to roughly double to change the verdict. **Disclose it with the
+  evaluation.** The experiments use the same seeding, which keeps them
+  comparable with the anchor, and it is not changed mid-campaign.
 - **PT large_diverse has two seeds near zero, and both are kept** (seed 6
   0.008, seed 10 0.045; cell 0.169 ± 0.136), as PT medium_diverse's seed 10 is.
 - **large_diverse resolves little.** The learned rewards' across-seed sds there
