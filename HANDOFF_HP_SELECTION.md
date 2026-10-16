@@ -20750,7 +20750,8 @@ are free when queue 4 ends. Steps 3–4 wait for the anchor's last sweep.
 > |---|---|---|---|---|---|
 > | r16 | MR medium_play | `edf1tdr4` | 0.606 ± 0.090 (10) | 0.620 ± 0.084 | 2026-10-15 |
 > | r16 | MR medium_diverse | `69e53xjk` | 0.649 ± 0.064 (10) | 0.653 ± 0.066 | 2026-10-15 |
-> | r16 | MR large_play | `ldr9p7ug` | | | running (`s2`) |
+> | r16 | MR large_play | `ldr9p7ug` | 0.500 ± 0.060 (10) | 0.509 ± 0.064 | 2026-10-16 |
+> | r16 | MR large_diverse | `oipn486o` | | | running (`s2`), parameters identical to its file |
 >
 > 🔄 **Step 3 LAUNCHED 2026-10-15 ~18:36 UTC (user): BNN, all four levels, GPUs
 > 2–5**, `COND="r16 r32 r64 r128" NUM_CHAINS=128 train_rewards.sh bnn "2 3 4 5" 4`,
