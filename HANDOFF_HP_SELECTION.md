@@ -21200,3 +21200,52 @@ four datasets. Consequences, which hold for every IQL result in this campaign:
   evaluation. Nothing in this campaign is unfair between methods. **But the
   write-up must say it**, beside every policy result and in Chapter 3's scope
   statement.
+
+### 13.14 The IQL controls — DECIDED 2026-10-16 (user): everything stops; the controls run on the whole box
+
+**Why (user, 2026-10-16), in substance:** the controls may change the direction
+of the research. The concern is that the four antmaze variants are not sensitive
+enough to separate learned reward functions, with some evidence in the anchor
+results and in the sparsity experiment so far (§13.13). If so, the options are new
+tasks (possibly a new preference dataset) or a more sensitive way of scoring
+antmaze, which would have to be argued not to favour BNN + CVaR.
+
+**Decisions:**
+
+| question | decision |
+|---|---|
+| controls | **no terminals** (learned reward is the only goal signal) and **motion heuristic** (path-length reward, with terminals) |
+| no-terminals series | **MR best-model and BNN CVaR**, each at its anchor stage-4 index (MR 0, 2, 3, 3; BNN CVaR 2, 2, 3, 3) |
+| heuristic index | **3, fixed in advance**, no selection |
+| priority | **stop all runs and queues now**; a run within an hour of finishing may complete; run the controls with all GPUs and CPUs |
+
+**Implementation (all OFF by default, so no existing sweep changes):**
+
+- `iql_eval.py`: `drop_terminals` zeroes the terminals **after** the reward is
+  built, gauged and normalized, so the normalization constants are the anchor's.
+  `heuristic_reward: path_length` sets each transition's reward to the raw torso
+  displacement ‖xy′ − xy‖, gauged `max0` like a learned reward, and is exclusive
+  with a reward model. The patch is purely additive. Tested on a toy dataset with
+  the functions extracted from the source (D4RL is not installed here): the reward
+  and normalization are identical with and without the drop at every index, and
+  the heuristic equals the displacement.
+- `phase2_sweeps.py control --write` generates `ctrl_sweeps/` (12 files: 4 × no-terminals
+  MR, 4 × no-terminals BNN CVaR, 4 × heuristic). It asserts that each no-terminals
+  file is its anchor evaluation file plus `drop_terminals` and nothing else, and
+  that no control file matches an anchor cell; `register` skips them silently.
+  `ctrl_sweeps/launch.sh` lists the 12; `stage4_queue.sh` accepts `@control`.
+- **Scale:** 120 runs. Two queues of five agents each, so a 10-run sweep is two full
+  waves: 10 concurrent, the box's CPU ceiling with no BNN job. ~12 waves ≈ **2.75 days**.
+  The no-terminals results come first.
+
+**What stops, and what has to be repaired on resume:**
+
+- BNN sparsity training (r16 medium_play seed 8 was ~4 h from done): killed. Its
+  partial directory is moved aside, not deleted. Seeds 1–7 are finished. On resume,
+  `train_rewards.sh`'s preflight refuses non-empty output directories, so the resume
+  must start from seed 8, and `production_readout` will see seed 8's crashed wandb
+  run beside the new one; filter it.
+- IQL: `kqa5ugg7` (ensemble CVaR medium_play r16) had 4 of 10 finished and seeds
+  5–8 at ~300k: cancelled. **That cell is re-run as a fresh sweep on resume** (a
+  sweep's grid points are consumed by killed runs). The waiter `s3` (PT r16) and
+  the rest of `s2` (seven ensemble r16 sweeps) are not launched.
