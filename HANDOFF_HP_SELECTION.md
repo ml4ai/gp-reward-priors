@@ -21249,3 +21249,23 @@ antmaze, which would have to be argued not to favour BNN + CVaR.
   5–8 at ~300k: cancelled. **That cell is re-run as a fresh sweep on resume** (a
   sweep's grid points are consumed by killed runs). The waiter `s3` (PT r16) and
   the rest of `s2` (seven ensemble r16 sweeps) are not launched.
+
+#### 13.14.1 Launched 2026-10-16 23:44 UTC (user); first runs checked; the readout written before any result
+
+- **Both control queues are running.** Queue A, GPUs 0–4: no-terminals MR ×4, then
+  heuristic medium_play and medium_diverse. Queue B, GPUs 5,0–3: no-terminals BNN CVaR
+  ×4, then heuristic large_play and large_diverse. First sweeps: `jk2f7imj`
+  (no-terminals MR, medium_play) and `nzytopm9` (no-terminals BNN CVaR, medium_play).
+  Both have **identical parameters** to their files. Every run received
+  `drop_terminals=True`, its family's index (MR 0, BNN CVaR 2) and its own seed's
+  model, and all ten were at ~12k steps five minutes in. The `[drop_terminals]
+  zeroed …` line is in the box's agent logs (`ctrl_sweeps/logs/`); wandb receives
+  console output only when a run ends.
+- **`results/control_readout.py`, written before any control run finished**: §12.5's
+  gate, audit and exact paired bootstrap, descriptive, no verdict. Questions fixed in
+  advance: **A** what the terminals carry (anchor − no-terminals, within MR and within
+  BNN CVaR); **B** whether the rewards separate without terminals (BNN CVaR − MR,
+  beside the §12 cell with terminals); **C** learned rewards against motion shaping
+  (every anchor method − heuristic, the task reward included); **D** each cell's own
+  mean ± sd. Self-tested; run live, it finds both running sweeps and their audit is
+  clean.
