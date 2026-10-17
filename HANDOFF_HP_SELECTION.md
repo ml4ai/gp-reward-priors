@@ -21340,3 +21340,42 @@ From `results/control_readout.py` (§13.14.1), both cells complete and audit-cle
   - Whether the collapse comes from the CVaR penalty or from the BNN reward
     itself is not separable without the BNN posterior mean without terminals,
     which is not in the control set (§13.14). **Recommended to the user.**
+
+#### 13.14.5 Added 2026-10-17 (user): BNN mean without terminals, and no-terminals normalization grids
+
+After §13.14.4. **The user's concern: the BNN CVaR collapse could be a
+normalization artifact**, since the indices were selected with terminals.
+Decisions, each on the recommended option except where the user extended it:
+
+| question | decision |
+|---|---|
+| BNN mean without terminals | **added**, seeds 1–10 at its stage-4 index (2, 2, 3, 3): separates the CVaR penalty from the BNN reward |
+| grid indices | **all 8** (0–3 for the task reward). Also tests empirically that shifted indices tie without terminals |
+| grid rewards | **MR, BNN CVaR, BNN mean, and the task reward** |
+| after the grid | **re-run seeds 1–10 at the no-terminals winner** wherever it differs from the index used; both reported |
+| priority | **grid next**, ahead of everything still waiting |
+
+**Why shifts should not matter without terminals, and scale should.** With no
+terminal every transition bootstraps, so a constant c adds c/(1 − γ) to every
+value and the advantages, and hence the policy, are unchanged (up to how well
+the network learns the offset). Only scale and shape remain. **Indices {0, 1},
+{2, 3, 4, 5} and {6, 7} should each tie**; the full grid tests that.
+
+**Built:** `phase2_sweeps.py control` now also writes `noterm_antmaze_<v>_bnn_mean`
+and the 16 grids `s4noterm_antmaze_<v>_<mr|bnn_cvar|bnn_mean|task>`. Each grid is
+the anchor's STAGE-4 file plus `drop_terminals`, asserted, at seed 0. The grids sit
+in a separate spec, because their fixed params equal the seeds 1–10 controls' and
+one dict would make every match ambiguous. `control_readout.py` gained BNN mean in
+A, B (BNN CVaR − BNN mean without terminals) and B2. It also gained **section E**:
+each grid scored and selected by the stage-4 rule (`iql_score.select_normalization`:
+last-10, argmax, ties to the lowest index), beside the index used, saying "re-run at
+k" where they differ. Self-tested, including a tie and an incomplete grid. Written
+before any grid run existed.
+
+**Queue, re-ordered (box commands in the reply):** the running sweeps
+(no-terminals MR and BNN CVaR, medium_diverse) finish, then two five-agent queues
+run the grids first (BNN CVaR and MR grids, then BNN mean, then task reward),
+then the rest. The rest is no-terminals MR and BNN CVaR on the large variants, BNN
+mean ×4, heuristic ×4, then task reward ×4. Estimated: the BNN CVaR and MR grids
+about 44 h after the current sweeps end; everything about 6.9 days after, plus any
+re-runs.
