@@ -21269,3 +21269,10 @@ antmaze, which would have to be argued not to favour BNN + CVaR.
   (every anchor method − heuristic, the task reward included); **D** each cell's own
   mean ± sd. Self-tested; run live, it finds both running sweeps and their audit is
   clean.
+- **Confirmed in the box's agent logs (user, 2026-10-17):** all ten first runs
+  print `[drop_terminals] zeroed 9768 terminals`, with no traceback. 9,768 rather
+  than the dataset's 9,787 because the transition builder drops each trajectory's
+  final step, so the 19 goal arrivals that fell on a trajectory end are not in the
+  training data. Every gauge line shows rewards ≤ 0 (BNN CVaR means about −4.1,
+  minima −19 to −40; MR means −17 to −70, the familiar MR scale). The commands match
+  the sweep files.
