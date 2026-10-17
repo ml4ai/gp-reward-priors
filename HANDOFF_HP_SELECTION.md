@@ -21311,3 +21311,32 @@ asserts the one-key difference. 40 runs, chained behind the two running queues
 includes the task reward (with − without terminals), and a new **B2** asks whether
 a learned reward carries more goal information than the task reward once both
 lose their terminals (learned − task reward, both without terminals).
+
+#### 13.14.4 First control result, 2026-10-17 17:07 UTC: medium_play without terminals (DESCRIPTIVE, one variant)
+
+From `results/control_readout.py` (§13.14.1), both cells complete and audit-clean:
+
+| cell | with terminals (anchor) | without terminals | with − without (95% exact) |
+|---|---|---|---|
+| MR best-model | 0.642 ± 0.042 | **0.636 ± 0.071** | +0.006 [−0.038, +0.054] |
+| BNN CVaR | 0.734 ± 0.048 | **0.226 ± 0.211** | **+0.508 [+0.390, +0.621]**, 10/10 seeds |
+
+- **Without terminals the two rewards separate, in the opposite direction:**
+  BNN CVaR − MR = −0.410 [−0.540, −0.267], 0/10 seeds, against +0.091 [+0.059,
+  +0.130] with terminals (the §12 cell).
+- **MR's reward carries the goal by itself on medium_play**: removing the terminals
+  changes nothing.
+- **BNN CVaR's does not**: its anchor score rested on the terminals. Per seed,
+  without terminals: 0.40, 0.22, 0.00, 0.05, 0.00, 0.20, 0.45, 0.26, 0.06, 0.62.
+  The legacy max is 0.551 against a last-10 of 0.226, so these runs learn the
+  goal and then lose it.
+- **Caveats, stated now, before more variants:**
+  - One variant of four.
+  - The normalization indices were selected WITH terminals and are kept (§13.14).
+    Without terminals the reward's level stops mattering: a constant shift adds
+    the same amount to every value. Its SCALE still matters, through IQL's
+    advantage weighting, and MR (index 0, raw) and BNN CVaR (index 2, scaled) sit
+    on different scales, so part of the gap may be scale, not content.
+  - Whether the collapse comes from the CVaR penalty or from the BNN reward
+    itself is not separable without the BNN posterior mean without terminals,
+    which is not in the control set (§13.14). **Recommended to the user.**
