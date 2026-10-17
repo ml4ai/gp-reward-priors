@@ -21295,3 +21295,19 @@ the sign of the reward relative to termination, which stage 4 sets, and
 possibly much less to its shape**, which the controls test. Recommended to the
 user: add the task-reward-without-terminals control (40 runs), needed to read
 the no-terminals results.
+
+#### 13.14.3 Added 2026-10-17 (user): the task reward without terminals
+
+Needed to read the no-terminals results: if learned rewards fail without
+terminals, this shows whether ANY reward can teach the goal without them here.
+**`ctrl_sweeps/noterm_antmaze_<v>_task.yaml`** is the task reward's evaluation file
+plus `drop_terminals`, at its stage-4 index (3, 1, 1, 1). It runs under
+`iql_eval.py` with no reward model, which is **exactly** `iql.py`'s task-reward
+path: a full diff of the two programs differs only in the reward-model plumbing
+and the two control options (the evaluation code is identical). The generator
+asserts the one-key difference. 40 runs, chained behind the two running queues
+(medium_play and medium_diverse behind queue A, the large pair behind queue B).
+`control_readout.py` gained it before any control result existed: section A now
+includes the task reward (with − without terminals), and a new **B2** asks whether
+a learned reward carries more goal information than the task reward once both
+lose their terminals (learned − task reward, both without terminals).
