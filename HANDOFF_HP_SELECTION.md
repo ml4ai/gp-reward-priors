@@ -21276,3 +21276,22 @@ antmaze, which would have to be argued not to favour BNN + CVaR.
   training data. Every gauge line shows rewards ≤ 0 (BNN CVaR means about −4.1,
   minima −19 to −40; MR means −17 to −70, the familiar MR scale). The commands match
   the sweep files.
+
+#### 13.14.2 Stage 4 read through the terminals (user's observation, 2026-10-17)
+
+The user noted that some normalization indices collapse performance, suggesting a
+reward can be misinformative rather than merely uninformative. The stage-4 table
+(§6) confirms it: **indices 4 and 5 score 0.000–0.06 for every learned reward on
+every variant**, and indices 6–7 are intermediate. But every index in a row is
+the SAME reward model under a different affine transform, so the collapse is
+about the reward's **level**, not its preference content. Indices 4/5 subtract
+`min_ret`, the lowest whole-trajectory return, from each per-step reward. After
+`max0` that return is large and negative (BNN rewards average about −4 per step),
+so every step becomes strongly positive, and a terminal (the goal) then **ends** a
+positive stream: the best policy avoids the goal. Indices 6/7 subtract
+`min_ret / trajectory length`, leaving rewards near zero with mixed sign: a weak
+pull, hence intermediate scores. **Antmaze-with-terminals is highly sensitive to
+the sign of the reward relative to termination, which stage 4 sets, and
+possibly much less to its shape**, which the controls test. Recommended to the
+user: add the task-reward-without-terminals control (40 runs), needed to read
+the no-terminals results.
