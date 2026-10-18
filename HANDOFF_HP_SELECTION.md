@@ -21435,3 +21435,7 @@ Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
 - **Section F** reads each reward at its own no-terminals winner: the re-run where
   the winner moved, the original control where it did not. It gives with − without
   terminals per reward, BNN CVaR − MR, and BNN CVaR − BNN mean. Self-tested.
+- **Queueing the re-runs, DECIDED 2026-10-18 (user): one re-queue**, once the BNN
+  CVaR and MR grids are complete on all four variants (~10-19 21:00 UTC). At that
+  point every re-run of those two rewards is known; they go in together, ahead of
+  the BNN mean and task-reward grids.
