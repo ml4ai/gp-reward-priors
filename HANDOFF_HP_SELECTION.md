@@ -21401,3 +21401,37 @@ re-runs.
   `c0spiago` (MR, medium_play) at 23:07 UTC. Both are identical to their files; every
   run is at seed 0 with `drop_terminals=True` and its own index. The BNN CVaR and MR
   grids on all four variants should be in by about 10-19 21:00 UTC.
+
+#### 13.14.7 The first no-terminals grids (medium_play), 2026-10-18 17:32 UTC; re-runs generated
+
+Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
+
+| reward | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner | seeds 1–10 ran at |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MR (`c0spiago`) | .678 | **.737** | .674 | .593 | .000 | .008 | .266 | .269 | **1** | 0 |
+| BNN CVaR (`qknrdi48`) | **.662** | .619 | .557 | .403 | .002 | .000 | .384 | .295 | **0** | 2 |
+
+- **The shift-invariance prediction of §13.14.5 fails for large shifts.** Indices 0
+  and 1 (a shift of 1) are close, as predicted, but 4 and 5 (a shift in the
+  thousands) still collapse without terminals. A shift c moves every value by
+  about c/(1 − γ) = 100c, and IQL's value regression evidently cannot carry an
+  offset that large. The caveat ("up to how well the network learns the
+  offset") is the dominant effect, not a footnote. Stated so it is not repeated.
+- **BNN CVaR's best index without terminals is the raw scale (0)**, not the
+  scaled index 2 its collapsed seeds 1–10 cell used: consistent with the scale
+  hypothesis of §13.14.6. These are single seed-0 runs; the re-runs decide.
+- **Both winners differ from the index used, so both are re-run** (the user's
+  rule): `ctrl_sweeps/rerun_noterm_antmaze_medium_play_mr` (index 1) and
+  `..._bnn_cvar` (index 0).
+
+**Tooling, written before any re-run exists:**
+- `control_readout.py --write-grid-winners` records each COMPLETE grid's winner
+  in `results/control_grid_winners.json`. It never changes a recorded winner; a
+  change stops it.
+- `phase2_sweeps.py control --rerun --write` builds a re-run for every control
+  whose winner moved: the no-terminals evaluation file with only
+  `normalize_reward` changed, asserted. Re-runs are queued by name; they are not
+  in `ctrl_sweeps/launch.sh`'s "all" list, which no queue uses.
+- **Section F** reads each reward at its own no-terminals winner: the re-run where
+  the winner moved, the original control where it did not. It gives with − without
+  terminals per reward, BNN CVaR − MR, and BNN CVaR − BNN mean. Self-tested.
