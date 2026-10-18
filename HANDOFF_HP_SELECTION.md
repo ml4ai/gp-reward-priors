@@ -21439,3 +21439,21 @@ Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
   CVaR and MR grids are complete on all four variants (~10-19 21:00 UTC). At that
   point every re-run of those two rewards is known; they go in together, ahead of
   the BNN mean and task-reward grids.
+
+#### 13.14.8 The medium_diverse no-terminals grids, 2026-10-18 23:00 UTC
+
+| reward | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner | ran at |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MR (`ib9i8gkl`) | .171 | .160 | .306 | .117 | .006 | .003 | .276 | **.310** | **7** | 2 |
+| BNN CVaR (`oq8nr9cu`) | .456 | .361 | **.486** | .367 | .004 | .007 | .240 | .310 | **2** | 2 |
+
+- **MR's winner moves 2 → 7 by 0.004**, a tie within noise, but the stage-4 rule is
+  applied as written: `ctrl_sweeps/rerun_noterm_antmaze_medium_diverse_mr` (index 7).
+- **BNN CVaR's winner is the index it ran at**, so its no-terminals cell (0.490 ±
+  0.069) stands at its winner. No re-run.
+- **Read with §13.14.6:** on medium_diverse, MR without terminals is weak at every
+  index (best 0.31 at seed 0) while BNN CVaR reaches about 0.49. So BNN CVaR's
+  advantage here is not a scale artifact. On medium_play the grid points the other
+  way (BNN CVaR best at raw scale, 0.66 against 0.56 scaled). The re-runs decide
+  both. Four grid winners are recorded; three re-runs are generated.
+- Large_play grids `x7agei8e` (BNN CVaR) and `vsi5qvtv` (MR) started ~22:55 UTC.
