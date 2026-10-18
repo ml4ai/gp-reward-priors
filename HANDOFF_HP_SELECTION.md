@@ -21379,3 +21379,25 @@ then the rest. The rest is no-terminals MR and BNN CVaR on the large variants, B
 mean ×4, heuristic ×4, then task reward ×4. Estimated: the BNN CVaR and MR grids
 about 44 h after the current sweeps end; everything about 6.9 days after, plus any
 re-runs.
+
+#### 13.14.6 Sweep check 2026-10-18 02:33 UTC: medium_diverse without terminals; the first grids running
+
+**medium_diverse, without terminals (DESCRIPTIVE; `control_readout.py`):**
+
+| cell | with terminals | without | with − without (95% exact) |
+|---|---|---|---|
+| MR best-model (idx 2) | 0.647 ± 0.057 | **0.306 ± 0.104** | +0.341 [+0.268, +0.416], 10/10 |
+| BNN CVaR (idx 2) | 0.637 ± 0.053 | **0.490 ± 0.069** | +0.147 [+0.119, +0.177], 10/10 |
+
+- **The medium_play picture flips.** Without terminals, BNN CVaR − MR is **+0.184
+  [+0.118, +0.250], 9/10** here, against −0.410 on medium_play. Both differences are
+  large and they have opposite signs.
+- **What stays consistent so far**: every cell run at index 2 (scaled) lost a lot
+  without terminals (BNN CVaR on both variants, MR on medium_diverse). The one cell
+  run at index 0 (raw scale), MR on medium_play, lost nothing. That points at scale,
+  and the no-terminals grids running now test exactly that. One pattern over three
+  cells is a hypothesis, not a finding.
+- **The grids started on time**: `qknrdi48` (BNN CVaR, medium_play) at 22:52 UTC and
+  `c0spiago` (MR, medium_play) at 23:07 UTC. Both are identical to their files; every
+  run is at seed 0 with `drop_terminals=True` and its own index. The BNN CVaR and MR
+  grids on all four variants should be in by about 10-19 21:00 UTC.
