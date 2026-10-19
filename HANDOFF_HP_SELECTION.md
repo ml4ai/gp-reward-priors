@@ -21502,3 +21502,37 @@ On the user's question; read from github.com/csmile-1006/PreferenceTransformer
 here: it is in the PT authors' own pipeline**, and the published antmaze results
 for MR and PT inherit it. The write-up should say so wherever those results are
 compared against.
+
+#### 13.14.10 Where the goal comes from without terminals: steps-to-goal (run), reward maps and goal coverage (box)
+
+The goal is **not** in the antmaze observation: 29 dimensions, all varying (torso
+x, y; orientation; joint angles and velocities), checked on the preference data
+2026-10-19. It reaches IQL through the task reward and the terminals; without
+terminals, through the learned reward's spatial shape, or through the data (IQL's
+actor imitates advantage-weighted dataset actions). The user asked for three checks.
+
+**1. Steps-to-goal (`results/control_steps.py`, output `control_steps_latest.txt`):**
+`results_table.ipynb`'s Table 2 statistic, the success-weighted steps over the last
+10 evaluations, paired by seed with and without terminals. DESCRIPTIVE.
+
+| reward | variant | success with → without | steps with → without | without − with |
+|---|---|---|---|---|
+| MR | medium_play | 0.642 → 0.636 | 417 → 435 | +18 [−13, +49] |
+| BNN CVaR | medium_play | 0.734 → 0.226 | 360 → 492 | +135 (8 seeds succeed) |
+| MR | medium_diverse | 0.647 → 0.306 | 418 → 514 | +96 [+74, +127] |
+| BNN CVaR | medium_diverse | 0.637 → 0.490 | 401 → 438 | +37 [+25, +47] |
+
+**Where success survives without terminals, directness survives too** (MR,
+medium_play): the policy still heads for the goal, so something other than the
+terminals carries it. Where success collapses, the remaining successes take about
+100–135 more steps, consistent with wandering into the goal. The step cost tracks
+the success loss. Caveat: steps count successful episodes only, a selected subset
+when success falls.
+
+**2–3. `results/goal_structure.py`, on the box:** reward maps (each learned reward
+exactly as IQL trains on it, via iql_eval's own labelling functions with BNN labels
+from the cache, averaged per maze cell, Spearman ρ against BFS distance to the
+evaluation goal; negative = the reward rises toward the goal; task reward and
+path-length heuristic as references). Plus goal coverage: the fraction of
+transitions whose commanded goal (`infos/goal`) is the evaluation goal's cell.
+Self-tested here; the live maze and goal come from the box's D4RL env.
