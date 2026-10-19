@@ -21457,3 +21457,23 @@ Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
   way (BNN CVaR best at raw scale, 0.66 against 0.56 scaled). The re-runs decide
   both. Four grid winners are recorded; three re-runs are generated.
 - Large_play grids `x7agei8e` (BNN CVaR) and `vsi5qvtv` (MR) started ~22:55 UTC.
+
+#### 13.14.9 The large_play no-terminals grids, 2026-10-19 17:21 UTC
+
+| reward | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner | anchor index |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MR (`vsi5qvtv`) | .177 | .120 | .049 | .120 | .000 | .000 | **.312** | .156 | **6** | 3 |
+| BNN CVaR (`x7agei8e`) | **.393** | .233 | .245 | .156 | .000 | .001 | .225 | .210 | **0** | 3 |
+
+- **Re-runs generated:** `rerun_noterm_antmaze_large_play_mr` (index 6) and
+  `..._bnn_cvar` (index 0). Six grid winners are recorded; five re-runs exist.
+- **BNN CVaR's best no-terminals index is the raw scale on two variants of three**
+  (medium_play and large_play; on medium_diverse it is 2). Without terminals
+  every large_play score is low (at most 0.39 at seed 0).
+- **On large_play and large_diverse the seeds 1–10 no-terminals cells at the
+  anchor index have not run yet** (they are queued after the grids). The
+  re-queue keeps them, so every variant reports both the anchor index and the
+  winner, as medium_play and medium_diverse do. Dropping them would save 40 runs
+  but break that symmetry.
+- The large_diverse grids (`e4inbxly` BNN CVaR, `qa98zrtp` MR) are in their second
+  wave; the single re-queue follows when they finish.
