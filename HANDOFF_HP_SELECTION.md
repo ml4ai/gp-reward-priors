@@ -21536,3 +21536,38 @@ evaluation goal; negative = the reward rises toward the goal; task reward and
 path-length heuristic as references). Plus goal coverage: the fraction of
 transitions whose commanded goal (`infos/goal`) is the evaluation goal's cell.
 Self-tested here; the live maze and goal come from the box's D4RL env.
+
+#### 13.14.11 Reward maps and goal coverage, first run (box, 2026-10-19; `calibration_results/goal_structure_run1.txt`)
+
+Spearman ρ of each reward's per-cell mean against BFS distance to the evaluation
+goal (negative = rises toward the goal); goal cell's rank in parentheses; seeds 1–3.
+DESCRIPTIVE.
+
+| reward | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| BNN CVaR | −0.88 to −0.90 (2) | −0.40 to −0.61 (4–6) | −0.88 to −0.93 (2) | −0.78 to −0.80 (2) |
+| BNN mean | −0.70 to −0.81 (2–3) | +0.32 to +0.45 (12–14) | −0.52 to −0.56 (2–3) | −0.10 to −0.16 (3–4) |
+| MR | −0.39 to −0.59 (4–7) | +0.03 to +0.32 (14–24) | −0.01 to −0.19 (2–4) | −0.10 to −0.20 (4–6) |
+| PT | +0.04 to +0.12 (6–19) | −0.60 to +0.15 (10–16) | −0.10 to −0.45 (30–43) | −0.30 to −0.38 (39–40) |
+| path-length heuristic | +0.28 | +0.40 | +0.33 | +0.16 |
+
+- **Goal coverage:** the controller was commanded to the evaluation goal's cell for
+  5–8% of transitions (within one cell: 11–25%); the goal cell is heavily occupied
+  (medium about 97k transitions against a mean of 38k per cell).
+- **MR's maps fit its no-terminals results:** the reward rises toward the goal on
+  medium_play, where MR held up without terminals, and not on medium_diverse, where it
+  collapsed.
+- **The motion heuristic points away from the goal** everywhere: ants move fastest
+  far from the goal and linger near it.
+- **BNN CVaR does not fit:** the strongest goal gradient of any reward on every
+  variant, yet it collapsed without terminals on medium_play. Two candidate
+  explanations, both checkable: (1) the gradient is DATA DENSITY (CVaR lowers reward
+  where the posterior is uncertain, i.e. where data is thin; the goal cell is among
+  the densest), and (2) loitering (its goal cell ranks 2nd; without terminals a
+  policy may settle in the 1st-ranked cell). Plus scale, which the index-0 re-run tests.
+- **Extended** (`b9cb88f`): per model, ρ of the reward map against cell occupancy,
+  and the top cell's distance from the goal and occupancy; per variant, occupancy
+  against distance. Same command, second run.
+- Side check: BNN training reads the live maze (`map_env_name` is set in all four
+  production configs). The hardcoded large map in `maze_layouts.py` is an unused
+  fallback and does not match the live maze (the live goal cell is (7, 9)).

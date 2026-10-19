@@ -1,0 +1,200 @@
+nohup: ignoring input
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/champlin/anaconda3/envs/pt/lib/python3.12/site-packages/Cython/Distutils/old_build_ext.py:15: DeprecationWarning: dep_util is Deprecated. Use functions from setuptools instead.
+  from distutils.dep_util import newer, newer_group
+<frozen importlib._bootstrap>:530: DeprecationWarning: the load_module() method is deprecated and slated for removal in Python 3.12; use exec_module() instead
+Warning: Flow failed to import. Set the environment variable D4RL_SUPPRESS_IMPORT_ERROR=1 to suppress this message.
+No module named 'flow'
+/home/champlin/anaconda3/envs/pt/lib/python3.12/site-packages/glfw/__init__.py:917: GLFWError: (65550) b'X11: The DISPLAY environment variable is missing'
+  warnings.warn(message, GLFWError)
+Warning: CARLA failed to import. Set the environment variable D4RL_SUPPRESS_IMPORT_ERROR=1 to suppress this message.
+No module named 'carla'
+pybullet build time: Oct  1 2025 17:38:49
+/home/champlin/anaconda3/envs/pt/lib/python3.12/site-packages/pybullet_envs/env_bases.py:8: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import parse_version
+/home/champlin/anaconda3/envs/pt/lib/python3.12/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+Target Goal:  (20.861471875702954, 20.583787906581605)
+Target Goal:  (20.889536706355276, 20.569026541166465)
+
+=== antmaze-medium-play-v2: evaluation goal [20.86, 20.58] (from target_goal) -> cell (6, 6); 26 free cells; max BFS distance 10
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.86it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.63it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.72it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.33it/s]
+  goal coverage: commanded goal in the evaluation goal's cell for 0.055 of 1,000,000 transitions; within 1 cell 0.252; 12 distinct commanded cells; commanded-goal BFS distance to the evaluation goal: median 8
+  state coverage: 26 cells visited; transitions in the goal cell 96,806
+  task reward (0/1)                   rho -0.057   goal cell's reward rank 1 of 26
+  path-length heuristic               rho +0.275   goal cell's reward rank 11 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.77it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.24it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.58it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.30it/s]
+  MR        seed  1   999,000 transitions   rho -0.393   goal cell's reward rank 7 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.70it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.58it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.68it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.31it/s]
+  MR        seed  2   999,000 transitions   rho -0.549   goal cell's reward rank 4 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.88it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.63it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.72it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.36it/s]
+  MR        seed  3   999,000 transitions   rho -0.585   goal cell's reward rank 6 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.62it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.45it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.58it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.20it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.22it/s]
+  PT        seed  1   999,000 transitions   rho +0.117   goal cell's reward rank 19 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.92it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.70it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.77it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.40it/s]
+  PT        seed  2   999,000 transitions   rho +0.044   goal cell's reward rank 6 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.98it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.74it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.81it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.42it/s]
+  PT        seed  3   999,000 transitions   rho +0.095   goal cell's reward rank 14 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.84it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.59it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.64it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.24it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.30it/s]
+[label-cache] HIT a877b5c051d2351d333977e58623d9e4 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean 0.0000 +- 1.5127 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  1   999,000 transitions   rho -0.698   goal cell's reward rank 2 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.90it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.60it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.68it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.26it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.34it/s]
+[label-cache] HIT f21c49a4ffd36720da9aa2dee6029808 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.4059 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  2   999,000 transitions   rho -0.737   goal cell's reward rank 3 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.90it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.61it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.68it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.24it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.32it/s]
+[label-cache] HIT 36f2046c93ee66cbd5d295bf6f617135 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.4638 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  3   999,000 transitions   rho -0.814   goal cell's reward rank 3 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.91it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.64it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.69it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.24it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.32it/s]
+[label-cache] HIT 312949f1bfd301f245cea8de466952ef — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.9059 +- 1.6166 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  1   999,000 transitions   rho -0.878   goal cell's reward rank 2 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.86it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.59it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.64it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.23it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.29it/s]
+[label-cache] HIT b16efe3078b8e2ce93d0bc739bb73a47 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.7798 +- 1.5489 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  2   999,000 transitions   rho -0.904   goal cell's reward rank 2 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.90it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.61it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.69it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.32it/s]
+/home/champlin/anaconda3/envs/pt/lib/python3.12/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[label-cache] HIT c6c61439da8188a191c1f726e3741f5a — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.9663 +- 1.5876 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  3   999,000 transitions   rho -0.900   goal cell's reward rank 2 of 26
+Target Goal:  (20.401039790520066, 21.05736364564298)
+Target Goal:  (20.829023571234256, 21.174169673819577)
+
+=== antmaze-medium-diverse-v2: evaluation goal [20.4, 21.06] (from target_goal) -> cell (6, 6); 26 free cells; max BFS distance 10
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.87it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.58it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.63it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.22it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.28it/s]
+  goal coverage: commanded goal in the evaluation goal's cell for 0.051 of 1,000,000 transitions; within 1 cell 0.233; 12 distinct commanded cells; commanded-goal BFS distance to the evaluation goal: median 8
+  state coverage: 26 cells visited; transitions in the goal cell 90,980
+  task reward (0/1)                   rho -0.336   goal cell's reward rank 1 of 26
+  path-length heuristic               rho +0.404   goal cell's reward rank 15 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.79it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.58it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.70it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.26it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.33it/s]
+  MR        seed  1   999,000 transitions   rho +0.034   goal cell's reward rank 14 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.93it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.62it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.67it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.32it/s]
+  MR        seed  2   999,000 transitions   rho +0.314   goal cell's reward rank 22 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.76it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.54it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.66it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.18it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.22it/s]
+  MR        seed  3   999,000 transitions   rho +0.322   goal cell's reward rank 24 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.93it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.74it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.82it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.35it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.50it/s]
+  PT        seed  1   999,000 transitions   rho -0.601   goal cell's reward rank 10 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.87it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.62it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.65it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.33it/s]
+  PT        seed  2   999,000 transitions   rho -0.598   goal cell's reward rank 12 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.94it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.73it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.78it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.31it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.44it/s]
+  PT        seed  3   999,000 transitions   rho +0.147   goal cell's reward rank 16 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.86it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.68it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.77it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.31it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.43it/s]
+[label-cache] HIT 52128bf748710d8d3d70a9c9eb913138 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.3954 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  1   999,000 transitions   rho +0.332   goal cell's reward rank 12 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.92it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.73it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.78it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.42it/s]
+[label-cache] HIT a9a60b04c5512bea400e16a7f0c26d1c — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean 0.0000 +- 1.4251 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  2   999,000 transitions   rho +0.318   goal cell's reward rank 12 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.91it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.72it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.78it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.38it/s]
+[label-cache] HIT dd408543c4178f53e4d791782a8dc3e8 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean 0.0000 +- 1.3862 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  3   999,000 transitions   rho +0.454   goal cell's reward rank 14 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.88it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.70it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.30it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+[label-cache] HIT 686217d7a6dc4f506784da7916fb6b02 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.8729 +- 0.9900 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  1   999,000 transitions   rho -0.610   goal cell's reward rank 4 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  5.02it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.79it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.80it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.43it/s]
+[label-cache] HIT bcf2dde3ac0ad9002cb26b67b9ad8569 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.9133 +- 1.0891 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  2   999,000 transitions   rho -0.613   goal cell's reward rank 4 of 26
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  5.07it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.81it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.82it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.31it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.46it/s]
+[label-cache] HIT e9044b69795c57e5efe53c1d56684c98 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.8057 +- 0.9022 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  3   999,000 transitions   rho -0.400   goal cell's reward rank 6 of 26
+Target Goal:  (32.214776421720494, 24.951388510273468)
+Target Goal:  (33.170222730814686, 24.70092930296314)
+
+=== antmaze-large-play-v2: evaluation goal [32.21, 24.95] (from target_goal) -> cell (7, 9); 46 free cells; max BFS distance 18
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  5.02it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.79it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.81it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.42it/s]
+  goal coverage: commanded goal in the evaluation goal's cell for 0.080 of 1,000,000 transitions; within 1 cell 0.110; 28 distinct commanded cells; commanded-goal BFS distance to the evaluation goal: median 8
+  state coverage: 46 cells visited; transitions in the goal cell 46,595
+  task reward (0/1)                   rho -0.253   goal cell's reward rank 1 of 46
+  path-length heuristic               rho +0.333   goal cell's reward rank 16 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  5.04it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.74it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.76it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.28it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+  MR        seed  1   999,000 transitions   rho -0.189   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.78it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.61it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.70it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.36it/s]
+  MR        seed  2   999,000 transitions   rho -0.013   goal cell's reward rank 4 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.92it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.67it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+  MR        seed  3   999,000 transitions   rho -0.189   goal cell's reward rank 4 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.96it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.70it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.76it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.38it/s]
+  PT        seed  1   999,000 transitions   rho -0.397   goal cell's reward rank 43 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.87it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.67it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.76it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.28it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.39it/s]
+  PT        seed  2   999,000 transitions   rho -0.103   goal cell's reward rank 30 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.86it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.64it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.73it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.37it/s]
+  PT        seed  3   999,000 transitions   rho -0.454   goal cell's reward rank 43 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.93it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.68it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.28it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.38it/s]
+[label-cache] HIT 1d86c190448f82ec70d20a9edd0ad1ce — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.0709 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  1   999,000 transitions   rho -0.522   goal cell's reward rank 3 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.95it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.69it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+[label-cache] HIT a40bfecbc32e04282e230b07ae69ed17 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.0385 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  2   999,000 transitions   rho -0.553   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  5.03it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.76it/s]load datafile:  50%|█████     | 4/8 [00:00<00:01,  3.78it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.42it/s]
+[label-cache] HIT 47878e484460b9599531fe03bbe81430 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean 0.0000 +- 1.1659 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  3   999,000 transitions   rho -0.564   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.96it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.67it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.74it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.24it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.34it/s]
+[label-cache] HIT 7bb74e7c587bfd1381407f7a5dd0c0d7 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.7761 +- 1.2409 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  1   999,000 transitions   rho -0.934   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.81it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.57it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.67it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.25it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.32it/s]
+[label-cache] HIT b89466b05fc78fc108d5ebb317875e7c — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.7464 +- 1.3078 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  2   999,000 transitions   rho -0.884   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.89it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.68it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.74it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.26it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.36it/s]
+[label-cache] HIT 0aa451bb4ac9f43829b697ca0a27dffc — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.8108 +- 1.3810 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  3   999,000 transitions   rho -0.883   goal cell's reward rank 2 of 46
+Target Goal:  (32.76641427428873, 24.616423943720626)
+Target Goal:  (32.5561608789608, 24.639359373974596)
+
+=== antmaze-large-diverse-v2: evaluation goal [32.77, 24.62] (from target_goal) -> cell (7, 9); 46 free cells; max BFS distance 18
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.85it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.64it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.60it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.16it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.20it/s]
+  goal coverage: commanded goal in the evaluation goal's cell for 0.079 of 1,000,000 transitions; within 1 cell 0.118; 28 distinct commanded cells; commanded-goal BFS distance to the evaluation goal: median 8
+  state coverage: 46 cells visited; transitions in the goal cell 46,501
+  task reward (0/1)                   rho -0.253   goal cell's reward rank 1 of 46
+  path-length heuristic               rho +0.159   goal cell's reward rank 11 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.94it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.70it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.18it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.25it/s]
+  MR        seed  1   999,000 transitions   rho -0.198   goal cell's reward rank 4 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.89it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.60it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.47it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.21it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.24it/s]
+  MR        seed  2   999,000 transitions   rho -0.133   goal cell's reward rank 5 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.93it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.75it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.28it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.39it/s]
+  MR        seed  3   999,000 transitions   rho -0.099   goal cell's reward rank 6 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.91it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.74it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.40it/s]
+  PT        seed  1   999,000 transitions   rho -0.303   goal cell's reward rank 40 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.90it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.65it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.73it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+  PT        seed  2   999,000 transitions   rho -0.376   goal cell's reward rank 40 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.91it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.74it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.28it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.39it/s]
+  PT        seed  3   999,000 transitions   rho -0.363   goal cell's reward rank 39 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.87it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.77it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.38it/s]
+[label-cache] HIT 21973420bf18b527a2d23192805ff6d8 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.3922 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  1   999,000 transitions   rho -0.112   goal cell's reward rank 4 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.89it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.63it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.70it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.37it/s]
+[label-cache] HIT 885bc3ce9318130faa4de074fe9cc6e1 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.3588 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  2   999,000 transitions   rho -0.102   goal cell's reward rank 4 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.86it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.78it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.29it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.41it/s]
+[label-cache] HIT bf06761e842e740fe43cef188dce684b — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -0.0000 +- 1.3780 (alpha=0.0, centre_draws=True)
+  BNN mean  seed  3   999,000 transitions   rho -0.162   goal cell's reward rank 3 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.91it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.66it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.74it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.37it/s]
+[label-cache] HIT 376dc16ff9ab3d3e979e46e8a882ed0f — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.6587 +- 1.1293 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  1   999,000 transitions   rho -0.794   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.72it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.61it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.69it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.35it/s]
+[label-cache] HIT a966e0814df0960abfc4f9293a653821 — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.5506 +- 0.9718 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  2   999,000 transitions   rho -0.782   goal cell's reward rank 2 of 46
+load datafile:   0%|          | 0/8 [00:00<?, ?it/s]load datafile:  12%|█▎        | 1/8 [00:00<00:01,  4.90it/s]load datafile:  38%|███▊      | 3/8 [00:00<00:01,  4.64it/s]load datafile:  50%|█████     | 4/8 [00:01<00:01,  3.73it/s]load datafile:  62%|██████▎   | 5/8 [00:01<00:01,  2.27it/s]load datafile: 100%|██████████| 8/8 [00:01<00:00,  4.38it/s]
+[label-cache] HIT 0fc94a37c1914ba95eba878b76023daa — 999999 labels, inventory VERIFIED against 128 source file(s).
+[BNN/CVaR] labels from cache: mean -2.6788 +- 1.0196 (alpha=0.95, centre_draws=True)
+  BNN CVaR  seed  3   999,000 transitions   rho -0.799   goal cell's reward rank 2 of 46
