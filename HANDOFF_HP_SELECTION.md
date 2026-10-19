@@ -21477,3 +21477,5 @@ Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
   but break that symmetry.
 - The large_diverse grids (`e4inbxly` BNN CVaR, `qa98zrtp` MR) are in their second
   wave; the single re-queue follows when they finish.
+- **DECIDED 2026-10-19 (user): keep them.** The large variants run both the
+  anchor-index no-terminals cells and the re-runs at the grid winners.
