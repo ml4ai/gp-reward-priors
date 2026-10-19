@@ -21479,3 +21479,26 @@ Seed 0, no terminals, last-10 per index (section E of `control_readout.py`):
   wave; the single re-queue follows when they finish.
 - **DECIDED 2026-10-19 (user): keep them.** The large variants run both the
   anchor-index no-terminals cells and the re-runs at the grid winners.
+
+#### 13.13.2 The Preference Transformer's own IQL keeps the terminals too (checked 2026-10-19)
+
+On the user's question; read from github.com/csmile-1006/PreferenceTransformer
+(main), raw files:
+
+- `dataset_utils.py`, `D4RLDataset`: built from `d4rl.qlearning_dataset(env)` with
+  `masks = 1.0 - dataset['terminals']`. `reward_from_preference` (MR) and
+  `reward_from_preference_transformer` (PT) replace only `dataset.rewards`; the
+  masks are untouched.
+- `critic.py`: `target_q = batch.rewards + discount * batch.masks * next_v`, so a
+  goal arrival stops bootstrapping, as in this campaign's IQL.
+- `train_offline.py`, `normalize()` for a learned antmaze reward:
+  (r − min_return / trajectory length) / (max_return − min_return) × 1000, then −1.
+  **That is this campaign's normalization index 7**, without the `max0` gauge; under
+  index 7 a constant shift largely cancels (exactly for equal trajectory lengths).
+  Index 7 was in every stage-4 grid and lost to indices 2–3 for every learned reward,
+  by far on the large variants (0.07–0.13 against 0.38–0.56).
+
+**So the terminal channel of §13.13.1 is not an artefact of the IQL code cloned
+here: it is in the PT authors' own pipeline**, and the published antmaze results
+for MR and PT inherit it. The write-up should say so wherever those results are
+compared against.
