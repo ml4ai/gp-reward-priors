@@ -21592,3 +21592,34 @@ DESCRIPTIVE.
   waiter waits for WHATEVER sweep is running on its GPU set (matched by the
   launcher's GPU arguments), so a switch between sweeps cannot trip it. The
   re-runs start when the two BNN mean grids now running end (about 10-20 10:00 UTC).
+
+#### 13.14.13 Density and loitering (extended run, 2026-10-19; `calibration_results/goal_structure_run2.txt`)
+
+DESCRIPTIVE; reward maps, not observed behaviour.
+
+- **Density:** the data crowds toward the goal on every variant (occupancy vs BFS
+  distance ρ −0.38 to −0.51). BNN CVaR's reward map tracks occupancy (+0.45 to
+  +0.66); BNN mean and MR do not (about −0.3 to +0.3). Part of CVaR's goal gradient
+  is density, as its penalty predicts, but not all: its map is more goal-aligned
+  (−0.78 to −0.93) than occupancy itself.
+- **Loitering:** BNN CVaR's highest-reward cell is never the goal, and it is the same
+  cell on all three seeds: medium_play (6, 5) and medium_diverse (6, 5), each one
+  cell from the goal and as densely visited as the goal cell; large_play (7, 10), one
+  cell away; large_diverse (6, 4), a sparse cell ten cells away. Without terminals a
+  reward-maximizing policy may settle in the top cell; success needs the goal itself.
+  This fits the collapse on medium_play and large_diverse and the long
+  steps-to-goal of the remaining successes (§13.14.10); with terminals, arriving at
+  the goal is what pays, which pulls the policy the last cell.
+- **MR's top cells are mostly sparse and far** (e.g. (2, 2) on medium_play, 4,283
+  transitions), yet MR on medium_play succeeds without terminals. A hypothesis: IQL
+  learns from the data it sees, so a rarely visited top cell attracts less than a
+  dense one.
+- **PT:** its goal cell ranks near the bottom on the large variants (39–43 of 46), and
+  on large_diverse its map tracks occupancy almost exactly (+0.86).
+- **Unconfirmed:** the policies were not saved and the evaluation does not log final
+  positions; confirming loitering needs a few re-runs that log them. The index-0
+  re-runs test scale separately.
+- **A candidate mechanism story for the write-up:** conservatism shapes the reward
+  toward well-supported states near the goal (Chapter 3's H2, low-support
+  deflation), and the terminals supply the last step. CVaR's benefit with terminals
+  and its collapse without them may be the same mechanism.
