@@ -21571,3 +21571,24 @@ DESCRIPTIVE.
 - Side check: BNN training reads the live maze (`map_env_name` is set in all four
   production configs). The hardcoded large map in `maze_layouts.py` is an unused
   fallback and does not match the live maze (the live goal cell is (7, 9)).
+
+#### 13.14.12 BNN CVaR and MR grids complete (2026-10-19 23:10 UTC); the single re-queue
+
+| reward | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR: winner (anchor index) | 1 (0) | 7 (2) | 6 (3) | 6 (3) |
+| BNN CVaR: winner (anchor index) | 0 (2) | 2 (2) | 0 (3) | 7 (3) |
+
+- **large_diverse without terminals is near zero for both rewards at every index**
+  except 6–7: MR 0.000, 0.000, 0.000, 0.004, 0.000, 0.000, **0.152**, 0.123; BNN CVaR
+  0.016, 0.000, 0.027, 0.011, 0.000, 0.000, 0.074, **0.142** (seed 0).
+- **Seven of eight winners moved, so seven re-runs**
+  (`ctrl_sweeps/rerun_noterm_antmaze_<v>_<mr|bnn_cvar>`); BNN CVaR on medium_diverse
+  stands at its anchor index.
+- **The single re-queue (user's decision, §13.14.7):** the two queues are replaced
+  by E1 (GPUs 0–4): the four MR re-runs, then the remaining BNN mean and task-reward
+  grids for the medium variants, then the rest; and E2 (GPUs 5, 0–3): the three BNN
+  CVaR re-runs, then the large variants' remaining grids, then the rest. Each new
+  waiter waits for WHATEVER sweep is running on its GPU set (matched by the
+  launcher's GPU arguments), so a switch between sweeps cannot trip it. The
+  re-runs start when the two BNN mean grids now running end (about 10-20 10:00 UTC).
