@@ -21666,3 +21666,28 @@ To see loitering directly rather than infer it from reward maps (§13.14.13).
   0.68). `xj16t1yu` (BNN CVaR) is at ~96% on its first five seeds.
 - **Fixed in the reader:** it read running runs' partial CSVs as if they were the
   scoring window; it now reads finished runs only (`a9916b4`).
+
+#### 13.14.16 Final positions (diagnostics, 2026-10-20 22:17 UTC): loitering REFUTED on medium_play (5 of 10 BNN CVaR seeds)
+
+`results/final_positions.py`, finished runs only, last 10 evaluations (100 episodes
+each). Both diagnostics reproduce their original cells: MR pools to 0.630 (original
+0.636); BNN CVaR seeds 1–5 score 0.397, 0.210, 0.000, 0.040, 0.000 (original 0.40,
+0.22, 0.00, 0.05, 0.00).
+
+| no terminals, medium_play | success | failures ending 1 cell from the goal | failures ending ≥ 5 cells away | most common failure-end cells |
+|---|---|---|---|---|
+| BNN CVaR (seeds 1–5) | 0.129 | 10% | 75% | (5, 4) ×716, (3, 4), (4, 2), (5, 3) |
+| MR (seeds 1–10) | 0.630 | 11% | 61% | (2, 2) ×452, (5, 6), (3, 3) |
+
+- **BNN CVaR's failures do not stop one cell short.** The loitering hypothesis of
+  §13.14.13 predicted failures piling up in (6, 5), the cell next to the goal where
+  its reward map peaks. Only ~10% end there, nearly all from one seed (seed 4, 244
+  episodes). Most end five or more cells away, around (5, 4) (5 cells from the goal).
+  **Without terminals the failing BNN CVaR policies do not head toward the goal at
+  all.**
+- **The reward map's top cell did not predict where the policy ends.** It said where
+  reward is high, not where IQL's policy goes. Recorded as refuted, so it is not
+  repeated.
+- **Remaining candidates for the collapse:** scale (the index-0 re-run is next in F2)
+  and the CVaR shaping pulling the route toward dense mid-maze areas (untested).
+- BNN CVaR seeds 6–10 were still running; to be folded in.
