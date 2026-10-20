@@ -21646,3 +21646,23 @@ To see loitering directly rather than infer it from reward maps (§13.14.13).
   (6, 6)); it refuses the large layout, which does not.
 - **Queued first**, ahead of each family's re-runs (MR's in E1, BNN CVaR's in E2):
   both explain cells already measured. This delays the re-runs by ~11.5 h.
+
+#### 13.14.15 Sweep check 2026-10-20 16:43 UTC: BNN mean grids (medium_play, large_play); the diagnostics running
+
+| BNN mean, seed 0, no terminals | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner | anchor index |
+|---|---|---|---|---|---|---|---|---|---|---|
+| medium_play (`bc2ywwt9`) | **.805** | .712 | .711 | .580 | .000 | .001 | .329 | .383 | **0** | 2 |
+| large_play (`uk65rxd6`) | .179 | .177 | .123 | .199 | .000 | .000 | **.269** | .179 | **6** | 3 |
+
+- **On medium_play, BNN mean at raw scale is the best no-terminals score of any
+  reward at seed 0** (0.805; MR's grid best 0.737, BNN CVaR's 0.662). Re-runs generated:
+  `rerun_noterm_antmaze_medium_play_bnn_mean` (index 0) and `..._large_play_bnn_mean`
+  (index 6). Ten grid winners recorded; nine re-runs exist. **Not yet queued**: the BNN
+  mean re-runs (and any from the task-reward grids) go in one small re-queue once
+  those grids finish; the queues F1/F2 already hold the anchor-index BNN mean cells.
+- **The diagnostics are running and the logging works on the box:** `zqks51zw` (MR,
+  medium_play) writes `final_positions.csv` per run; its first five seeds reproduce
+  the original cell (0.51, 0.73, 0.65, 0.65, 0.67 against 0.50, 0.77, 0.64, 0.65,
+  0.68). `xj16t1yu` (BNN CVaR) is at ~96% on its first five seeds.
+- **Fixed in the reader:** it read running runs' partial CSVs as if they were the
+  scoring window; it now reads finished runs only (`a9916b4`).
