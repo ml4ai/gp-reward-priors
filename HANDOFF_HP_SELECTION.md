@@ -21623,3 +21623,26 @@ DESCRIPTIVE; reward maps, not observed behaviour.
   toward well-supported states near the goal (Chapter 3's H2, low-support
   deflation), and the terminals supply the last step. CVaR's benefit with terminals
   and its collapse without them may be the same mechanism.
+
+#### 13.14.14 Final-position logging and two diagnostic re-runs (user, 2026-10-19)
+
+To see loitering directly rather than infer it from reward maps (§13.14.13).
+
+- **`iql_eval.py` `log_final_positions`** (OFF by default): every evaluation episode's
+  final torso (x, y), un-normalized, with its success and length, is appended to
+  `final_positions.csv` in the wandb run (saved live). The final observation is the
+  vector env's terminal observation (`terminal_observation` or `final_observation`,
+  whichever the gym version gives), falling back to the last pre-step observation,
+  one step earlier. Tested here with a fake auto-resetting vector env in all three
+  cases; with the option off, the old two-value return is unchanged.
+- **Two diagnostic sweeps**, generated as the no-terminals control files plus that one
+  key (asserted): `ctrl_sweeps/poslog_noterm_antmaze_medium_play_bnn_cvar` (index 2,
+  the cell that collapsed to 0.226) and `..._mr` (index 0, the cell that held). Same
+  seeds, so they repeat those cells and add where each episode ended.
+- **`results/final_positions.py <sweep>`**: per run, over the last 10 evaluations,
+  the success rate and the cells where FAILED episodes end, plus their BFS distance
+  to the goal; pooled over runs. Loitering predicts BNN CVaR's failures end in (6, 5).
+  It uses the hardcoded medium layout, which matches the live maze (26 cells, goal
+  (6, 6)); it refuses the large layout, which does not.
+- **Queued first**, ahead of each family's re-runs (MR's in E1, BNN CVaR's in E2):
+  both explain cells already measured. This delays the re-runs by ~11.5 h.
