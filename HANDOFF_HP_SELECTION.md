@@ -22048,3 +22048,83 @@ the hold when reading them. They are covered history, not quoted.
 
 These go into the normalization inventory (§14.2 item 5) and the cost count (§14.3
 item 5).
+
+### 14.7 Trivial rewards, the new grids, and the exact cost of §14.5 (agent, 2026-10-21)
+
+**Built (all OFF by default; no existing sweep changes):**
+- `iql_eval.py` `trivial_reward: zero | mean` (§14.2 item 2). `zero` is 0 on every
+  transition; `mean` is the dataset's task-reward mean on every transition. No reward
+  model, not gauged. The config refuses any `normalize_reward` other than 0, a reward
+  model, and `heuristic_reward`. Tested here, with D4RL absent, by the function and the
+  config checks; the earlier control and final-position tests still pass.
+- `phase2_sweeps.py control --trivial --write`: 16 files,
+  `ctrl_sweeps/trivial_{zero,mean}[_noterm]_antmaze_<v>.yaml`, seeds 1–10, index 0,
+  `Lineage: CONTROL trivial`. The generator asserts each file's exact key set.
+- `CONTROL_GRID` gains PT and the ensemble mean: 8 grids,
+  `ctrl_sweeps/s4noterm_antmaze_<v>_{pt,ens_mean}.yaml`. Each is the anchor's
+  stage-4 file plus `drop_terminals`, asserted. The ensemble-mean grid matches
+  exactly one spec entry, although it shares MR's root. `control_readout` section E
+  reads them and says "seeds 1–10 run at k", since they have no anchor-index cell.
+- Not queued yet: 24 sweeps (16 trivial, 8 grids). The 8 grids are 64 runs; the
+  trivial files are 160.
+
+**A property of the trivial rewards to know before they run (theory, not measured).**
+- With a constant reward and no terminals, IQL's value is that constant over (1 − γ)
+  everywhere. Every advantage is then zero, and the advantage-weighted actor update is
+  plain **behaviour cloning**.
+- With r ≡ 0 the value is 0 everywhere, terminals or not. So **zero (both protocols)
+  and mean-constant (without terminals) are all behaviour cloning**, up to
+  optimization noise.
+- Only mean-constant WITH terminals differs: a positive constant makes ending an
+  episode costly, the sign effect of §13.14.2.
+- Consequences for §14.5:
+  - (c) under the candidate protocol tests the family against behaviour cloning twice;
+  - the usability check is task reward vs behaviour cloning;
+  - the zero runs with and without terminals duplicate each other in expectation.
+
+  Nothing in §14.5 is wrong because of this. But the author may want to know it before
+  any trivial run exists, while §14.5's do-NOTs (which bind only after a no-terminals
+  ladder result) still allow a change.
+
+**Open, the author's call: the motion reward's index without terminals.** §14.5 reports
+the motion reward under both protocols, and only the with-terminals arm exists (index 3,
+fixed in advance). Without terminals, MR's selected index moved on all four variants
+(§13.14.12). Two options:
+- **Fixed 3 again**, the one-key-different invariant (40 runs). This may handicap the
+  motion reward against families whose index is re-selected.
+- **A seed-0 grid, then seeds 1–10 at its winner** (32 + 40 runs), as the families get.
+
+**Exact cost of §14.3 item 5 / §14.5** (IQL runs; MR, PT and ensemble mean; 4 variants
+× 10 seeds = 40 runs a cell). Done or queued is excluded:
+- standard: the anchor (all 3 families) and MR r16;
+- candidate: MR's grids and full-data cells, and the task-reward grids and cells (G1/G2).
+
+| block | cells | runs | needs |
+|---|---|---|---|
+| standard, sparsity r16–r128 | 11 (12 less MR r16) | 440 | models exist (MR, PT; the ensemble reuses MR's) |
+| standard, noise 0.1–0.45 | 15 | 600 | **400 reward models to train** (MR, PT × 5 levels × 40) |
+| candidate, grids PT and ensemble mean | 8 grids | 64 | files written |
+| candidate, full data PT and ensemble mean | 8 | 320 | the grids |
+| candidate, sparsity r16–r128 | 12 | 480 | models exist |
+| candidate, noise 0.1–0.45 | 15 | 600 | the noise models |
+| trivial rewards | 16 | 160 | files written |
+| motion reward without terminals | 4 | 40 (or 72 with a grid) | the decision above |
+| **total** | | **2,704** (2,736) | |
+
+- **Wall-clock:** the box runs 10 IQL runs at a time, at about 5.7 h a run, so about
+  1.75 runs an hour. 2,704 runs is about **1,545 h ≈ 64 days** of IQL, after G1/G2
+  (about 10-25).
+- **Not included:**
+  - the 400 noise reward-model trainings, whose wall-clock has not been measured for
+    MR or PT;
+  - NMR, if added: +1/3 on every family term, about +18 days of IQL, plus its own
+    training and its own grid.
+- **Where the cost could be cut** (the author's call; nothing is changed):
+  - fewer evaluation episodes or evaluation points per run (the evaluation's share of
+    wall-clock is not measured);
+  - fewer ladder levels;
+  - the candidate protocol only on the ladders, with the standard arm of (b) at fewer
+    levels.
+
+  Each is a change to §14.5 and must be made before any no-terminals ladder result
+  exists.
