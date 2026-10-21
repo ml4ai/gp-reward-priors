@@ -21739,7 +21739,7 @@ To see loitering directly rather than infer it from reward maps (§13.14.13).
 - **Fixed in the reader:** it read running runs' partial CSVs as if they were the
   scoring window; it now reads finished runs only (`a9916b4`).
 
-#### 13.14.16 Final positions (diagnostics, 2026-10-20 22:17 UTC): loitering REFUTED on medium_play (5 of 10 BNN CVaR seeds)
+#### 13.14.16 Final positions (diagnostics, 2026-10-20 22:17 UTC): loitering REFUTED on medium_play (all 10 BNN CVaR seeds, 10-21)
 
 `results/final_positions.py`, finished runs only, last 10 evaluations (100 episodes
 each). Both diagnostics reproduce their original cells: MR pools to 0.630 (original
@@ -21749,6 +21749,7 @@ each). Both diagnostics reproduce their original cells: MR pools to 0.630 (origi
 | no terminals, medium_play | success | failures ending 1 cell from the goal | failures ending ≥ 5 cells away | most common failure-end cells |
 |---|---|---|---|---|
 | BNN CVaR (seeds 1–5) | 0.129 | 10% | 75% | (5, 4) ×716, (3, 4), (4, 2), (5, 3) |
+| **BNN CVaR (seeds 1–10, added 10-21)** | **0.224** | **13%** | **66%** | (5, 4) ×1,563, (4, 5) ×544, (3, 4) ×526, (6, 5) ×487 |
 | MR (seeds 1–10) | 0.630 | 11% | 61% | (2, 2) ×452, (5, 6), (3, 3) |
 
 - **BNN CVaR's failures do not stop one cell short.** The loitering hypothesis of
@@ -21762,4 +21763,13 @@ each). Both diagnostics reproduce their original cells: MR pools to 0.630 (origi
   repeated.
 - **Remaining candidates for the collapse:** scale (the index-0 re-run is next in F2)
   and the CVaR shaping pulling the route toward dense mid-maze areas (untested).
-- BNN CVaR seeds 6–10 were still running; to be folded in.
+- **All ten BNN CVaR seeds (2026-10-21 00:10 UTC): the refutation holds.** Seeds
+  6–10 score 0.216, 0.447, 0.263, 0.053, 0.612 (original 0.20, 0.45, 0.26, 0.06,
+  0.62); pooled 0.224 against the original 0.226. Pooled failure ends by BFS distance
+  from the goal: 0: 3%, 1: 13%, 2: 3%, 3: 8%, 4: 7%, ≥ 5: 66%. (Distance 0 is the
+  goal cell outside the success radius: the cell is larger than the goal region.)
+  **(6, 5) takes 487 of 7,762 failures (6%), nearly all from two seeds**, 4 and 9,
+  where it is about a quarter of each seed's failures (244 of 960, 243 of 947). So
+  loitering by the goal is a minority pattern in 2 seeds of 10, not the mechanism
+  of the collapse. The dominant failure end, (5, 4), is the top failure cell on 5 of
+  10 seeds (1, 2, 6, 7, 8). Seed 10, the best (0.612), has no dominant failure cell.
