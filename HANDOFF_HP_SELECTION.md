@@ -53,6 +53,14 @@
 > dated log, two of whose predictions were later refuted (§13.14.7, §13.14.16).
 > The consolidated reading will be §13.15, written once the controls are in.
 > Sparsity (Experiment 1) and label noise are paused until then.
+>
+> **Added 2026-10-20 — READ FIRST: the dissertation is restructured, and every BNN and
+> CVaR result is ON HOLD (§14).** A new chapter on **benchmarking preference-based
+> reward models** now comes before the BNN with CVaR chapter, and the amortized
+> posterior chapter is dropped. **No BNN result and no CVaR result (BNN CVaR, BNN mean,
+> ensemble CVaR) is analysed, read or reported until the author lifts the hold**, and
+> every BNN or CVaR run that has not started is paused. §14.1 says exactly what that
+> covers; §14.2–§14.4 list what to implement and run for the benchmarking study.
 
 ---
 
@@ -21773,3 +21781,127 @@ each). Both diagnostics reproduce their original cells: MR pools to 0.630 (origi
   loitering by the goal is a minority pattern in 2 seeds of 10, not the mechanism
   of the collapse. The dominant failure end, (5, 4), is the top failure cell on 5 of
   10 seeds (1, 2, 6, 7, 8). Seed 10, the best (0.612), has no dominant failure cell.
+
+---
+
+## 14. The benchmarking study and the BNN/CVaR hold — DECIDED 2026-10-20 (author)
+
+**Why.** The IQL controls (§13.13–§13.14) showed that on D4RL antmaze the terminals
+carry the goal, so offline-RL scores barely respond to the learned reward. The author
+decided to make that a chapter of its own. New dissertation order:
+
+| new | chapter | was |
+|---|---|---|
+| Ch. 3 | **Benchmarking preference-based reward models under data degradation** (antmaze case study) | — |
+| Ch. 4 | Risk-sensitive offline policy learning from BNN rewards (BNN + CVaR) | Ch. 3 |
+| Ch. 5 | Online adaptation by preference re-querying | Ch. 4 |
+| — | Amortized reward posterior | Ch. 5, now future work |
+
+**Wherever this document says "Chapter 3" it means the BNN + CVaR chapter, now Ch. 4.**
+Prior work already reports the general phenomenon (Li et al. 2023, "Survival Instinct
+in Offline RL", including goal terminals and a no-terminals ablation for IQL/CQL; Shin,
+Dragan and Brown 2023, trivial rewards on D4RL), so the chapter's claim is a
+benchmarking procedure for preference-based reward models on antmaze with human labels
+and data degradation, not the discovery of insensitivity.
+
+**The question the new chapter answers (RQ1):** can the standard offline benchmark
+distinguish preference-based reward models when their training data is degraded, and
+what changes to the evaluation protocol let it do so? It is tested on **both** ladders,
+sparsity and label noise.
+
+### 14.1 The hold on BNN and CVaR — what it covers
+
+The author's rule: the benchmarking chapter shows no result from a method it has not
+introduced, and CVaR belongs to the method introduced in the next chapter. The
+proposal shows no BNN or CVaR result at all.
+
+| | rule |
+|---|---|
+| **Covered** | BNN CVaR, BNN mean, ensemble CVaR: every cell, grid, control, diagnostic and readout |
+| **Not covered** | MR, PT, ensemble **mean**, task reward, motion heuristic, trivial rewards (§14.3), NMR if added |
+| **Runs not yet started** | **paused**: do not launch. This includes the BNN mean re-runs and anchor-index cells of §13.14.15, any BNN CVaR / ensemble CVaR control or re-run still queued, the BNN sparsity training (paused since §13.14; r16 medium_play seed 8 onward), and every BNN or ensemble-CVaR sparsity or noise sweep |
+| **Runs already in progress** | may finish; their results are stashed unread |
+| **Analysis** | **none**: no readout, table, chart or summary that includes a covered result. Do not run readouts that print covered cells. The existing write-ups of covered results (§7.6 E and G, the BNN parts of §13.14) stay in this document as history but are **not quoted** anywhere |
+| **Stash** | move generated readout outputs, tables and notebook outputs for covered results into `results/held_bnn_cvar/` (create it), out of the reporting path. **Delete nothing**: raw runs, wandb, caches, chains and label caches stay where they are. Readouts used for the benchmarking study must filter covered families out by default |
+
+Lifting the hold is the author's decision. It is expected once the benchmarking
+protocol is settled and registered, so that the BNN is first evaluated under it.
+
+### 14.2 To implement
+
+1. **NMR baseline, gated on cost.** The Preference Transformer paper's non-Markovian
+   reward model: an LSTM model (Early et al. 2022) that PT's repository implements in
+   JAX (`--model_type NMR`). Port it to this codebase beside MR and PT, with the same
+   data, splits, likelihood (mean-pooled Bradley-Terry, as every family here), the same
+   matched search (130-trial cap, K = 15 stop, common capacity range sized like PT's)
+   and the same checkpoint selection. **First step, before the port is finished:
+   measure the wall-clock of one training run and of one IQL labelling pass** (a
+   non-Markovian reward needs each transition's preceding context to be labelled, as
+   PT's does). **Report the timing to the author, who decides whether NMR goes in.**
+2. **Trivial rewards (Shin et al. 2023's references):** `trivial_reward: zero` (0 on
+   every transition) and `trivial_reward: mean` (the task reward's mean over the
+   offline dataset, on every transition), in `iql_eval.py` beside `heuristic_reward`,
+   exclusive with a reward model, **not gauged** and at index 0, with and without
+   terminals. Note for the readout: with terminals, a positive constant makes ending an
+   episode bad and a zero constant makes it neutral, so these are also checks of the
+   sign effect of §13.14.2.
+3. **Ties-kept arm for the ties ablation** (§14.3, item 3). Data: for each seed 1–10,
+   on **large-play (64% ties) and medium-diverse (29% ties)**, allocate that dataset's
+   tied pairs to train / validation / test at 70 / 15 / 15 with a seeded draw, and add
+   them to that seed's existing tie-free files. The tie-free arm is then the existing
+   anchor, unchanged, and the two arms share every non-tie pair. Training: ties enter as
+   the soft target [0.5, 0.5], as in PT's code. Hyperparameters: the tie-free winners,
+   frozen, so only the data differs. Metrics: held-out preference accuracy on the
+   **tie-free** validation pairs (a tie has no right answer); cross-entropy on the tied
+   validation pairs reported beside it.
+4. **Max versus last-10 readout, no new runs:** a script that reports both statistics
+   (the maximum of a run's 200 evaluation points, as PT reports, and the mean of the
+   last ten) for every finished run of an uncovered family, and per comparison whether
+   the gap and the ranking change. Descriptive.
+5. **Normalization inventory:** list every normalization grid already run and every
+   one still to run, for uncovered families only, with and without terminals; build
+   the tables from the finished ones. What the chapter will say: with terminals, the
+   reward's sign relative to termination dominates (indices 4/5 collapse); without
+   terminals, scale and large offsets matter; the selected index changes when the
+   terminals go. Grids still missing for PT, ensemble mean and NMR should be run.
+
+### 14.3 Experiments to run (uncovered families only)
+
+1. **Finish the uncovered controls and write §13.15** (the consolidated reading). The
+   MR, task-reward and motion-heuristic controls continue; the BNN ones are held.
+2. **Trivial rewards**, all four variants, seeds 1–10, with and without terminals: 160
+   IQL runs.
+3. **Ties ablation**: MR and PT (and NMR if added), large-play and medium-diverse,
+   seeds 1–10, reward-model training for the ties-kept arm, then IQL under the protocol
+   the author settles (the policy score may not respond to ties with terminals, for the
+   same reason it barely responds to data). The tie-free arm reuses the anchor models.
+4. **Normalization grids** still missing (§14.2, item 5).
+5. **The sensitivity test of RQ1, on both ladders**, for MR, PT, ensemble mean (and
+   NMR), with the task, motion and trivial rewards as references: the sparsity ladder
+   (16, 32, 64, 128 pairs, full) and the noise ladder (flip 0.1–0.45), under the
+   standard protocol (with terminals) and under the candidate protocol (without). The
+   reward models already trained for these families are reused. **Normalization must
+   be re-selected under the no-terminals protocol** (the index changes, §13.14.12).
+   **Cost, to be computed exactly by the agent:** roughly 3 families × 4 variants × 10
+   seeds = 120 IQL runs per level and protocol, about 3 days at 10 slots; nine levels
+   per protocol. The with-terminals MR and PT sparsity runs already done count.
+6. **Max versus last-10 readout** over everything above, once runs exist.
+
+### 14.4 Not yet decided — do not run until the author fixes them
+
+- **The sensitivity criterion and its test for RQ1.** Working definition (not
+  registered): a protocol is sensitive if policy scores fall along a ladder for the
+  reward models whose held-out preference accuracy falls, and if a reward with no
+  preference information (zero, constant, motion) no longer scores as well as the
+  learned rewards. RQ1 would be refuted if scores still do not follow the degradation
+  without terminals, or if nothing reaches the goal without terminals, not even the
+  task reward (possibly the large mazes). **The test must be written down and fixed
+  before any no-terminals ladder result is read**, as §12 and §13.9 were.
+- **H1 (the BNN chapter) is not tested under any protocol until the hold is lifted.**
+  It was registered under the with-terminals protocol (§13.9, §13.11) and MR sparsity
+  results had been seen when the controls began; whatever protocol it is finally
+  tested under is registered anew, and the departure disclosed.
+- **NMR in or out** (§14.2, item 1).
+- **Order of work**, beyond: hold first, then §13.15, NMR timing, trivial rewards, the
+  ties arm data, the max-versus-last-10 readout and the normalization inventory, and
+  only then the ladders.
