@@ -38,6 +38,21 @@
 > **Added 2026-10-12 — §13 tracks the set-up of Experiments 1 (sparsity) and 2
 > (label noise)**: what data exists and is verified, the directory-naming rule
 > the label cache imposes, the cost, and the decisions still open.
+>
+> **Added 2026-10-20: read this before quoting any policy result. Antmaze's
+> `terminals` are exactly the goal arrivals (§13.13.1).** IQL stops bootstrapping
+> at a terminal and every learned reward here is ≤ 0 per step, so the terminals
+> pull every IQL run to the goal, on every reward, whatever that reward says. The
+> anchor verdicts (§12, §7.6 E) and the experiment results compare reward
+> *shaping* on top of that shared channel; **§7.6 H gives the caveat and how it
+> changes each reading.** **The IQL controls that test this are the current work
+> (§13.14–§13.14.16)**: the user stopped everything else for them on 2026-10-16,
+> and they may change the research direction. They are no-terminals cells with
+> their own normalization grids, a motion-heuristic control, and goal-structure
+> and final-position diagnostics. Nothing from them is final yet; §13.14.x is a
+> dated log, two of whose predictions were later refuted (§13.14.7, §13.14.16).
+> The consolidated reading will be §13.15, written once the controls are in.
+> Sparsity (Experiment 1) and label noise are paused until then.
 
 ---
 
@@ -18571,7 +18586,8 @@ the earlier draft are withdrawn; see §12.8.)
    best-model and PT, four variants, margin 0.10; §4.3.174). Six cells were not
    blind (§12.7, §12.8) and the two that were are both NOT BEHIND. **What it
    licenses (§12.4): the anchor does not threaten the experiments. It is not a
-   superiority claim, and there is no rule combining the eight.**
+   superiority claim, and there is no rule combining the eight.** All eight
+   compare reward shaping on top of the shared terminal channel (item H).
 
    **How the verdict is described, as a test** (wording agreed with the user
    2026-10-16; use it as written):
@@ -18621,6 +18637,7 @@ the earlier draft are withdrawn; see §12.8.)
      above; MR is level.
    Learned rewards beating the task reward is a statement about reward shaping
    under IQL on these datasets, not about preference-label quality; say so.
+   At index 1 the task reward is in effect a terminals-only baseline (item H).
 6. **None of 3–5 is a verdict** (§12.2). They are the same paired difference and
    exact interval, reported so the registered result is read in context.
 
@@ -18664,6 +18681,60 @@ and the motivation for Chapter 4. The same rule gates every sparsity level.
 
 ---
 
+**H. The terminals carry the goal in every IQL run.** (The fact is **FINAL**,
+measured 2026-10-16, §13.13.1. What it means for A–G is **PENDING** on the
+controls, §13.14; added 2026-10-20.)
+
+1. **The fact.** On all four datasets, D4RL antmaze's `terminals` coincide
+   exactly with the goal arrivals (9,787 / 1,959 / 12,517 / 6,189). IQL stops
+   bootstrapping at a terminal. After the `max0` gauge and the selected
+   normalizations, every learned reward is ≤ 0 per step, so reaching a terminal
+   pays whatever the reward says. **The learned reward shapes the path; the
+   terminals set the destination.**
+2. **It is shared and standard, so nothing is unfair between methods.** Every
+   method, the task reward included, trains on the same `qlearning_dataset`
+   terminals, as CORL's IQL does. So does the Preference Transformer authors' own
+   IQL (`masks = 1 − terminals`; their antmaze normalization is this campaign's
+   index 7, §13.13.2). Their published MR and PT antmaze results inherit the same
+   channel.
+3. **How it changes the readings above:**
+   - **E item 1 (8/8 NOT BEHIND).** The verdicts stand as registered, but they
+     compare shaping on top of a shared goal channel. That channel may compress
+     the differences between rewards, which is the benchmark-sensitivity concern
+     that started the controls (§13.14). Do not read the verdicts as showing that
+     the preference rewards carry the goal equally well.
+   - **C and E item 5 (against the task reward).** At index 1, r − 1 is −1 on
+     every step plus the terminals: in effect a **terminals-only baseline**. A
+     learned reward that beats it shows that shaping helps on top of the
+     terminals, not that preference labels beat the task reward.
+   - **B (indices 4 and 5 collapse).** With terminals, the collapse is about the
+     reward's sign relative to termination. Those indices make every step
+     positive, and a terminal then ends a positive stream, so the best policy
+     avoids the goal (§13.14.2). It is not about preference content. (Without
+     terminals, 4 and 5 still collapse, from the size of the offset; §13.14.7.)
+   - **Experiment 1.** At r16, preference accuracy falls below the
+     trivial-heuristic floor while MR's IQL scores hold (§13.13). That
+     decoupling is what a terminal channel predicts.
+4. **What the controls show so far: DESCRIPTIVE, partial, not to be quoted as
+   results.**
+   - Without terminals, at the anchor indices, the rewards separate, but
+     inconsistently. BNN CVaR − MR is −0.410 [−0.540, −0.267] on medium_play and
+     +0.184 [+0.118, +0.250] on medium_diverse (§13.14.4, §13.14.6).
+   - Without terminals, the large variants score low at every index at seed 0.
+   - The index selected with terminals is not the no-terminals winner on 9 of the
+     10 grids recorded so far.
+   - Re-runs at the winners are pending (`control_readout.py` section F), and so
+     are the remaining grids and the heuristic control.
+5. **The write-up must:**
+   - state the terminal channel beside every policy result and in Chapter 3's
+     scope statement;
+   - not present any anchor or experiment policy result as evidence of how well a
+     reward carries the goal, until the controls are read;
+   - take the controls' reading from §13.15, once written, not from the
+     §13.14.x log.
+
+---
+
 **F. PENDING — what closes each open item.**
 
 > ✅ **All closed 2026-10-15**: all 28 cells are in and registered, the §12
@@ -18678,6 +18749,7 @@ and the motivation for Chapter 4. The same rule gates every sparsity level.
 | Ensemble: 8 of 8 cells | 10-15 (`gpyiq4w5`, the last) | D, E |
 | Oracle medium_play at index 3 | 10-14 (`79ke5lc3`) | C |
 | Cross-family statements in E | 10-15 | E, from the registered readout |
+| H: what the terminal channel means for A–G | **open**: the IQL controls (§13.14) | §13.15, to be written |
 
 ## 8. Tooling
 
