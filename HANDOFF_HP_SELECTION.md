@@ -22295,3 +22295,58 @@ evaluation cells.
 **Still to do:** a named "time-only PT reward" control in `stat_readout` / §13.15 that
 reads the old PT cells deliberately. It is the accidental control of §14.10, and
 until then the pre-fix PT sweeps are read nowhere.
+
+### 14.12 NMR ported to PyTorch; training times; the timing runs (agent, 2026-10-21)
+
+**The port** (§14.2 item 1), from the PT repository's `flaxmodels/lstm/lstm.py`
+(`LSTMRewardModel`) and `JaxPref/NMR.py`:
+- **`optbnn/bnn/nets/nmr.py`.** concat(s, a) → Dense e, e/2, e/2 → LSTM (hidden e/2,
+  zero initial state) → concat(dense output, LSTM output) → Dense e/2, e/4, e/4 →
+  Dense 1. That is a reward for every step from that step's prefix only (checked).
+  Activation and dropout follow each dense layer, as in the reference, whose defaults
+  are e = 256, ReLU, dropout 0.1 and Adam at 1e-3. Timesteps and mask are accepted and
+  unused, as in the reference.
+  - Departures, both shared with our MR and PT: PyTorch's default initialisation, and
+    mean-pooled BT instead of the reference's sum.
+  - The output keys match PT's (`weighted_sum`, `value`), so NMR runs through the
+    unchanged `PTTrainer` and the fixed labeller (§14.10). The PT repository likewise
+    labels NMR with its PT labeller, reading the last step.
+  - Parameters at e = 2^3…2^8: 575, 1.6k, 4.9k, 16.9k, 62.0k, 237k. **2^4–2^7
+    (1.6k–62k) matches PT's searched 2.2k–57.5k**, for the matched search if NMR goes
+    in.
+- **`scripts_nmr/run_nmr_training_antmaze_eval.py`.** PT's training script with only
+  the network and its fields swapped. Same data files, splits, PTTrainer, checkpoint
+  selection (test split → `best_model.pt`) and reload check.
+- **`iql_eval.py` `nmr_reward_model`** (+ `load_nmr_reward_model`), labelled by
+  `qlearning_dataset_pt`. It needs `query_length > 1` and `seq_labeller 2`, and
+  excludes the BNN and ensemble flags.
+- **`tests/iql_eval/test_nmr.py`** (passes):
+  - trains on the real medium_play seed-1 split (3 epochs: validation loss 0.693 →
+    0.681);
+  - reloads through `iql_eval`'s loader with identical outputs;
+  - labels a toy dataset that matches a per-row own-episode reference on all rows;
+  - checks the config guards.
+
+**Training times already known** (wandb, finished production runs, 5,000 epochs,
+median minutes per model):
+
+| | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| MR, full data | 7.4 | 8.8 | 5.6 | 9.4 |
+| PT, full data | 24.2 | 15.7 | 11.5 | 18.6 |
+| MR, sparsity conditions | 3.8 | 3.7 | 3.6 | 3.8 |
+| PT, sparsity conditions | 15.2 | 9.9 | 10.3 | 10.5 |
+
+So the 400 noise reward models (§14.7) cost about 200 × ~8 min (MR) + 200 × ~18 min
+(PT) ≈ 87 GPU-hours serially, a day or less spread over the GPUs. That is small next
+to the IQL.
+
+**To measure on the box:**
+- one NMR training run (medium_play, seed 0, 5,000 epochs, e = 2^5, batch 64, wandb
+  project `NMR-timing`, so it never enters a sweep readout);
+- one labelling pass each for NMR, PT and MR with `scripts_nmr/time_labelling.py`.
+  The labeller runs exactly as `iql_eval.train()` does it.
+
+**Also invalid, by the §14.10 bug:** the PT rows of the goal-structure reward maps
+(`calibration_results/held_bnn_cvar/goal_structure_run{1,2}.txt`, §13.14.11–13). They
+were computed with the broken labeller.
