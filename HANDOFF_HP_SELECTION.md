@@ -22128,3 +22128,40 @@ fixed in advance). Without terminals, MR's selected index moved on all four vari
 
   Each is a change to §14.5 and must be made before any no-terminals ladder result
   exists.
+
+### 14.8 Decisions on §14.7, the motion reward's grid, and a queue incident (2026-10-21)
+
+**DECIDED (author, 2026-10-21):**
+- **Decision 1:** the trivial arms stay as they are (zero and mean-constant, with and
+  without terminals), knowing that three of the four reduce to behaviour cloning in
+  theory (§14.7). §14.5 is unchanged.
+- **Decision 2:** the motion reward gets a **seed-0 no-terminals grid**, then seeds 1–10
+  at its winner, as the families do. That is 32 + 40 runs, so §14.7's total is
+  **2,736**.
+
+**Built:** `control_grid_spec` gains `ctrl_sweeps/s4noterm_antmaze_<v>_heuristic`
+(4 files). Each is the heuristic control's params plus `drop_terminals`, at seed 0
+over indices 0–7, asserted, and it matches neither the seeds 1–10 heuristic control nor
+any anchor. `control_readout` section E reads them, with the with-terminals index 3 as
+"anchor index", and `--write-grid-winners` records them under
+`ctrl_sweeps/heuristic_antmaze_<v>`. Self-tests pass.
+
+**Incident: H1/H2 started early (the agent's error).** `bash -c 'a; b; cmd'` execs its
+last command, so a waiter's `QID=…` tag vanishes from the process list once its queue
+starts. H1 and H2 waited on `QID=g[12]`, found nothing, and launched at once (about
+10-21 16:50 UTC). Their first sweeps, the PT medium_play grid (H1) and the
+ensemble-mean medium_play grid (`xwtwuvea`, H2), are running beside G1 and G2: 20
+agents against a ceiling of about 10 runs, so everything runs about twice as slow until
+they end.
+- **Kept, not killed:** killed runs would use up points in those sweeps and force fresh
+  grid sweeps. The scores are unaffected.
+- The H queue scripts were killed, and their remaining items requeued.
+- **Waiters from now on match the queue's own command line**
+  (`stage4_queue[.]sh <gpus> 1 ctrl:<first item>`) and any stray `launch.sh`, never a
+  `QID` tag. Earlier waiters that matched `launch.sh` were correct.
+
+**Queues now:**
+- G1 → H1c: the PT grids for medium_diverse, large_play and large_diverse; the motion
+  grids for medium_play and medium_diverse; then the 8 medium trivial cells.
+- G2 → H2c: the ensemble-mean grids for medium_diverse, large_play and large_diverse;
+  the motion grids for large_play and large_diverse; then the 8 large trivial cells.
