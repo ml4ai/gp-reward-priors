@@ -22350,3 +22350,30 @@ to the IQL.
 **Also invalid, by the §14.10 bug:** the PT rows of the goal-structure reward maps
 (`calibration_results/held_bnn_cvar/goal_structure_run{1,2}.txt`, §13.14.11–13). They
 were computed with the broken labeller.
+
+### 14.13 NMR timing, measured on the box (2026-10-21; the CPU was loaded with ~20 IQL agents)
+
+| | NMR | PT | MR |
+|---|---|---|---|
+| one training run, medium_play, 5,000 epochs | **14.7 min** (e = 2^5, batch 64; wandb `NMR-timing`) | 24.2 min (production median) | 7.4 min |
+| one labelling pass, 999,000 transitions | **18.4 s** | 70.7 s | 0.5 s |
+| labelling as a share of one IQL run (~5.7 h) | 0.09% | 0.34% | 0.00% |
+
+- **NMR's training and labelling cost is negligible**; what NMR adds is IQL runs. In
+  the units of §14.7: a stage-4 grid and a full-data cell under the standard protocol
+  (72), plus its share of every RQ1 block (792), **≈ 864 IQL runs, about 21 days at
+  10 concurrent runs**. Training its reward models takes about 15 min each (44
+  production models; 360 sparsity and noise models), and the stage-1 search is at
+  most 130 trials per variant.
+- The timing run's reload check passed. It is an untuned configuration (lr 1e-3, the
+  reference default). Training reached loss 0 and accuracy 1, and validation loss at
+  the checkpoint chosen on the test split was 0.98, with validation accuracy 0.92.
+  So test-split selection matters a great deal for NMR, as it does for PT, and the
+  stage-1 search should cover the learning rate. Its per-step rewards span
+  [−143, 298], against PT's [−4, 4]. The `max0` gauge and the normalization index
+  handle the level and scale.
+- **Decision for the author:** NMR in or out (§14.4). If in, the next agent step is
+  NMR's stage-1 sweep files, matched to PT's (130-trial cap, K = 15 stop, e = 2^4–2^7
+  for 1.6k–62k parameters against PT's 2.2k–57.5k, the learning rate over PT's
+  range, batch and dropout as PT's), then `train_rewards.sh` support and the spec
+  entries.
