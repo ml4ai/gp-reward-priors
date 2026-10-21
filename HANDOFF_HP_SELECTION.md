@@ -22260,3 +22260,38 @@ barely depends on what the reward says about the state.
    control.
 3. The PT no-terminals grids queued in H1c will use the fixed labeller once the box
    pulls.
+
+### 14.11 PT re-run set up (author agreed, 2026-10-21)
+
+**Decided (author):** `igqs6dgt` stopped (the author killed it on the box); PT is re-run
+with the fixed labeller: the stage-4 grids, then seeds 1–10 at the new winners.
+
+**Built:**
+- `iql_eval.py` `seq_labeller`. Any run with `query_length > 1` must declare
+  `seq_labeller: 2` (the fixed labeller) or is refused. So an old PT sweep file can
+  never run again, and a box without the fix rejects the key. Tested in
+  `tests/iql_eval/test_trivial.py`.
+- `phase2_sweeps.spec()`: PT carries `seq_labeller: 2`.
+  - Every PT sweep from before the fix now matches **no** spec entry, so `eval_readout`,
+    `control_readout`, `exp_readout`, `stat_readout` and `register` drop them. The
+    killed `igqs6dgt` is dropped too.
+  - `register` skips them silently (`is_pre_fix_seq`).
+  - Self-test extended.
+- Regenerated, nothing else changed: `pt_sweeps/sweep_antmaze_<v>.yaml` (now STAGE 4
+  lineage; the old EVALUATION files and their winners stay in git history) and
+  `ctrl_sweeps/s4noterm_antmaze_<v>_pt.yaml`. Each gains only `seq_labeller`.
+- The old PT winners (pre-fix grids) were medium_play 3, medium_diverse 2,
+  large_play 3, large_diverse 0. `phase2_sweeps.py winners` overwrites them from the
+  new grids. That is the intended re-selection, not a changed rule.
+
+**Queue:** lane P on GPUs 4 5 0 1 2, started at once: the four PT stage-4 grids, then
+a fresh PT medium_play no-terminals grid. The box ran 20 agents from 10-21 16:46 to
+18:17 (G1, G2 and the two early grids) at the normal ~175k steps an hour, so a third
+lane is affordable; this is to be confirmed over a longer window. The other three PT
+no-terminals grids stay in H1c and run with the fix once the box has pulled. Next:
+`winners` on the four grids, `eval --only pt_sweeps --write`, then the four PT
+evaluation cells.
+
+**Still to do:** a named "time-only PT reward" control in `stat_readout` / §13.15 that
+reads the old PT cells deliberately. It is the accidental control of §14.10, and
+until then the pre-fix PT sweeps are read nowhere.
