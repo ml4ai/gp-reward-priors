@@ -21889,19 +21889,102 @@ protocol is settled and registered, so that the BNN is first evaluated under it.
 
 ### 14.4 Not yet decided — do not run until the author fixes them
 
-- **The sensitivity criterion and its test for RQ1.** Working definition (not
-  registered): a protocol is sensitive if policy scores fall along a ladder for the
-  reward models whose held-out preference accuracy falls, and if a reward with no
-  preference information (zero, constant, motion) no longer scores as well as the
-  learned rewards. RQ1 would be refuted if scores still do not follow the degradation
-  without terminals, or if nothing reaches the goal without terminals, not even the
-  task reward (possibly the large mazes). **The test must be written down and fixed
-  before any no-terminals ladder result is read**, as §12 and §13.9 were.
-- **H1 (the BNN chapter) is not tested under any protocol until the hold is lifted.**
-  It was registered under the with-terminals protocol (§13.9, §13.11) and MR sparsity
-  results had been seen when the controls began; whatever protocol it is finally
-  tested under is registered anew, and the departure disclosed.
+- ~~The sensitivity criterion and its test for RQ1~~ — **fixed 2026-10-20, §14.5.**
+- **RQ2's main hypothesis (the BNN chapter's; registered as "H1" in §13.9 and §13.11)
+  is not tested under any protocol until the hold is lifted.** It was registered under
+  the with-terminals protocol and MR sparsity results had been seen when the controls
+  began; whatever protocol it is finally tested under is registered anew, and the
+  departure disclosed. **Naming from 2026-10-20:** hypotheses are named by research
+  question ("RQ1's hypotheses", "RQ2's main hypothesis"), because "H1" is now
+  ambiguous across chapters.
 - **NMR in or out** (§14.2, item 1).
 - **Order of work**, beyond: hold first, then §13.15, NMR timing, trivial rewards, the
   ties arm data, the max-versus-last-10 readout and the normalization inventory, and
   only then the ladders.
+
+### 14.5 RQ1's sensitivity test — FIXED 2026-10-20 (author), before any no-terminals ladder result existed
+
+**When it was fixed, and what had been seen.** No ladder level below full data has been
+run without terminals, so tests (a) and (b) below are blind in their candidate-protocol
+arm. Not blind, and to be disclosed: the with-terminals MR sparsity results (they
+started the controls, §13.13), which enter the standard-protocol arm of (b); and the
+full-data no-terminals MR cells and any task-reward no-terminals cells already read
+(§13.14), which enter (c) and the usability check. The zero and mean-constant rewards
+have not been run. The author chose every item on the recommended option.
+
+**What is compared.** Families: MR best-model, PT, ensemble **mean**, and NMR if it is
+added (it then falls under this rule unchanged). Protocols: **standard** (the dataset's
+terminals, as every run so far) and **candidate** (`drop_terminals`). Ladders: sparsity
+(16, 32, 64, 128 pairs and the full train-pool) and label noise (flip 0.1, 0.2, 0.3,
+0.4, 0.45 and 0). Datasets: the four variants. Seeds 1–10. Both protocols' IQL runs use
+the **same reward models**, so the protocol is the only difference between them. Each
+protocol uses its own selected normalization; the candidate protocol's is re-selected
+at seed 0 (as stage 4 did) and then frozen.
+
+**Quantities.** S: the last-10 statistic of the IQL run, as everywhere. A: held-out
+preference accuracy on that seed's clean, tie-free validation split (for the ensemble,
+the accuracy of its mean reward). The **degradation slope** of a quantity over a ladder,
+per (variant, seed): the OLS slope over all that ladder's points, the anchor included,
+against log2(pairs) on the sparsity ladder and against the flip fraction on the noise
+ladder, **signed so that positive means the quantity falls as the data degrades**
+(sparsity: the slope itself; noise: minus the slope).
+
+**Statistics, as §13.9 and §13.11.** Unit: one (variant, seed). Variants pooled into one
+test per family and ladder. One-sided exact Wilcoxon signed-rank at α = 0.025 (zeros
+dropped, midranks, exact sign-flip distribution). Effect sizes: the exact stratified
+seed bootstrap, 95%, per variant and pooled. Completeness gate (§12.5): every cell a
+test reads is complete and audited before the test runs; no partial tests.
+
+**Read first — two checks.**
+
+1. **Manipulation check**, per family and ladder: the degradation slope of A is above
+   zero (accuracy falls as data degrades), one-sided exact test as above, on all four
+   variants. A family and ladder that fail it do not test sensitivity: flagged and
+   reported beside the verdicts, as a failed H3 gate cell is (§13.12).
+2. **Usability check**, per variant: under the candidate protocol at full data, the task
+   reward beats the zero reward, S_task − S_zero > 0, paired by seed over that variant's
+   ten seeds, one-sided exact Wilcoxon at 0.025. The task reward uses its own selected
+   index under the candidate protocol. **A variant that fails is excluded from every
+   candidate-protocol test below and reported as a limit of the benchmark** (expected
+   possibly for the large mazes).
+
+**The three tests**, per family and ladder, on the usable variants only:
+
+- **(a) The candidate protocol responds to degradation:** the degradation slope of S
+  under the candidate protocol is above zero.
+- **(b) It responds more than the standard protocol:** per unit, the candidate
+  degradation slope of S minus the standard one is above zero. Same reward models in
+  both arms. This is the test of "the standard protocol is blind", made without trying
+  to prove a null.
+- **(c) It separates preference information from none:** at full data, under the
+  candidate protocol, S_family − S_zero > 0 **and** S_family − S_mean-constant > 0, paired
+  by seed. (c) does not depend on the ladder; its result is shared by both ladders'
+  verdicts.
+
+**Verdict.** The candidate protocol is **SENSITIVE** for a family on a ladder iff (a),
+(b) and (c) all reject; otherwise NOT SENSITIVE, naming the part that did not. A
+conjunction of tests each at 0.025 is a valid 0.025 test of the conjunction, so there
+is no multiplicity correction. **RQ1's second part holds in full on a ladder iff the
+verdict is SENSITIVE for every family**; partial support is reported as partial. Each
+ladder gets its own verdict; no verdict pools the ladders. RQ1 is refuted on a ladder
+if (a) or (b) fails on the usable variants, or if no variant passes the usability check.
+
+**Reported beside, no test:**
+
+- **The movement reward** at full data under both protocols, against each family. It is
+  not uninformative with respect to the labels, which follow motion, so it answers
+  whether a reward learned more than motion, not whether the benchmark registers
+  preference information.
+- **The secondary non-inferiority check on the standard protocol** (descriptive, the
+  same form as §12): at full data with terminals, for each family, is each trivial
+  reward (zero, mean-constant) not behind the family by more than **0.10**? NOT BEHIND
+  if the lower end of the exact 95% interval of S_trivial − S_family exceeds −0.10. Per
+  variant and pooled, reported without correction. It lets the write-up say positively
+  that trivial rewards match learned rewards with terminals, if they do.
+- The ties ablation, the normalization grids and max versus last-10 (§14.2–§14.3):
+  descriptive, intervals only.
+
+**Do-NOTs, as §13.9:** do not change any of the above after a no-terminals ladder
+result has been seen; do not drop a family or a variant except by the usability check;
+do not re-select a normalization after seeing seeds 1–10; do not read the candidate
+arm of (a) or (b) until every cell of that family and ladder is complete.
