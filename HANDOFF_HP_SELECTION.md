@@ -22165,3 +22165,37 @@ they end.
   grids for medium_play and medium_diverse; then the 8 medium trivial cells.
 - G2 → H2c: the ensemble-mean grids for medium_diverse, large_play and large_diverse;
   the motion grids for large_play and large_diverse; then the 8 large trivial cells.
+
+### 14.9 Max versus last-10, first reading (§14.2 item 4; agent, 2026-10-21; DESCRIPTIVE)
+
+**Built:**
+- `results/stat_readout.py`, output in `results/stat_readout_latest.txt`. For every
+  complete, audit-clean cell of an uncovered family it gives both statistics, then
+  within each group (the anchor per variant, the controls per variant, each family's
+  ladder per variant), paired by seed with the exact bootstrap:
+  - whether the ranking of cell means changes;
+  - whether each paired difference changes sign;
+  - whether its 95% interval changes between excluding and including zero.
+- The three collectors (`eval_readout.collect`, `control_readout.collect_controls`,
+  `exp_readout.collect_exp`) now also store each run's `max` (additive), and skip
+  covered methods **before fetching** their runs. Self-tests pass.
+
+**First reading** (2026-10-21 18:50 UTC; the controls are mostly still running):
+- **The max sits above last-10 in every cell**, by +0.09 to +0.20. These runs peak and
+  fall back.
+- **Anchor, with terminals (task reward, MR, PT, ensemble mean): the ranking changes
+  on 2 of 4 variants.** On medium_diverse it goes from ENS_MEAN > MR > task > PT to
+  MR > task > ENS_MEAN > PT. On large_diverse the task reward moves from second to
+  first.
+- **Over 33 paired comparisons in total:** 6 sign flips and 8 separation changes.
+  Example: task − ensemble mean on medium_diverse is −0.076 [−0.122, −0.032] on
+  last-10 and +0.036 [+0.007, +0.063] on max. Both intervals exclude zero, in
+  opposite directions.
+- **MR's sparsity ladder (full vs r16, with terminals):** on large_play and
+  large_diverse, r16 scores above full data on both statistics (large_diverse's max
+  interval crosses zero). On medium_play and medium_diverse the sign flips between
+  statistics.
+
+**The reading for the chapter:** the reported statistic alone can reorder methods on
+this benchmark, which is one more reason the standard protocol cannot be read at face
+value. To be finalized once every cell is in.
