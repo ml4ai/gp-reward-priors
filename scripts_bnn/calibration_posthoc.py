@@ -13,6 +13,10 @@ import sys
 import numpy as np
 from scipy.stats import spearmanr
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "results"))                 # hold.py (HANDOFF §14.1)
+import hold
+hold.refuse("calibration_posthoc.py", "a diagnostic of the BNN's H3 gate")
 sys.path.insert(0, sys.argv[1])
 import calibration_gate as G
 

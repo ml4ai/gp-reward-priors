@@ -49,6 +49,9 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, ROOT)
 
 import experiment_conditions as E                          # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "results"))                 # hold.py (HANDOFF §14.1)
+import hold                                                # noqa: E402
 
 SEEDS = list(E.EVAL_SEEDS)
 BATCH = 64                          # MR/PT validation loader: batch_size 64, shuffle=False
@@ -178,7 +181,7 @@ def cmd_floor(a, out=print):
             c = floor_correct(val_file(v, s))
             floor[(v, s)], n_pairs[(v, s)] = c, c.size
     accs, notes = {}, []
-    for fam in ("mr", "pt", "bnn"):
+    for fam in ("mr", "pt", "bnn") if hold.INCLUDE else ("mr", "pt"):     # the hold, §14.1
         acc, nt = model_accuracies(fam, n_pairs, a.since)
         notes += nt
         for k, row in acc.items():
@@ -189,6 +192,8 @@ def cmd_floor(a, out=print):
     out("on each seed's base validation split.  margin = model accuracy - floor accuracy.")
     out("Mean over seeds 1-10, exact 10-seed bootstrap 95% interval.  DESCRIPTIVE: no verdict.")
     out("=" * 100)
+    if not hold.INCLUDE:
+        out("  BNN/CVaR HOLD (HANDOFF §14.1): BNN rows are not shown")
     for n in notes:
         out(f"  note: {n}")
     out("\nTHE FLOOR (identical at every level: validation never shrinks)")
@@ -196,7 +201,7 @@ def cmd_floor(a, out=print):
         f = [floor[(v, s)].mean() for s in SEEDS]
         out(f"  {v:15s} {np.mean(f):.3f}  (seeds {min(f):.3f}-{max(f):.3f}; "
             f"{n_pairs[(v, 1)]} pairs per seed)")
-    series_all = ("MR", "PT", "BNN mean", "BNN CVaR")
+    series_all = ("MR", "PT", "BNN mean", "BNN CVaR") if hold.INCLUDE else ("MR", "PT")
     for level in LEVELS:
         out(f"\n[{level}]")
         for v in E.VARIANTS:
@@ -221,7 +226,8 @@ def cmd_floor(a, out=print):
                 out(f"  {v:15s} {ser:9s} accuracy {macc:.3f}   margin {b['mean']:+.3f}  "
                     f"[{b['lower']:+.3f}, {b['upper']:+.3f}]   above the floor on "
                     f"{sum(x > 0 for x in vals)}/10 seeds")
-    out("\nBNN rows appear at a sparsity level once its ten models are finished.")
+    if hold.INCLUDE:
+        out("\nBNN rows appear at a sparsity level once its ten models are finished.")
     return 0
 
 
@@ -263,6 +269,7 @@ def main():
     ap.add_argument("--pooled", action="store_true")
     ap.add_argument("--since", default="2026-09-24T19:00:00")
     ap.add_argument("--selftest", action="store_true")
+    hold.parse()                                   # before argparse sees the flag
     a = ap.parse_args()
     if a.selftest:
         return selftest()

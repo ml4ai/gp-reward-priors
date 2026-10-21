@@ -21988,3 +21988,63 @@ if (a) or (b) fails on the usable variants, or if no variant passes the usabilit
 result has been seen; do not drop a family or a variant except by the usability check;
 do not re-select a normalization after seeing seeds 1–10; do not read the candidate
 arm of (a) or (b) until every cell of that family and ladder is complete.
+
+### 14.6 The hold, implemented (agent, 2026-10-21 ~01:00 UTC)
+
+**Readouts.** `results/hold.py` defines the covered set (BNN CVaR, BNN mean, ensemble
+CVaR; a run is covered if its `reward_model_root` is a BNN root, or it is an MR ensemble
+with `mr_alpha` > 0). Every readout imports it:
+
+| readout | under the hold |
+|---|---|
+| `results/control_readout.py` | covered cells and grids dropped at collection; every section filtered; **section B (BNN CVaR − MR) omitted** |
+| `results/control_steps.py`, `scripts_bnn/heuristic_floor.py` | BNN rows dropped |
+| `results/goal_structure.py` (box) | `--kinds` defaults to MR,PT; a BNN kind is refused |
+| `results/final_positions.py` | a covered sweep is not read |
+| `results/eval_readout.py`, `results/exp_readout.py`, `scripts_bnn/calibration_gate.py` (every subcommand), `scripts_bnn/calibration_posthoc.py`, `scripts_bnn/production_readout.py bnn` | **refuse to run**: everything they print is covered |
+
+`--include-held` restores the old behaviour in each, for use only once the author lifts
+the hold. Self-tests pass in all of them; control_readout's self-test also asserts that
+nothing covered is printed by default. Live run 2026-10-21: control_readout's output
+contains no covered line apart from the hold banner.
+
+**Stash** (moved with `git mv`, nothing deleted; each folder has a README):
+`results/held_bnn_cvar/` (eval_readout_latest, control_steps_latest) and
+`calibration_results/held_bnn_cvar/` (the H3 gate, check and post-hoc; goal_structure runs
+1–2; heuristic_floor). Two of these are MIXED (MR/PT beside BNN); the filtered readouts
+regenerate the uncovered part. Raw data stays: `calibration_results/measurements/`,
+`anchor_measure.log`, `results/control_grid_winners.json` (generator state, not a readout).
+Each repo keeps its own stash, so nothing moves between the two repositories.
+
+**Not yet filtered: the two notebooks.** `results/results_table.ipynb` and
+`results/experiments_results.ipynb` still plot the covered families when run. The
+author's working copies have local changes (formatting; experiments_results also has
+outputs from a 10-16 run, with BNN lines), so the agent has not edited them. Until a filter
+is added: do not run them, and clear the local outputs of experiments_results.
+
+**Queues (box).** F1/F2 are replaced by G1/G2. These are the same uncovered items in the same
+order, rebalanced, with the nine covered items removed:
+- from F1: the BNN mean medium_diverse grid, and the BNN mean no-terminals cells for
+  medium_play and medium_diverse;
+- from F2: the BNN CVaR re-runs on large_play and large_diverse, the BNN mean
+  large_diverse grid, and the BNN CVaR and BNN mean no-terminals cells for large_play and
+  large_diverse.
+
+The BNN CVaR medium_play re-run already in progress (`hsrofm69`, index 0) finishes as a
+sweep ("in progress may finish") and is stashed unread: the filtered readouts never print
+it.
+
+**Disclosure.** The BNN CVaR final positions, all ten seeds (§13.14.16, `bc019af`), were
+read on 10-20 at 17:10 PDT. §14 was committed at 20:25 PDT, and the agent did not know of
+the hold when reading them. They are covered history, not quoted.
+
+**Needed by §14.5 and not yet in any queue:**
+- the trivial rewards (§14.2 item 2, to implement);
+- the motion reward **without** terminals (§14.5 reports it under both protocols; only
+  the with-terminals heuristic exists);
+- PT and ensemble-mean cells and normalization grids without terminals. §14.5's
+  candidate protocol needs every family at full data at its own re-selected index, and
+  only MR and the task reward have no-terminals controls so far.
+
+These go into the normalization inventory (§14.2 item 5) and the cost count (§14.3
+item 5).

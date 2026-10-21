@@ -60,6 +60,8 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, ROOT)
 
 import experiment_conditions as E                          # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "results"))                 # hold.py (HANDOFF §14.1)
 
 CONSERVATISM = 0.95                 # the deployed level (bnn_alpha)
 TAIL = 1.0 - CONSERVATISM           # tail fraction, as diagnose_sampling_tail's cvar_ce
@@ -460,9 +462,12 @@ def main():
     c.add_argument("--in-dir", default=DEFAULT_OUT)
     c.add_argument("--since", default="2026-09-24T19:00:00")
     c.add_argument("--tol", type=float, default=1e-4)
+    import hold
+    hold.parse()                                   # before argparse sees the flag
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    hold.refuse("calibration_gate.py", "the BNN's H3 calibration gate")
     if a.cmd == "check":
         return cmd_check(a)
     if a.cmd == "measure":

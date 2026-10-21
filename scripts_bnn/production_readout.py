@@ -275,11 +275,17 @@ def main():
     ap.add_argument("--cond", default=None,
                     help="verify an experiment condition's models (r16, n02, n02o, ...)")
     ap.add_argument("--selftest", action="store_true")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), "results"))
+    import hold                                    # the BNN/CVaR hold, HANDOFF §14.1
+    hold.parse()                                   # before argparse sees the flag
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if not a.family:
         ap.error("family required")
+    if a.family == "bnn":
+        hold.refuse("production_readout.py bnn", "the BNN reward models' validation and health")
     variants = [v for v in (a.variants or ",".join(VARIANTS)).split(",") if v]
     if a.cond:
         import experiment_conditions as E
