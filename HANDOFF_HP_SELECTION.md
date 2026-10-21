@@ -22426,3 +22426,10 @@ terminals and no-terminals grid, and its ladder models.
 `train_rewards.sh nmr` (seeds 0–10) → spec entries (`nmr_sweeps/`, IQL with
 `nmr_reward_model`, `query_length 100`, `seq_labeller 2`) → stage 4 → the evaluation
 cells.
+
+**Launched 2026-10-21 (author):** NMR-training sweeps `f5cwj8vn` (medium_play),
+`ti24tkoq` (medium_diverse), `qsqmxyqc` (large_play), `ctjc4y8h` (large_diverse).
+Checked on wandb at launch: each first trial reads its own variant's base config, at
+seed 0, 5,000 epochs and select_split test, with swept values inside the ranges, and
+writes `…_nmr_eval_0`. Convergence check:
+`python check_sweep_convergence.py --patience 15 NMR-training/<id>`.
