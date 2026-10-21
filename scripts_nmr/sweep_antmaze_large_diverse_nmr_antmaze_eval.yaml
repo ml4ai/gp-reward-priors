@@ -1,0 +1,42 @@
+project: NMR-training
+program: run_nmr_training_antmaze_eval.py
+method: bayes
+run_cap: 130  # matched across model families
+metric:
+  name: eval_loss_at_selected
+  goal: minimize
+
+# NMR stage-1 search, antmaze-large-diverse-v2 (gp_reward-priors HANDOFF §14.2 item 1, §14.14; the
+# author put NMR in on 2026-10-21).  The SAME procedure as MR, PT and the BNN:
+#   - objective: the validation loss AT the checkpoint selected on the TEST split
+#     (select_split test; handoff 4.3.107), minimised;
+#   - seed 0: the selection lineage, model seed and data split (seed_0);
+#   - budget: run_cap 130 trials, matched across families;
+#   - stopping rule: stop when the best-so-far has not improved for K = 15
+#     consecutive trials, checked out of band with check_sweep_convergence.py;
+#     report the stopping-rule winner (primary) and best-of-all (robustness).
+#
+# Search space.  NMR's architecture has ONE capacity knob, embd_dim (the dense
+# widths e, e/2, e/4 and the LSTM hidden size e/2 all follow it), so it searches
+# two dimensions where PT searches four:
+#   embd_dim: log2 exponent 4-7 -> e = 16-128 -> 1.6k-62k parameters, matched to
+#             PT's searched 2.2k-57.5k (handoff 3.2.16's common capacity ranges);
+#   lr:       PT's range exactly.
+# Dropout (0.1), activation (relu) and batch size (64) are fixed, as PT's are.
+parameters:
+  config_path:
+    value: "scripts_nmr/antmaze_large_diverse_nmr_antmaze_eval.yaml"
+  seed:
+    value: 0
+  criteria_key:
+    value: "loss"
+  epochs:
+    value: 5000
+  embd_dim:
+    distribution: int_uniform
+    min: 4
+    max: 7
+  lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-2

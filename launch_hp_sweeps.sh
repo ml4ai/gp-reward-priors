@@ -5,6 +5,7 @@
 # Usage (from anywhere; the script cd's to the repo root):
 #   ./launch_hp_sweeps.sh bnn        # round-3 BNN sweeps             (4 sweeps)
 #   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
+#   ./launch_hp_sweeps.sh nmr        # NMR stage 1 (handoff 14.14)    (4 sweeps)
 #
 # There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
 # running them together would oversubscribe.  The baselines' phase-1 sweeps are
@@ -67,8 +68,8 @@ export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"
 
 SET="${1:-}"
-if [[ "$SET" != "bnn" && "$SET" != "baselines" ]]; then
-    echo "usage: $0 bnn|baselines" >&2
+if [[ "$SET" != "bnn" && "$SET" != "baselines" && "$SET" != "nmr" ]]; then
+    echo "usage: $0 bnn|baselines|nmr" >&2
     exit 1
 fi
 
@@ -115,6 +116,15 @@ BASELINE_ENTRIES=(
     "pt_large_play|scripts_pt/sweep_antmaze_large_play_pt_antmaze_eval.yaml|2"
     "pt_large_diverse|scripts_pt/sweep_antmaze_large_diverse_pt_antmaze_eval.yaml|2"
 )
+# NMR (handoff 14.2 item 1, 14.14; added 2026-10-21).  A small LSTM: two sweeps per
+# GPU on 4 and 5, which the IQL queues load least.  Its own cache file: nothing to
+# resume, and a later procedure change must bump it, as for the other sets.
+NMR_ENTRIES=(
+    "nmr_medium_play|scripts_nmr/sweep_antmaze_medium_play_nmr_antmaze_eval.yaml|4"
+    "nmr_medium_diverse|scripts_nmr/sweep_antmaze_medium_diverse_nmr_antmaze_eval.yaml|5"
+    "nmr_large_play|scripts_nmr/sweep_antmaze_large_play_nmr_antmaze_eval.yaml|4"
+    "nmr_large_diverse|scripts_nmr/sweep_antmaze_large_diverse_nmr_antmaze_eval.yaml|5"
+)
 
 if [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
@@ -124,6 +134,9 @@ if [[ "$SET" == "bnn" ]]; then
     # hardest to notice.  Round 5 changes map_amp2 (item A), the optimiser's
     # metric (item C) and the CVaR convention (item F), so it must start clean.
     IDS_FILE="exp/sweep_ids_bnn_round5.txt"
+elif [[ "$SET" == "nmr" ]]; then
+    ENTRIES=("${NMR_ENTRIES[@]}")
+    IDS_FILE="exp/sweep_ids_nmr_round1.txt"
 else
     ENTRIES=("${BASELINE_ENTRIES[@]}")
     IDS_FILE="exp/sweep_ids_baselines_round2.txt"

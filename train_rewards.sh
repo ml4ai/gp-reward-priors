@@ -126,7 +126,8 @@ case "$METHOD" in
   bnn) SCRIPT="scripts_bnn/run_bnn_training_antmaze_eval.py"; CFG_DIR="scripts_bnn"; CFG_SUF="_bnn_antmaze_eval.yaml" ;;
   mr)  SCRIPT="scripts_mr/run_mr_training_antmaze_eval.py";   CFG_DIR="scripts_mr";  CFG_SUF="_mr_antmaze_eval.yaml"  ;;
   pt)  SCRIPT="scripts_pt/run_pt_training_antmaze_eval.py";   CFG_DIR="scripts_pt";  CFG_SUF="_pt_antmaze_eval.yaml"  ;;
-  *)   echo "ERROR: METHOD must be bnn | mr | pt (got '${METHOD:-<empty>}')" >&2; exit 1 ;;
+  nmr) SCRIPT="scripts_nmr/run_nmr_training_antmaze_eval.py"; CFG_DIR="scripts_nmr"; CFG_SUF="_nmr_antmaze_eval.yaml" ;;
+  *)   echo "ERROR: METHOD must be bnn | mr | pt | nmr (got '${METHOD:-<empty>}')" >&2; exit 1 ;;
 esac
 
 read -ra GPUS <<< "$GPU_LIST"
@@ -181,6 +182,13 @@ for v in $VARIANTS; do
   # must not silently train production models.  The marker is a comment, so it
   # disappears the moment the header is replaced with a real provenance block.
   grep -q 'SUPERSEDED-ROUND1' "$cfg" && SUPERSEDED+=("$v -> $cfg")
+  # A base config whose swept fields are placeholders (NMR before its stage-1
+  # winner, handoff 14.14) must never train production models.  No override.
+  if grep -q 'UNSELECTED-BASE' "$cfg"; then
+    echo "ERROR: $cfg is an UNSELECTED base config (placeholder hyperparameters)." >&2
+    echo "Write the stage-1 winner with scripts_bnn/make_production_config.py first." >&2
+    exit 1
+  fi
   meas=$(abs_meas "$cfg")
   [[ -n "$meas" && ! -f "$meas" ]] && MISSING_MEAS+=("$v -> $meas")
   for s in $SEEDS; do JOBS+=("- $v $s"); done

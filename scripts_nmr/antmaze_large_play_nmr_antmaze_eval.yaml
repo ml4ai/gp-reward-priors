@@ -1,0 +1,33 @@
+# NMR base config, antmaze-large-play-v2 (gp_reward-priors HANDOFF §14.2 item 1, §14.14).
+# UNSELECTED-BASE: the swept fields (embd_dim, lr) below are PLACEHOLDERS, not a
+# selected configuration.  train_rewards.sh refuses a config carrying this marker;
+# scripts_bnn/make_production_config.py --family nmr replaces this header and the
+# swept values with the stage-1 winner's, exactly as for MR and PT.
+# The sweep overrides every field it varies, so editing those here does not change
+# a sweep run.  Fixed fields mirror PT's production config (batch 64, eval every
+# epoch, test-split selection, mean-pooled BT); dropout and activation are the PT
+# repository's NMR defaults.  compile_model is false (PT: true): torch.compile buys
+# nothing for an LSTM, and it affects speed only.
+#
+project: NMR-training
+group: NMR
+name: nmr
+embd_dim: 5          # PLACEHOLDER (swept: log2 exponent 4-7)
+embd_dropout: 0.1
+activations: relu
+dataset_id: D4RL_antmaze-large-play-v2
+antmaze_variant: antmaze-large-play-v2   # train/val/test derived from antmaze_variant + seed by the script
+epochs: 5000
+batch_size: 64
+lr: 0.001            # PLACEHOLDER (swept: log-uniform 1e-5 to 1e-2)
+eval_every: 1
+criteria_key: loss   # selection criterion on select_split (test); sweep metric eval_loss_at_selected
+compile_model: false
+pin_memory: true
+seed: 1
+checkpoints_path: ./exp/reward_learning/antmaze_large_play_nmr_eval
+
+bt_pool: mean
+num_workers: 4
+prefetch_factor: 2
+select_split: test

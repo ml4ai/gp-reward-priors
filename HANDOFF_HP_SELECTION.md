@@ -22394,3 +22394,35 @@ untuned run overfit, batch and dropout as PT's), then `train_rewards.sh` support
 the spec entries; then its production models (seeds 1–10), stage-4 grid with
 terminals and no-terminals grid, and its ladder models.
 
+
+### 14.14 NMR is IN (author, 2026-10-21); its stage-1 search files
+
+**Decided (author):** NMR joins the uncovered families (§14.1) and falls under
+§14.5's rule unchanged.
+
+**Built (stage 1, matched to PT's; nothing launched yet):**
+- **`scripts_nmr/sweep_antmaze_<v>_nmr_antmaze_eval.yaml`** (4). Bayes, `run_cap` 130,
+  metric `eval_loss_at_selected` (minimised), seed 0, epochs 5,000,
+  `criteria_key loss`; the K = 15 stop is checked out of band with
+  `check_sweep_convergence.py`. That is PT's procedure exactly.
+  - **Search space: `embd_dim` exponent 4–7 (e = 16–128, 1.6k–62k parameters,
+    matched to PT's 2.2k–57.5k) and `lr` log-uniform 1e-5 to 1e-2 (PT's range).**
+    NMR has one capacity knob where PT has three (width, heads, depth), so it searches
+    two dimensions to PT's four. The budget and stopping rule are the same.
+  - Fixed, as for PT: dropout 0.1, ReLU, batch 64.
+- **`scripts_nmr/antmaze_<v>_nmr_antmaze_eval.yaml`** (4): base configs. Their swept
+  fields are placeholders, and the header carries the marker `UNSELECTED-BASE`.
+  `compile_model` is false (PT: true); that affects speed only.
+- **`launch_hp_sweeps.sh nmr`:** its own sweep-ID cache
+  (`exp/sweep_ids_nmr_round1.txt`), one agent per sweep, two per GPU on 4 and 5.
+- **`train_rewards.sh nmr`:** it refuses any config still carrying `UNSELECTED-BASE`,
+  with no override.
+- **`make_production_config.py --family nmr`:** writes the winner, removes the marker,
+  and gives NMR its own provenance header and per-value notes. Self-test extended,
+  including the marker's removal. (It also no longer prints "derived fields left
+  null" for families that have none.)
+
+**After the search:** winners → `make_production_config.py --family nmr` →
+`train_rewards.sh nmr` (seeds 0–10) → spec entries (`nmr_sweeps/`, IQL with
+`nmr_reward_model`, `query_length 100`, `seq_labeller 2`) → stage 4 → the evaluation
+cells.
