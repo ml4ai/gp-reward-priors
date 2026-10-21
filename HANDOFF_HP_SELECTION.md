@@ -21902,7 +21902,7 @@ protocol is settled and registered, so that the BNN is first evaluated under it.
   departure disclosed. **Naming from 2026-10-20:** hypotheses are named by research
   question ("RQ1's hypotheses", "RQ2's main hypothesis"), because "H1" is now
   ambiguous across chapters.
-- **NMR in or out** (§14.2, item 1).
+- ~~NMR in or out~~ — **IN, decided by the author 2026-10-21 (§14.14).**
 - **Order of work**, beyond: hold first, then §13.15, NMR timing, trivial rewards, the
   ties arm data, the max-versus-last-10 readout and the normalization inventory, and
   only then the ladders.
@@ -22377,3 +22377,20 @@ were computed with the broken labeller.
   for 1.6k–62k parameters against PT's 2.2k–57.5k, the learning rate over PT's
   range, batch and dropout as PT's), then `train_rewards.sh` support and the spec
   entries.
+
+### 14.14 NMR is IN — DECIDED 2026-10-21 (author)
+
+After §14.13's timing (training 14.7 min, between MR's 7.4 and PT's 24.2, measured with
+the CPU loaded by ~20 IQL agents; labelling negligible). **NMR is a fourth preference
+family in the benchmarking study**, beside MR, PT and the ensemble mean, and falls under
+every rule of §14 unchanged: it enters RQ1's sensitivity test (§14.5) on both ladders
+and both protocols, the ties ablation (§14.3, item 3), the normalization grids and the
+max-versus-last-10 readout. The author accepts the extra cost, which is IQL runs (about
+864, roughly 21 days at 10 concurrent, per §14.13), not training.
+
+**Next agent steps, as §14.13 lists them:** NMR's stage-1 sweep files matched to PT's
+(130-trial cap, K = 15 stop, e = 2^4–2^7, the learning rate over PT's range since the
+untuned run overfit, batch and dropout as PT's), then `train_rewards.sh` support and
+the spec entries; then its production models (seeds 1–10), stage-4 grid with
+terminals and no-terminals grid, and its ladder models.
+
