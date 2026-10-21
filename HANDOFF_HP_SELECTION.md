@@ -61,6 +61,11 @@
 > ensemble CVaR) is analysed, read or reported until the author lifts the hold**, and
 > every BNN or CVaR run that has not started is paused. §14.1 says exactly what that
 > covers; §14.2–§14.4 list what to implement and run for the benchmarking study.
+>
+> **Added 2026-10-21 — every PT IQL number before this date is invalid as a PT
+> result (§14.10).** A labelling bug gave every PT run a reward that depended only on
+> time since the episode start. The PT reward models themselves are fine. The bug is
+> fixed and tested; PT's IQL runs must be redone.
 
 ---
 
@@ -22199,3 +22204,59 @@ they end.
 **The reading for the chapter:** the reported statistic alone can reorder methods on
 this benchmark, which is one more reason the standard protocol cannot be read at face
 value. To be finalized once every cell is in.
+
+### 14.10 BUG: every PT IQL run was labelled from the dataset's first episode (found and fixed 2026-10-21)
+
+**What was wrong.** `iql_eval.qlearning_dataset_pt` built each transition's
+100-step window from row indices equal to the transition's **within-episode step**,
+used as if they were **global** rows. Every transition at step k of any episode
+therefore got the reward of a window from the dataset's *first* episode at step k.
+**In every PT IQL run, the reward depended only on time since the last episode
+boundary, not on the state or action.** It was found while reading the labeller for
+the NMR port.
+- **Confirmed by test:** on a three-episode toy dataset only the first episode's rows
+  got their own reward; episode 2's rewards were 6, 7, 8… where its states were
+  206, 207, 208…. The old code fails even with a window of length 1.
+- **Origin:** present in the first per-step version of the function in `iql.py`
+  (sliced `observations[: episode_step + 1]` and
+  `[episode_step - (query_length - 1) : episode_step + 1]` from the dataset start),
+  kept exactly by its vectorization in `2ac29e1` (2026-05-20), then copied into
+  `iql_eval.py` (`4b34ac1`).
+- **Not affected:**
+  - the PT reward models themselves (training, validation, test, the stage-1 sweeps,
+    the heuristic floor's accuracies);
+  - MR, the ensemble and the BNN, whose labellers are per-transition.
+- **Affected:** every PT IQL number.
+  - the 4 anchor PT cells (40 runs) and the 4 PT stage-4 grids (32 runs), so PT's
+    selected index too;
+  - every PT row in §7.6, the §12 readout (covered), and `stat_readout`;
+  - the running PT no-terminals grid `igqs6dgt`.
+  - `iql.py` has the same broken function, but no sweep uses its PT path (it runs
+    the task reward only); left as is.
+
+**The fix (`iql_eval.py`).**
+- **Windows:** each window ends at the transition's own row, starts no earlier than
+  its episode's first row, and never crosses a terminal or timeout.
+- **Conventions unchanged:** zero left-padding, timesteps 0..L−1 right-aligned
+  (0..99 for a full window, as in the training data), attention mask 0 on padding.
+  These are the PT repository's own (`reward_from_preference_transformer`).
+- **Tested:** `tests/iql_eval/test_pt_windows.py` compares the function, row by row,
+  against a slow reference that rebuilds every window from explicit episode bounds.
+  It passes for windows of 1, 3, 25 and 100 steps, with terminals mid-episode and
+  back to back. The other three `iql_eval` tests (controls, trivial rewards, final
+  positions) moved from the scratchpad into `tests/iql_eval/` and pass.
+
+**An accidental control (descriptive).** A reward that knew only the time since the
+episode start scored, with terminals, 0.690 / 0.550 / 0.386 / 0.169. MR scored
+0.642 / 0.647 / 0.425 / 0.241 (§14.9). On medium_play the time-only reward is ahead
+of MR. This is direct evidence for §14's premise: with terminals, the benchmark
+barely depends on what the reward says about the state.
+
+**Open (the author's decisions):**
+1. Stop `igqs6dgt` now, or let it finish. If the box pulls the fix while it runs,
+   its second wave would use the fixed labeller, mixing two labellers in one grid.
+2. Re-run PT with the fixed labeller: the stage-4 grids (32 runs), then seeds 1–10 at
+   the new winners (40 runs). The old cells are kept as the "time-only reward"
+   control.
+3. The PT no-terminals grids queued in H1c will use the fixed labeller once the box
+   pulls.
