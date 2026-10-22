@@ -22622,3 +22622,51 @@ no-terminals grids. Box speed is to be checked at the next sweep check.
 **Queues:** G1 on the MR large_play re-run (second wave); G2 on the task-reward
 large_diverse grid; lane P on the PT medium_diverse stage-4 grid (`mb74ov4e`); H2d on
 the ensemble-mean medium_diverse grid (`693djv0v`). Registry: 24 of 32 cells (NMR's column is new; its 4 cells and PT's 4 are pending).
+
+### 14.20 The ties-kept arm's data and training condition (§14.2 item 3; agent, 2026-10-22)
+
+**Data** (`scripts_bnn/make_ties_sets.py`; `data/` is not in git, so it runs on each
+machine):
+- **The tie-free files are exactly the non-tie rows** of each `<env>_pref.hdf5`, in
+  order, on all four variants (checked).
+- **Ties:** large_play 637 of 1,000 (64%), medium_diverse 288 (29%); medium_play also
+  has 488 (49%), not in §14.2's scope. Non-tie labels are hard 0/1.
+- **Allocation:** for each seed 1–10, the tied rows (file order) are permuted with
+  `default_rng(100000 + seed)` and split 70/15/15 with `split_pref_nt_seeds.py`'s
+  rounding. That gives large_play 446 / 96 / 95 and medium_diverse 202 / 43 / 43.
+- **Files** (`eval/seed_<s>/ties/`): `…_pref_train_<s>_ties.hdf5` (base train + train
+  ties: 700 rows), `…_pref_test_<s>_ties.hdf5` (base test + test ties: 150), and
+  `…_pref_valties_<s>.hdf5` (the validation ties only).
+- **Validation is not altered for training.** A ties-kept model is scored on the base
+  tie-free validation split, which is §14.2's metric (accuracy on the tie-free
+  validation pairs). The tied validation pairs are in `valties`, for the readout's
+  cross-entropy on them. The test split, which picks the checkpoint, does carry its
+  ties: only the data differs between the arms.
+- **`--check` verifies every file against its sources, row by row:**
+  - the tie-free rows equal the base file;
+  - the ties form an exact partition;
+  - the ties come only after the base rows.
+
+  It is deterministic, and passes for all 20 (variant, seed) sets.
+- **Content fingerprints** (hashing keys, dtypes, shapes and bytes, not file bytes,
+  because HDF5 embeds creation times) are in `data_manifests/ties_fingerprints.txt`.
+  The box's run must print the same.
+- **Training uses soft targets:** both trainers' `CrossEntropyLoss` takes the
+  [0.5, 0.5] target as is. Training-time `training_acc` counts a tie as class 0; it
+  is a logged number only.
+
+**Condition `ties`** (`experiment_conditions.py`, not in `ALL_CONDS`): families MR, PT
+and NMR; variants large_play and medium_diverse; seeds 1–10. Train and test come from
+`ties/`, and validation is the base split. Model directories are
+`antmaze_<v>_<fam>_ties_eval_<s>`.
+- `jobs` skips other variants silently, and the BNN is refused.
+- `phase2_sweeps.exp_spec(…, "ties")` gives the 6 IQL sweep files, and
+  `is_condition_root` knows `ties`.
+- `stage4_queue.sh` accepts `@ties`.
+- Self-tests extended.
+- Checked with the helpers that `train_rewards.sh` uses: 20 jobs per family, a clean
+  preflight, and the expected paths.
+- NMR large_play waits for its winner, because `train_rewards.sh` refuses a
+  placeholder config.
+
+**IQL for the ties arm** waits for the protocol the author settles (§14.3 item 3).

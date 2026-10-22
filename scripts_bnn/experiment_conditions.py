@@ -63,6 +63,12 @@ SPARSITY = tuple(f"r{n}" for n in REDUCTION_SIZES)
 NOISE_PRIMARY = tuple(f"n{p}" for p in NOISE_LEVELS)
 NOISE_ORACLE = tuple(f"n{p}o" for p in NOISE_LEVELS)
 ALL_CONDS = SPARSITY + NOISE_PRIMARY + NOISE_ORACLE
+# The ties ablation (handoff §14.2 item 3, §14.20): one condition, "ties", on the two
+# variants with many ties, for the families that train on preference labels with a
+# checkpoint.  Kept OUT of ALL_CONDS: it is not a level of either ladder.
+TIES = "ties"
+TIES_VARIANTS = ("large_play", "medium_diverse")
+TIES_FAMILIES = ("mr", "pt", "nmr")
 # §11.3: the SENSITIVITY arm's families.  NMR joined on 2026-10-22 (author, handoff
 # 14.18): it picks its checkpoint on the test split, as MR and PT do.
 ORACLE_FAMILIES = ("mr", "pt", "nmr")
@@ -86,7 +92,9 @@ def parse(cond):
     if m and m.group(1) in NOISE_LEVELS:
         return {"kind": "noise", "level": m.group(1),
                 "arm": "oracle" if m.group(2) else "primary"}
-    raise ValueError(f"unknown condition {cond!r}; choose from {' '.join(ALL_CONDS)}")
+    if cond == TIES:
+        return {"kind": "ties", "level": None, "arm": None}
+    raise ValueError(f"unknown condition {cond!r}; choose from {' '.join(ALL_CONDS)} {TIES}")
 
 
 def env_of(variant):
@@ -112,6 +120,11 @@ def check_allowed(family, variant, seed, cond):
     env_of(variant)
     if family not in FAMILIES:
         raise ValueError(f"unknown family {family!r}")
+    if c["kind"] == "ties":
+        if family not in TIES_FAMILIES:
+            raise ValueError(f"ties: the ablation is MR, PT and NMR only, not {family} (§14.2 item 3)")
+        if variant not in TIES_VARIANTS:
+            raise ValueError(f"ties: the ablation runs on {' and '.join(TIES_VARIANTS)} only (§14.2 item 3)")
     if int(seed) not in EVAL_SEEDS:
         raise ValueError(f"seed {seed}: the experiments run at seeds 1-10 only; nothing is "
                          "re-selected under a condition, so there is no seed-0 lineage (§11.1)")
@@ -130,6 +143,12 @@ def split_overrides(family, variant, seed, cond, data_root):
     c = parse(cond)
     env = env_of(variant)
     sd = os.path.join(data_root, env, "eval", f"seed_{seed}")
+    if c["kind"] == "ties":
+        # validation stays the base split (tie-free accuracy is the metric); the
+        # validation ties are kept apart in ties/..._valties_<s>.hdf5 (§14.20)
+        td = os.path.join(sd, "ties")
+        return {"train_dataset": os.path.join(td, f"{env}_pref_train_{seed}_ties.hdf5"),
+                "test_dataset": os.path.join(td, f"{env}_pref_test_{seed}_ties.hdf5")}
     if c["kind"] == "reduction":
         return {"train_dataset": os.path.join(
             sd, "reduction", f"{env}_pref_train_{seed}_{c['level']}.hdf5")}
@@ -243,6 +262,8 @@ def jobs(family, variants, seeds, conds):
     for c in conds:
         for v in variants:
             for s in seeds:
+                if parse(c)["kind"] == "ties" and v not in TIES_VARIANTS:
+                    continue                          # outside the ablation's scope: not a job
                 try:
                     check_allowed(family, v, s, c)
                 except ValueError:
@@ -295,6 +316,21 @@ def selftest():
         except ValueError:
             pass
     assert len(ALL_CONDS) == 14 and len(set(ALL_CONDS)) == 14
+    # ---- the ties ablation (§14.20) ----
+    assert parse("ties") == {"kind": "ties", "level": None, "arm": None} and TIES not in ALL_CONDS
+    assert model_base("large_play", "pt", "ties") == "antmaze_large_play_pt_ties_eval"
+    ot = split_overrides("nmr", "medium_diverse", 4, "ties", "/d")
+    assert ot == {"train_dataset": "/d/antmaze-medium-diverse-v2/eval/seed_4/ties/antmaze-medium-diverse-v2_pref_train_4_ties.hdf5",
+                  "test_dataset": "/d/antmaze-medium-diverse-v2/eval/seed_4/ties/antmaze-medium-diverse-v2_pref_test_4_ties.hdf5"}, ot
+    for bad in (("bnn", "large_play"), ("mr", "medium_play")):
+        try:
+            check_allowed(bad[0], bad[1], 3, "ties")
+            raise AssertionError(f"ties accepted {bad}")
+        except ValueError:
+            pass
+    assert jobs("mr", list(VARIANTS), [1, 2], ["ties"]) == [("ties", "medium_diverse", 1), ("ties", "medium_diverse", 2),
+                                                            ("ties", "large_play", 1), ("ties", "large_play", 2)]
+    assert expected_run_paths("pt", "large_play", 3, "ties")["val_dataset"].endswith("_pref_val_3.hdf5")
     assert env_of("large_diverse") == "antmaze-large-diverse-v2"
     # names: the condition is in the basename, the anchor is untouched, all distinct
     assert model_base("large_play", "bnn") == "antmaze_large_play_bnn_eval"

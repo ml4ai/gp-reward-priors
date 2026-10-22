@@ -1,0 +1,22 @@
+  large_play      seed  1: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  e5078ae44d64 51746d961921 d9b843605a8f
+  large_play      seed  2: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  5e67fa1e0908 c691619cb2ae bd05b4760975
+  large_play      seed  3: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  8da6825a9b83 4294c097bd83 fe607a39bf33
+  large_play      seed  4: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  32de34c9033c b6a3a3cb87b5 86c8930d0eb8
+  large_play      seed  5: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  91a65ab47bda 8dbf0ba3ae8b ac3076782a9c
+  large_play      seed  6: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  d4d08e071d36 9afbb490461a 8b918c68576d
+  large_play      seed  7: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  9177a38e72a1 c347efecb3f2 7bf8d934d49e
+  large_play      seed  8: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  5e2d1a572858 c2f10c2c538c 1ce1abab8762
+  large_play      seed  9: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  522d2469498e 96ddf9add2e8 1d6ba5e1ce27
+  large_play      seed 10: 637 ties -> train 446, val 96, test 95; train 700 rows, test 150 rows   CHECK OK  a95cf6ed864b 0daca1e5a464 2fc9ba70d93b
+  medium_diverse  seed  1: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  cc66066fe53c a54c60b21682 fce46d68e3c5
+  medium_diverse  seed  2: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  c0af861a5f93 c06f083decfb b148ec720a84
+  medium_diverse  seed  3: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  43d8fab5f715 e4f5d5e56b88 23a4808c7fca
+  medium_diverse  seed  4: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  26c8e3eb7dae abaab96b06ae 462e4f488f22
+  medium_diverse  seed  5: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  800bb60d3480 6b0778516049 3d4ffa2603b1
+  medium_diverse  seed  6: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  f696d0acbb31 4c63a76ef9a4 db676bc1fa2c
+  medium_diverse  seed  7: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  e13c6403cbdb eb1d4193a60a affdcc754ff7
+  medium_diverse  seed  8: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  834513accc2c f88d3da81e91 b3642d759eeb
+  medium_diverse  seed  9: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  17578dbd040e c1b66035a825 ed70b810b8f8
+  medium_diverse  seed 10: 288 ties -> train 202, val 43, test 43; train 700 rows, test 150 rows   CHECK OK  a918282083c4 52cd9b2d3e8f ccad162f7494
+
+  ALL OK
