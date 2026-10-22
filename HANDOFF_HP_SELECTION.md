@@ -22834,3 +22834,20 @@ NMR large_play ties waits for NMR large_play production.
 
 `stat_readout` summary now: 10 groups; rankings change in 7; 8 sign flips and 8
 separation changes in 36 comparisons.
+
+### 14.26 The notebooks under the hold (closes §14.6's open item; agent, 2026-10-22)
+
+**Box (author):** NMR large_play production and ties training are queued; the ties
+readout's `measure` is running; lane S (PT medium_diverse evaluation) is launched, a
+seventh lane.
+
+- **`results_table.ipynb`:** `register` now ends the generated registry cell with
+  `INCLUDE_HELD = False`, which drops BNN CVaR, BNN mean and ensemble CVaR from
+  `SWEEPS` and `METHOD_COLUMNS`. Every table and chart downstream never sees them. The
+  registry's columns are now task reward, MR, PT, NMR and ensemble mean. Generator
+  self-test extended (5 columns, none covered, SWEEPS consistent with them).
+- **`experiments_results.ipynb`:** its method list gains NMR and the same
+  `INCLUDE_HELD = False` filter. The collectors it calls skip covered sweeps anyway
+  (`results/hold.py`). Committed with outputs empty.
+- Setting `INCLUDE_HELD = True` restores the old behaviour, for use only once the author
+  lifts the hold.
