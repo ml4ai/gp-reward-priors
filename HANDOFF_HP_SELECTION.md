@@ -22697,3 +22697,42 @@ NMR production: MR (20), then PT (20), then NMR medium_diverse (10).
     `CrossEntropyLoss`;
   - an end-to-end dry run here (stand-in d4rl, small real MR/PT/NMR models, the real
     validation and `valties` files) exercised both `measure` and `report`.
+
+### 14.22 Sweep check 2026-10-22 08:40 UTC: five lanes at full speed, NMR production verified, MR ties verified, MR without terminals complete
+
+**Box:** 5 lanes, 23 IQL runs, every one at 168–182k steps/h. The fifth lane cost
+nothing, as the fourth did not (§14.15). Running:
+- H2d, the ensemble-mean medium_diverse grid;
+- G2, the task-reward large_diverse grid;
+- G1, the task-reward medium_play grid (`jyibswrv`);
+- lane P, the PT medium_diverse stage-4 grid;
+- lane N, the PT medium_play evaluation (`auny10f3`, the first fixed-labeller PT cell).
+
+**NMR production, all three variants VERIFIED** (`production_readout.py nmr`):
+complete, config OK, health OK. **Seed 0 is bit-exact** with each winner, now
+including large_diverse (0.190551). Spread over 11 seeds: large_diverse 0.295 ± 0.169.
+
+**NMR large_play** (`qsqmxyqc`): 49 trials, best 0.1152 (trial 35), **14 of 15**
+non-improving, so the next non-improving trial stops it.
+
+**Ties training:** MR, 20/20 finished and **VERIFIED** (`production_readout.py mr
+--cond ties`). Each is the winner's configuration on the ties splits and paths
+(train and test from `ties/`, validation the base split), and healthy.
+`eval_loss_at_selected` (base validation): large_play 0.192 ± 0.033, medium_diverse
+0.236 ± 0.034. PT is training (12 running); NMR medium_diverse follows.
+
+**MR without terminals, at its own no-terminals winner: complete on all four variants**
+(`control_readout` F; with − without terminals; DESCRIPTIVE):
+
+| variant | without terminals (index) | with − without, 95% exact |
+|---|---|---|
+| medium_play | 0.652 ± 0.067 (1) | −0.010 [−0.049, +0.030] |
+| medium_diverse | 0.318 ± 0.067 (7) | **+0.328 [+0.297, +0.357]** |
+| large_play | 0.228 ± 0.074 (6) | **+0.197 [+0.163, +0.231]** |
+| large_diverse | 0.114 ± 0.029 (6) | **+0.127 [+0.073, +0.183]** |
+
+Without terminals, MR keeps its score only on medium_play. Elsewhere it loses
+0.13–0.33 even at its best normalization.
+
+**Queue N2** (behind lane N, GPUs 1–5): NMR stage 4 for large_diverse, then its
+no-terminals grid. Registry unchanged.
