@@ -54,7 +54,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
-FAMILIES = ("bnn", "mr", "pt")
+FAMILIES = ("bnn", "mr", "pt", "nmr")                  # NMR added 2026-10-22 (handoff 14.17)
 VARIANTS = ("medium_play", "medium_diverse", "large_play", "large_diverse")
 EVAL_SEEDS = tuple(range(1, 11))
 REDUCTION_SIZES = (16, 32, 64, 128)                    # decided 2026-10-12, §13.5
@@ -63,12 +63,17 @@ SPARSITY = tuple(f"r{n}" for n in REDUCTION_SIZES)
 NOISE_PRIMARY = tuple(f"n{p}" for p in NOISE_LEVELS)
 NOISE_ORACLE = tuple(f"n{p}o" for p in NOISE_LEVELS)
 ALL_CONDS = SPARSITY + NOISE_PRIMARY + NOISE_ORACLE
-ORACLE_FAMILIES = ("mr", "pt")                         # §11.3
+ORACLE_FAMILIES = ("mr", "pt")                         # §11.3: the SENSITIVITY arm's families
+# Families that pick their checkpoint on the TEST split, so in the noise PRIMARY arm
+# their test split is corrupted like the training labels.  Kept apart from
+# ORACLE_FAMILIES (2026-10-22): NMR selects on the test split, but whether it joins
+# the sensitivity arm is the author's call (handoff 14.17).
+SELECTS_CHECKPOINT = ("mr", "pt", "nmr")
 ORACLE_VARIANTS = ("medium_play",)                     # §11.3, fixed in advance
 # The key each training script takes its output directory under.
-OUT_KEY = {"bnn": "OUT_DIR", "mr": "checkpoints_path", "pt": "checkpoints_path"}
+OUT_KEY = {"bnn": "OUT_DIR", "mr": "checkpoints_path", "pt": "checkpoints_path", "nmr": "checkpoints_path"}
 # What a finished model directory contains, used to tell an empty dir from a model.
-MODEL_MARKERS = {"bnn": "sampling_f", "mr": "best_model.pt", "pt": "best_model.pt"}
+MODEL_MARKERS = {"bnn": "sampling_f", "mr": "best_model.pt", "pt": "best_model.pt", "nmr": "best_model.pt"}
 
 
 def parse(cond):
@@ -128,7 +133,7 @@ def split_overrides(family, variant, seed, cond, data_root):
         return {"train_dataset": os.path.join(
             sd, "reduction", f"{env}_pref_train_{seed}_{c['level']}.hdf5")}
     out = {"train_dataset": os.path.join(sd, "noise", f"{env}_pref_train_{seed}_{c['level']}.hdf5")}
-    if c["arm"] == "primary" and family in ORACLE_FAMILIES:
+    if c["arm"] == "primary" and family in SELECTS_CHECKPOINT:
         # MR/PT pick their checkpoint on the test split, so in the PRIMARY arm it
         # is corrupted like the training labels.  The BNN has no such decision.
         out["test_dataset"] = os.path.join(
@@ -303,6 +308,14 @@ def selftest():
                  "antmaze-medium-play-v2_pref_train_4_64.hdf5"}
     assert split_overrides("bnn", "large_play", 1, "r16", R).keys() == {"train_dataset"}
     # noise PRIMARY: MR/PT get a corrupted test split, the BNN does not
+    on = split_overrides("nmr", "large_diverse", 7, "n03", R)          # NMR selects on test too
+    assert "test_dataset" in on and on["test_dataset"].endswith("_7_03.hdf5"), on
+    try:
+        check_allowed("nmr", "medium_play", 3, "n03o")                   # not in the sensitivity arm
+        raise AssertionError("nmr accepted in the sensitivity arm")
+    except ValueError:
+        pass
+    assert model_base("large_play", "nmr", "r16") == "antmaze_large_play_nmr_r16_eval"
     o = split_overrides("pt", "large_diverse", 7, "n03", R)
     assert o["train_dataset"].endswith("/noise/antmaze-large-diverse-v2_pref_train_7_03.hdf5")
     assert o["test_dataset"].endswith("/noise/antmaze-large-diverse-v2_pref_test_7_03.hdf5")

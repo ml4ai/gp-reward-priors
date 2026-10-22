@@ -54,8 +54,11 @@ WINNERS = {
            "large_play": "cyrngs49", "large_diverse": "xokkypz7"},
     "bnn": {"medium_play": "ez84hubu", "medium_diverse": "q2dd6xqt",
             "large_play": "q45qbz8h", "large_diverse": "owlrd69d"},
+    # NMR stage 1 (handoff 14.16): K = 15 rule winners; large_play still searching.
+    "nmr": {"medium_play": "kt0uqgct", "medium_diverse": "t4pquwe6",
+            "large_diverse": "st6m929w"},
 }
-METRIC = {"mr": "eval_loss_at_selected", "pt": "eval_loss_at_selected",
+METRIC = {"mr": "eval_loss_at_selected", "pt": "eval_loss_at_selected", "nmr": "eval_loss_at_selected",
           "bnn": "val_cvar_ce"}
 # Seed-0 reproduction compares these (MR/PT); BNN seed 0 is the escalation,
 # verified separately by escalation_readout.py.
@@ -187,7 +190,7 @@ def report(family, prod, win, variants, cond=None):
             if u:
                 bad_cfg.append(f"s{s}:{u}")
             sm = r["summary"]
-            if family in ("mr", "pt"):
+            if family in ("mr", "pt", "nmr"):
                 if sm.get("reload_check_ok") != 1 or sm.get(m) is None \
                         or not math.isfinite(sm.get(m)):
                     bad_h.append(f"s{s}")
@@ -202,7 +205,7 @@ def report(family, prod, win, variants, cond=None):
 
     if cond:
         print("\n4. REPRODUCE: not applicable -- a condition has no seed-0 model (§11.1)")
-    elif family in ("mr", "pt"):
+    elif family in ("mr", "pt", "nmr"):
         print("\n4. REPRODUCE: seed-0 production run vs the sweep winner (same config, same seed)")
         for v in variants:
             rs = [r for r in c.get((v, 0), []) if r["state"] == "finished"]
@@ -266,7 +269,7 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("family", nargs="?", choices=("mr", "pt", "bnn"))
+    ap.add_argument("family", nargs="?", choices=("mr", "pt", "bnn", "nmr"))
     ap.add_argument("--since", default="2026-09-25T00:00:00",
                     help="only runs created after this (excludes older production sets)")
     ap.add_argument("--variants", default=None,

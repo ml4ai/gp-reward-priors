@@ -124,7 +124,9 @@ def _grid(sizes):
 # --------------------------------------------------------------------------
 # The models' accuracies
 # --------------------------------------------------------------------------
-_NAME = re.compile(r"antmaze_([a-z_]+?)_(bnn|mr|pt)(?:_(r\d+))?_eval_(\d+)$")
+# Variants named explicitly, so that "..._nmr_..." can never parse as family "mr".
+_NAME = re.compile(r"antmaze_(medium_play|medium_diverse|large_play|large_diverse)_(bnn|mr|pt|nmr)"
+                   r"(?:_(r\d+))?_eval_(\d+)$")
 
 
 def model_accuracies(family, n_pairs, since):

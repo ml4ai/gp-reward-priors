@@ -22538,3 +22538,37 @@ also the best of all trials.
 - **Before production training:** the three sweeps must be stopped and their in-flight
   trials allowed to finish. Their agents write to the same `…_nmr_eval_0` directory
   that production seed 0 overwrites.
+
+### 14.17 NMR wired into the IQL stage (agent, 2026-10-22, while its production models train)
+
+**Production training started (author):** `train_rewards.sh nmr` for medium_play,
+medium_diverse and large_diverse, seeds 0–10, on all 6 GPUs. At 05:40 UTC medium_play
+seeds 0–5 were running.
+
+**Built (all self-tests pass; `phase2_sweeps.py check`: 32/32 files match the spec):**
+- `spec()` has 4 NMR entries (`nmr_sweeps/sweep_antmaze_<v>`: root `…_nmr_eval`,
+  `nmr_reward_model`, `query_length 100`, `seq_labeller 2`). Each matches only itself
+  (asserted against PT's entry).
+- `method_of` maps it to "NMR". The registry gets an NMR column (`COLUMNS`; 8 methods).
+  NMR is in `control_readout` (anchor list, grid section, grid-only families, section
+  F) and in `stat_readout`.
+- `nmr_sweeps/launch.sh` is PT's launcher with the family renamed.
+- **Written:** `nmr_sweeps/sweep_antmaze_<v>.yaml` (STAGE 4, 4 files) and
+  `ctrl_sweeps/s4noterm_antmaze_<v>_nmr.yaml` (4 files). The at-winner generator
+  covers NMR.
+- `experiment_conditions.py`: `nmr` is a family (condition folders
+  `antmaze_<v>_nmr_<cond>_eval`). A new `SELECTS_CHECKPOINT = (mr, pt, nmr)` takes
+  over the old double duty of `ORACLE_FAMILIES`: in the noise PRIMARY arm, families
+  that pick their checkpoint on the test split get a corrupted test split. **NMR
+  therefore needs it. The sensitivity arm (`ORACLE_FAMILIES`, §11.3: MR and PT on
+  medium_play) is unchanged; whether NMR joins it is the author's call.**
+  `phase2_sweeps._MODEL_FAMILY` and `is_condition_root` know `nmr`.
+- **A parsing hazard removed:** `heuristic_floor._NAME` (`[a-z_]+?_(bnn|mr|pt)`)
+  would have read `…_nmr_…` as family `mr`. That pattern and `is_condition_root` now
+  name the four variants explicitly. Tested on `antmaze_large_play_nmr_r16_eval_3`.
+- `production_readout.py nmr`, with the three winners as references. Live run:
+  works; it reported 6 runs in progress and none finished.
+
+**Next:** verify the 33 production models (`production_readout.py nmr`), then queue
+NMR's stage-4 grids and no-terminals grids for the three variants. large_play
+follows when `qsqmxyqc` stops.
