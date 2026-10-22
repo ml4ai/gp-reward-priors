@@ -22780,3 +22780,28 @@ Seeds 1–10 files written:
 The task-reward cells feed §14.5's usability check (task reward vs zero under the
 candidate protocol, at the task reward's own index). **Queue R** takes the three, as
 a sixth lane (author's call).
+
+### 14.24 The time-only PT reward, read on purpose (agent, 2026-10-22)
+
+**Box (author):** queue R launched as a sixth lane (the task-reward re-runs on
+medium_play at 0 and large_diverse at 3; the ensemble mean on medium_diverse at 7).
+Box speed under ~28 agents is to be checked at the next sweep check.
+
+**Built:**
+- **`eval_readout.collect_timeonly`:** the pre-fix PT evaluation sweeps, matched on PT's
+  spec without `seq_labeller`, at the index each ran. They are read under the method
+  name **`PT_TIMEONLY`**: §14.10's accidental control, a PT model applied to windows
+  from the dataset's first episode, so a reward of time since the episode start.
+  `collect` gained optional `sp` / `method_as` for this; its default behaviour is
+  unchanged (self-tests pass).
+- **`stat_readout`** reads `PT_TIMEONLY` in the anchor groups, beside the fixed PT once
+  its cells exist. The ladders keep to MR, PT, NMR and the ensemble mean.
+- Output: `results/stat_readout_latest.txt` (2026-10-22). Summary: 10 groups;
+  rankings change in 6; 7 sign flips and 9 separation changes in 34 comparisons.
+
+**Seen in it (DESCRIPTIVE):**
+- With terminals, the time-only reward ranks second of the anchor cells on
+  medium_play (0.690; only the ensemble mean is above) and third on large_play.
+- Without terminals, MR on medium_diverse at index 2 has a max of 0.632 but a last-10
+  of 0.306. These runs reach the goal and then lose it. Under the PT paper's
+  statistic (max) its with − without gap would look far smaller than it is.
