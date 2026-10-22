@@ -22433,3 +22433,51 @@ Checked on wandb at launch: each first trial reads its own variant's base config
 seed 0, 5,000 epochs and select_split test, with swept values inside the ranges, and
 writes `…_nmr_eval_0`. Convergence check:
 `python check_sweep_convergence.py --patience 15 NMR-training/<id>`.
+
+### 14.15 Sweep check 2026-10-22 02:40 UTC (DESCRIPTIVE)
+
+**Queues.**
+- G1 finished the MR medium_diverse re-run (`9z9wf8rz`) and is on the MR large_play
+  re-run (`7cag5rpi`, 5/10).
+- G2 finished the MR large_diverse re-run (`pz1xoooh`) and is on the task-reward
+  large_play no-terminals grid (`c4us7e59`, 0/4, at ~750k steps).
+- Lane P: the PT medium_play stage-4 grid (`5ir672as`) is 5/8, **running with
+  `seq_labeller 2` and `query_length 100`** (checked in the run config).
+- The early ensemble-mean grid (`xwtwuvea`) is 5/8.
+- The killed `igqs6dgt` shows as 5 crashed runs; no readout reads it.
+
+**Box speed:** every IQL run between 10-21 16:46 and now went at 160–197k steps/h
+(5.3–6.1 h a run), with about 20 IQL agents plus the 4 NMR sweeps. That equals the
+10-agent rate. **The box takes about 20 concurrent IQL runs without slowing**, so
+§14.7's ~1.75 runs an hour is really about 3.5: the 64 days (85 with NMR) are about
+32 (43).
+
+**MR without terminals, at its own no-terminals winner** (`control_readout` F;
+with − without terminals):
+
+| variant | at the anchor index | at the no-terminals winner |
+|---|---|---|
+| medium_play | +0.006 (index 0) | −0.010 [−0.049, +0.030] (index 1: 0.652 ± 0.067) |
+| medium_diverse | +0.341 (index 2) | **+0.328 [+0.297, +0.357]** (index 7: 0.318 ± 0.067) |
+| large_diverse | not run yet | **+0.127 [+0.073, +0.183]** (index 6: 0.114 ± 0.029) |
+| large_play | not run yet | 5/10 |
+
+Re-selecting MR's normalization without terminals does **not** rescue MR on
+medium_diverse, or on large_diverse. Where MR collapses without terminals it
+collapses at its best index too. So the collapse is about what the reward says, not
+its scale.
+
+**NMR stage 1** (`check_sweep_convergence.py --patience 15`):
+
+| sweep | trials | non-improving since best | best `eval_loss_at_selected` (trial) |
+|---|---|---|---|
+| `f5cwj8vn` medium_play | 14 | 7/15 | 0.173 (7; e = 2^6, lr 2.9e-3) |
+| `ti24tkoq` medium_diverse | 11 | 8/15 | 0.245 (3; 2^5, 2.2e-3) |
+| `qsqmxyqc` large_play | 18 | 3/15 | 0.135 (15; 2^7, 1.9e-5) |
+| `ctjc4y8h` large_diverse | 11 | 5/15 | 0.191 (6; 2^6, 9.6e-3) |
+
+None has stopped; none has diverged or failed to sync.
+
+**Registry:** `register --write` now registers 24 of 28 cells. The 4 PT cells are
+unregistered until the fixed-labeller PT evaluation sweeps exist, as intended
+(§14.11).
