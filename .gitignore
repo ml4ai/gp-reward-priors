@@ -820,3 +820,7 @@ exp/*
 # Cached CVaR reward labels (handoff 3.2.9, to-do 17) -- ~4 MB each, and
 # regenerable from the chains while those still exist.  Not source.
 reward_label_cache/
+
+# Generated on the box by scripts_bnn/ties_readout.py measure; copied over by hand (handoff 14.21).
+# Never tracked: the box writes it in place, so a tracked copy conflicts on pull.
+calibration_results/ties/ties_measurements.json
