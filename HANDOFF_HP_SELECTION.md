@@ -22974,3 +22974,31 @@ Every CE-on-tied-pairs and |P − 0.5| difference has its interval far below zer
   overfits less: compare its training loss of 0 in §14.13.
 - **Whether any of this reaches the policy** is the IQL question, under the protocol the
   author settles (§14.3 item 3).
+
+### 14.30 The ties arm's IQL: candidate protocol only (author, 2026-10-22)
+
+**Decided (author):** the ties arm runs under the **candidate protocol only** (no
+terminals). There are enough with- against without-terminals comparisons elsewhere
+that a reader will expect the ties comparison to be indistinguishable with terminals
+on.
+
+**Design** (§14.5's rule): each ties-kept model is run without terminals at its
+**family's frozen no-terminals index**, the seed-0 grid winner of the tie-free models,
+seeds 1–10. The comparison is ties arm − tie-free arm, both without terminals at the
+same index, paired by seed. The tie-free arm is the family's no-terminals cell at its
+winner (MR: `rerun_MR`, or `noterm_MR` where the winner did not move; PT and NMR:
+`atwin_*`).
+
+**Built:**
+- `phase2_sweeps.py control --ties --write` (`control_ties_spec`): files
+  `ctrl_sweeps/ties_noterm_antmaze_<v>_<fam>.yaml`, `Lineage: CONTROL ties-noterm`.
+  Each is the tie-free no-terminals cell at the same index with only
+  `reward_model_root` changed (to `…_<fam>_ties_eval`); asserted.
+- They are written only once the family's no-terminals grid is complete.
+- `control_readout` reads them as `tiesnt_<FAM>` and adds **section G** (ties −
+  tie-free, no terminals, same index).
+- Self-tests extended.
+
+**Written now:** MR medium_diverse (index 7) and MR large_play (index 6). PT and NMR
+follow when their no-terminals grids complete: PT in H1c/P, NMR in N, N2 and S3. Queue
+**T** takes the two MR files, behind lane R (author's call on placement).
