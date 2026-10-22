@@ -166,8 +166,10 @@ def build(text, ran, rid, num_chains, cpg, ann=None, family="bnn"):
             continue
         k = m.group(1)
         seen.add(k)
-        if _same(old.get(k), target[k]):
+        if _same(old.get(k), target[k]) and "PLACEHOLDER" not in lines[i]:
             continue                                     # byte-identical
+        # (a PLACEHOLDER line is rewritten even when the winner equals it: its
+        # comment would otherwise claim the value was never selected; NMR, §14.14)
         who = ("round-5 winner" if family == "bnn"
                else "NMR stage-1 winner" if family == "nmr"
                else "round-2 baseline winner")
@@ -459,6 +461,11 @@ def selftest():
     assert ynmr["embd_dim"] == 6 and ynmr["lr"] == 3.1e-4 and ynmr["seed"] == 1, ynmr
     assert "NMR stage-1 winner abcd1234 (was 5)" in new_nmr and "round-2" not in new_nmr, new_nmr
     assert "derived fields left null" not in new_nmr                    # NMR has none
+    # a winner equal to the placeholder still loses the PLACEHOLDER comment
+    same_ran = dict(nmr_ran, embd_dim=5)
+    new_same, _, _ = build(nmr_text.replace("embd_dim: 5", "embd_dim: 5   # PLACEHOLDER (swept)"),
+                           same_ran, "abcd1234", 128, 32, nmr_ann, family="nmr")
+    assert "PLACEHOLDER" not in new_same and "NMR stage-1 winner abcd1234" in new_same, new_same
     assert not verify(new_nmr, nmr_text, nmr_ran, 128, 32, nmr_ann, family="nmr")
     # MR: no budget keys, no centre_draws requirement
     mr_text = "# h\nwidth: 8\ndepth: 5\nlr: 0.0062\nseed: 1\n"

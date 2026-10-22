@@ -22486,3 +22486,55 @@ unregistered until the fixed-labeller PT evaluation sweeps exist, as intended
 GPUs 5 0 1 2 3, now waiting only for the early ensemble-mean grid (`xwtwuvea`), not
 for G2. Four lanes then run about 20 IQL agents, which §14.15 measured as costing
 nothing in speed.
+
+### 14.16 Sweep check 2026-10-22 05:00 UTC: two grids complete, the at-winner generator, three NMR winners
+
+**Queues:**
+- **H2d started** (`693djv0v`, the ensemble-mean medium_diverse grid).
+- G2 is on the task-reward large_diverse no-terminals grid (`g1ujj2uz`).
+- G1 is on the MR large_play re-run (5/10).
+- Lane P: the PT medium_play stage-4 grid is 5/8.
+
+**Grid winners recorded** (`control_readout --write-grid-winners`; 12 in all; seed 0,
+no terminals):
+- **Ensemble mean, medium_play** (`xwtwuvea`): 0.678 / **0.693** / 0.499 / 0.451 /
+  0.001 / 0.001 / 0.325 / 0.277, so the winner is **1** (anchor index 2).
+- **Task reward, large_play** (`c4us7e59`, indices 0–3): 0.214 / **0.009** / **0.222** /
+  0.191, so the winner is **2** (its anchor index is 1). Without terminals, r − 1
+  (index 1) is almost useless on large_play. It is −1 everywhere except the goal
+  steps, and nothing else carries the goal.
+
+**Built: the at-winner generator** (`phase2_sweeps.py control --atwin --write`).
+- PT, the ensemble mean and the motion reward have no-terminals grids but no
+  anchor-index no-terminals cell. For each complete grid it writes
+  `ctrl_sweeps/atwin_noterm_antmaze_<v>_<fam>.yaml`: the grid file with only seeds
+  1–10 and the winning index changed (asserted), `Lineage: CONTROL noterm-atwin`.
+- `control_readout` reads them as `atwin_<family>` and reports with − without
+  terminals at the winner in section F. The motion reward is compared against its
+  own with-terminals control.
+- Self-tests extended. A live run is clean.
+- **Written now:** `atwin_noterm_antmaze_medium_play_ens_mean` (index 1), and, from the
+  existing re-run generator, `rerun_noterm_antmaze_large_play_task` (index 2).
+- **Queue Q** (GPUs 4 5 0 1 2) takes both, behind lane P.
+
+**NMR stage 1: three sweeps stopped by the K = 15 rule.** In each, the rule winner is
+also the best of all trials.
+
+| sweep | stop fired at trial | winner | eval_loss_at_selected | embd_dim | lr |
+|---|---|---|---|---|---|
+| `f5cwj8vn` medium_play | 22 | `kt0uqgct` | 0.1726 | 2^6 | 2.90e-3 |
+| `ti24tkoq` medium_diverse | 18 | `t4pquwe6` | 0.2449 | 2^5 | 2.23e-3 |
+| `ctjc4y8h` large_diverse | 21 | `st6m929w` | 0.1906 | 2^6 | 9.58e-3 |
+| `qsqmxyqc` large_play | not yet (best at trial 35, 0.1152) | | | | |
+
+- No trial diverged or failed to sync.
+- **Production configs written** for the three: `make_production_config.py --family nmr`,
+  VERIFY PASS on every behaviour-relevant key. large_play's config stays the marked
+  placeholder until its sweep stops.
+- **Fixed in the generator:** a line marked PLACEHOLDER is now rewritten even when the
+  winner equals it. medium_diverse's `embd_dim` 2^5 equals the placeholder, and it
+  would otherwise have kept a comment saying it was never selected. Self-test
+  extended.
+- **Before production training:** the three sweeps must be stopped and their in-flight
+  trials allowed to finish. Their agents write to the same `…_nmr_eval_0` directory
+  that production seed 0 overwrites.
