@@ -22736,3 +22736,47 @@ Without terminals, MR keeps its score only on medium_play. Elsewhere it loses
 
 **Queue N2** (behind lane N, GPUs 1–5): NMR stage 4 for large_diverse, then its
 no-terminals grid. Registry unchanged.
+
+### 14.23 The normalization inventory (§14.2 item 5; agent, 2026-10-22) and three new grid winners
+
+**`results/norm_inventory.py`** (output in `results/norm_inventory_latest.txt`). For
+every uncovered family and variant, it shows the seed-0 grid WITH terminals (stage 4)
+and WITHOUT them, each scored by the stage-4 rule, with its status (done / running
+k/n / not run). PT's pre-fix grids are listed apart, as the time-only reward. The
+motion reward's with-terminals index is the fixed 3. Covered families are never
+fetched. Self-tested.
+
+**First reading (DESCRIPTIVE; seed 0):**
+- **The selected index moves when the terminals go in 9 of 9** (family, variant)
+  pairs with both grids complete:
+  - task reward: medium_play 3→0, large_play 1→2, large_diverse 1→3;
+  - MR: 0→1, 2→7, 3→6, 3→6;
+  - ensemble mean: medium_play 2→1, medium_diverse 3→7.
+- **Indices 4 and 5 score ≈ 0 in both protocols for every family** (the largest
+  0.062). With terminals the cause is sign (§13.14.2); without them, the size of the
+  offset (§13.14.7).
+- **With terminals, the scaled indices win for learned rewards and r − 1 wins for the
+  task reward**, except medium_play (index 3, the §7.6 C tie). **Without terminals,
+  the winners move towards raw scale (0/1) on medium_play and towards the
+  trajectory-relative shifts (6/7) on the harder variants.**
+- The pre-fix PT row is the time-only reward of §14.10. With terminals it reaches
+  0.698 on medium_play at seed 0, above the fixed-labeller PT's 0.599.
+- **Missing:**
+  - PT: three with-terminals grids (lane P running) and four without (H1c and P);
+  - NMR: all eight (lanes N and N2; large_play after its winner);
+  - ensemble mean: large_play (running) and large_diverse without terminals;
+  - motion reward: all four without terminals (H1c/H2d);
+  - task reward: medium_diverse without terminals (running).
+
+**New no-terminals winners recorded** (`control_grid_winners.json`, 15 in all):
+- task reward: medium_play **0** (0.668), large_diverse **3** (0.139);
+- ensemble mean: medium_diverse **7** (0.416).
+
+Seeds 1–10 files written:
+- `rerun_noterm_antmaze_medium_play_task` (index 3 → 0);
+- `rerun_noterm_antmaze_large_diverse_task` (1 → 3);
+- `atwin_noterm_antmaze_medium_diverse_ens_mean` (7).
+
+The task-reward cells feed §14.5's usability check (task reward vs zero under the
+candidate protocol, at the task reward's own index). **Queue R** takes the three, as
+a sixth lane (author's call).
