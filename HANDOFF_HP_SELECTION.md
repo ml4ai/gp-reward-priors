@@ -22851,3 +22851,26 @@ seventh lane.
   (`results/hold.py`). Committed with outputs empty.
 - Setting `INCLUDE_HELD = True` restores the old behaviour, for use only once the author
   lifts the hold.
+
+### 14.27 Sweep check 2026-10-22 21:45 UTC: all NMR models verified, the motion-reward code path checked
+
+**Box:** 7 lanes, 29 IQL runs, 158–195k steps/h; the ensemble-mean large_play grid's
+second wave is a little lower, at 158–166k.
+
+**The motion-reward control's first runs** (`wuvi0kxh` medium_play, `grjxp1r8`
+large_play), the first use of `iql_eval`'s `heuristic_reward` path (§13.14):
+`heuristic_reward path_length`, no reward model, `gauge_reward max0`, index 3,
+terminals kept, seeds 1–10. That is the design exactly. The large_play runs completed
+all 200 evaluations (9 of 10 finished, the tenth at 998.5k). The code path works.
+
+**NMR production VERIFIED on all four variants:** 44 models, config OK, health OK,
+**seed 0 bit-exact with every winner** (large_play 0.115198). Spread over 11 seeds,
+large_play: 0.309 ± 0.191.
+
+**NMR ties VERIFIED:** large_play and medium_diverse, 20 of 20. **All 60 ties models (MR,
+PT, NMR × 2 variants × 10 seeds) are verified.** The ties readout's `measure` must be
+re-run on the box (resumable) to add NMR large_play, then the JSON brought over for
+`report`.
+
+**Queue S2** (behind lane S, GPUs 5 0 1 2 3): NMR stage 4 for large_play, then its
+no-terminals grid. Registry: 25 of 32.
