@@ -22670,3 +22670,30 @@ and NMR; variants large_play and medium_diverse; seeds 1–10. Train and test co
   placeholder config.
 
 **IQL for the ties arm** waits for the protocol the author settles (§14.3 item 3).
+
+### 14.21 The ties readout (agent, 2026-10-22; built before any ties model exists)
+
+**Box (author):** `make_ties_sets.py --write --check` on the box printed fingerprints
+identical to `data_manifests/ties_fingerprints.txt`. Ties training is queued behind
+NMR production: MR (20), then PT (20), then NMR medium_diverse (10).
+
+**`scripts_bnn/ties_readout.py`**, DESCRIPTIVE:
+- **`measure` (box).** For MR, PT and NMR × large_play and medium_diverse × seeds
+  1–10, it scores BOTH arms on the same held-out pairs of that seed: the anchor
+  model (tie-free) and the ties-kept model.
+  - `acc_tiefree` and `ce_tiefree` on the base validation split;
+  - `ce_ties` on `valties` (target [0.5, 0.5]; floor log 2, reached only by exact
+    indifference on every tied pair);
+  - `dev_ties`, the mean |P − 0.5| on the tied pairs.
+
+  Logits are masked means of per-step rewards, as in training. It loads models with
+  `iql_eval`'s own loaders, is resumable, and writes
+  `calibration_results/ties/ties_measurements.json`.
+- **`report` (anywhere):** each arm's mean per metric, and ties − tie-free paired by
+  seed with the exact bootstrap, once all 10 seeds of both arms are in.
+- **Tested:**
+  - the self-test covers pooling with masks, accuracy ignoring ties, the CE at
+    indifference being exactly log 2, and agreement with torch's soft-target
+    `CrossEntropyLoss`;
+  - an end-to-end dry run here (stand-in d4rl, small real MR/PT/NMR models, the real
+    validation and `valties` files) exercised both `measure` and `report`.
