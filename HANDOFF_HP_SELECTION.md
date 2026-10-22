@@ -22927,3 +22927,50 @@ DIFFERED; after it all four are IDENTICAL. All six `iql_eval` tests pass.
 - **Box:** kill lane S (`9dblwfrc`) and the S2 waiter, then run **S3**: PT medium_diverse
   stage 4 (`seq_labeller 3`), then NMR large_play's two grids. Then re-run the ties
   measurement with `--force`.
+
+### 14.29 The ties ablation on the reward models (DESCRIPTIVE; 2026-10-22, after the §14.28 fix)
+
+**Box (author):** steps 1–6 of §14.28 done. Lane S and the S2 waiter are stopped; S3
+is launched; the ties measurement was re-run with `--force` on the fixed loader.
+Files: `calibration_results/ties/ties_measurements.json` (120 measurements) and
+`ties_report.txt`.
+
+**The measurement checks out.** Each model's recomputed base-validation
+cross-entropy was compared with its training run's logged `eval_loss_at_selected`:
+- **large_play agrees to ≤ 2e-4 for all three families.** Its 54 validation pairs fit
+  in one batch of 64, so the logged batch mean is the per-pair mean.
+- **medium_diverse is within 0.012–0.031 for all three.** Its 107 pairs make two
+  batches (64 + 43), and the logged value is the unweighted mean of the batch means.
+- PT medium_diverse was 0.094 off before the loader fix and is now inside that band.
+
+**Process note:** `best_model.pt` is rewritten during training, so `measure` must run
+only after training has finished. The first NMR large_play measurement had read
+in-progress checkpoints. The `--force` run supersedes it.
+
+**Results** (ties − tie-free, paired by seed, 95% exact bootstrap):
+
+| family, variant | acc on tie-free pairs | CE on tie-free pairs | CE on tied pairs (floor 0.693) | \|P − 0.5\| on tied pairs |
+|---|---|---|---|---|
+| MR, large_play | 0.948 → 0.952, +0.004 [−0.020, +0.030] | +0.028 [−0.021, +0.073] | 2.161 → 0.753 | 0.385 → 0.118 |
+| MR, medium_diverse | 0.903 → 0.913, +0.010 [+0.000, +0.024] | +0.018 [+0.003, +0.033] | 1.428 → 0.876 | 0.308 → 0.202 |
+| PT, large_play | 0.913 → 0.919, +0.006 [−0.013, +0.024] | −0.014 [−0.087, +0.054] | 1.670 → 0.751 | 0.288 → 0.065 |
+| PT, medium_diverse | 0.865 → 0.887, **+0.022 [+0.004, +0.048]** | −0.010 [−0.044, +0.022] | 1.514 → 0.864 | 0.297 → 0.183 |
+| NMR, large_play | 0.937 → 0.933, −0.004 [−0.028, +0.019] | **−0.142 [−0.277, −0.030]** | 3.508 → 0.750 | 0.405 → 0.066 |
+| NMR, medium_diverse | 0.907 → 0.916, +0.009 [−0.011, +0.028] | −0.008 [−0.033, +0.015] | 1.755 → 0.883 | 0.316 → 0.190 |
+
+Every CE-on-tied-pairs and |P − 0.5| difference has its interval far below zero.
+
+- **Trained without ties, every family is confidently opinionated on the pairs the
+  labeller called even:**
+  - cross-entropy on tied pairs is 1.4–3.5, two to five times the floor of an
+    indifferent model;
+  - the predicted preference sits 0.29–0.40 away from 0.5 on average.
+- **Trained with ties, the models move most of the way to indifference** (cross-entropy
+  0.75–0.88, |P − 0.5| 0.07–0.20).
+- **Accuracy on the tie-free pairs is unchanged or slightly better** (largest change
+  +0.022, PT medium_diverse). Keeping the ties costs nothing on the pairs that have
+  an answer.
+- NMR large_play's tie-free cross-entropy also improves (−0.142). With ties, NMR
+  overfits less: compare its training loss of 0 in §14.13.
+- **Whether any of this reaches the policy** is the IQL question, under the protocol the
+  author settles (§14.3 item 3).
