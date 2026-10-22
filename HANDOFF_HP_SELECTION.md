@@ -22586,3 +22586,39 @@ medium_play only: it picks its checkpoint on the test split, as they do.
   - Self-tests updated: NMR is accepted in the arm on medium_play and refused off it.
 - **Adds:** 5 noise levels × seeds 1–10 = 50 NMR sensitivity-arm models, plus their
   IQL cells under whichever protocols the arm is read with.
+
+### 14.19 Sweep check 2026-10-22 07:40 UTC: NMR production verified (2 of 3), the first fixed-labeller PT winner, lane N
+
+**NMR production (`production_readout.py nmr`):**
+- medium_play and medium_diverse, seeds 0–10: all finished; config OK against the
+  winner; health OK (reload check passed, finite metric).
+- **Seed 0 reproduces each sweep winner bit-exactly** (0.172587 and 0.244852).
+- Spread of `eval_loss_at_selected` over the 11 seeds: medium_play 0.306 ± 0.185
+  (0.115–0.610), medium_diverse 0.234 ± 0.052.
+- large_diverse is training (seeds 0–5 running).
+
+**NMR large_play** (`qsqmxyqc`): 44 trials, best 0.1152 at trial 35 (2^6, lr 3.6e-4),
+9 of 15 non-improving.
+
+**PT medium_play, stage 4 with the fixed labeller** (`5ir672as`; seed 0, with
+terminals):
+
+| index | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| score | .439 | .586 | .537 | **.599** | .000 | .000 | .531 | .461 |
+
+- **The winner is index 3**, the same index the broken labeller's grid chose. It is
+  recorded in `phase2_winners.json`.
+- **The three pre-fix PT winners (medium_diverse 2, large_play 3, large_diverse 0)
+  were removed** from `phase2_winners.json`. They came from broken-labeller grids, and
+  `eval` must not write files from them. Each comes back when its new grid finishes.
+- `pt_sweeps/sweep_antmaze_medium_play.yaml` is now the EVALUATION file at index 3. The
+  other three PT files stay STAGE 4 until lane P has launched them.
+
+**Lane N** (GPUs 1–5; a fifth IQL lane, so about 25 agents): PT medium_play
+evaluation, then NMR stage 4 for medium_play and medium_diverse, then their
+no-terminals grids. Box speed is to be checked at the next sweep check.
+
+**Queues:** G1 on the MR large_play re-run (second wave); G2 on the task-reward
+large_diverse grid; lane P on the PT medium_diverse stage-4 grid (`mb74ov4e`); H2d on
+the ensemble-mean medium_diverse grid (`693djv0v`). Registry unchanged, 24 of 28.
