@@ -38,7 +38,7 @@
 #             the production (anchor) models, exactly as before.
 #               r16 r32 r64 r128      Experiment 1, data sparsity
 #               n01 n02 n03 n04 n045  Experiment 2, label noise, PRIMARY arm
-#               n01o ... n045o        Experiment 2, SENSITIVITY arm (mr/pt, medium_play)
+#               n01o ... n045o        Experiment 2, SENSITIVITY arm (mr/pt/nmr, medium_play)
 #             A condition changes only the split files a run reads and the
 #             directory it writes, both defined in scripts_bnn/experiment_conditions.py
 #             (handoff sections 11 and 13).  With COND set, SEEDS defaults to 1..10

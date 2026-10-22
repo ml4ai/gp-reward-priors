@@ -63,11 +63,12 @@ SPARSITY = tuple(f"r{n}" for n in REDUCTION_SIZES)
 NOISE_PRIMARY = tuple(f"n{p}" for p in NOISE_LEVELS)
 NOISE_ORACLE = tuple(f"n{p}o" for p in NOISE_LEVELS)
 ALL_CONDS = SPARSITY + NOISE_PRIMARY + NOISE_ORACLE
-ORACLE_FAMILIES = ("mr", "pt")                         # §11.3: the SENSITIVITY arm's families
+# §11.3: the SENSITIVITY arm's families.  NMR joined on 2026-10-22 (author, handoff
+# 14.18): it picks its checkpoint on the test split, as MR and PT do.
+ORACLE_FAMILIES = ("mr", "pt", "nmr")
 # Families that pick their checkpoint on the TEST split, so in the noise PRIMARY arm
-# their test split is corrupted like the training labels.  Kept apart from
-# ORACLE_FAMILIES (2026-10-22): NMR selects on the test split, but whether it joins
-# the sensitivity arm is the author's call (handoff 14.17).
+# their test split is corrupted like the training labels.  The same three today, but
+# kept as its own list: the two roles are different questions (handoff 14.17).
 SELECTS_CHECKPOINT = ("mr", "pt", "nmr")
 ORACLE_VARIANTS = ("medium_play",)                     # §11.3, fixed in advance
 # The key each training script takes its output directory under.
@@ -116,7 +117,7 @@ def check_allowed(family, variant, seed, cond):
                          "re-selected under a condition, so there is no seed-0 lineage (§11.1)")
     if c["arm"] == "oracle":
         if family not in ORACLE_FAMILIES:
-            raise ValueError(f"{cond}: the sensitivity arm is MR and PT only; the {family} "
+            raise ValueError(f"{cond}: the sensitivity arm is MR, PT and NMR only; the {family} "
                              "selects no checkpoint and is one model in both arms (§11.3)")
         if variant not in ORACLE_VARIANTS:
             raise ValueError(f"{cond}: the sensitivity arm runs on medium_play only, a scope "
@@ -310,9 +311,10 @@ def selftest():
     # noise PRIMARY: MR/PT get a corrupted test split, the BNN does not
     on = split_overrides("nmr", "large_diverse", 7, "n03", R)          # NMR selects on test too
     assert "test_dataset" in on and on["test_dataset"].endswith("_7_03.hdf5"), on
+    check_allowed("nmr", "medium_play", 3, "n03o")                       # in the sensitivity arm (14.18)
     try:
-        check_allowed("nmr", "medium_play", 3, "n03o")                   # not in the sensitivity arm
-        raise AssertionError("nmr accepted in the sensitivity arm")
+        check_allowed("nmr", "large_play", 3, "n03o")                    # medium_play only
+        raise AssertionError("nmr accepted off medium_play in the sensitivity arm")
     except ValueError:
         pass
     assert model_base("large_play", "nmr", "r16") == "antmaze_large_play_nmr_r16_eval"

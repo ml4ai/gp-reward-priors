@@ -22572,3 +22572,17 @@ seeds 0–5 were running.
 **Next:** verify the 33 production models (`production_readout.py nmr`), then queue
 NMR's stage-4 grids and no-terminals grids for the three variants. large_play
 follows when `qsqmxyqc` stops.
+
+### 14.18 NMR joins the label-noise sensitivity arm (author, 2026-10-22)
+
+**Decided (author):** NMR is in the sensitivity arm (§11.3), with MR and PT, on
+medium_play only: it picks its checkpoint on the test split, as they do.
+- **Code:**
+  - `experiment_conditions.ORACLE_FAMILIES = (mr, pt, nmr)`; its refusal message names
+    all three.
+  - `phase2_sweeps.exp_spec` writes the `n0Xo` sweep files for NMR too.
+  - `SELECTS_CHECKPOINT` stays its own list (§14.17), though it holds the same three
+    today.
+  - Self-tests updated: NMR is accepted in the arm on medium_play and refused off it.
+- **Adds:** 5 noise levels × seeds 1–10 = 50 NMR sensitivity-arm models, plus their
+  IQL cells under whichever protocols the arm is read with.
