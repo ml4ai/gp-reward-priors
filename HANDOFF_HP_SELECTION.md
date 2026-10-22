@@ -22621,4 +22621,4 @@ no-terminals grids. Box speed is to be checked at the next sweep check.
 
 **Queues:** G1 on the MR large_play re-run (second wave); G2 on the task-reward
 large_diverse grid; lane P on the PT medium_diverse stage-4 grid (`mb74ov4e`); H2d on
-the ensemble-mean medium_diverse grid (`693djv0v`). Registry unchanged, 24 of 28.
+the ensemble-mean medium_diverse grid (`693djv0v`). Registry: 24 of 32 cells (NMR's column is new; its 4 cells and PT's 4 are pending).
