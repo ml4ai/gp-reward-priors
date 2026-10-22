@@ -22481,3 +22481,8 @@ None has stopped; none has diverged or failed to sync.
 **Registry:** `register --write` now registers 24 of 28 cells. The 4 PT cells are
 unregistered until the fixed-labeller PT evaluation sweeps exist, as intended
 (§14.11).
+
+**Fourth lane (author, 2026-10-22):** H2c was replaced by **H2d**: the same 13 items on
+GPUs 5 0 1 2 3, now waiting only for the early ensemble-mean grid (`xwtwuvea`), not
+for G2. Four lanes then run about 20 IQL agents, which §14.15 measured as costing
+nothing in speed.
