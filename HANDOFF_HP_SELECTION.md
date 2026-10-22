@@ -22874,3 +22874,56 @@ re-run on the box (resumable) to add NMR large_play, then the JSON brought over 
 
 **Queue S2** (behind lane S, GPUs 5 0 1 2 3): NMR stage 4 for large_play, then its
 no-terminals grid. Registry: 25 of 32.
+
+### 14.28 BUG: the PT loader rebuilt one-head PTs with four heads (found and fixed 2026-10-22)
+
+**How it was found.** The ties readout (§14.21) recomputes each model's validation
+cross-entropy. That should match `eval_loss_at_selected` logged in training, and it
+does for MR (0.192 vs 0.1917), NMR (0.186 vs 0.1861) and PT large_play (0.266 vs
+0.2663). It **did not for PT medium_diverse (0.304 logged, 0.398 recomputed)**.
+
+**What was wrong.** `run_pt_training_antmaze_eval.py` derives
+`num_heads = embd_dim // min(head_dim, embd_dim)` in `__post_init__`. It is not a
+dataclass field, so `pyrallis.dump` never writes it to `config.yaml`.
+`iql_eval.load_pt_reward_model` read `cfg.get("num_heads", 4)`, so it always got 4.
+
+| PT winner | embd | head | heads trained | heads rebuilt |
+|---|---|---|---|---|
+| medium_play (`giab551o`) | 32 | 8 | 4 | 4 ✓ |
+| large_play (`cyrngs49`) | 32 | 8 | 4 | 4 ✓ |
+| medium_diverse (`rupj57fq`) | 8 | 32→8 | **1** | 4 ✗ |
+| large_diverse (`xokkypz7`) | 32 | 32 | **1** | 4 ✗ |
+
+Same weights, different attention: the rebuilt model's outputs differ (test below).
+**Every PT IQL label on medium_diverse and large_diverse came from a mis-built model**:
+- the pre-fix anchor cells, already the time-only control (§14.10);
+- the fixed-labeller medium_diverse grid `mb74ov4e` (its winner 3 is withdrawn);
+- the medium_diverse evaluation `9dblwfrc`, running in lane S, to be killed;
+- the goal-structure PT maps;
+- the ties readout's PT medium_diverse numbers, both arms.
+
+medium_play and large_play are correct. The PT reward models themselves are fine.
+
+**Fix (`iql_eval.py`):** `_pt_num_heads(cfg, embd_dim)` derives the head count as the
+training script does (`head_dim` expanded, or a log2 exponent ≤ 7 in a hand-written
+file). A config with neither `num_heads` nor `head_dim` is refused, never defaulted.
+**`tests/iql_eval/test_pt_loader.py`** saves each of the four PT winners' architectures
+as training does and reloads them. Before the fix medium_diverse and large_diverse
+DIFFERED; after it all four are IDENTICAL. All six `iql_eval` tests pass.
+
+**Versioning, so that correct runs stay matched and wrong ones drop out:**
+- **`seq_labeller 3`** = the fixed windows plus the correct head count. `2` stays valid
+  for a 4-head PT (and for NMR, which has no heads); `train()` refuses `2` for any
+  PT that does not have 4 heads.
+- `spec()`: PT medium_diverse and large_diverse carry `seq_labeller 3`
+  (`PT_ONE_HEAD`); medium_play and large_play keep `2`, so `5ir672as`, `auny10f3` and
+  the running `t53vxa9c` stay matched. The wrong-head medium_diverse sweeps
+  (`mb74ov4e`, `9dblwfrc`) now match nothing and drop out of every readout.
+- **Regenerated** (`phase2_sweeps.py check`: 32/32):
+  `pt_sweeps/sweep_antmaze_{medium,large}_diverse.yaml` (STAGE 4, `seq_labeller 3`),
+  `ctrl_sweeps/s4noterm_antmaze_{medium,large}_diverse_pt.yaml`. Lane P launches its
+  large_diverse grid from the regenerated file once the box has pulled, before P gets
+  there (it is on large_play).
+- **Box:** kill lane S (`9dblwfrc`) and the S2 waiter, then run **S3**: PT medium_diverse
+  stage 4 (`seq_labeller 3`), then NMR large_play's two grids. Then re-run the ties
+  measurement with `--force`.
