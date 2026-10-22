@@ -22805,3 +22805,32 @@ Box speed under ~28 agents is to be checked at the next sweep check.
 - Without terminals, MR on medium_diverse at index 2 has a max of 0.632 but a last-10
   of 0.306. These runs reach the goal and then lose it. Under the PT paper's
   statistic (max) its with − without gap would look far smaller than it is.
+
+### 14.25 Sweep check 2026-10-22 19:15 UTC: 29 runs at full speed, the first fixed-labeller PT cell, NMR large_play selected, ties models verified
+
+**Box: six lanes, 29 IQL runs, all at 170–197k steps/h.** No slowdown at any
+concurrency tried (10 → 29).
+
+**PT, fixed labeller:**
+- **Stage 4, medium_diverse** (`mb74ov4e`): winner **3** (0.639; runner-up 7 at 0.476).
+  The pre-fix grid picked 2. Recorded; `pt_sweeps/sweep_antmaze_medium_diverse.yaml`
+  is now the EVALUATION file at index 3. Lane P is on large_play (`t53vxa9c`).
+- **Evaluation, medium_play** (`auny10f3`; `seq_labeller 2`, index 3): **0.673 ±
+  0.086** over seeds 1–10. Registered (25 of 32).
+- **The fixed PT against the time-only reward (§14.10), medium_play, with terminals**
+  (`stat_readout`): last-10 −0.016 [−0.086, +0.046]; max +0.012 [−0.029, +0.051].
+  **Indistinguishable. A reward that sees the state and one that sees only the time
+  since the episode start score the same**: §14's premise in a single comparison.
+
+**NMR large_play** (`qsqmxyqc`): the K = 15 stop fired at trial 50 (the sweep is
+FINISHED). The rule winner is the best of all: `fcx73tls` (0.1152; 2^6, lr 3.58e-4).
+Its production config is written (VERIFY PASS; no placeholder remains), and
+`production_readout`'s winners list holds all four NMR winners.
+
+**Ties models VERIFIED** (`production_readout … --cond ties`): PT, 20 of 20 (large_play
+`eval_loss_at_selected` 0.266 ± 0.073, medium_diverse 0.304 ± 0.049); NMR
+medium_diverse, 10 of 10. With MR's (§14.22), every ties model so far is verified.
+NMR large_play ties waits for NMR large_play production.
+
+`stat_readout` summary now: 10 groups; rankings change in 7; 8 sign flips and 8
+separation changes in 36 comparisons.

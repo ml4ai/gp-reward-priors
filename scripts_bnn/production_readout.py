@@ -54,9 +54,9 @@ WINNERS = {
            "large_play": "cyrngs49", "large_diverse": "xokkypz7"},
     "bnn": {"medium_play": "ez84hubu", "medium_diverse": "q2dd6xqt",
             "large_play": "q45qbz8h", "large_diverse": "owlrd69d"},
-    # NMR stage 1 (handoff 14.16): K = 15 rule winners; large_play still searching.
+    # NMR stage 1 (handoff 14.16, 14.25): the K = 15 rule winners.
     "nmr": {"medium_play": "kt0uqgct", "medium_diverse": "t4pquwe6",
-            "large_diverse": "st6m929w"},
+            "large_play": "fcx73tls", "large_diverse": "st6m929w"},
 }
 METRIC = {"mr": "eval_loss_at_selected", "pt": "eval_loss_at_selected", "nmr": "eval_loss_at_selected",
           "bnn": "val_cvar_ce"}
