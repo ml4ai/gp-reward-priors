@@ -23029,3 +23029,44 @@ Files written: `atwin_noterm_antmaze_large_play_ens_mean` (6) and
 `rerun_noterm_antmaze_medium_diverse_task` (1 → 2). **Queue U** takes them, behind T. Its
 wait pattern matches T's item name with `[@]`, so it sees T both while T waits and
 while it runs.
+
+### 14.32 Sweep check 2026-10-23 06:55 UTC: two more stage-4 winners, the motion reward on medium_play, the task reward without terminals
+
+**Box:** 33 IQL runs at 168–199k steps/h.
+- Lane P is on PT large_diverse stage 4 (`k8r1ycif`), **on `seq_labeller 3`** (checked).
+- N is on NMR medium_diverse stage 4 (`kkqft8wf`).
+- S3 is on the PT medium_diverse grid (3 left).
+- R is on the task-reward large_diverse re-run (`vqt0xdbm`).
+- G1 is on the motion reward medium_diverse; G2 on the motion reward large_diverse.
+
+**Stage-4 winners** (seed 0, with terminals):
+
+| grid | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner |
+|---|---|---|---|---|---|---|---|---|---|
+| PT large_play (`t53vxa9c`, fixed labeller, 4 heads) | .262 | .343 | **.448** | .423 | .000 | .000 | .101 | .155 | **2** (pre-fix grid: 3) |
+| NMR medium_play (`pqi8aio2`) | .623 | .695 | **.696** | .552 | .000 | .026 | .510 | .465 | **2** (a 0.001 tie with 1; rule as written) |
+
+Both recorded. Their EVALUATION files are written (`pt_sweeps/…large_play` index 2,
+`nmr_sweeps/…medium_play` index 2); the other NMR files stay STAGE 4 until launched.
+
+**The motion reward, medium_play, with terminals** (`wuvi0kxh`): **0.715 ± 0.020**.
+Against it (`control_readout` C, paired, 95% exact):
+
+| | difference | seeds ahead |
+|---|---|---|
+| task reward (headline index 3) − motion | **−0.196 [−0.249, −0.144]** | 0/10 |
+| MR − motion | **−0.072 [−0.097, −0.052]** | 0/10 |
+| PT − motion | −0.041 [−0.099, +0.008] | 4/10 |
+| ensemble mean − motion | −0.003 [−0.022, +0.013] | 6/10 |
+
+With terminals, **a reward for moving fast is level with the best learned rewards on
+medium_play and clearly ahead of MR and the task reward**. On large_play it is level
+with all of them (§14.31).
+
+**The task reward without terminals at its own winner, medium_play** (`aqszat8y`,
+index 0, the raw 0/1): **0.672 ± 0.037**, against 0.519 ± 0.086 with terminals at its
+headline index 3. With − without is **−0.153 [−0.217, −0.092]**, 0/10. Without
+terminals the raw sparse reward does better here than the headline with-terminals
+cell; the conventional r − 1 with terminals was 0.648 (§7.6 C).
+
+Registry: 25 of 32.
