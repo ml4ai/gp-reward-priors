@@ -23070,3 +23070,16 @@ terminals the raw sparse reward does better here than the headline with-terminal
 cell; the conventional r − 1 with terminals was 0.648 (§7.6 C).
 
 Registry: 25 of 32.
+
+**Box capacity (author, 2026-10-23).**
+- Lane V (the PT large_play and NMR medium_play evaluation cells) is launched as an
+  eighth lane.
+- Before it: **606 GB system memory available**; every GPU at about 100% utilization,
+  but under half its memory allocated.
+- The author's reading of why speed has held at 33 runs: evaluation phases (the
+  CPU-heavy part, 25 environment workers per run) rarely overlap across runs. Overlaps
+  will grow with concurrency. "100% utilization" is the share of time a kernel is
+  running, not saturation, and IQL's small networks and batches use little of an A6000
+  per kernel.
+- **Rule from here:** at each sweep check, compare the median per-run speed with the
+  ~175–185k steps/h baseline. A drop of 10% or more stops further lanes.
