@@ -23149,3 +23149,24 @@ when complete and audit-clean, and the hold applies: covered families are never 
   retry on W&B read timeouts.
 - Executed end to end here, with no errors and all 7 figures rendered. Committed with
   outputs empty.
+
+### 14.35 Sweep check 2026-10-23 20:25 UTC: nine lanes at the baseline, the second fixed-labeller PT cell
+
+**Box:** 9 lanes, **40 IQL runs, median 176k steps/h** (38 runs over 0.5 h old; range
+157–197k). Within the baseline, so the 10% rule allows more. Running:
+- V's NMR medium_play evaluation (`cerhtzd6`, the first NMR evaluation cell);
+- W's PT medium_diverse evaluation (`agqg3efy`, `seq_labeller 3`);
+- S3's NMR large_play stage 4 (3 left);
+- H2d's motion-reward large_play no-terminals grid (3 left);
+- N's NMR medium_play no-terminals grid;
+- P's PT medium_play no-terminals grid;
+- R's ensemble-mean medium_diverse cell at 7;
+- the task-reward anchor-index no-terminals cells, medium_play (G1) and large_play (G2).
+
+**PT large_play, fixed labeller, with terminals** (`f3nigcvw`, index 2): **0.346 ±
+0.093**. Registered (26 of 32).
+- Against the time-only reward (`stat_readout`): last-10 −0.041 [−0.129, +0.037]; max
+  +0.015 [−0.051, +0.072]. **Indistinguishable again**, as on medium_play (§14.25).
+- Last of the five anchor cells on large_play by last-10, third by max.
+- `stat_readout`: 12 groups; rankings change in 8; 12 sign flips and 14 separation
+  changes in 54 comparisons.
