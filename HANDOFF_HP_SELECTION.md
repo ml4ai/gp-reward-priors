@@ -23002,3 +23002,30 @@ winner (MR: `rerun_MR`, or `noterm_MR` where the winner did not move; PT and NMR
 **Written now:** MR medium_diverse (index 7) and MR large_play (index 6). PT and NMR
 follow when their no-terminals grids complete: PT in H1c/P, NMR in N, N2 and S3. Queue
 **T** takes the two MR files, behind lane R (author's call on placement).
+
+### 14.31 Sweep check 2026-10-23 03:10 UTC: 31 runs at full speed, the first motion-reward cell, two more no-terminals winners
+
+**Box:** 31 IQL runs at 175–205k steps/h. Running:
+- S3's PT medium_diverse stage 4 on **`seq_labeller 3`** (`e5v0cdvi`);
+- lane P's PT large_play stage 4 (`t53vxa9c`, 5/8);
+- lane N's NMR medium_play stage 4 (`pqi8aio2`, 5/8);
+- H2d's ensemble-mean large_diverse no-terminals grid (`aavcllqi`);
+- R's task-reward medium_play re-run;
+- the motion-reward cells for medium_play (G1) and large_diverse (G2).
+
+The heuristic and ties waiters (T) are queued.
+
+**The motion reward, with terminals, large_play** (`grjxp1r8`, index 3 fixed): **0.398 ±
+0.084**. Against it (`control_readout` C, paired, 95% exact): task reward −0.030 [−0.093,
++0.032], MR +0.027 [−0.025, +0.093], ensemble mean +0.042 [−0.007, +0.105].
+**Indistinguishable from the learned rewards and the task reward.** A reward for moving
+fast, which points away from the goal (§13.14.11), does as well with terminals.
+
+**New no-terminals winners** (`control_grid_winners.json`, 17):
+- ensemble mean, large_play: **6** (0.266; the anchor index is 3);
+- task reward, medium_diverse: **2**.
+
+Files written: `atwin_noterm_antmaze_large_play_ens_mean` (6) and
+`rerun_noterm_antmaze_medium_diverse_task` (1 → 2). **Queue U** takes them, behind T. Its
+wait pattern matches T's item name with `[@]`, so it sees T both while T waits and
+while it runs.
