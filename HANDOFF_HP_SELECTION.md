@@ -23128,3 +23128,24 @@ scores 0. `atwin_noterm_antmaze_large_diverse_ens_mean` is written.
 **Lane W** (author's call; a ninth lane): the PT medium_diverse and large_diverse
 evaluations, the NMR medium_diverse evaluation, and the ensemble-mean large_diverse
 cell at 6. Registry: 25 of 32.
+
+### 14.34 Charts: `results/benchmark_results.ipynb` (agent, 2026-10-23, on the author's request)
+
+A notebook for the benchmarking chapter's results (DESCRIPTIVE). It reuses the readouts'
+collectors (`eval_readout.collect` and `collect_timeonly`,
+`control_readout.collect_controls`, `norm_inventory.collect`), so a cell appears only
+when complete and audit-clean, and the hold applies: covered families are never fetched.
+- **Charts:**
+  1. each reward with vs without terminals at its own selected index;
+  2. each reward − the motion reward, with terminals (forest plot, exact bootstrap);
+  3. every seed-0 normalization grid with and without terminals, winners boxed;
+  4. max vs last-10 for every cell;
+  5. learning curves with and without terminals (mean ± sd over seeds);
+  6. the ties ablation (accuracy on tie-free pairs; cross-entropy on tied pairs against
+     log 2);
+  7. PT fixed vs the time-only reward, per seed.
+- **Data:** the first run fetches from W&B (~13 min) and caches to
+  `results/.cache/benchmark_data.pkl` (gitignored). `REFRESH = True` refetches. Fetches
+  retry on W&B read timeouts.
+- Executed end to end here, with no errors and all 7 figures rendered. Committed with
+  outputs empty.
