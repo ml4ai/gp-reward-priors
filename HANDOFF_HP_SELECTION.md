@@ -23083,3 +23083,48 @@ Registry: 25 of 32.
   per kernel.
 - **Rule from here:** at each sweep check, compare the median per-run speed with the
   ~175–185k steps/h baseline. A drop of 10% or more stops further lanes.
+
+### 14.33 Sweep check 2026-10-23 17:35 UTC: 38 runs at the baseline, all PT stage 4 done, the motion reward on all four variants
+
+**Box:** 8 lanes, **38 IQL runs, median 178k steps/h** (33 runs over 0.5 h old). That is
+within the 175–185k baseline, so the 10% rule allows more lanes.
+
+**Stage-4 winners** (seed 0, with terminals):
+
+| grid | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner |
+|---|---|---|---|---|---|---|---|---|---|
+| PT medium_diverse (`e5v0cdvi`, `seq_labeller 3`, 1 head) | .243 | .208 | .060 | **.618** | .015 | .031 | .402 | .521 | **3** (the wrong-head grid also chose 3) |
+| PT large_diverse (`k8r1ycif`, `seq_labeller 3`, 1 head) | .000 | .003 | .006 | **.193** | .030 | .013 | .027 | .057 | **3** |
+| NMR medium_diverse (`kkqft8wf`) | .480 | .452 | **.654** | .621 | .022 | .012 | .451 | .459 | **2** |
+
+**PT's stage 4 is complete on the fixed labeller:** medium_play 3, medium_diverse 3,
+large_play 2, large_diverse 3. EVALUATION files are written for these three grids (PT
+medium_diverse and large_diverse at 3, NMR medium_diverse at 2). The NMR large_play and
+large_diverse files stay STAGE 4 until launched.
+
+**The motion reward, with terminals, complete on all four variants** (`control_readout`
+C; method − motion, paired, 95% exact; * = interval excludes 0):
+
+| variant | motion | task reward | MR | PT | ensemble mean |
+|---|---|---|---|---|---|
+| medium_play | 0.715 ± 0.020 | −0.196* | −0.072* | −0.041 | −0.003 |
+| medium_diverse | 0.683 ± 0.027 | −0.077* | −0.037* | (cell running) | −0.001 |
+| large_play | 0.398 ± 0.084 | −0.030 | +0.027 | (cell running) | +0.042 |
+| large_diverse | 0.288 ± 0.069 | −0.015 | −0.047 | (cell running) | −0.005 |
+
+**With terminals, a reward for moving fast is never significantly behind any learned
+reward or the task reward, on any variant.** It is significantly ahead of the task
+reward and MR on both medium mazes.
+
+**The task reward without terminals, large_diverse, at its own winner** (`vqt0xdbm`,
+index 3): **0.100 ± 0.044**, against 0.272 ± 0.045 with terminals. With − without is
+**+0.173 [+0.129, +0.212]**, 10/10: it collapses. On medium_play the same comparison
+went the other way (−0.153, §14.32).
+
+**Ensemble mean, large_diverse, no terminals** (`aavcllqi`): .000 .000 .000 .000 .000
+.000 **.117** .111, so the winner is **6**. Every non-trajectory-relative index
+scores 0. `atwin_noterm_antmaze_large_diverse_ens_mean` is written.
+
+**Lane W** (author's call; a ninth lane): the PT medium_diverse and large_diverse
+evaluations, the NMR medium_diverse evaluation, and the ensemble-mean large_diverse
+cell at 6. Registry: 25 of 32.
