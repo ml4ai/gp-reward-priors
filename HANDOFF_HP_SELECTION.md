@@ -23170,3 +23170,18 @@ when complete and audit-clean, and the hold applies: covered families are never 
 - Last of the five anchor cells on large_play by last-10, third by max.
 - `stat_readout`: 12 groups; rankings change in 8; 12 sign flips and 14 separation
   changes in 54 comparisons.
+
+### 14.36 Sweep check 2026-10-23 22:30 UTC: the first speed dip, the NMR large_play winner
+
+**Box:** 41 IQL runs, **median 171k steps/h**. That is 2–5% under the ~175–185k
+baseline: the first dip, inside the 10% rule. No new lane this time; new work is
+chained behind existing lanes.
+
+**NMR large_play, stage 4** (`unfc8v8q`; seed 0, with terminals): .241 .293 .199 **.325**
+.000 .000 .044 .118, so the winner is **3**. Recorded; its EVALUATION file is written.
+NMR so far: medium_play 2, medium_diverse 2, large_play 3 (large_diverse is in N2).
+**Queue V2** (behind lane V): the NMR large_play evaluation.
+
+Also finished: the task reward's large_play cell at its with-terminals index (1),
+without terminals (G2, `j9e3oxs6`), for `control_readout` A. G2 is on large_diverse.
+S3 is on NMR's large_play no-terminals grid (`1rvmgkpm`). Registry: 26 of 32.
