@@ -23280,3 +23280,85 @@ Unlike MR, the ensemble mean loses on medium_play too without terminals.
 **The task reward on medium_diverse at its with-terminals index 1, without terminals**
 (`yyxc5hhj`): 0.294 ± 0.086; with − without +0.312 [+0.265, +0.363]. Its cell at its own
 no-terminals winner (index 2) is in queue U.
+
+### 14.40 The leveling ablation, with its secondary ties arm — DECIDED 2026-10-24 (author); predictions written before any of its new cells ran
+
+**Why.** The PT pipeline never levels the reward (no `gauge_reward`), and the theory
+for leveling is strong (§5.1; with terminals the reward's sign relative to termination
+decides goal attraction, §13.14.2). So this ablation is kept to **one dataset,
+medium_diverse**, chosen by the author: its ties-kept reward models already exist
+(§14.2 item 3), a medium maze should pass the usability check without terminals, and
+its no-terminals scores are not at the floor. **Families:** MR best-model, PT, NMR,
+ensemble mean (from the ties-kept MR runs' snapshots where needed). **Seeds 1–10.**
+"Leveling" is `gauge_reward max0`; "no leveling" is `gauge_reward none`.
+
+**Normalization is held fixed within each pair (author):** each family uses its
+selected index for that protocol, with leveling (the stage-4 winner with terminals; the
+no-terminals winner without), for **both** the leveled and the unleveled cell, so a pair
+differs only by leveling. The four secondary cells of a family all use its no-terminals
+index.
+
+**Cells, per family** (existing cells reused; **new** cells in bold):
+
+| | arm | terminals | ties | leveling | index | status |
+|---|---|---|---|---|---|---|
+| A1 | primary | kept | removed | yes | stage-4 winner | the anchor evaluation cell |
+| **A2** | primary | kept | removed | **no** | A1's | **new** |
+| A3 | primary | dropped | removed | yes | no-terminals winner | the candidate-protocol anchor |
+| **A4** | primary | dropped | removed | **no** | A3's | **new** |
+| **R** | PT-pipeline reference | kept | removed | **no** | **7** | **new** |
+| B1 | secondary | dropped | removed | yes | A3's | = A3 |
+| B2 | secondary | dropped | removed | no | A3's | = A4 |
+| B3 | secondary | dropped | kept | yes | A3's | the ties ablation's cell |
+| **B4** | secondary | dropped | **kept** | **no** | A3's | **new** |
+
+**Cost:** four new cells per family (A2, A4, R, B4), 4 families × 10 seeds × 4 =
+**160 IQL runs**, no new reward-model training. Reference R is PT's own pipeline for
+antmaze (terminals, no leveling, index 7, §13.13.2), applied to our data and models.
+
+**The offset measurement (no IQL runs).** For every reward model in the arms (each
+family, ties kept and removed, seeds 1–10, medium_diverse), on the offline dataset's
+transitions and with no leveling: the raw reward's mean m, sd s, min and max; the
+trajectory-return range R_max − R_min that the range normalizations divide by (as
+`return_reward_range` computes it); the ratio m / s; and the offset after the family's
+fixed index, e.g. m · H / (R_max − R_min) for the range-scaled indices. Reported ties-kept
+against ties-removed, paired by seed, with exact 95% intervals.
+
+**How the fixed index bears on the result** (from `gauge_reward`'s docstring and
+`modify_reward`): indices 0–3 pass a constant offset through (2–3 rescale it), 4–5
+amplify it by about the trajectory length, and 6–7 largely cancel it (exactly for equal
+trajectory lengths). So the leveling effect is expected to be large only where the fixed
+index passes or amplifies the offset. MR's no-terminals index on medium_diverse is 7.
+
+**Predictions, written before any new cell ran** (descriptive expectations, not
+registered tests; the write-up reports each against its outcome):
+
+- **P1, with terminals (A2 against A1):** for families whose fixed index is 0–5, removing
+  leveling changes the score substantially and widens the seed-to-seed spread, because
+  each seed's offset differs; per seed, a positive offset after normalization lowers the
+  score (the goal then ends a positive stream). For indices 6–7, little change.
+- **P2, without terminals (A4 against A3):** a small change, unless the offset after
+  normalization is large, in which case lower (as the large offsets of §13.14.7).
+- **P3, ties by leveling, without terminals:** without leveling, keeping ties lowers the
+  score (B4 below B2); with leveling, keeping ties makes no difference (B3 level with
+  B1). Weaker for families at indices 6–7, which cancel the offset themselves.
+- **P4, the offset measurement:** ties-kept models have a smaller spread s and a smaller
+  return range than ties-removed models, and so a larger m / s and a larger offset after
+  normalization, paired by seed. This is the mechanism behind P3: ties pull compared
+  segments toward equal reward, shrinking the spread, and the range normalizations then
+  enlarge the unidentified offset.
+- **R:** no prediction. Because index 7 largely cancels a constant offset, R mostly
+  measures what index 7 is worth on our data, not what leveling is worth.
+
+**Disclosures:**
+- The author's original decision to remove ties rested on comparisons run **before
+  leveling was implemented**; those comparisons are confounded with the missing level
+  and are not used as a reason (the dissertation's BNN chapter, formerly Ch. 3, is
+  qualified accordingly, 2026-10-24).
+- **B3 for MR had been seen** when this section was written (§14.39: ties-kept 0.321
+  against tie-free 0.318, +0.003 [−0.037, +0.042]). So P3's leveled half is not blind for
+  MR. Every new cell (A2, A4, R, B4) is blind.
+
+**Analysis:** descriptive, exact paired 95% intervals, as the other ablations (§14.5,
+"reported beside"). No test.
+
