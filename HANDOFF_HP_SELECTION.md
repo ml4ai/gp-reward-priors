@@ -23216,3 +23216,32 @@ was noise. One ensemble-mean run is at 130k, an outlier.
 - **At-winner files written:** `atwin_noterm_antmaze_medium_play_{pt,nmr}` (1) and
   `atwin_noterm_antmaze_large_play_heuristic` (6). **Queue X** takes them, behind Q.
 - No new ties files: the ties arm is medium_diverse and large_play only.
+
+### 14.38 Sweep check 2026-10-24 14:55 UTC: the trivial-reward path checked, three NMR / motion no-terminals winners
+
+**Box:** 39 IQL runs, **median 175k steps/h** (baseline).
+- In progress, 5/10 each: the first ties IQL cell (MR medium_diverse, `u3vw5o40`), PT
+  large_diverse (`rxyelm05`), NMR large_play (`5tue6ml1`), the ensemble mean at its
+  medium_play winner (`imma54jg`, Q), and the task reward medium_diverse at index 1
+  (G1).
+- N2 started NMR large_diverse stage 4 (`58vkdfem`).
+
+**The trivial-reward code path, first runs** (`cdju0vo7`, H2d: zero, large_play, with
+terminals): `trivial_reward zero`, no reward model, no heuristic, index 0, terminals kept,
+seeds 1–10. That is the design. (`gauge_reward max0` in the config is the field default;
+the trivial branch never gauges.)
+
+**No-terminals winners** (`control_grid_winners.json`, 23):
+- **NMR medium_diverse** (`wmjmser3`): **.438** .389 .385 .218 .002 .005 .320 .275, so
+  the winner is **0** (anchor 2).
+- **NMR large_play** (`1rvmgkpm`): winner **6** (anchor 3).
+- **Motion reward, large_diverse** (`n8sm6kon`): .001 .000 .007 .001 .000 .000 .127
+  **.150**, so the winner is **7**.
+
+**Files written**, each checked against its source (index and models):
+- `atwin_noterm_antmaze_{medium_diverse,large_play}_nmr` (0, 6);
+- `atwin_noterm_antmaze_large_diverse_heuristic` (7);
+- **`ties_noterm_antmaze_{medium_diverse,large_play}_nmr` (0, 6)**, the NMR ties arm at
+  the same indices as its tie-free cells.
+
+**Lane Y** (author's call; a tenth lane, which the speed rule allows) takes all five.
