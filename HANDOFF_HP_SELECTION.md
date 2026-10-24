@@ -23185,3 +23185,34 @@ NMR so far: medium_play 2, medium_diverse 2, large_play 3 (large_diverse is in N
 Also finished: the task reward's large_play cell at its with-terminals index (1),
 without terminals (G2, `j9e3oxs6`), for `control_readout` A. G2 is on large_diverse.
 S3 is on NMR's large_play no-terminals grid (`1rvmgkpm`). Registry: 26 of 32.
+
+### 14.37 Sweep check 2026-10-24 05:40 UTC: the first NMR cell, PT medium_diverse, three more no-terminals winners
+
+**Box:** 38 IQL runs, **median 175k steps/h**, back at the baseline; the 171k of §14.36
+was noise. One ensemble-mean run is at 130k, an outlier.
+- Lane P is done, so Q started (ensemble mean, medium_play at 1).
+- R is done, so **T started: the first ties IQL cell** (MR medium_diverse ties, no
+  terminals, index 7, `u3vw5o40`).
+- W is on the PT large_diverse evaluation (`rxyelm05`); V2 on the NMR large_play
+  evaluation (`5tue6ml1`); N on NMR medium_diverse no terminals; H2d on the motion
+  reward large_diverse no terminals; G1 on the task reward medium_diverse at index 1;
+  G2 on the task reward large_diverse at index 1.
+
+**New evaluation cells (seeds 1–10, with terminals; registered, 28 of 32):**
+- **NMR medium_play** (`cerhtzd6`, index 2): **0.741 ± 0.040**, the first NMR cell.
+- **PT medium_diverse** (`agqg3efy`, index 3, `seq_labeller 3`, one head): **0.612 ±
+  0.114**.
+
+**No-terminals winners** (`control_grid_winners.json`, 20):
+
+| grid | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | winner (anchor) |
+|---|---|---|---|---|---|---|---|---|---|
+| PT medium_play (`2ruyxjox`) | .362 | **.424** | .001 | .357 | .005 | .004 | .350 | .321 | **1** (3) |
+| NMR medium_play (`e32ne9dd`) | .675 | **.723** | .595 | .662 | .000 | .000 | .326 | .328 | **1** (2) |
+| motion reward, large_play (`k6p741l8`) | .000 | .000 | .000 | .003 | .000 | .000 | **.192** | .150 | **6** (3, fixed) |
+
+- Without terminals PT's best on medium_play is 0.424, against 0.599 with terminals, and
+  its index 2 collapses (0.001).
+- **At-winner files written:** `atwin_noterm_antmaze_medium_play_{pt,nmr}` (1) and
+  `atwin_noterm_antmaze_large_play_heuristic` (6). **Queue X** takes them, behind Q.
+- No new ties files: the ties arm is medium_diverse and large_play only.
