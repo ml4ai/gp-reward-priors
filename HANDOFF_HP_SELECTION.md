@@ -23362,3 +23362,54 @@ registered tests; the write-up reports each against its outcome):
 **Analysis:** descriptive, exact paired 95% intervals, as the other ablations (§14.5,
 "reported beside"). No test.
 
+
+### 14.41 The leveling ablation, built (agent, 2026-10-24; no new cell has run)
+
+**Generator** (`phase2_sweeps.py control --leveling --write`, `leveling_spec`): files
+`ctrl_sweeps/lev_<cell>_antmaze_medium_diverse_<fam>.yaml`, `Lineage: CONTROL
+leveling-<cell>`, written only once the cell's index is known. Each is checked against
+its source cell (`cmd_control_leveling`):
+- **A2** = the anchor evaluation cell + `gauge_reward none`;
+- **R** = the same + index 7;
+- **A4** = the no-terminals cell at its winner + `gauge_reward none`;
+- **B4** = the ties-kept no-terminals cell at the same index + `gauge_reward none`.
+
+The ties-kept root is `<family root>_ties_eval`; the ensemble mean reads the MR ties
+runs' per-epoch snapshots. `is_control` now includes `gauge_reward`, so `register`
+passes these over silently. `control_readout`'s collector reads them as
+`lev<cell>_<FAM>`. Self-tests extended.
+
+**Written now: 15 files.**
+- MR (indices 2 / 7) and NMR (2 / 0): A2, R, A4, B4.
+- PT (3): A2 and R. **PT's A4 and B4 wait for PT's medium_diverse no-terminals grid**
+  (H1c), as does PT's B3, the ties ablation's cell.
+- Ensemble mean (3 / 7): A2, R, A4, B4, **and B3**.
+
+**An addition for the author to confirm: the ensemble mean's B3.** §14.40 takes B3 from
+the ties ablation, but that ablation covered MR, PT and NMR only. Without it the
+ensemble mean has no leveled ties-kept cell, and P3 cannot be read for it.
+`lev_B3_antmaze_medium_diverse_ens_mean` (ties kept, no terminals, leveled, index 7) is
+written as the last item of LV2: 10 more runs, 170 in all. Drop it from LV2 if not
+wanted.
+
+**`results/leveling_readout.py`:** per family, each cell's mean ± sd (P1 predicts a
+wider spread without leveling). Then A2 − A1, A4 − A3, R − A1, B3 − B1, B4 − B2, and the
+interaction (B4 − B2) − (B3 − B1) per seed, all with exact intervals. Self-tested.
+
+**`results/offset_measure.py`** (P4; no IQL):
+- **`measure` runs on the box.** It labels the dataset with `iql_eval`'s own loaders and
+  labellers, exactly as `train()` does, with no leveling. It records:
+  - m, s, min, max, m/s;
+  - the return range from `return_reward_range`, and H;
+  - for both fixed indices, the reward's mean and sd after `modify_reward`, leveled and
+    unleveled.
+- It writes `exp/offset_measurements.json` (gitignored), is resumable, and logs a failed
+  model without stopping.
+- **`report`:** ties − tie-free, paired by seed, exact intervals.
+- Self-tested. A dry run here (stand-in d4rl, small real MR/PT/NMR models) exercised
+  `measure` and `report`. The ensemble was not dry-run (its snapshot folders exist only
+  on the box).
+
+**Queues:** **LV1** (now, in lane V's freed slot): MR then NMR, A2, R, A4, B4. **LV2**
+(behind G2's last cell): PT A2, R; ensemble mean A2, R, A4, B4, B3. Lane count stays at
+10.
