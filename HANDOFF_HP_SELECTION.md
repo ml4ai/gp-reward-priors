@@ -23413,3 +23413,7 @@ interaction (B4 − B2) − (B3 − B1) per seed, all with exact intervals. Self
 **Queues:** **LV1** (now, in lane V's freed slot): MR then NMR, A2, R, A4, B4. **LV2**
 (behind G2's last cell): PT A2, R; ensemble mean A2, R, A4, B4, B3. Lane count stays at
 10.
+
+**DECIDED (author, 2026-10-24):** the ensemble mean's B3 is kept (§14.41), so the
+ablation is 170 IQL runs. LV1 and LV2 are launched and the offset measurement is
+running on the box.
