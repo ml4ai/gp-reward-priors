@@ -23245,3 +23245,38 @@ the trivial branch never gauges.)
   the same indices as its tie-free cells.
 
 **Lane Y** (author's call; a tenth lane, which the speed rule allows) takes all five.
+
+### 14.39 Sweep check 2026-10-24 18:40 UTC: the first ties IQL cell, the ensemble mean without terminals, two more evaluation cells
+
+**Box:** 10 lanes, 40 IQL runs, **median 169k steps/h**, 3–6% under the baseline. Inside
+the 10% rule, but the lowest so far and just after the tenth lane: **no further lanes**
+until it recovers. Running:
+- T's MR large_play ties (`fly57h5d`);
+- Y's NMR medium_diverse at 0 (`ggbud1p3`);
+- W's NMR medium_diverse evaluation (`5st7zcei`);
+- N2's NMR large_diverse stage 4;
+- Q's task reward large_play re-run at 2;
+- G1's MR large_play at index 3, without terminals (last G1 item; H1c follows);
+- G2's MR large_diverse at index 3 (last G2 item);
+- H2d's trivial zero, large_play.
+
+**The first ties IQL cell** (candidate protocol, `control_readout` G): MR medium_diverse,
+no terminals, index 7. Ties-kept **0.321 ± 0.063** against tie-free 0.318 ± 0.067.
+Ties − tie-free **+0.003 [−0.037, +0.042]**, 6/10. **Without terminals too, keeping the
+ties does not move the policy**, although it moved the reward models' behaviour on tied
+pairs a great deal (§14.29).
+
+**New evaluation cells** (with terminals; registered, **30 of 32**; left: NMR
+medium_diverse, running, and NMR large_diverse, whose stage 4 is running):
+- **PT large_diverse** (`rxyelm05`, index 3, `seq_labeller 3`): **0.209 ± 0.133**.
+- **NMR large_play** (`5tue6ml1`, index 3): **0.368 ± 0.090**.
+
+**The ensemble mean without terminals, at its own winner** (with − without, 95% exact):
+- medium_play (`imma54jg`, index 1): 0.590 ± 0.071; **+0.121 [+0.079, +0.166]**, 10/10;
+- medium_diverse (`i6yim3dp`, index 7): 0.287 ± 0.068; **+0.396 [+0.351, +0.452]**, 10/10.
+
+Unlike MR, the ensemble mean loses on medium_play too without terminals.
+
+**The task reward on medium_diverse at its with-terminals index 1, without terminals**
+(`yyxc5hhj`): 0.294 ± 0.086; with − without +0.312 [+0.265, +0.363]. Its cell at its own
+no-terminals winner (index 2) is in queue U.
