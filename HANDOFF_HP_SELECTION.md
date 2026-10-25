@@ -23521,3 +23521,57 @@ against 0.367 with terminals.
 
 **NMR medium_diverse, with terminals** (`5st7zcei`, index 2): **0.651 ± 0.056**.
 Registered: **31 of 32** anchor cells; only NMR large_diverse remains (W2).
+
+### 14.44 The first leveling cells; two readout fixes; PT's and NMR's no-terminals winners (2026-10-25)
+
+**Terminology (author, 2026-10-25):** the dissertation calls leveling **"shift"**: a
+wording change only. The computation is unchanged (`gauge_reward max0` vs `none`).
+Code, files and this document keep the existing names (`gauge_reward`, "leveling",
+`lev_*`), so recorded runs and readouts stay consistent.
+
+**Two readout fixes, neither touching any computation:**
+1. **A2 and R share their fixed params**, differing only in the index, so every A2 or R
+   sweep matched both entries and was skipped. `control_readout.disambiguate` now keeps
+   the entry whose index is the sweep's own; any other ambiguity is still skipped.
+   Tested.
+2. **`eval_readout.audit_run` required `gauge_reward max0` on every learned-reward run**,
+   which rejected the deliberately unshifted cells. It now checks the gauge the cell's
+   spec declares (`none` for §14.40's new cells, `max0` otherwise). Tested both ways.
+
+**P1, with terminals: A2 (no shift) − A1** (medium_diverse, `leveling_readout`; output
+in `results/leveling_readout_latest.txt`):
+
+| family (index) | A1 | A2 | A2 − A1 | ahead |
+|---|---|---|---|---|
+| MR (2) | 0.647 ± 0.057 | 0.354 ± 0.064 | **−0.293 [−0.328, −0.264]** | 0/10 |
+| PT (3) | 0.612 ± 0.114 | 0.447 ± 0.126 | **−0.166 [−0.229, −0.101]** | 1/10 |
+
+- **MR: as expected** from its positive unshifted offset (+0.40 after index 2, §14.42).
+- **PT: NOT as expected.** Its unshifted offset after index 3 is negative (−1.35), for
+  which §14.42 expected little change. It drops 0.166 all the same, so the offset's
+  sign is not the whole mechanism.
+- **The wider spread P1 predicted does not appear** (sd 0.057 → 0.064 and
+  0.114 → 0.126).
+- R (index 7) is 5/10 for both.
+
+**New no-terminals winners** (`control_grid_winners.json`):
+- **PT medium_diverse** (`yg57ej60`): .364 .042 .189 .302 .008 .004 **.368** .303, so
+  the winner is **6**;
+- **NMR large_diverse** (`moblu1k1`): six zeros, then **.136** .117, so the winner is
+  **6**.
+
+**Files written:**
+- `atwin_noterm_antmaze_medium_diverse_pt` (6), `ties_noterm_antmaze_medium_diverse_pt`
+  (6), `lev_A4` and `lev_B4_antmaze_medium_diverse_pt` (6);
+- `atwin_noterm_antmaze_large_diverse_nmr` (6).
+
+**Queue Z** (behind lane U) takes the five. PT's B3 is its ties cell. The offset
+measurement needs a PT re-run (`--force`) for index 6.
+
+**Also in (DESCRIPTIVE):**
+- the third ties cell, NMR medium_diverse (index 0): ties-kept 0.338 ± 0.073 against
+  0.374 ± 0.142; **−0.036 [−0.126, +0.071]**. Null again.
+- the trivial mean-constant, large_play, with terminals: **0.003 ± 0.004**, like zero.
+  Every reward beats it by 0.34–0.44, 10/10.
+- PT medium_play at its no-terminals winner (index 1): **0.409 ± 0.267**; with − without
+  **+0.265 [+0.129, +0.409]**, 10/10.
