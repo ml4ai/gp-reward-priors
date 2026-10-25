@@ -23417,3 +23417,43 @@ interaction (B4 − B2) − (B3 − B1) per seed, all with exact intervals. Self
 **DECIDED (author, 2026-10-24):** the ensemble mean's B3 is kept (§14.41), so the
 ablation is 170 IQL runs. LV1 and LV2 are launched and the offset measurement is
 running on the box.
+
+### 14.42 The offset measurement (P4), 2026-10-24 (DESCRIPTIVE; `results/offset_report_latest.txt`)
+
+**Box (author):** `offset_measure.py measure` finished: 80 measurements (4 families × 2
+arms × seeds 1–10), copied to `exp/offset_measurements.json` (not tracked). PT's
+no-terminals index is still unknown, so those PT rows are empty; re-measure PT with
+`--force` once its grid is done.
+
+**Ties − tie-free, paired by seed, 95% exact:**
+
+| | MR | PT | NMR | ensemble mean |
+|---|---|---|---|---|
+| raw sd s | 6.80 → 3.94; **−2.85 [−4.05, −1.36]** | 3.70 → 1.67; **−2.04 [−2.61, −1.47]** | 6.80 → 2.98; **−3.81 [−5.35, −2.27]** | 17.7 → 8.34; **−9.34 [−10.7, −7.92]** |
+| return range | **−6,749 [−8,442, −5,100]** | **−3,881 [−5,165, −2,740]** | **−9,273 [−11,990, −6,607]** | **−18,120 [−19,310, −16,970]** |
+| raw mean m | 5.10 → 1.65; −3.46 [−4.80, −2.36] | −2.16 → −1.19; +0.97 [−0.03, +1.84] | 7.69 → 1.74; −5.95 [−7.96, −4.32] | ≈ 0 both (centred draws) |
+| m / s | 0.84 → 0.52; **−0.32 [−0.55, −0.11]** | −0.70 → −0.80; −0.10 [−0.42, +0.22] | 1.17 → 0.58; **−0.59 [−0.79, −0.40]** | ≈ 0 both |
+| mean after the with-terminals index, unleveled | idx 2: 0.40 → 0.27; −0.13 [−0.21, −0.04] | idx 3: −1.35 → −1.39; −0.04 [−0.19, +0.11] | idx 2: 0.53 → 0.33; −0.21 [−0.30, −0.13] | idx 3: −1.000 both |
+| mean after the no-terminals index, unleveled | idx 7: 0.21 → 0.28; +0.08 [−0.06, +0.21] | (unknown index) | idx 0: 7.69 → 1.74 (= m) | idx 7: 1.07 → 0.88; −0.19 [−0.25, −0.14] |
+
+**Against P4:**
+- **The spread and the return range: confirmed.** Ties shrink both, strongly, in every
+  family.
+- **The relative offset and the offset after normalization: not confirmed.** m / s and
+  the post-index offset do not grow with ties. For MR and NMR they *shrink*, because the
+  raw mean falls more than the spread; for PT there is no clear change. The ensemble
+  mean's level is pinned near zero by its centred draws (`centre_draws`), with or
+  without leveling.
+
+**So P4's mechanism for P3 does not hold as written.** Ties flatten the reward but do
+not enlarge its offset relative to its spread. P3 itself is tested by the B cells.
+
+**What the numbers imply for P1** (recorded before any A2 cell finished):
+- The **sign** of the unleveled offset after the with-terminals index differs by family:
+  MR +0.40 and NMR +0.53 (index 2, scale only), against PT −1.35 and the ensemble mean
+  −1.00 (index 3, scale then −1).
+- With terminals, a positive per-step reward makes the goal end a positive stream, so
+  the expectation is a **lower A2 for MR and NMR** and little change for PT and the
+  ensemble mean.
+- NMR's no-terminals index is 0 (raw), so its A4 carries an unleveled per-step mean of
+  +7.7 (tie-free), m / s 1.17. That is a large offset for P2.
