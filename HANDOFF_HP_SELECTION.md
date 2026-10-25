@@ -23467,3 +23467,57 @@ not enlarge its offset relative to its spread. P3 itself is tested by the B cell
   ensemble mean.
 - NMR's no-terminals index is 0 (raw), so its A4 carries an unleveled per-step mean of
   +7.7 (tie-free), m / s 1.17. That is a large offset for P2.
+
+### 14.43 Sweep check 2026-10-25 05:20 UTC: behaviour cloning fails with terminals, ties null again, NMR stage 4 complete
+
+**Box:** 41 IQL runs, median 169k steps/h (slightly up from 165–166k). Since §14.39 these
+finished, and their lanes moved on:
+- NMR large_diverse stage 4 → N2 on NMR large_diverse no terminals;
+- trivial zero, large_play → H2d on trivial mean, large_play;
+- MR large_play ties → U on the ensemble mean at large_play's winner;
+- the task-reward large_play re-run → X on PT medium_play at its winner;
+- NMR medium_diverse at its winner → Y on NMR medium_diverse ties;
+- G1's last cell → **H1c started: PT medium_diverse no-terminals grid** (`yg57ej60`). This
+  gates PT's leveling (A4, B4), B3 and ties files.
+
+**NMR large_diverse, stage 4** (`58vkdfem`): .023 .057 **.181** .105 .012 .032 .019 .015,
+so the winner is **2**. **NMR's stage 4 is complete: 2, 2, 3, 2.** Its EVALUATION file
+is written. **Queue W2** (behind lane W): the NMR large_diverse evaluation, the last
+anchor cell.
+
+**Built: the trivial rewards in `control_readout`** (they were read nowhere). The
+collector reads the 16 trivial cells (`trivial_spec`). **Section H** gives each cell's
+mean ± sd and, paired by seed:
+- with terminals, each reward − zero and − mean-constant;
+- without terminals, each reward at its own winner − zero and − mean-constant (for the
+  task reward this is §14.5's usability check, descriptive here).
+
+Self-tested.
+
+**The first trivial cell: zero, large_play, with terminals** (`cdju0vo7`): **0.003 ±
+0.002**. Against it, every reward is far ahead, 10/10 each:
+
+| reward − zero | difference |
+|---|---|
+| task reward | +0.365 [+0.318, +0.412] |
+| MR | +0.422 [+0.391, +0.455] |
+| PT | +0.343 [+0.287, +0.398] |
+| NMR | +0.365 [+0.310, +0.417] |
+| ensemble mean | +0.438 [+0.398, +0.472] |
+
+With zero reward IQL is behaviour cloning (§14.7), and **behaviour cloning fails here
+even with terminals**. The terminals carry the goal only under a reward that makes
+reaching one worth something: a negative per-step level (r − 1), motion, the time-only
+reward and the learned rewards all qualify; zero does not. This refines §13.13.1:
+**what the benchmark rewards is the reward's level relative to termination**
+(§13.14.2), not its shape.
+
+**The second ties IQL cell: MR large_play** (`fly57h5d`, no terminals, index 6): ties-kept
+0.222 ± 0.055 against tie-free 0.228 ± 0.074; **−0.006 [−0.035, +0.022]**. Null again.
+
+**Without terminals, at their own winners:** NMR medium_diverse (`ggbud1p3`, index 0)
+**0.374 ± 0.142**; the task reward on large_play (`eiu9g7ca`, index 2) **0.207 ± 0.051**,
+against 0.367 with terminals.
+
+**NMR medium_diverse, with terminals** (`5st7zcei`, index 2): **0.651 ± 0.056**.
+Registered: **31 of 32** anchor cells; only NMR large_diverse remains (W2).
