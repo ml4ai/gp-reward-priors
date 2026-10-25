@@ -66,6 +66,16 @@
 > result (§14.10).** A labelling bug gave every PT run a reward that depended only on
 > time since the episode start. The PT reward models themselves are fine. The bug is
 > fixed and tested; PT's IQL runs must be redone.
+>
+> **Added 2026-10-24 — terminology in the writing (author).** What this document and
+> the code call the *gauge*, the *level rule* or *leveling* (`gauge_reward max0`,
+> `--leveling`, `leveling_readout.py`) is called the **reward shift** in the proposal
+> and dissertation: the learned reward is shifted so that its maximum over the offline
+> dataset is zero, which fixes the unidentified *offset*. "Shifted" / "unshifted" =
+> leveled / unleveled. *Rescale* and *normalize* mean only the `modify_reward` grid,
+> whose −1 entry the writing calls "subtracting one", not a shift. Code names and the
+> dated entries below are left as they were. Reward-model "types" are now
+> "families" in the writing.
 
 ---
 
@@ -23281,7 +23291,7 @@ Unlike MR, the ensemble mean loses on medium_play too without terminals.
 (`yyxc5hhj`): 0.294 ± 0.086; with − without +0.312 [+0.265, +0.363]. Its cell at its own
 no-terminals winner (index 2) is in queue U.
 
-### 14.40 The leveling ablation, with its secondary ties arm — DECIDED 2026-10-24 (author); predictions written before any of its new cells ran
+### 14.40 The leveling ablation (in the writing, the reward-shift ablation), with its secondary ties arm — DECIDED 2026-10-24 (author); predictions written before any of its new cells ran
 
 **Why.** The PT pipeline never levels the reward (no `gauge_reward`), and the theory
 for leveling is strong (§5.1; with terminals the reward's sign relative to termination
@@ -23363,7 +23373,7 @@ registered tests; the write-up reports each against its outcome):
 "reported beside"). No test.
 
 
-### 14.41 The leveling ablation, built (agent, 2026-10-24; no new cell has run)
+### 14.41 The leveling (reward-shift) ablation, built (agent, 2026-10-24; no new cell has run)
 
 **Generator** (`phase2_sweeps.py control --leveling --write`, `leveling_spec`): files
 `ctrl_sweeps/lev_<cell>_antmaze_medium_diverse_<fam>.yaml`, `Lineage: CONTROL
