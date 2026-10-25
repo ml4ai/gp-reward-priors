@@ -23575,3 +23575,11 @@ measurement needs a PT re-run (`--force`) for index 6.
   Every reward beats it by 0.34–0.44, 10/10.
 - PT medium_play at its no-terminals winner (index 1): **0.409 ± 0.267**; with − without
   **+0.265 [+0.129, +0.409]**, 10/10.
+
+**Offset re-measure (2026-10-25, `--force`, adds PT's no-terminals index 6):** every other
+number reproduced exactly; the report diff touches only PT's two new rows (a check that
+the measurement is deterministic). **PT at index 6, unshifted:** mean after
+normalization +2.10 (tie-free) against +2.16 (ties kept), ties − tie-free +0.06 [−0.18,
++0.28]. mean/sd ≈ 0.06 in both: index 6 leaves a positive but negligible offset
+relative to the spread, and ties do not change it. `results/offset_report_latest.txt`
+updated.
