@@ -23583,3 +23583,50 @@ normalization +2.10 (tie-free) against +2.16 (ties kept), ties − tie-free +0.0
 +0.28]. mean/sd ≈ 0.06 in both: index 6 leaves a positive but negligible offset
 relative to the spread, and ties do not change it. `results/offset_report_latest.txt`
 updated.
+
+### 14.45 Sweep check 2026-10-25: the R cells (PT pipeline setup) and the ensemble mean's large-maze no-terminals cells
+
+**Box:** 40 IQL runs, median 168k steps/h. That is under the 175–185k baseline but not
+10% under it, so stay at 10 lanes and add none. Lane state:
+- LV1 is on MR A4 (`a1eu1bfs`); LV2 is on the ensemble mean's A2 (`k3b11fot`);
+- U is on the task medium_diverse rerun (`6khwpw3i`), with Z behind it;
+- W2 is on NMR large_diverse eval (`3kbr98ey`). The registry is 31 of 32.
+
+**R − A1, with terminals** (medium_diverse; R is no shift + index 7, the PT pipeline's
+setup; DESCRIPTIVE; `results/leveling_readout_latest.txt`):
+
+| family | A1 (index) | A2 (same index, no shift) | R (index 7, no shift) | R − A1 | ahead |
+|---|---|---|---|---|---|
+| MR | 0.647 ± 0.057 (2) | 0.354 ± 0.064 | 0.536 ± 0.054 | **−0.111 [−0.163, −0.059]** | 2/10 |
+| PT | 0.612 ± 0.114 (3) | 0.447 ± 0.126 | 0.465 ± 0.044 | **−0.147 [−0.216, −0.074]** | 2/10 |
+
+- **The PT pipeline's setup costs both families** 0.11–0.15 against the shifted anchor.
+- **For MR, index 7 recovers much of what dropping the shift loses**: 0.536 against A2's
+  0.354 (means only; no R − A2 interval is computed). This fits §14.42: index 7
+  subtracts min_ret/len per step, which cancels most of a constant offset, so the
+  unshifted index-7 reward sits near the shifted one. **For PT it does not**: R 0.465
+  vs A2 0.447. PT's drop without the shift is again not explained by the offset alone
+  (see §14.44).
+- **R has the smallest spread of the PT cells** (sd 0.044 against 0.114 and 0.126).
+  Again there is no sign of the wider spread P1 predicted for unshifted cells.
+
+**The ensemble mean without terminals, at its own winner** (the §13 controls). It is
+now complete on all four variants:
+
+| variant | with terminals | without (index) | with − without | ahead |
+|---|---|---|---|---|
+| medium_play | 0.711 ± 0.025 | 0.590 ± 0.071 (1) | +0.121 [+0.079, +0.166] | 10/10 |
+| medium_diverse | 0.683 ± 0.037 | 0.287 ± 0.068 (7) | +0.396 [+0.351, +0.452] | 10/10 |
+| large_play | 0.440 ± 0.064 | 0.213 ± 0.060 (6) | **+0.227 [+0.162, +0.289]** | 10/10 |
+| large_diverse | 0.283 ± 0.078 | 0.123 ± 0.027 (6) | **+0.160 [+0.106, +0.208]** | 9/10 |
+
+The large-maze cells (`kilptgd6`, `vyoyl397`) are the new ones. The ensemble mean
+behaves like MR (+0.197 and +0.127 on the large mazes): terminals help it on every
+variant.
+
+**Still running / next:**
+- MR A4; the ensemble mean's A2; queue Z (PT medium_diverse A3/B3/A4/B4, NMR
+  large_diverse at its winner);
+- NMR medium_play/large_play at their winners (4/10 and 5/10);
+- zero reward without terminals on large_play (5/10);
+- the task medium_diverse rerun.
