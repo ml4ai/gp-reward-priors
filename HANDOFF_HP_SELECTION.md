@@ -23632,3 +23632,34 @@ variant.
 - NMR medium_play/large_play at their winners (4/10 and 5/10);
 - zero reward without terminals on large_play (5/10);
 - the task medium_diverse rerun.
+
+### 14.46 Without-terminals views in the two results notebooks (user request, 2026-10-25)
+
+`results/results_table.ipynb` and `results/experiments_results.ipynb` now repeat every
+table and chart **without terminals** (§14.5's candidate arm; the writing's names are
+"with terminals" / "without terminals", see the front matter). Tooling only: no
+computation or registered readout changes.
+
+- **The cell definition:** each reward's no-terminals cell at its own frozen index is the
+  anchor's evaluation sweep plus `drop_terminals`, at the seed-0 no-terminals grid
+  winner (`results/control_grid_winners.json`). `phase2_sweeps.noterm_spec` holds it;
+  the original controls, the re-runs and the at-winner cells all match it, and only
+  the index tells them apart.
+- **`results_table.ipynb`:** `register --write` now also writes a generated
+  `SWEEPS_NOTERM` / `NOTERM_INDEX` / `ORACLE_NOTERM_CONVENTIONAL` registry, by exact
+  match. It found exactly the cells `control_readout` section F reads. The new section
+  covers Tables 1, 1b and 2, the plots, the export, and the oracle's winning-vs-r−1
+  comparison. 18 of 28 cells are registered (16 of the 20 shown outside the hold).
+- **`experiments_results.ipynb`:** `load(axis, "candidate")` reads the ladders through
+  `exp_readout.collect_exp(..., protocol="candidate")`: the experiment file plus
+  `drop_terminals`, at the no-terminals index. **This fixes the form of the future
+  no-terminals ladder files.** The full-data point and the task-reward line are the
+  no-terminals cells. No ladder cell exists yet, so the panels show only full data.
+- **Fix:** the figures now draw NMR's full-data point. `exp_readout.add_anchor` adds only
+  the H1 methods, so NMR's was dropped; the notebook now adds the anchor cell of every
+  drawn series. The registered readout is unchanged.
+- **Small fixes:**
+  - `eval_readout.collect` takes `program=` (every no-terminals cell runs `iql_eval.py`,
+    including the task reward);
+  - `build_registry` no longer lets a complete conventional oracle sweep overwrite the
+    "running" note of the winning-index sweep.
