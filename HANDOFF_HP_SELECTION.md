@@ -23663,3 +23663,54 @@ computation or registered readout changes.
     including the task reward);
   - `build_registry` no longer lets a complete conventional oracle sweep overwrite the
     "running" note of the winning-index sweep.
+
+### 14.47 Sweep check 2026-10-26: registry complete; PT's large_play no-terminals winner; zero reward without terminals
+
+**Box:** 32 IQL runs in 7 sweeps, **median 176k steps/h**, back at the baseline. Lane W2
+finished (NMR large_diverse eval), so its slot is free.
+
+**The anchor registry is complete: 32 of 32.** The last cell is NMR large_diverse with
+terminals (`3kbr98ey`, index 2): **0.207 ± 0.108**. Against the motion reward (0.288):
+−0.081 [−0.167, +0.001], ahead on 3/10 (descriptive).
+
+**PT large_play no-terminals grid** (`63gmvsfg`): .075 .126 .063 .110 .000 .000 .206
+**.209**, so the winner is **7** (by 0.003 over index 6). It is added to
+`control_grid_winners.json`. Files written:
+- `atwin_noterm_antmaze_large_play_pt` (7);
+- `ties_noterm_antmaze_large_play_pt` (7).
+**Lane AA** (W2's GPUs) takes both.
+
+**New no-terminals cells, each at its own winner** (with − without terminals,
+DESCRIPTIVE):
+
+| reward | variant | without | with − without | ahead |
+|---|---|---|---|---|
+| NMR (1) | medium_play | 0.593 ± 0.123 | +0.148 [+0.091, +0.227] | 10/10 |
+| NMR (6) | large_play | 0.218 ± 0.066 | +0.149 [+0.099, +0.197] | 10/10 |
+| task (2) | medium_diverse | 0.306 ± 0.059 | +0.300 [+0.276, +0.329] | 10/10 |
+
+**The zero reward without terminals, large_play** (`otv6pg9r`): **0.000 ± 0.000**, all
+ten seeds. Every reward without terminals, at its own winner, is ahead on 10/10:
+
+| reward | − zero |
+|---|---|
+| task | +0.207 [+0.179, +0.238] |
+| MR | +0.228 |
+| NMR | +0.218 |
+| ensemble mean | +0.213 |
+
+The task − zero line is §14.5's usability quantity on large_play. It is shown here
+descriptively; §14.5's readout decides it.
+
+**Still running:**
+- the leveling cells: MR A4 (7/10), the ensemble mean's A2 (6/10);
+- queue Z: PT medium_diverse at its winner (`1w6qd18r`), then PT's B3, A4 and B4 cells,
+  then NMR large_diverse at its winner;
+- NMR large_play ties without terminals (`8sebfu4u`);
+- the motion reward at its no-terminals winner on large_play (`fnnujciy`);
+- H2d: the trivial mean without terminals on large_play (`xcyreo0v`), then the four
+  trivial large_diverse cells;
+- H1c: the PT large_diverse no-terminals grid (`xqxqgb07`), then the motion-reward
+  grids for medium_play and medium_diverse, then the eight trivial medium cells.
+
+**Notebooks:** the no-terminals registry has 18 of 28 cells.
