@@ -23767,3 +23767,43 @@ Every reward is ahead by 0.21–0.23, on 10/10.
 The no-terminals registry has 19 of 28 cells.
 
 **Lane AB launched (author, 2026-10-26)** on GPUs 5, 0–3; its log is clean.
+
+### 14.49 Sweep check 2026-10-26: MR's leveling block complete (P3 null); PT large_play without terminals; duplicate sweeps in wandb's listing
+
+**Box:** 31 IQL runs in 8 sweeps, median 173k steps/h, inside the 10% rule.
+- LV1 moved to NMR (A2, `9lwlzopo`).
+- The ensemble mean's R is at 8/10.
+- Lane AB (PT large_diverse at its winner, `ymemlvgl`) and queue Z's PT B3 (`lt7fnh6t`)
+  are running.
+
+**MR's leveling block is complete** (medium_diverse, DESCRIPTIVE;
+`results/leveling_readout_latest.txt`). New this check: B4 (`bi03jnqk`), 0.353 ± 0.091.
+
+| comparison | diff | ahead |
+|---|---|---|
+| P1: A2 − A1 (with terminals) | −0.293 [−0.328, −0.264] | 0/10 |
+| P2: A4 − A3 (without terminals) | +0.021 [−0.063, +0.121] | 7/10 |
+| R − A1 | −0.111 [−0.163, −0.059] | 2/10 |
+| B3 − B1 (ties, shifted) | +0.003 [−0.037, +0.042] | 6/10 |
+| B4 − B2 (ties, unshifted) | +0.013 [−0.020, +0.047] | 6/10 |
+| **P3: (B4 − B2) − (B3 − B1)** | **+0.010 [−0.041, +0.068]** | |
+
+**P3 is not seen for MR.** P3 predicted that unshifted ties would lower the score (B4
+below B2). It is weaker by design at index 6–7, which cancels the offset, and MR's
+no-terminals index is 7. So the null fits P3's own caveat, and MR cannot test P3 at
+full strength. PT (index 6) and NMR (index 0) are the stronger tests; NMR's
+no-terminals per-step offset is the largest (m / s 1.17, §14.42).
+
+**PT large_play at its no-terminals winner (index 7)** (`ktwxuib4`): **0.207 ± 0.050**.
+- With − without terminals: **+0.139 [+0.074, +0.202]**, ahead on 9/10.
+- PT − zero (and − mean-constant), without terminals: +0.207 [+0.177, +0.236], 10/10.
+- PT's ties cell on large_play has started.
+
+**Fix: duplicate sweeps in wandb's listing.** `register` reported "two complete index-1
+oracle sweeps, g68x036g and g68x036g". wandb pages the sweep listing, and a sweep
+created during the read (NMR's A2 started then) shifts the pages, so one sweep came
+back twice. A readout could then refuse a cell as having "two sweeps". Every collector
+now lists through `phase2_sweeps.iql_sweeps`, which yields each sweep once:
+`register`, `eval_readout`, `exp_readout`, `control_readout` (cells and grids) and
+`norm_inventory`. Tested. This check's readouts show no cell refused for a second sweep.
+The registry was re-run.
