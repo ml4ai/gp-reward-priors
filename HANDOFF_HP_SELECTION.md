@@ -23716,3 +23716,52 @@ descriptively; §14.5's readout decides it.
 **Notebooks:** the no-terminals registry has 18 of 28 cells.
 
 **Lane AA launched (author, 2026-10-26)** on GPUs 1–5; its log is clean. The box is at 8 lanes.
+
+### 14.48 Sweep check 2026-10-26: leveling P2 for MR and P1 for the ensemble mean; PT's last no-terminals winner; a fourth null ties cell
+
+**Box:** 35 IQL runs in 7 sweeps, **median 182k steps/h**, above the baseline. A new lane
+is allowed: **lane AB** takes PT large_diverse at its winner.
+
+**Leveling** (medium_diverse, DESCRIPTIVE; `results/leveling_readout_latest.txt`):
+
+| cell | family (index) | shifted | unshifted | unshifted − shifted | ahead |
+|---|---|---|---|---|---|
+| P2: A4 − A3, without terminals | MR (7) | 0.318 ± 0.067 | 0.339 ± 0.114 | +0.021 [−0.063, +0.121] | 7/10 |
+| P1: A2 − A1, with terminals | ensemble mean (3) | 0.683 ± 0.037 | 0.560 ± 0.062 | **−0.122 [−0.166, −0.075]** | 1/10 |
+
+- **MR, P2: as predicted.** There is little change without terminals at index 7, which
+  cancels the offset itself. The spread does widen (sd 0.067 → 0.114).
+- **Ensemble mean, P1: fits P1's general claim for indices 0–5** (a substantial change
+  and a wider spread, sd 0.037 → 0.062). It does **not** fit §14.42's sign reading: its
+  unshifted offset after index 3 is negative (−1.00), for which little change was
+  expected. Like PT (§14.44), it drops anyway. Two of the three families with a negative
+  offset now drop, so the sign of the offset does not decide the effect. This is the
+  first P1 cell with the predicted wider spread.
+
+**PT large_diverse no-terminals grid** (`xqxqgb07`): six zeros, then .110 **.130**, so
+the winner is **7**. It is in `control_grid_winners.json`, and
+`atwin_noterm_antmaze_large_diverse_pt` (7) is written. That completes every family's
+no-terminals index.
+
+**New no-terminals cells at their winners** (with − without terminals, all 10/10):
+
+| reward | variant | without | with − without |
+|---|---|---|---|
+| PT (6) | medium_diverse | 0.277 ± 0.063 | +0.336 [+0.251, +0.418] |
+| motion (6) | large_play | 0.217 ± 0.061 | +0.180 [+0.137, +0.219] |
+
+**Ties, no terminals: NMR large_play** (index 6): 0.211 ± 0.048 against 0.218 ± 0.066,
+**−0.007 [−0.041, +0.025]**, ahead on 5/10. That makes four null ties cells.
+
+**The mean-constant without terminals, large_play:** **0.000 ± 0.000**, like zero.
+Every reward is ahead by 0.21–0.23, on 10/10.
+
+**Still running:**
+- the leveling cells: the ensemble mean's R (5/10), MR's B4 (5/10);
+- queue Z: PT's B3 (ties, `lt7fnh6t`), then PT's A4 and B4, then NMR large_diverse at
+  its winner;
+- lane AA: PT large_play at its winner (5/10), then PT's large_play ties cell;
+- the motion reward at its large_diverse winner (`8txcmwfd`);
+- H1c: the motion-reward medium_play grid;
+- H2d: the trivial zero, large_diverse, with terminals.
+The no-terminals registry has 19 of 28 cells.
