@@ -23714,3 +23714,5 @@ descriptively; §14.5's readout decides it.
   grids for medium_play and medium_diverse, then the eight trivial medium cells.
 
 **Notebooks:** the no-terminals registry has 18 of 28 cells.
+
+**Lane AA launched (author, 2026-10-26)** on GPUs 1–5; its log is clean. The box is at 8 lanes.
