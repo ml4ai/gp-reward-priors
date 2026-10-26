@@ -23765,3 +23765,5 @@ Every reward is ahead by 0.21–0.23, on 10/10.
 - H1c: the motion-reward medium_play grid;
 - H2d: the trivial zero, large_diverse, with terminals.
 The no-terminals registry has 19 of 28 cells.
+
+**Lane AB launched (author, 2026-10-26)** on GPUs 5, 0–3; its log is clean.
