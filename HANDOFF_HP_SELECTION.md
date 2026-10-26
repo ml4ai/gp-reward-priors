@@ -75,7 +75,9 @@
 > leveled / unleveled. *Rescale* and *normalize* mean only the `modify_reward` grid,
 > whose −1 entry the writing calls "subtracting one", not a shift. Code names and the
 > dated entries below are left as they were. Reward-model "types" are now
-> "families" in the writing.
+> "families" in the writing. Also (2026-10-25): in the writing, "standard protocol"
+> means **PT's** protocol. §14.5's "standard" arm (our protocol with the terminals kept)
+> is called **"with terminals"**, and its "candidate" arm "without terminals".
 
 ---
 
