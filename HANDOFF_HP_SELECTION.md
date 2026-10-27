@@ -23966,3 +23966,6 @@ filled:
 - **Queue Z's script is stopped** (PT's B4 keeps running), and **lane AG** takes NMR
   large_diverse at its winner now rather than after B4, about 11 h sooner. That is the
   last family cell without terminals (BNN aside).
+
+**Steps done (author, 2026-10-27):** queue Z's script was the only match and is stopped;
+PT's B4 keeps running. Lanes AF and AG are launched. The box is at 8 lanes.
