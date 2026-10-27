@@ -23969,3 +23969,43 @@ filled:
 
 **Steps done (author, 2026-10-27):** queue Z's script was the only match and is stopped;
 PT's B4 keeps running. Lanes AF and AG are launched. The box is at 8 lanes.
+
+### 14.54 Sweep check 2026-10-27: NMR's R; the first non-null ties effect (ensemble mean, unshifted); zero reward with terminals on the medium mazes
+
+**Box:** 40 IQL runs in 8 sweeps (8 lanes), median 175k steps/h, at the low edge of the
+baseline. No new lanes.
+- AF: motion medium_diverse at its winner (`584ml6z3`). AG: NMR large_diverse at its
+  winner (`yv2bvb97`).
+- AD and AE moved to the mean-constant with terminals (`gbwm1skm` medium_diverse,
+  `8ylk32xr` medium_play). H2d: the trivial zero, large_diverse, without terminals
+  (`ol4wvc5t`, about 850k).
+- LV1 moved to NMR's A4 (`ekufbalq`). LV2 moved to the ensemble mean's B3 (`v3r1u2ow`).
+  PT's B4 (`920rahg8`) is at about 650k.
+- **Registry:** unchanged, 32/32 and 21/28; NMR large_diverse shows as running.
+- **A transient audit failure:** the readout ran while B3's runs were at step 0, before
+  their config had synced (`reward_model_path` None). Checked afterwards: the runs now
+  carry the expected `..._mr_ties_eval_<seed>` path, as B4's do. No action.
+
+**Leveling** (medium_diverse, DESCRIPTIVE):
+- **NMR's R** (index 7, `0lzynpif`): **0.495 ± 0.105**. R − A1: **−0.156 [−0.238,
+  −0.083]**, 0/10. R − A1 is now read for all four families: MR −0.111, PT −0.147, NMR
+  −0.156, ensemble mean −0.209. NMR's R is above its A2 (0.299), like MR's. Unlike the
+  other three families, NMR's R does not have the smallest spread (sd 0.105, against A1's
+  0.056).
+- **The ensemble mean's B4 − B2** (ties kept − tie-free, unshifted, without terminals,
+  index 7, `cwkfwlsc`): 0.348 ± 0.062 against 0.302 ± 0.049: **+0.046 [+0.026, +0.064]**,
+  9/10. That is the first ties difference whose interval excludes zero; the six earlier
+  ties cells, all shifted, were null. MR's B4 − B2 was +0.013 [−0.020, +0.047]. The
+  ensemble mean's P3 waits on its B3, now running.
+
+**Zero reward with terminals, medium mazes** (DESCRIPTIVE): every reward is ahead on
+10/10.
+
+| reward | medium_play − zero | medium_diverse − zero |
+|---|---|---|
+| zero | 0.002 ± 0.002 | 0.013 ± 0.027 |
+| task | +0.517 [+0.465, +0.565] | +0.593 [+0.552, +0.630] |
+| MR | +0.640 [+0.614, +0.663] | +0.633 [+0.599, +0.666] |
+| PT | +0.672 [+0.618, +0.718] | +0.599 [+0.531, +0.659] |
+| NMR | +0.739 [+0.717, +0.763] | +0.638 [+0.596, +0.677] |
+| ensemble mean | +0.710 [+0.694, +0.723] | +0.669 [+0.645, +0.694] |
