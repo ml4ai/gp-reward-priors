@@ -23867,3 +23867,5 @@ just above zero, unlike large_play's 0.003. Every reward with terminals is ahead
 | MR | +0.228 | 10/10 |
 | PT | +0.195 | 9/10 |
 | NMR | +0.193 | 10/10 |
+
+**Lane AC launched (author, 2026-10-26)** on GPUs 0–4; its log is clean.
