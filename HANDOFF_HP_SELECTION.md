@@ -23892,9 +23892,8 @@ zero. The with-terminals cell has a wide spread (0.209 ± 0.133). DESCRIPTIVE.
 
 **PT's ties cell, B3** (ties kept, shifted, no terminals, index 6, `lt7fnh6t`): **0.297 ±
 0.050** against the tie-free cell's (B1 = A3) 0.277 ± 0.063: **+0.020 [−0.014, +0.053]**,
-6/10. That is the fifth null ties cell (MR, NMR and PT on medium_diverse, NMR and now PT
-in the leveling block). PT's P3 still waits on A4 (running) and B4 (next in Z).
-DESCRIPTIVE.
+6/10. That is the fifth null ties cell, after MR and NMR on medium_diverse and large_play.
+PT's P3 still waits on A4 (running) and B4 (next in Z). DESCRIPTIVE.
 
 **The 8 trivial medium cells are split over two lanes.** They were the tail of H1c's
 queue, behind the motion medium_diverse grid: 80 runs on one lane, about 88 h. Lane AB's
