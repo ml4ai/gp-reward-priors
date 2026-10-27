@@ -23909,3 +23909,60 @@ That keeps the box at 8 lanes, as at §14.48–§14.51.
 **Steps done (author, 2026-10-27):** H1c's queue script was the only match and is
 stopped; the motion medium_diverse grid keeps running. Lane AD and the AE waiter are
 launched.
+
+### 14.53 Sweep check 2026-10-27: leveling P1 for NMR and P2 for PT and the ensemble mean; motion reward without terminals (medium_play cell, medium_diverse winner); a sixth null ties cell
+
+**Box:** 30 IQL runs in 6 sweeps, median 180k steps/h. Lane AC, lane AA and H1c's grid
+finished, and AE started (trivial zero, medium_play, with terminals, `am20sjts`).
+- LV1 moved to NMR's R (`0lzynpif`, 5/10); LV2 to the ensemble mean's B4 (`cwkfwlsc`,
+  5/10).
+- Queue Z moved to PT's B4 (`920rahg8`, seeds 1–5 at about 130k); NMR large_diverse at
+  its winner is the last item.
+- Lane AD is on the trivial zero, medium_diverse, with terminals (`ufsyy1k0`, 5/10).
+- H2d is on the trivial zero, large_diverse, without terminals (`ol4wvc5t`).
+- **Registry:** unchanged, 32/32 and 21/28.
+
+**Leveling** (medium_diverse, DESCRIPTIVE; `results/leveling_readout_latest.txt`):
+
+| cell | family (index) | shifted | unshifted | unshifted − shifted | ahead |
+|---|---|---|---|---|---|
+| P1: A2 − A1, with terminals | NMR (2) | 0.651 ± 0.056 | 0.299 ± 0.104 | **−0.352 [−0.418, −0.284]** | 0/10 |
+| P2: A4 − A3, without terminals | PT (6) | 0.277 ± 0.063 | 0.264 ± 0.062 | −0.013 [−0.063, +0.041] | 5/10 |
+| P2: A4 − A3, without terminals | ensemble mean (7) | 0.287 ± 0.068 | 0.302 ± 0.049 | +0.016 [−0.028, +0.060] | 5/10 |
+
+- **P1 is now read for all four families:** NMR −0.352, MR −0.293, PT −0.166, ensemble
+  mean −0.122, each 0–1/10 ahead. NMR's unshifted spread is about twice its shifted one
+  (sd 0.104 against 0.056), as P1 predicts.
+- **P2 is read for three families (MR, PT, ensemble mean), and is null in each:** +0.021,
+  −0.013, +0.016. The spread does not widen without shifting here (PT 0.062 against 0.063;
+  ensemble mean 0.049 against 0.068).
+
+**Motion reward without terminals:**
+- **medium_play at its winner** (index 7, `49p5zkq7`): **0.303 ± 0.052**. With − without
+  terminals: **+0.412 [+0.386, +0.440]**, 10/10, the largest gap so far.
+- **medium_diverse grid** (`xz9ueryd`): .006 .000 .053 .094 .006 .012 .304 **.332**, so
+  the winner is **7**. It is in `control_grid_winners.json`, and
+  `atwin_noterm_antmaze_medium_diverse_heuristic` (7) is written. That is the last
+  no-terminals grid.
+
+**PT's large_play ties cell** (index 7, `xxtjktou`): 0.220 ± 0.038 against 0.207 ±
+0.050: **+0.013 [−0.022, +0.050]**, 5/10. That is the sixth null ties cell. DESCRIPTIVE.
+
+**Trivial mean-constant with terminals, large_diverse** (`ssvhx21l`): **0.022 ± 0.016**,
+a little above zero's 0.013. Every reward with terminals is ahead by 0.18–0.26
+(DESCRIPTIVE):
+
+| reward | − mean-constant | ahead |
+|---|---|---|
+| ensemble mean | +0.260 [+0.213, +0.307] | 10/10 |
+| task | +0.250 [+0.220, +0.278] | 10/10 |
+| MR | +0.219 [+0.160, +0.278] | 10/10 |
+| PT | +0.186 [+0.103, +0.261] | 8/10 |
+| NMR | +0.184 [+0.123, +0.244] | 10/10 |
+
+**Lanes.** Two slots are free (AC's and H1c's). The box is at 6 lanes, so both can be
+filled:
+- **Lane AF:** the motion reward on medium_diverse at its winner.
+- **Queue Z's script is stopped** (PT's B4 keeps running), and **lane AG** takes NMR
+  large_diverse at its winner now rather than after B4, about 11 h sooner. That is the
+  last family cell without terminals (BNN aside).
