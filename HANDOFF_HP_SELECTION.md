@@ -23838,3 +23838,32 @@ families' R cells, DESCRIPTIVE:
   So index 7 is no general remedy for an unshifted reward.
 - **R again has the smallest spread** of each family's with-terminals cells (sd 0.029
   for the ensemble mean, 0.044 for PT).
+
+### 14.51 Sweep check 2026-10-26: motion reward without terminals (medium_play winner, large_diverse cell); zero reward with terminals on large_diverse
+
+**Box:** 34 IQL runs in 7 sweeps, median 176k steps/h. The motion large_diverse lane
+finished, so **lane AC** takes the new motion medium_play cell.
+- H1c is on the motion medium_diverse grid (`xz9ueryd`).
+- H2d is on the trivial mean, large_diverse, with terminals (`ssvhx21l`).
+- PT's B3 is at 6/10, and PT's large_play ties cell and PT large_diverse at its winner
+  are at 5/10.
+- The registry is unchanged and clean.
+
+**Motion medium_play no-terminals grid** (`9mfp76ih`): .019 .018 .119 .121 .004 .002
+.319 **.412**, so the winner is **7**. It is in `control_grid_winners.json`, and
+`atwin_noterm_antmaze_medium_play_heuristic` (7) is written.
+
+**Motion large_diverse at its no-terminals winner** (index 7, `8txcmwfd`): **0.134 ±
+0.040**. With − without terminals: **+0.154 [+0.110, +0.203]**, 10/10.
+
+**Zero reward with terminals, large_diverse** (`h44i8z5q`): **0.013 ± 0.010**. That is
+just above zero, unlike large_play's 0.003. Every reward with terminals is ahead
+(DESCRIPTIVE):
+
+| reward | − zero | ahead |
+|---|---|---|
+| task | +0.259 [+0.230, +0.286] | 10/10 |
+| ensemble mean | +0.269 | 10/10 |
+| MR | +0.228 | 10/10 |
+| PT | +0.195 | 9/10 |
+| NMR | +0.193 | 10/10 |
