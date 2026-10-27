@@ -23905,3 +23905,7 @@ slot is free now and AA's frees within about an hour, so:
 - **AE waiter** (AA's GPUs): after AA's queue ends, the 4 medium_play trivial cells.
 
 That keeps the box at 8 lanes, as at §14.48–§14.51.
+
+**Steps done (author, 2026-10-27):** H1c's queue script was the only match and is
+stopped; the motion medium_diverse grid keeps running. Lane AD and the AE waiter are
+launched.
