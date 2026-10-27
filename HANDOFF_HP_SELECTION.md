@@ -23807,3 +23807,34 @@ now lists through `phase2_sweeps.iql_sweeps`, which yields each sweep once:
 `register`, `eval_readout`, `exp_readout`, `control_readout` (cells and grids) and
 `norm_inventory`. Tested. This check's readouts show no cell refused for a second sweep.
 The registry was re-run.
+
+### 14.50 Sweep check 2026-10-26: the ensemble mean's R cell
+
+**Box:** 38 IQL runs in 8 sweeps, median 173k steps/h, inside the 10% rule.
+- LV2 moved to the ensemble mean's A4 (`np2oha7l`).
+- LV1 is on NMR's A2 (`9lwlzopo`).
+- PT's large_play ties cell (`xxtjktou`) is running in lane AA.
+- About half the seeds are done on: PT's B3 (Z), PT large_diverse at its winner (AB),
+  motion large_diverse at its winner, trivial zero large_diverse, and the motion
+  medium_play grid.
+
+The registry is unchanged (32 of 32; 20 of 28 without terminals) and clean.
+
+**The ensemble mean's R** (no shift, index 7, with terminals; `30t80e61`):
+**0.473 ± 0.029**. R − A1 is **−0.209 [−0.241, −0.178]**, ahead on 0/10. All three
+families' R cells, DESCRIPTIVE:
+
+| family (A1 index) | A1 | A2 (no shift, A1's index) | R (no shift, index 7) | R − A1 |
+|---|---|---|---|---|
+| MR (2) | 0.647 | 0.354 | 0.536 | −0.111 |
+| PT (3) | 0.612 | 0.447 | 0.465 | −0.147 |
+| ensemble mean (3) | 0.683 | 0.560 | 0.473 | **−0.209** |
+
+- **The PT pipeline's setup costs every family**, the ensemble mean most.
+- **R against A2 splits three ways** (means only):
+  - MR: R well above A2, so index 7 recovers what dropping the shift loses (§14.45);
+  - PT: R ≈ A2;
+  - ensemble mean: R **below** A2.
+  So index 7 is no general remedy for an unshifted reward.
+- **R again has the smallest spread** of each family's with-terminals cells (sd 0.029
+  for the ensemble mean, 0.044 for PT).
