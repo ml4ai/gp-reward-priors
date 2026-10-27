@@ -23869,3 +23869,40 @@ just above zero, unlike large_play's 0.003. Every reward with terminals is ahead
 | NMR | +0.193 | 10/10 |
 
 **Lane AC launched (author, 2026-10-26)** on GPUs 0–4; its log is clean.
+
+### 14.52 Sweep check 2026-10-27: PT large_diverse without terminals; PT's ties cell (B3); trivial medium cells split over two lanes
+
+**Box:** 31 IQL runs in 7 sweeps, median 179k steps/h, within the baseline. Lane AB
+finished, and lane AA has only PT's large_play ties cell left (7/10, last 3 seeds
+running).
+- LV1 is on NMR's A2 (`9lwlzopo`, 7/10); LV2 is on the ensemble mean's A4 (`np2oha7l`,
+  5/10).
+- Queue Z moved to PT's A4 (`u4i1ls9s`); PT's B4, then NMR large_diverse at its winner,
+  follow.
+- Lane AC (motion medium_play at its winner, `49p5zkq7`) is at about 300k steps.
+- H1c's motion medium_diverse grid (`xz9ueryd`) has indices 0–4 at about 600k; 5–7 have
+  not started. H2d's trivial mean, large_diverse, with terminals (`ssvhx21l`) is at about
+  650k.
+- **Registry:** 32/32 with terminals, **21/28 without** (PT large_diverse added).
+
+**PT large_diverse at its no-terminals winner** (index 7, `ymemlvgl`): **0.136 ± 0.042**.
+With − without terminals: **+0.072 [−0.012, +0.155]** (paired-t [−0.030, +0.175]), 7/10.
+That is the smallest with − without gap so far, and the first whose interval includes
+zero. The with-terminals cell has a wide spread (0.209 ± 0.133). DESCRIPTIVE.
+
+**PT's ties cell, B3** (ties kept, shifted, no terminals, index 6, `lt7fnh6t`): **0.297 ±
+0.050** against the tie-free cell's (B1 = A3) 0.277 ± 0.063: **+0.020 [−0.014, +0.053]**,
+6/10. That is the fifth null ties cell (MR, NMR and PT on medium_diverse, NMR and now PT
+in the leveling block). PT's P3 still waits on A4 (running) and B4 (next in Z).
+DESCRIPTIVE.
+
+**The 8 trivial medium cells are split over two lanes.** They were the tail of H1c's
+queue, behind the motion medium_diverse grid: 80 runs on one lane, about 88 h. Lane AB's
+slot is free now and AA's frees within about an hour, so:
+- **Lane AD** (AB's GPUs, now): the 4 medium_diverse trivial cells.
+- **H1c's queue script is stopped** (its grid's `launch.sh` and agents keep running), so
+  H1c ends with the grid. Its slot then takes the motion medium_diverse at-winner file,
+  written once the grid completes.
+- **AE waiter** (AA's GPUs): after AA's queue ends, the 4 medium_play trivial cells.
+
+That keeps the box at 8 lanes, as at §14.48–§14.51.
