@@ -24009,3 +24009,22 @@ baseline. No new lanes.
 | PT | +0.672 [+0.618, +0.718] | +0.599 [+0.531, +0.659] |
 | NMR | +0.739 [+0.717, +0.763] | +0.638 [+0.596, +0.677] |
 | ensemble mean | +0.710 [+0.694, +0.723] | +0.669 [+0.645, +0.694] |
+
+**Charts (agent, 2026-10-27; `results/benchmark_results.ipynb`, author's request):**
+- **Chart 1** marks the trivial rewards' means: zero dark, mean-constant light, solid with
+  terminals and dashed without.
+- **New chart 1b:** with − without terminals per reward and variant, paired, 95% exact
+  intervals, seeds ahead. It has fixed rows, and a row is blank until both cells are
+  complete.
+- **Chart 4 fix:** the leveling and trivial cells, which postdate the chart, were drawn in
+  the motion reward's colour. Leveling cells now take their family's colour, and trivial
+  cells are grey.
+- **New chart 8, the shift (leveling) ablation:** each family's 7 cells as mean ± sd
+  (filled = shifted), then every comparison and P3 with intervals. It is built on
+  `leveling_readout.cells_for`, so it matches the readout.
+- **New chart 9, ties in IQL:** ties-kept − tie-free success, with the shifted cells
+  (`control_readout` G, plus the ensemble mean's B3) and the unshifted ones (B4 − B2).
+- **Scope:** every plotted difference is within one reward; nothing is compared across
+  families. DESCRIPTIVE.
+- **Status:** executed end to end against a refreshed cache with no errors, then
+  committed with outputs cleared. Set `REFRESH = True` to pick up later cells.
