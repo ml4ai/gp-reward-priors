@@ -24773,3 +24773,17 @@ local data passes for every block below, with these job counts:
     n045"`, and `"n01o … n045o"` for the sensitivity arm. Both skip held families.
 - No label caching is needed: that step is the BNN's (§13.7). MR, PT and NMR label inside
   the IQL run.
+
+**Steps done (author, 2026-10-28): lanes AM–AT (§14.61) and the training chain (above) are
+launched.**
+- **Checked on wandb about 15 minutes in:** 40 IQL runs in 8 sweeps, each lane on its first
+  item at the intended index.
+  - Without terminals, MR r16: `w5ejjtb8` (AM, medium_play, index 1), `0jzj90sn` (AO,
+    medium_diverse, 7), `n3571ylh` (AQ, large_play, 6), `q05ajp2s` (AS, large_diverse, 6).
+  - With terminals, MR r32: `y5m7chk7` (AN, 0), `oijrw9ng` (AP, 2), `clm1wlk4` (AR, 3),
+    `2k88jyvf` (AT, 3).
+- **Speed:** median 171k steps/h, about 5% below the 175–185k baseline, measured early
+  and with the training chain sharing the GPUs. Inside the 10% rule; watch it.
+- **The training chain is not checked from here yet.** The first verification is
+  `production_readout.py nmr --cond r16` once NMR's r16 models finish.
+- Candidate-arm cells are reported by completeness only (§14.61).
