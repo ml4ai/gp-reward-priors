@@ -24096,3 +24096,8 @@ behind LV1, AD and AE are split out:
 
 That puts the box back at 8 lanes until LV1, AD and AE finish (each is at 5/10 or more).
 The mean-constant cells in AI and AJ can be moved to those slots at the next check.
+
+**Steps done (author, 2026-10-27):** the check showed five queue scripts (AD, AE, LV1, LV2
+and H2d), and each `pkill` pattern matched only its own. LV1's, AD's and AE's scripts are
+stopped, and their running sweeps keep going. Lanes AH, AI and AJ are launched. The box is
+at 8 lanes.
