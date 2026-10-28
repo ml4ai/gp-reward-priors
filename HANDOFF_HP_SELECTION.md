@@ -24028,3 +24028,17 @@ baseline. No new lanes.
   families. DESCRIPTIVE.
 - **Status:** executed end to end against a refreshed cache with no errors, then
   committed with outputs cleared. Set `REFRESH = True` to pick up later cells.
+
+### 14.55 Sweep check 2026-10-27: no new cell complete
+
+**Box:** 40 IQL runs in 8 sweeps (8 lanes), **median 171k steps/h**. That is about 5%
+below the 175–185k baseline, inside the 10% rule, so the lanes stay as they are. Watch it
+next check.
+- **At 5/10** (seeds 6–10 running): AF's motion medium_diverse at its winner, AG's NMR
+  large_diverse at its winner, PT's B4 (queue Z), and H2d's zero without terminals on
+  large_diverse.
+- **At 0/10** (seeds 1–5 at 600–900k): the ensemble mean's B3 (LV2), NMR's A4 (LV1), and
+  the mean-constant with terminals on medium_diverse (AD) and medium_play (AE).
+- **Registry:** unchanged, 32/32 and 21/28.
+- **§14.54's B3 audit failure has cleared:** B3 now reads INCOMPLETE, so it was a config
+  sync race.
