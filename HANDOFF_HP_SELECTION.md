@@ -24042,3 +24042,57 @@ next check.
 - **Registry:** unchanged, 32/32 and 21/28.
 - **§14.54's B3 audit failure has cleared:** B3 now reads INCOMPLETE, so it was a config
   sync race.
+
+### 14.56 Sweep check 2026-10-27: PT's P3; motion medium_diverse and NMR large_diverse without terminals; zero reward without terminals on large_diverse
+
+**Box:** 24 IQL runs in 5 sweeps, median 177k steps/h, back inside the baseline. Lane AF,
+lane AG and queue Z finished, so three slots are free. H2d moved to its last item, the
+mean-constant without terminals on large_diverse (`c2gkswl0`, seeds 1–5 at about 400k).
+- At 5/10 or more: the mean-constant with terminals on medium_diverse (AD, `gbwm1skm`) and
+  medium_play (AE, `8ylk32xr`), the ensemble mean's B3 (LV2, `v3r1u2ow`), and NMR's A4
+  (LV1, `ekufbalq`, 7/10).
+- **Registry:** NMR large_diverse without terminals is registered (`yv2bvb97`), so 32/32
+  and **22/28**. The six still missing are BNN cells (§14.1 hold).
+
+**Leveling, PT** (medium_diverse, DESCRIPTIVE; `results/leveling_readout_latest.txt`):
+- **B4** (ties, unshifted, without terminals, index 6, `920rahg8`): 0.238 ± 0.077.
+- **B4 − B2: −0.026 [−0.065, +0.014]**, 3/10. Null, as MR's (+0.013) was; the ensemble
+  mean's +0.046 is still the only unshifted ties difference whose interval excludes zero.
+- **P3** = (B4 − B2) − (B3 − B1): **−0.047 [−0.107, +0.019]**. Null. P3 is now read for MR
+  (+0.010) and PT; the ensemble mean's waits on its B3 and NMR's on its A4 and B4.
+
+**With − without terminals, at the no-terminals winner** (DESCRIPTIVE):
+
+| maze | reward | with | without | with − without | ahead |
+|---|---|---|---|---|---|
+| medium_diverse | motion (7, `584ml6z3`) | 0.683 ± 0.027 | 0.328 ± 0.075 | **+0.355 [+0.317, +0.399]** | 10/10 |
+| large_diverse | NMR (6, `yv2bvb97`) | 0.207 ± 0.108 | 0.139 ± 0.015 | +0.068 [+0.005, +0.130] | 7/10 |
+
+- The motion reward loses the most without terminals on both medium mazes (+0.412 on
+  medium_play).
+- NMR large_diverse: the exact bootstrap interval just excludes zero, the paired-t one
+  does not (−0.009, +0.144). Without terminals NMR's spread is a seventh of what it is
+  with them (sd 0.015 against 0.108).
+- That completes every family cell without terminals except the BNN's.
+
+**Zero reward without terminals, large_diverse** (`ol4wvc5t`): **0.000 ± 0.000**. Each
+reward's own no-terminals winner is ahead on 10/10 (DESCRIPTIVE):
+
+| reward | − zero, without terminals |
+|---|---|
+| NMR | +0.139 [+0.131, +0.148] |
+| PT | +0.136 [+0.113, +0.161] |
+| ensemble mean | +0.123 [+0.107, +0.138] |
+| MR | +0.114 [+0.097, +0.131] |
+| task | +0.100 [+0.075, +0.127] |
+
+**Lanes.** Three slots are free and the box is at 5 lanes, so the five items still queued
+behind LV1, AD and AE are split out:
+- **LV1's, AD's and AE's queue scripts are stopped** (their running sweeps keep going), so
+  each lane ends with its current cell.
+- **Lane AH:** NMR's B4, now rather than after A4.
+- **Lane AI:** zero, then mean-constant, without terminals, medium_diverse.
+- **Lane AJ:** zero, then mean-constant, without terminals, medium_play.
+
+That puts the box back at 8 lanes until LV1, AD and AE finish (each is at 5/10 or more).
+The mean-constant cells in AI and AJ can be moved to those slots at the next check.
