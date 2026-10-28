@@ -82,6 +82,8 @@
 > **Added 2026-10-27 — RESUME HERE: §14.57** has the current state: what is complete,
 > the eight lanes running on the box, what comes next, and how a sweep check is done.
 > §14.15–§14.56 are the dated sweep-check log behind it; §14.58 onward are the checks since.
+> **As of §14.60 (2026-10-28) the box is idle:** every uncovered control and every shift
+> (leveling) cell is complete, so §14.57's item 1 is done and items 2–4 are next.
 
 ---
 
@@ -24332,3 +24334,65 @@ heartbeats; every finished cell has 10/10 seeds scored, so no run needs a sync.
 trivial cells without terminals. All five are running; AH, AI and AJ should finish within
 the hour, AK and AL in about 2 h. After that the uncovered controls and the shift ablation
 are complete, and §14.57's next item is §13.15 (order to be confirmed with the author).
+
+### 14.60 Sweep check 2026-10-28: NMR's P3 (not null, opposite to the prediction); the trivial rewards complete; the box is idle
+
+**Box:** 0 IQL runs. AH, AI, AJ, AK and AL finished (`97e6xdjx`, `vv9zfl1l`, `r175teff`,
+`0anbbzh4`, `u5eljk82`). Each sweep is FINISHED with 10/10 runs finished and synced to step
+1M, so no run needs a sync. Every lane has ended, and nothing outside the hold is queued.
+- **Registry:** unchanged, 32/32 and 22/28 (the six missing are held BNN or ensemble CVaR
+  cells). **Grids:** none new.
+- **This completes §14.57's item 1:** every uncovered control and every cell of the shift
+  (leveling) ablation is in.
+
+**Leveling, NMR's B4 and P3** (medium_diverse, index 0, DESCRIPTIVE;
+`results/leveling_readout_latest.txt`):
+- **B4** (ties kept, unshifted, without terminals, `97e6xdjx`): **0.435 ± 0.129**, against
+  B2 (= A4) 0.301 ± 0.117.
+- **B4 − B2: +0.133 [+0.034, +0.234]**, ahead on 8/10 (paired-t +0.012, +0.255).
+- **P3** = (B4 − B2) − (B3 − B1) = +0.133 − (−0.036): **+0.169 [+0.080, +0.261]**. This is
+  the first P3 whose interval excludes zero, and its sign is the **opposite** of §14.40's
+  prediction: without the shift, keeping ties *raises* NMR's score; with the shift it makes
+  no clear difference (B3 − B1 −0.036 [−0.126, +0.071]).
+- **P3 for all four families:** MR +0.010, PT −0.047, ensemble mean +0.024 (all null), NMR
+  +0.169. The two unshifted ties differences that exclude zero (NMR +0.133, ensemble mean
+  +0.046) are both positive.
+- **In line with §14.42's offset numbers** (no new measurement): NMR's no-terminals index 0
+  passes the raw mean through, and keeping ties lowers it from +7.69 to +1.74 per step
+  (m / s 1.17 → 0.58). So B4 carries a much smaller unshifted offset than B2, and NMR's
+  unshifted A4 was already below its shifted A3 (P2 −0.072, §14.58). P4's mechanism (ties
+  enlarge the relative offset) was refuted in §14.42; for NMR the offset moves the other
+  way, and so does P3. This reading is descriptive and not a test.
+
+**Trivial rewards without terminals, medium mazes** (DESCRIPTIVE):
+
+| maze | zero | mean-constant |
+|---|---|---|
+| medium_play | 0.001 ± 0.001 (`r175teff`) | 0.009 ± 0.026 (`u5eljk82`) |
+| medium_diverse | 0.017 ± 0.053 (`vv9zfl1l`) | 0.001 ± 0.001 (`0anbbzh4`) |
+
+Each reward at its own no-terminals winner is ahead of both on 10/10:
+
+| reward | medium_play − zero | medium_play − mean | medium_diverse − zero | medium_diverse − mean |
+|---|---|---|---|---|
+| task | +0.672 [+0.651, +0.694] | +0.664 [+0.643, +0.688] | +0.289 [+0.238, +0.334] | +0.305 [+0.269, +0.338] |
+| MR | +0.652 [+0.613, +0.691] | +0.644 [+0.610, +0.674] | +0.301 [+0.251, +0.350] | +0.317 [+0.278, +0.358] |
+| PT | +0.408 [+0.248, +0.561] | +0.400 [+0.245, +0.548] | +0.259 [+0.220, +0.301] | +0.275 [+0.239, +0.314] |
+| NMR | +0.593 [+0.512, +0.653] | +0.585 [+0.507, +0.639] | +0.356 [+0.263, +0.442] | +0.373 [+0.284, +0.450] |
+| ensemble mean | +0.589 [+0.546, +0.630] | +0.581 [+0.523, +0.630] | +0.269 [+0.209, +0.319] | +0.286 [+0.242, +0.320] |
+
+- **The trivial rewards are complete:** all 16 cells (4 mazes × zero / mean-constant ×
+  with / without terminals). Without terminals both trivial rewards are at or near 0 on
+  every maze; with terminals they are at most 0.022 (large_diverse mean-constant).
+- PT's medium_play no-terminals winner keeps its wide spread (sd 0.267), so its interval
+  against either trivial reward is the widest.
+
+**What comes next (§14.57, items 2–4), none started:**
+1. **§13.15**, the consolidated reading of the controls (§13.14–§14.60), including NMR's
+   reversed P3 and §14.11's "time-only PT reward" control. Sparsity and label noise wait on
+   it.
+2. **The RQ1 no-terminals ladder files** (§14.46 form, §14.7 cost). The order of 1 and 2 is
+   to be confirmed with the author before either starts.
+3. **Max versus last-10** (§14.2 item 4), no new runs.
+4. Charts: `results/benchmark_results.ipynb` with `REFRESH = True` picks up the cells since
+   §14.54 (chart 8's NMR P3, chart 9's NMR B4, the trivial cells in charts 1 and 1b).
