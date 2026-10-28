@@ -24271,3 +24271,10 @@ uncovered controls and the leveling ablation are complete. Log names now run up 
 **Diff baseline for the next check:** the controls readout is now kept, with the `wandb:`
 lines stripped, in `results/control_readout_latest.txt` (parent repo), beside
 `results/leveling_readout_latest.txt`. Diff the next run of each against them.
+
+**Steps done (author, 2026-10-28):** the check showed four queue scripts: H2d, AH, AI and
+AJ. LV2 and AE had finished in the meantime (`v3r1u2ow` and `8ylk32xr`, both 10/10
+finished; B3 was LV2's last item, so its script had exited). Each `pkill` pattern matched
+only its own script. AI's and AJ's scripts are stopped, and their zero cells keep running.
+Lanes AK and AL are launched. The box is at 6 lanes (H2d, AH, AI, AJ, AK, AL), and nothing
+else outside the hold is queued.
