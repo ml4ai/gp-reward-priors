@@ -53,6 +53,7 @@
 > dated log, two of whose predictions were later refuted (§13.14.7, §13.14.16).
 > The consolidated reading will be §13.15, written once the controls are in.
 > Sparsity (Experiment 1) and label noise are paused until then.
+> **§13.15 was written 2026-10-28: quote the controls from there.**
 >
 > **Added 2026-10-20 — READ FIRST: the dissertation is restructured, and every BNN and
 > CVaR result is ON HOLD (§14).** A new chapter on **benchmarking preference-based
@@ -18780,7 +18781,7 @@ controls, §13.14; added 2026-10-20.)
 | Ensemble: 8 of 8 cells | 10-15 (`gpyiq4w5`, the last) | D, E |
 | Oracle medium_play at index 3 | 10-14 (`79ke5lc3`) | C |
 | Cross-family statements in E | 10-15 | E, from the registered readout |
-| H: what the terminal channel means for A–G | **open**: the IQL controls (§13.14) | §13.15, to be written |
+| H: what the terminal channel means for A–G | 10-28 (uncovered rewards; the BNN parts stay held) | §13.15 |
 
 ## 8. Tooling
 
@@ -21804,6 +21805,251 @@ each). Both diagnostics reproduce their original cells: MR pools to 0.630 (origi
   loitering by the goal is a minority pattern in 2 seeds of 10, not the mechanism
   of the collapse. The dominant failure end, (5, 4), is the top failure cell on 5 of
   10 seeds (1, 2, 6, 7, 8). Seed 10, the best (0.612), has no dominant failure cell.
+
+### 13.15 The consolidated reading of the controls (agent, 2026-10-28; DESCRIPTIVE)
+
+**What this is.** The reading of the IQL controls that §7.6 H, §13.14 and §14.3 deferred
+to here, written once every uncovered control was complete (§14.60). **Quote the controls
+from this section, not from the dated log** (§13.13–§13.14.16, §14.15–§14.60), which keeps
+refuted predictions and partial numbers. Scope and rules:
+- **Uncovered rewards only** (§14.1): MR best-model, PT, NMR, ensemble mean, the task
+  reward, the motion (path-length) reward, the zero and mean-constant rewards, and the
+  time-only PT reward. No BNN or CVaR cell is used or implied.
+- **Every comparison is within one reward** (with against without terminals, shifted
+  against unshifted, ties kept against removed) **or a reward against a reference reward**
+  (task, motion, zero, mean-constant). Nothing here ranks the families against each
+  other; that reading belongs to §14.5's test and its readout.
+- **Statistic:** the last-10 mean of the success rate, seeds 1–10, paired by seed, 95%
+  exact bootstrap over seeds, "ahead" = seeds on which the first cell is higher.
+  Normalization grids are seed 0 only. No test is run here.
+- **Sources:** `results/control_readout_latest.txt` (sections A–H),
+  `results/leveling_readout_latest.txt`, `results/offset_report_latest.txt`,
+  `results/stat_readout_latest.txt` (2026-10-23), `calibration_results/goal_structure_run1.txt`
+  and `_run2.txt`, and `results/final_positions.py` (§13.14.16).
+
+#### 13.15.1 The terminal channel (FINAL)
+
+- **On all four antmaze-v2 datasets the `terminals` are exactly the goal arrivals**
+  (§13.13.1). IQL stops bootstrapping at a terminal, so with terminals the goal reaches
+  every run whatever its reward says, provided reaching a terminal is worth something.
+- **It is the standard setup.** The Preference Transformer's own IQL keeps the same
+  terminals and normalizes a learned reward exactly as index 7 does, without the shift
+  (§13.13.2). Published MR and PT antmaze results inherit the channel.
+- **The goal is not in the observation** (29 dimensions, §13.14.10). Without terminals it
+  can reach IQL only through the reward's spatial shape or through the data.
+
+#### 13.15.2 With terminals, the score registers the reward's level relative to termination
+
+**Trivial rewards fail with terminals.** Zero (IQL then imitates the data) scores
+0.002–0.013 and the mean-constant reward 0.002–0.022 on the four variants. Every reward,
+the task reward included, is ahead of both:
+
+| variant | each reward − zero, with terminals | each reward − mean-constant, with terminals | seeds ahead |
+|---|---|---|---|
+| medium_play | +0.517 to +0.739 | +0.517 to +0.739 | 10/10 every reward |
+| medium_diverse | +0.593 to +0.669 | +0.595 to +0.671 | 10/10 every reward |
+| large_play | +0.343 to +0.438 | +0.342 to +0.437 | 10/10 every reward |
+| large_diverse | +0.193 to +0.269 | +0.184 to +0.260 | 8–10/10 |
+
+- **So §14.5's secondary non-inferiority check comes out the other way from Shin et al.
+  (2023) on this benchmark:** no trivial cell is within 0.10 of any reward on any variant.
+  The narrowest case, PT on large_diverse against the mean-constant, has
+  S_trivial − S_PT in [−0.261, −0.103]. Every cell is TOO FAR BEHIND in §12's terms.
+- **Why (§14.43, §13.14.2):** with terminals, what the benchmark rewards is a reward whose
+  per-step level makes ending the episode pay. A negative level (the task reward's r − 1,
+  every shifted learned reward at its winning index) does; zero and a positive constant
+  do not; indices 4 and 5, which make every step strongly positive, turn the goal into a
+  penalty and collapse every learned reward (0.000–0.06 in every stage-4 grid).
+
+**Rewards with no preference information do about as well as the learned ones with
+terminals.**
+- **The motion reward** (path length, index 3, fixed in advance) scores 0.715, 0.683,
+  0.398 and 0.288. Each learned reward minus motion lies within −0.081 to +0.042 on every
+  variant (section C), and only one of those sixteen intervals lies above zero (NMR,
+  medium_play, +0.027 [+0.004, +0.050]). The task reward is behind the motion reward on
+  both medium mazes (−0.196 and −0.077, 0/10 each). The motion reward's map points *away*
+  from the goal on every variant (§13.14.11), so it carries no goal information of its own.
+- **The time-only PT reward** (`PT_TIMEONLY`; §14.10's labelling bug read on purpose,
+  §14.24): a PT model applied to the dataset's first episode, so a reward of time since
+  the episode start, with no preference or spatial content. It is read in
+  `results/stat_readout.py` and is **the control this section was asked to name** (§14.11).
+  With terminals it scores 0.690 ± 0.060, 0.550 ± 0.172, 0.386 ± 0.073 and 0.169 ± 0.136
+  (medium_play, medium_diverse, large_play, large_diverse). Task reward (stage-4 index)
+  − time-only: −0.171 [−0.216, −0.126], +0.056 [−0.032, +0.173], −0.019 [−0.082, +0.049],
+  +0.103 [+0.011, +0.186]. On the medium and large play mazes a reward that only counts
+  time matches or beats the task reward.
+
+**The shift is worth more than the reward's content with terminals** (§14.40, medium_diverse;
+`leveling_readout_latest.txt`):
+
+| family (with-terminals index) | P1: unshifted − shifted (A2 − A1) | ahead | R − A1 (PT's pipeline: unshifted, index 7) | ahead |
+|---|---|---|---|---|
+| MR (2) | −0.293 [−0.328, −0.264] | 0/10 | −0.111 [−0.163, −0.059] | 2/10 |
+| PT (3) | −0.166 [−0.229, −0.101] | 1/10 | −0.147 [−0.216, −0.074] | 2/10 |
+| NMR (2) | −0.352 [−0.418, −0.284] | 0/10 | −0.156 [−0.238, −0.083] | 0/10 |
+| ensemble mean (3) | −0.122 [−0.166, −0.075] | 1/10 | −0.209 [−0.241, −0.178] | 0/10 |
+
+- P1's prediction holds in direction for every family. Dropping the shift moves each
+  family's score by 0.12–0.35 with the same reward model, which is as large as most
+  reward-against-reference differences above. For MR and NMR the unshifted reward's mean
+  is positive after their index 2 (+0.40, +0.53; §14.42), which with terminals makes the
+  goal end a positive stream.
+- **R, PT's own antmaze pipeline applied to our models, is below our protocol for every
+  family.** Index 7 largely cancels the offset (§14.40), so R mostly measures what
+  index 7 costs on our data, not what the shift is worth.
+
+**Reading (with terminals):** the benchmark registers whether the reward's level makes
+termination pay, and how it is shifted and normalized, far more than what the reward
+learned from preferences. Rewards with no preference content (motion, time-only) and the
+same reward model with a different shift move the score as much as anything a learned
+reward's content does. This is §7.6 H's caveat, now measured.
+
+#### 13.15.3 Without terminals, every reward still carries the goal, partly
+
+**Every reward beats both trivial rewards on every variant without terminals**, each at
+its own no-terminals winner (section H):
+
+| variant | zero / mean-constant, without terminals | each reward − zero | each reward − mean-constant | seeds ahead |
+|---|---|---|---|---|
+| medium_play | 0.001 / 0.009 | +0.408 to +0.672 | +0.400 to +0.664 | 10/10 every reward |
+| medium_diverse | 0.017 / 0.001 | +0.259 to +0.356 | +0.275 to +0.373 | 10/10 every reward |
+| large_play | 0.000 / 0.000 | +0.207 to +0.228 | +0.207 to +0.227 | 10/10 every reward |
+| large_diverse | 0.000 / 0.000 | +0.100 to +0.139 | +0.100 to +0.139 | 10/10 every reward |
+
+- The smallest lower interval end is +0.075 (the task reward on large_diverse).
+- **For §14.5 these are inputs, not its tests.** The usability check (task − zero, without
+  terminals, full data) has every seed ahead on every variant, so no variant is close to
+  failing it, the large mazes included, against the expectation written into §14.5. Test
+  (c) (each family − zero and − mean-constant, without terminals, full data) likewise has
+  every seed ahead for every family on every variant. Both are run formally by the ladder
+  readout, unchanged.
+
+**What the terminals add, at each reward's own no-terminals winner** (section F; with −
+without; the index is re-selected without terminals, so this is the protocol difference,
+not a fixed-index ablation):
+
+| reward | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| task | **−0.153** [−0.217, −0.092] 0/10 | +0.300 [+0.276, +0.329] 10/10 | +0.160 [+0.119, +0.201] 10/10 | +0.173 [+0.129, +0.212] 10/10 |
+| MR | −0.010 [−0.049, +0.030] 4/10 | +0.328 [+0.297, +0.357] 10/10 | +0.197 [+0.163, +0.231] 10/10 | +0.127 [+0.073, +0.183] 9/10 |
+| PT | +0.265 [+0.129, +0.409] 10/10 | +0.336 [+0.251, +0.418] 10/10 | +0.139 [+0.074, +0.202] 9/10 | +0.072 [−0.012, +0.155] 7/10 |
+| NMR | +0.148 [+0.091, +0.227] 10/10 | +0.277 [+0.194, +0.365] 10/10 | +0.149 [+0.099, +0.197] 10/10 | +0.068 [+0.005, +0.130] 7/10 |
+| ensemble mean | +0.121 [+0.079, +0.166] 10/10 | +0.396 [+0.351, +0.452] 10/10 | +0.227 [+0.162, +0.289] 10/10 | +0.160 [+0.106, +0.208] 9/10 |
+| motion | +0.412 [+0.386, +0.440] 10/10 | +0.355 [+0.317, +0.399] 10/10 | +0.180 [+0.137, +0.219] 10/10 | +0.154 [+0.110, +0.203] 10/10 |
+
+- **The terminals usually help, by 0.07–0.41.** On medium_diverse every reward loses
+  about a third of a success rate without them.
+- **Two exceptions on medium_play:** MR is level, and the task reward does *better*
+  without terminals at its own index 0 (0.672 against 0.519). There, the task reward with
+  terminals is held back by its with-terminals index, not helped by the terminals.
+- **The motion reward loses the most** on both medium mazes, as expected of a reward
+  whose map points away from the goal: with terminals the goal carries it, without them
+  nothing does.
+- **Spread:** without terminals PT's medium_play cell is very wide (sd 0.267), and NMR's
+  large_diverse cell very narrow (0.015 against 0.108 with terminals).
+
+**Normalization has to be re-selected per protocol.**
+- In every one of the 24 no-terminals grids (six rewards × four variants), the winner
+  differs from the index the reward used with terminals (section E).
+- On the large mazes every learned reward and the motion reward select index 6 or 7, the
+  indices that largely cancel a constant offset.
+- **Large offsets collapse runs without terminals too.** Indices 4 and 5 score at most
+  0.012 in every no-terminals grid. §13.14.5's prediction that without terminals a shift
+  stops mattering holds only for small shifts: a shift c moves every value by about
+  c / (1 − γ), which IQL's value regression does not absorb (§13.14.7; refuted as
+  written, not to be repeated).
+
+**How the goal gets through without terminals (mechanism evidence, partial).**
+- **Reward maps fit the outcome where measured:** MR's map rises toward the goal on
+  medium_play, where MR holds without terminals, and not on medium_diverse, where it loses
+  0.33 (§13.14.11).
+- **Loitering near the goal is refuted** as the reason for failures without terminals:
+  on medium_play, failures end mostly five or more cells from the goal, and the cell next
+  to it takes 6% of failures, from two seeds (§13.14.16).
+- **Runs peak and fall back:** the max over evaluations sits 0.09–0.20 above the last-10
+  mean in every cell read so far (§14.9), and some no-terminals runs reach the goal and
+  then lose it (MR medium_diverse at index 2: max 0.632, last-10 0.306; §14.24).
+
+#### 13.15.4 The shift without terminals, and ties
+
+**P2, unshifted − shifted without terminals (A4 − A3), medium_diverse:**
+
+| family (no-terminals index) | A4 − A3 | ahead |
+|---|---|---|
+| MR (7) | +0.021 [−0.063, +0.121] | 7/10 |
+| PT (6) | −0.013 [−0.063, +0.041] | 5/10 |
+| ensemble mean (7) | +0.016 [−0.028, +0.060] | 5/10 |
+| NMR (0) | −0.072 [−0.146, −0.001] | 3/10 |
+
+Without terminals the shift matters little where the selected index cancels the offset
+(6, 7). It matters at index 0, which passes NMR's raw per-step mean (+7.7) through, and
+then lowers the score, as P2 predicted for a large offset.
+
+**Ties in the IQL score.**
+- **With the shift, keeping ties changes nothing:** all seven shifted ties cells are null
+  (section G: MR, PT and NMR on medium_diverse and large_play; plus the ensemble mean's
+  B3 on medium_diverse, +0.022 [−0.022, +0.067]).
+- **Without the shift (B4 − B2, medium_diverse):** MR +0.013 [−0.020, +0.047], PT −0.026
+  [−0.065, +0.014], ensemble mean **+0.046 [+0.026, +0.064]**, NMR **+0.133 [+0.034,
+  +0.234]**. Where the difference is not null, keeping ties *raises* the score.
+- **P3, the interaction** (B4 − B2) − (B3 − B1): MR +0.010, PT −0.047, ensemble mean +0.024
+  (all null), **NMR +0.169 [+0.080, +0.261]**. §14.40 predicted ties would *lower* the
+  unshifted score through a larger offset. P4's mechanism was refuted (§14.42: ties shrink
+  the raw mean more than the spread), and for NMR, at index 0, the smaller offset of the
+  ties-kept models is in line with the higher score. P3's direction is refuted as written.
+
+**Reading:** ties matter in the IQL score only through the offset they leave in an
+unshifted reward. Once the reward is shifted, the ties ablation is null on every cell. So
+the ties question cannot be read apart from the shift, and the earlier comparisons that
+removed ties before the shift existed are not evidence either way (§14.40 disclosure).
+
+#### 13.15.5 What the chapter can say from the controls
+
+Each statement is descriptive, about this benchmark, uncovered rewards only:
+1. **With terminals, antmaze scores register the reward's level relative to termination
+   and its normalization and shift, more than its preference content.** Evidence: the
+   terminal channel (13.15.1), the trivial-reward failure set against motion and time-only
+   success, and the shift's effect within one reward model (13.15.2).
+2. **Unlike in Shin et al.'s (2023) D4RL results, trivial rewards do not match learned
+   rewards with terminals here** (which tasks they covered is to be checked against the
+   paper before the write-up cites it), because a zero or positive constant level
+   does not make reaching the goal pay. So "trivial rewards do as well" is the wrong
+   diagnosis of this benchmark; "content-free rewards with the right level do as well" is
+   the measured one.
+3. **Without terminals, every reward still carries goal information** (every reward ahead
+   of both trivial rewards on every seed and variant), so the candidate protocol is not
+   degenerate, and the large mazes stay usable, at low absolute scores (0.10–0.23).
+4. **The normalization and the shift are part of the protocol, not tuning details.** The
+   selected index changes with the protocol in 24 of 24 grids, large offsets collapse runs
+   under both protocols, and the shift changes scores within a reward model by up to 0.35
+   with terminals.
+5. **The reported statistic is part of the protocol:** max against last-10 can reorder
+   cells (§14.9; to be finalized, §14.57 item 4).
+6. **Ties do not change the IQL score once the reward is shifted.**
+
+#### 13.15.6 Refuted or withdrawn along the way (not to be repeated)
+
+- Shift-invariance without terminals (§13.14.5): holds only for small shifts (§13.14.7).
+- Loitering near the goal as the cause of no-terminals failures (§13.14.13): refuted by
+  final positions (§13.14.16).
+- The reward map's top cell as where the policy ends (§13.14.13): refuted (§13.14.16).
+- P4's mechanism, ties enlarging the relative offset (§14.40): refuted (§14.42).
+- P3's direction, ties lowering the unshifted score (§14.40): refuted where P3 is not null
+  (NMR, §14.60).
+
+#### 13.15.7 What this closes, and what follows
+
+- **Closes §7.6 H** (the open row of §7.6 F): the write-up takes the controls' reading
+  from here. §7.6 H's rule stands: state the terminal channel beside every policy result
+  with terminals.
+- **Ends the pause on Experiments 1 and 2 (sparsity, label noise) for the uncovered
+  families**, which waited on this section (§13.14, front matter). They now run as §14.5's
+  ladders under both protocols; the BNN arms stay held (§14.1). Next: the no-terminals
+  ladder files (§14.57 item 3), the order confirmed by the author 2026-10-28.
+- **Caveats carried into the write-up:** descriptive throughout; one statistic (last-10)
+  as primary; grids at seed 0 only; the shift ablation, P2, P3 and the time-only reward on
+  medium_diverse or the anchor cells only; the reward-map and final-position evidence on
+  a few seeds and mostly medium_play.
 
 ---
 
