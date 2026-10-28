@@ -24729,3 +24729,47 @@ relax it):** `exp_readout` will see these cells as they finish.
 - **Standard-arm cells:** each cell's own mean ± sd and completeness only (§13.9).
 - Nothing comparative from a ladder until its family's ladder is complete and the
   registered readout runs.
+
+### 14.62 Condition-model training: NMR's sparsity models, then the noise models (author's order, 2026-10-28)
+
+**Decided (author):** train NMR's sparsity models first, then the noise models. Nothing new
+was built: `train_rewards.sh` already takes `COND` and the `nmr` family (§13.6, §14.17),
+and every job list, split file and output directory comes from
+`scripts_bnn/experiment_conditions.py`.
+
+**Checked here (2026-10-28):** the module's self-test passes. Its preflight against the
+local data passes for every block below, with these job counts:
+
+| block | family | `COND` | variants | jobs | one model (§14.13) |
+|---|---|---|---|---|---|
+| sparsity | NMR | r16 r32 r64 r128 | all four | 160 | ~15 min |
+| noise, primary | MR | n01 n02 n03 n04 n045 | all four | 200 | ~7 min |
+| noise, sensitivity | MR | n01o … n045o | medium_play | 50 | ~7 min |
+| noise, primary | PT | n01 … n045 | all four | 200 | ~24 min |
+| noise, sensitivity | PT | n01o … n045o | medium_play | 50 | ~24 min |
+| noise, primary | NMR | n01 … n045 | all four | 200 | ~15 min |
+| noise, sensitivity | NMR | n01o … n045o | medium_play | 50 | ~15 min |
+
+- **910 trainings in all.** The ensemble mean reads MR's condition models, so it needs
+  none. The BNN's are held (§14.1) and are not trained.
+- **Concurrency:** the launcher's default packs are 18 MR jobs or 12 PT/NMR jobs at a time
+  on GPUs 0–5. That gives about 3.5 h (NMR sparsity) + 1.7 h (MR noise) + 8.4 h (PT noise)
+  + 5.1 h (NMR noise) ≈ **19 h** at §14.13's per-model times. Those were measured beside
+  about 20 IQL agents; with lanes AM–AT's 40 running too, expect longer. Watch the IQL
+  median at each sweep check: if it falls 10% below the baseline, lower the pack.
+- **One chained job, in the author's order:** NMR sparsity, then noise MR (primary,
+  sensitivity), PT, NMR. The steps are joined by `&&`, so a failed preflight stops the
+  chain and launches nothing further. The sensitivity arm is called with
+  `VARIANTS=medium_play` (§11.3). The run is from `~/iqlpref/gp_reward-priors`, with the
+  training environment's `python` on PATH, logging to `~/iqlpref/train_conditions.log`
+  (gitignored).
+
+**After each block:**
+- **Verify** with `scripts_bnn/production_readout.py <family> --cond <cond>` (§13.7; it
+  knows NMR) on the analysis machine.
+- **Then generate and queue its IQL files:**
+  - NMR's sparsity ladder files exist already (§14.61), both protocols.
+  - The noise files come from `phase2_sweeps.py exp [--candidate] --conds "n01 n02 n03 n04
+    n045"`, and `"n01o … n045o"` for the sensitivity arm. Both skip held families.
+- No label caching is needed: that step is the BNN's (§13.7). MR, PT and NMR label inside
+  the IQL run.
