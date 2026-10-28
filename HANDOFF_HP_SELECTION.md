@@ -78,6 +78,10 @@
 > "families" in the writing. Also (2026-10-25): in the writing, "standard protocol"
 > means **PT's** protocol. §14.5's "standard" arm (our protocol with the terminals kept)
 > is called **"with terminals"**, and its "candidate" arm "without terminals".
+>
+> **Added 2026-10-27 — RESUME HERE: §14.57** has the current state: what is complete,
+> the eight lanes running on the box, what comes next, and how a sweep check is done.
+> §14.15–§14.56 are the dated sweep-check log behind it.
 
 ---
 
@@ -24101,3 +24105,107 @@ The mean-constant cells in AI and AJ can be moved to those slots at the next che
 and H2d), and each `pkill` pattern matched only its own. LV1's, AD's and AE's scripts are
 stopped, and their running sweeps keep going. Lanes AH, AI and AJ are launched. The box is
 at 8 lanes.
+
+### 14.57 Current state and how to resume (agent, 2026-10-27, end of session)
+
+**Read this section first.** It consolidates §14.5–§14.56 as of the end of §14.56. Every
+number below is DESCRIPTIVE. The BNN/CVaR hold (§14.1) still stands, and the front matter's
+terminology note still applies: the writing says "shift" for leveling and "with" / "without
+terminals" for the two arms. Code names are unchanged.
+
+#### What is complete (outside the hold)
+
+- **Evaluation registry** (`phase2_sweeps.py register --write`): 32/32 cells with terminals,
+  22/28 without. The six missing cells are all BNN or ensemble CVaR (held).
+- **Every family's no-terminals cell at its own grid winner** (MR, PT, NMR, ensemble mean,
+  task, motion) on all four variants (`control_readout` sections E and F,
+  `results/control_grid_winners.json`).
+- **Ties under the candidate protocol** (section G): MR, PT and NMR on medium_diverse and
+  large_play. All six cells are null.
+- **Trivial rewards:** large_play complete (all four cells). large_diverse: zero and
+  mean-constant with terminals and zero without. medium_play and medium_diverse: zero with
+  terminals.
+- **Leveling (shift) ablation, medium_diverse** (§14.40, `results/leveling_readout.py`,
+  latest in `results/leveling_readout_latest.txt`):
+
+| family | A1 A2 A3 A4 R B3 B4 | P1 = A2 − A1 | P2 = A4 − A3 | R − A1 | P3 |
+|---|---|---|---|---|---|
+| MR | all done | −0.293 | +0.021 | −0.111 | +0.010 |
+| PT | all done | −0.166 | −0.013 | −0.147 | −0.047 |
+| ensemble mean | B3 running | −0.122 | +0.016 | −0.209 | waits on B3 |
+| NMR | A4 running, B4 running | −0.352 | waits on A4 | −0.156 | waits on A4, B4 |
+
+  The unshifted ties difference B4 − B2 is +0.013 (MR), −0.026 (PT) and **+0.046 [+0.026,
+  +0.064]** (ensemble mean, the only non-null ties result so far).
+- **Charts:** `results/benchmark_results.ipynb` charts 1, 1b, 2–9 (§14.34, §14.54). Set
+  `REFRESH = True` to pull new cells into `results/.cache/benchmark_data.pkl`. The
+  notebook is committed without outputs.
+
+#### What is running on the box (8 lanes, 2026-10-27 ~23:00 PDT)
+
+| lane | GPUs | current cell (sweep) | after it |
+|---|---|---|---|
+| AD | 5 0 1 2 3 | mean-constant, with terminals, medium_diverse (`gbwm1skm`, 6/10) | nothing (script stopped) |
+| AE | 1 2 3 4 5 | mean-constant, with terminals, medium_play (`8ylk32xr`, 5/10) | nothing (script stopped) |
+| LV1 | 4 5 0 1 2 | NMR A4 (`ekufbalq`, 7/10) | nothing (script stopped) |
+| LV2 | 5 0 1 2 3 | ensemble mean B3 (`v3r1u2ow`, 5/10) | nothing (last item) |
+| H2d | 5 0 1 2 3 | mean-constant, without terminals, large_diverse (`c2gkswl0`, 0/10) | nothing (last item) |
+| AH | 0 1 2 3 4 | NMR B4 (`97e6xdjx`, just started) | nothing |
+| AI | 0 1 2 3 4 | zero, without terminals, medium_diverse (`vv9zfl1l`, just started) | mean-constant, without terminals, medium_diverse |
+| AJ | 0 1 2 3 4 | zero, without terminals, medium_play (`r175teff`, just started) | mean-constant, without terminals, medium_play |
+
+When AD, AE and LV1 free their slots, the plan (§14.56) is to stop AI's and AJ's queue
+scripts and give their mean-constant cells lanes of their own. That is the last queued
+work outside the hold. Once these cells are in, the uncovered controls are complete.
+
+#### What comes next, in order (§14.3, §14.4)
+
+1. **Finish the cells above**: NMR's P2 and P3, the ensemble mean's P3, and the four
+   medium-maze trivial cells without terminals plus the two with terminals still running.
+2. **Write §13.15**, the consolidated reading of the controls (§13.14–§14.56). Sparsity and
+   label noise were paused until it exists. §14.11's "time-only PT reward" control is to
+   be named there.
+3. **The no-terminals ladder files for §14.5's RQ1 test** (sparsity and noise, MR, PT,
+   NMR, ensemble mean; task, motion and trivial references). Their form is fixed by §14.46
+   (`exp_readout.collect_exp(..., protocol="candidate")`: the experiment file plus
+   `drop_terminals`, at each family's no-terminals index). §14.7 has the cost. Confirm
+   the order with the author before generating or queueing them.
+4. **Max versus last-10** (§14.2 item 4, §14.9) over everything, once runs exist.
+
+#### How a sweep check is done (the author says "check the sweeps")
+
+1. `git pull` both repos (`~/iqlpref`, then `~/iqlpref/gp_reward-priors`).
+2. From `~/iqlpref`, run these four in parallel, in the background. Each takes up to
+   about 10 minutes.
+   - `results/box_status.py`: running runs, speed, sweeps. It prints no results.
+   - `phase2_sweeps.py register --write`, run after `phase2_sweeps.py winners` when a
+     grid has completed.
+   - `results/control_readout.py`
+   - `results/leveling_readout.py`
+3. Diff each output against the previous check's, and read only what changed.
+4. Check for interrupted or unsynced runs.
+5. **Speed rule:** no new lanes if the median falls 10% or more below the 175–185k
+   steps/h baseline.
+6. When a no-terminals grid completes:
+   - add its winner to `results/control_grid_winners.json`;
+   - run `phase2_sweeps.py control --atwin --write`;
+   - queue the at-winner file.
+7. Copy the leveling readout, with the `wandb:` lines stripped, to
+   `results/leveling_readout_latest.txt`.
+8. Write the next §14.x here, giving for each cell the sweep id, mean ± sd, the paired
+   difference with its 95% exact bootstrap interval, and seeds ahead.
+9. Commit and push the inner repo, then the parent with the gp_reward-priors bump. Commit
+   to master only, with the Co-Authored-By trailer.
+10. Give box commands as one-line fenced bash blocks. The agent never logs into the box.
+11. End the reply with a done / next / queued list.
+
+**Queue mechanics:**
+- `stage4_queue.sh "<gpus>" 1 ctrl:<name>@control ...` runs its items one after another.
+  It has no skip logic.
+- To split a queue, first have the author run `pgrep -af 'stage4_queue[.]sh'` and check
+  that the pattern matches only one script. Then stop only that script with
+  `pkill -f 'stage4_queue[.]sh <gpus> 1 <first item>@'`. Its running `launch.sh` and
+  agents finish the current cell.
+- A waiter is `nohup bash -c 'while pgrep -f "<pattern>" >/dev/null; do sleep 300; done;
+  ./stage4_queue.sh ...' > stage4_queue_X.log 2>&1 &`.
+- Log names so far run up to `stage4_queue_AJ.log`, and lanes are named after their logs.
