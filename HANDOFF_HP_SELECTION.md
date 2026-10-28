@@ -81,7 +81,7 @@
 >
 > **Added 2026-10-27 — RESUME HERE: §14.57** has the current state: what is complete,
 > the eight lanes running on the box, what comes next, and how a sweep check is done.
-> §14.15–§14.56 are the dated sweep-check log behind it.
+> §14.15–§14.56 are the dated sweep-check log behind it; §14.58 onward are the checks since.
 
 ---
 
@@ -24209,3 +24209,65 @@ work outside the hold. Once these cells are in, the uncovered controls are compl
 - A waiter is `nohup bash -c 'while pgrep -f "<pattern>" >/dev/null; do sleep 300; done;
   ./stage4_queue.sh ...' > stage4_queue_X.log 2>&1 &`.
 - Log names so far run up to `stage4_queue_AJ.log`, and lanes are named after their logs.
+
+### 14.58 Sweep check 2026-10-28: NMR's P2; the mean-constant with terminals on medium_diverse; the mean-constant cells split out of AI and AJ
+
+**Box:** 24 IQL runs in 6 sweeps, median 176k steps/h, inside the 175–185k baseline. No
+stale heartbeats, and every finished cell has 10/10 seeds scored, so no run needs a sync.
+- **Finished:** AD (mean-constant, with terminals, medium_diverse, `gbwm1skm`) and LV1
+  (NMR's A4, `ekufbalq`). Their queue scripts were already stopped (§14.56), so two slots
+  are free.
+- **About to finish:** AE (mean-constant, with terminals, medium_play, `8ylk32xr`, 8/10,
+  seeds 9 and 10 at 979k) and LV2 (the ensemble mean's B3, `v3r1u2ow`, 8/10, seeds 9 and
+  10 at about 940k).
+- **At 0/10:** H2d (mean-constant, without terminals, large_diverse, `c2gkswl0`, seeds 1–5
+  at about 740k), and AH (NMR's B4, `97e6xdjx`), AI (zero, without terminals,
+  medium_diverse, `vv9zfl1l`) and AJ (zero, without terminals, medium_play, `r175teff`),
+  each with seeds 1–5 at about 240k.
+- **Registry:** unchanged, 32/32 and 22/28. The six missing cells are BNN or ensemble CVaR
+  (§14.1 hold).
+- **Grids:** none completed, so there are no new grid winners and no at-winner files.
+
+**Leveling, NMR's P2** (medium_diverse, DESCRIPTIVE; `results/leveling_readout_latest.txt`):
+- **A4** (without terminals, unshifted, index 0, `ekufbalq`): 0.301 ± 0.117, against A3's
+  0.374 ± 0.142.
+- **P2 = A4 − A3: −0.072 [−0.146, −0.001]**, ahead on 3/10. The exact bootstrap interval
+  just excludes zero, and the paired-t one does not (−0.161, +0.016).
+- P2 is now read for all four families: MR +0.021, PT −0.013, ensemble mean +0.016, NMR
+  −0.072. NMR is the only family whose no-terminals index (0) passes the offset through
+  unscaled (§14.40), which is where P2 predicts a lower score. Its spread does not widen
+  without the shift (sd 0.117 against 0.142).
+- Still waiting: NMR's B4 (AH), and so NMR's P3. The ensemble mean's B3 is at 8/10, and so
+  is its P3.
+
+**Mean-constant with terminals, medium_diverse** (`gbwm1skm`): **0.012 ± 0.009**, level
+with zero's 0.013 ± 0.027. Every reward with terminals is ahead on 10/10 (DESCRIPTIVE):
+
+| reward | − mean-constant, with terminals |
+|---|---|
+| ensemble mean | +0.671 [+0.646, +0.694] |
+| NMR | +0.639 [+0.604, +0.674] |
+| MR | +0.635 [+0.598, +0.669] |
+| PT | +0.600 [+0.526, +0.666] |
+| task | +0.595 [+0.561, +0.625] |
+
+Trivial cells now: large_play complete; large_diverse missing only the mean-constant
+without terminals (H2d); medium_diverse complete with terminals; medium_play's
+mean-constant with terminals at 8/10 (AE); the four medium cells without terminals are
+running (zero, AI and AJ) or not started (mean-constant).
+
+**Lanes.** As planned in §14.56, AD's and LV1's slots go to the two mean-constant cells
+queued behind AI and AJ. Each starts about 10 h sooner:
+- **AI's and AJ's queue scripts are stopped.** Their zero cells keep running, and each
+  lane then ends.
+- **Lane AK** (AD's GPUs, 5 0 1 2 3): mean-constant, without terminals, medium_diverse.
+- **Lane AL** (LV1's GPUs, 4 5 0 1 2): mean-constant, without terminals, medium_play.
+
+That puts the box at 8 lanes until AE and LV2 finish, within the hour, and then at 6.
+Nothing else outside the hold is queued. Once these cells and NMR's B4 are in, the
+uncovered controls and the leveling ablation are complete. Log names now run up to
+`stage4_queue_AL.log`.
+
+**Diff baseline for the next check:** the controls readout is now kept, with the `wandb:`
+lines stripped, in `results/control_readout_latest.txt` (parent repo), beside
+`results/leveling_readout_latest.txt`. Diff the next run of each against them.
