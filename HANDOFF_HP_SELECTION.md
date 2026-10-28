@@ -24052,7 +24052,7 @@ mean-constant without terminals on large_diverse (`c2gkswl0`, seeds 1–5 at abo
   medium_play (AE, `8ylk32xr`), the ensemble mean's B3 (LV2, `v3r1u2ow`), and NMR's A4
   (LV1, `ekufbalq`, 7/10).
 - **Registry:** NMR large_diverse without terminals is registered (`yv2bvb97`), so 32/32
-  and **22/28**. The six still missing are BNN cells (§14.1 hold).
+  and **22/28**. The six still missing are BNN or ensemble CVaR cells (§14.1 hold).
 
 **Leveling, PT** (medium_diverse, DESCRIPTIVE; `results/leveling_readout_latest.txt`):
 - **B4** (ties, unshifted, without terminals, index 6, `920rahg8`): 0.238 ± 0.077.
