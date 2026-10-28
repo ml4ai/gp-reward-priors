@@ -24278,3 +24278,57 @@ finished; B3 was LV2's last item, so its script had exited). Each `pkill` patter
 only its own script. AI's and AJ's scripts are stopped, and their zero cells keep running.
 Lanes AK and AL are launched. The box is at 6 lanes (H2d, AH, AI, AJ, AK, AL), and nothing
 else outside the hold is queued.
+
+### 14.59 Sweep check 2026-10-28: the ensemble mean's P3; the trivial rewards complete on the large mazes and with terminals everywhere
+
+**Box:** 22 IQL runs in 5 sweeps, median 180k steps/h, inside the baseline. No stale
+heartbeats; every finished cell has 10/10 seeds scored, so no run needs a sync.
+- **Finished:** H2d (mean-constant, without terminals, large_diverse, `c2gkswl0`), its
+  last item, so its lane has ended. The box is at 5 lanes.
+- **At 6/10** (seeds 7–10 at 900–970k): AH (NMR's B4, `97e6xdjx`), AI (zero, without
+  terminals, medium_diverse, `vv9zfl1l`), AJ (zero, without terminals, medium_play,
+  `r175teff`).
+- **At 5/10** (seeds 6–10 at 590–700k): AK (mean-constant, without terminals,
+  medium_diverse, `0anbbzh4`), AL (mean-constant, without terminals, medium_play,
+  `u5eljk82`).
+- **Registry:** unchanged, 32/32 and 22/28 (the six missing are held BNN or ensemble CVaR
+  cells). **Grids:** none completed, so no new winners or at-winner files.
+- **Lanes:** nothing outside the hold is queued, so H2d's slot stays empty.
+
+**Leveling, the ensemble mean's B3 and P3** (medium_diverse, index 7, DESCRIPTIVE;
+`results/leveling_readout_latest.txt`):
+- **B3** (ties kept, shifted, without terminals, `v3r1u2ow`): 0.308 ± 0.066, against B1's
+  0.287 ± 0.068.
+- **B3 − B1: +0.022 [−0.022, +0.067]**, 6/10. Null, like the six earlier shifted ties
+  cells.
+- **P3** = (B4 − B2) − (B3 − B1): **+0.024 [−0.033, +0.077]**. Null.
+- P3 is now read for three families, all null: MR +0.010, PT −0.047, ensemble mean +0.024.
+  The ensemble mean's unshifted ties difference (B4 − B2, +0.046 [+0.026, +0.064]) is still
+  the only ties difference whose interval excludes zero, and its sign is the opposite of
+  P3's prediction (keeping ties raises the unshifted score). Its index is 7, where §14.40
+  expected P3 to be weak. NMR's P3 waits on B4 (AH, 6/10).
+
+**Trivial rewards** (DESCRIPTIVE):
+- **Mean-constant with terminals, medium_play** (`8ylk32xr`): **0.002 ± 0.003**, level with
+  zero's 0.002 ± 0.002. Every reward is ahead on 10/10, by about as much as over zero:
+
+| reward | − mean-constant, with terminals, medium_play |
+|---|---|
+| NMR | +0.739 [+0.717, +0.763] |
+| ensemble mean | +0.709 [+0.691, +0.724] |
+| PT | +0.671 [+0.617, +0.718] |
+| MR | +0.640 [+0.615, +0.662] |
+| task | +0.517 [+0.465, +0.565] |
+
+- **Mean-constant without terminals, large_diverse** (`c2gkswl0`): **0.000 ± 0.000**, as
+  zero's. Each reward at its own no-terminals winner is ahead on 10/10, by the same amounts
+  as over zero (§14.56): NMR +0.139, PT +0.136, ensemble mean +0.123, MR +0.114, task
+  +0.100.
+- **Status:** the trivial rewards are now complete on both large mazes (all eight cells)
+  and with terminals on all four mazes. Only the four medium-maze cells without terminals
+  remain (AI, AJ, AK, AL).
+
+**What is left outside the hold:** NMR's B4 (and so its P3) and the four medium-maze
+trivial cells without terminals. All five are running; AH, AI and AJ should finish within
+the hour, AK and AL in about 2 h. After that the uncovered controls and the shift ablation
+are complete, and §14.57's next item is §13.15 (order to be confirmed with the author).
