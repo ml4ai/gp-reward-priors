@@ -24950,3 +24950,17 @@ NMR waiter (AU–BB), on the same GPUs.
   about 4, PT about 5.5, NMR about 7.5. Noise: about 2–3 days per family after that.
 - Before launching: `git pull --recurse-submodules` on the box (the noise files are in
   `4ad4609` and `154d35b`). Each queue checks its files when it starts.
+
+**Steps done (author, 2026-10-29): waiters BC–BJ are launched.** The box now holds lanes
+AM–AT (running), NMR waiters AU–BB and noise waiters BC–BJ. That is every IQL cell of
+RQ1's two ladders (sparsity and noise, both arms, both protocols) for the uncovered
+families; nothing else is queued outside the hold. `pgrep -fc 'while pgrep -f'` should
+read 16 until the first NMR waiter starts its queue. Log names run up to
+`stage4_queue_BJ.log`.
+
+**Reading as the ladders complete (§14.5, unchanged):**
+- When a family's whole sparsity ladder is complete under both protocols, run the
+  registered readout for that family and ladder. That is the manipulation check, then
+  (a), (b) and (c) on the variants that pass the usability check.
+- Until then: with-terminals cells as their own mean ± sd, candidate cells by completeness
+  only.
