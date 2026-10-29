@@ -24787,3 +24787,55 @@ launched.**
 - **The training chain is not checked from here yet.** The first verification is
   `production_readout.py nmr --cond r16` once NMR's r16 models finish.
 - Candidate-arm cells are reported by completeness only (§14.61).
+
+### 14.63 Sweep check 2026-10-28 (evening): NMR's sparsity models verified; the speed rule is tripped; NMR's ladder queued as waiters
+
+**Box:** 40 IQL runs in 8 sweeps (lanes AM–AT), all on their first item, seeds 1–5 at
+734–852k. **Median 141k steps/h, about 20% below the 175–185k baseline.**
+- The training chain (§14.62) is the likely cause: it has up to 12–18 training jobs on the
+  same GPUs.
+- No stale heartbeats, and no cell is complete yet, so there is nothing to sync or read.
+- **Registry:** unchanged, 32/32 and 22/28. **The controls and leveling readouts are
+  unchanged** (diffed against the `_latest.txt` files).
+
+**NMR's sparsity models (`production_readout.py nmr --cond r16 … r128`): VERIFIED, all
+four conditions.** Each has 40/40 runs complete (10 seeds × 4 variants), with config OK
+against the winner and health OK. A condition has no seed-0 reproduction (§11.1).
+- `eval_loss_at_selected`, descriptive, reward-model metric only: the means fall with more
+  data on medium_diverse (0.55 → 0.28) and large_diverse (0.57 → 0.32).
+- One medium_play r64 seed is an outlier at 4.39, which pulls that cell's mean to 0.74
+  (sd 1.29). That is a property of one model, not a verification failure.
+- So the training chain has moved on to the noise models (MR first).
+
+**The speed rule:**
+- **No new lanes while the median is 10% or more below baseline.** Lanes AM–AT keep
+  running.
+- **The training chain is left as it is.** It is finite: MR's noise block is short; PT's
+  and NMR's remain, about 13.5 h at §14.13's times and longer under load. Changing its
+  pack would mean stopping jobs mid-block, and `train_rewards.sh` refuses the partly
+  written model directories that leaves.
+- Expect the lanes to recover once the chain ends.
+
+**NMR's sparsity ladder (32 cells) is queued as eight waiters, not as new lanes.** Each
+waits for the lane with the same variant and protocol, then runs NMR r16 → r128 on that
+lane's GPUs:
+
+| waiter | behind | variant | protocol |
+|---|---|---|---|
+| AU | AM | medium_play | candidate |
+| AV | AN | medium_play | standard |
+| AW | AO | medium_diverse | candidate |
+| AX | AP | medium_diverse | standard |
+| AY | AQ | large_play | candidate |
+| AZ | AR | large_play | standard |
+| BA | AS | large_diverse | candidate |
+| BB | AT | large_diverse | standard |
+
+- Each waiter matches its lane's own queue command line (`stage4_queue[.]sh <gpus> 1
+  <first item>@`, the §14.8 rule), which is distinct for all eight lanes. A waiter's own
+  command line does not match its pattern (`[.]`, and `"<gpus>"` in quotes), and nor do the
+  NMR queues it starts (`nmr:` against `mr:`).
+- With the lanes at 11–12 cells, the NMR cells start after PT's. That puts NMR's ladder
+  about 2 days behind PT's, at the current speed.
+- Before launching the waiters, the author checks that each pattern matches exactly one
+  running script (command in the chat of 2026-10-28).
