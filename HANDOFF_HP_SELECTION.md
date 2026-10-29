@@ -24887,3 +24887,16 @@ written. Not queued.
   medium_play). Should its IQL cells run under the standard protocol only (§11.3's
   original design) or under both? §14.18 left this open ("whichever protocols the arm is
   read with"). No sensitivity-arm IQL file is written yet.
+
+**DECIDED (author, 2026-10-29): the sensitivity arm runs under both protocols, like the
+primary arm.**
+- **Written:** `exp --conds "n01o n02o n03o n04o n045o"` with and without `--candidate`,
+  15 + 15 files (MR, PT, NMR on medium_play × 5 levels).
+- **Indices:** standard at the stage-4 winners (MR 0, PT 3, NMR 2); candidate at the
+  no-terminals winners (1 for all three).
+- **Queued with the noise cells** once PT's and NMR's noise models pass, on the
+  medium_play waiters: 15 more cells on each of the two medium_play lanes.
+- **Reading:** `exp_readout` reads the primary arm only. The sensitivity arm is
+  descriptive (§11.3; the module's docstring), so its cells are reported as each cell's
+  own mean ± sd, candidate cells as completeness only until the arm is complete, and it
+  has no registered test.
