@@ -24839,3 +24839,10 @@ lane's GPUs:
   about 2 days behind PT's, at the current speed.
 - Before launching the waiters, the author checks that each pattern matches exactly one
   running script (command in the chat of 2026-10-28).
+
+**Steps done (author, 2026-10-28):** the pattern check was run and the eight waiters
+AU–BB were started. The box now holds 8 lane scripts (AM–AT) and 8 waiters. Log names run
+up to `stage4_queue_BB.log`. A waiter shows in `pgrep -af 'stage4_queue[.]sh'` too,
+because its own command line names `./stage4_queue.sh`, so that check now lists 16
+processes. Any future `pkill` pattern must still include `<gpus> 1 <first item>@`, which a
+waiter's quoted `"<gpus>"` does not match.
