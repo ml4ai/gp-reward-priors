@@ -24900,3 +24900,53 @@ primary arm.**
   descriptive (§11.3; the module's docstring), so its cells are reported as each cell's
   own mean ± sd, candidate cells as completeness only until the arm is complete, and it
   has no registered test.
+
+### 14.65 Sweep check 2026-10-29 11:15 MST: every condition model verified, the training chain done; the first ladder cells; the noise ladder queued as waiters
+
+**Box:** 40 IQL runs in 8 sweeps; every lane is on its second cell. **Median 143k steps/h**,
+up from 125k but still about 18% below baseline: these runs started under the training
+load.
+- No stale heartbeats; the registry and both readouts are unchanged.
+- The speed rule still applies (no new lanes); the waiters below add none.
+
+**Condition models: all VERIFIED** (`production_readout.py`, complete 10/10 per variant,
+config and health OK).
+- PT n04, n045 and n01o–n045o: 110 models.
+- NMR n01–n045 and n01o–n045o: 250 models.
+- With §14.63–§14.64 that is **every model the ladders need**: NMR sparsity 160; noise MR
+  250, PT 250, NMR 250. **The training chain has finished.**
+
+**Ladder cells, sparsity:**
+- **Standard (with terminals), each cell's own mean ± sd only** (§13.9; DESCRIPTIVE, no
+  comparison across levels or families):
+
+| variant | MR r16 (index) | MR r32 |
+|---|---|---|
+| medium_play | 0.606 ± 0.090 (`edf1tdr4`, 0) | 0.663 ± 0.051 (`y5m7chk7`, 0) |
+| medium_diverse | 0.648 ± 0.064 (`69e53xjk`, 2) | 0.655 ± 0.103 (`oijrw9ng`, 2) |
+| large_play | 0.500 ± 0.060 (`ldr9p7ug`, 3) | 0.469 ± 0.076 (`clm1wlk4`, 3) |
+| large_diverse | 0.317 ± 0.128 (`oipn486o`, 3) | 0.304 ± 0.093 (`2k88jyvf`, 3) |
+
+  MR r64 with terminals is running in AN, AP, AR, AT (`25t1gyjc`, `ehdeebhd`, `sbzauu8z`,
+  `761x7ug0`).
+- **Candidate (without terminals), completeness only** (§14.61): MR r16 is complete, 10/10
+  on all four variants (`w5ejjtb8`, `0jzj90sn`, `n3571ylh`, `q05ajp2s`). MR r32 is running
+  (`7ktifg33`, `kf8dzfel`, `lq99pgo8`, `prdtz3oh`). No score is read before MR's whole
+  candidate ladder is in.
+
+**The noise ladder is queued as eight more waiters, BC–BJ** (190 cells), one behind each
+NMR waiter (AU–BB), on the same GPUs.
+- **Primary arm:** each lane runs its own (variant, protocol)'s 20 cells: MR → ensemble mean
+  → PT → NMR, n01 → n045.
+- **Sensitivity arm:** the 30 cells (medium_play files, 15 per protocol) are spread over the
+  four lanes of their protocol, 3–4 each, after the primary cells. That keeps every lane
+  at 23–24 noise cells; on the medium_play lanes alone they would have added 15 cells.
+- **The pattern, a waiter behind a waiter (§14.64):** `nmr[:]r16/[noterm_]sweep_antmaze_<v>@r16`.
+  It matches the NMR waiter while it waits, its queue once started, and nothing else: not
+  the new waiter itself (`[:]`), not the noise queues (`n01`…), and not the other protocol
+  (`/sweep` against `/noterm_sweep`).
+- **Load per lane, all queued work:** 39–40 cells. That is about 19 days at the baseline
+  speed, longer while below it. Sparsity: MR completes in about 2 days, the ensemble mean
+  about 4, PT about 5.5, NMR about 7.5. Noise: about 2–3 days per family after that.
+- Before launching: `git pull --recurse-submodules` on the box (the noise files are in
+  `4ad4609` and `154d35b`). Each queue checks its files when it starts.
