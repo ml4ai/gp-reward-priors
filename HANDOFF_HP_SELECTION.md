@@ -24846,3 +24846,44 @@ up to `stage4_queue_BB.log`. A waiter shows in `pgrep -af 'stage4_queue[.]sh'` t
 because its own command line names `./stage4_queue.sh`, so that check now lists 16
 processes. Any future `pkill` pattern must still include `<gpus> 1 <first item>@`, which a
 waiter's quoted `"<gpus>"` does not match.
+
+### 14.64 Sweep check 2026-10-29 00:40 MST: MR's noise models verified, PT's half done; the noise ladder files written; the box at 125k
+
+**Box:** 40 IQL runs in 8 sweeps, all lanes on their first cell, seeds 1–5 finished and
+6–10 at 214–415k. **Median 125k steps/h, about 30% below baseline**, down from 141k: PT
+training is heavier than NMR's or MR's (§14.13).
+- No stale heartbeats; the registry and both readouts are unchanged.
+- No new lanes (speed rule); the training chain is left as it is (§14.63).
+
+**Ladder cells** (sweep states only): MR r16 without terminals and MR r32 with terminals,
+5/10 finished in each of the 8 lanes. MR r16 with terminals is the 4 FINISHED cells from
+before (§14.61). No ladder cell has finished in these lanes, so there is nothing to report.
+
+**Condition models (`production_readout.py <family> --cond <c>`):**
+
+| family | primary n01–n045 | sensitivity n01o–n045o (medium_play) |
+|---|---|---|
+| MR | **VERIFIED**, 5 × 40 | **VERIFIED**, 5 × 10 |
+| PT | n01–n03 **VERIFIED**; n04 22/40 (12 running); n045 not started | not started |
+| NMR | not started | not started |
+
+- So the chain is in PT's n04. Left: about 108 PT jobs, then 250 NMR, at 12 at a time.
+  At this load that is roughly half a day or more, and the IQL slowdown lasts until then.
+
+**Noise ladder files written, primary arm only** (`exp --conds "n01 n02 n03 n04 n045"`,
+with and without `--candidate`): 80 standard and 80 candidate files for MR, PT, NMR and
+the ensemble mean. The ensemble mean reads MR's noise models. Held families are not
+written. Not queued.
+- **Queue plan:** once PT's and NMR's noise models pass, queue all 160 noise cells
+  together. They go as waiters behind the NMR waiters, one per (variant, protocol), MR →
+  ensemble mean → PT → NMR.
+- **A waiter behind a waiter needs a different pattern.** Before AU–BB start their queues,
+  their own command lines quote `"<gpus>"`, so the `<gpus> 1 <first item>@` form misses
+  them. The pattern should instead name the NMR waiter's first item with a bracket, e.g.
+  `nmr[:]r16/noterm_sweep_antmaze_medium_play@r16`. That matches the NMR waiter both while
+  it waits and after it starts its queue, and never matches the new waiter's own command
+  line.
+- **Open, the author's call:** the sensitivity arm (n01o–n045o, MR, PT and NMR on
+  medium_play). Should its IQL cells run under the standard protocol only (§11.3's
+  original design) or under both? §14.18 left this open ("whichever protocols the arm is
+  read with"). No sensitivity-arm IQL file is written yet.
