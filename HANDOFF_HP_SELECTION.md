@@ -24964,3 +24964,19 @@ read 16 until the first NMR waiter starts its queue. Log names run up to
   (a), (b) and (c) on the variants that pass the usability check.
 - Until then: with-terminals cells as their own mean ± sd, candidate cells by completeness
   only.
+
+### 14.66 Sweep check 2026-10-29 15:35 MST: the speed is back; no new cell
+
+**Box:** 40 IQL runs in 8 sweeps, **median 174k steps/h**, back at the baseline now that the
+training chain has finished (§14.65). The speed rule is satisfied again; no lane change is
+needed, since all queued work is already in lanes or waiters.
+- All lanes are on the second half of their second cell: seeds 1–5 finished, 6–10 at
+  320–727k. MR r64 with terminals (AN, AP, AR, AT) and MR r32 without terminals (AM, AO,
+  AQ, AS) are at 5/10 on all four variants.
+- No stale heartbeats. The registry and both readouts are unchanged, and no ladder cell
+  finished since §14.65. The with-terminals MR r16 and r32 cells there stand as reported.
+
+**Expected next:** the second cells finish in about 3–4 h, then MR r128 with terminals and MR
+r64 without terminals start. MR's sparsity ladder should be complete in both protocols in
+about 1.5 days (r128 without terminals is the last), and then the registered readout runs
+for MR.
