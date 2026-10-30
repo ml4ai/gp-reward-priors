@@ -25007,3 +25007,64 @@ are complete, 10/10 on all four variants (r32: `7ktifg33`, `kf8dzfel`, `lq99pgo8
 4–6 h; without terminals, r64 finishes in 4–6 h and r128 about 11 h after that. **So the
 registered readout for MR (§14.5) should be runnable in about 18 h** (around 2026-10-30
 19:00 MST).
+
+### 14.68 Sweep check 2026-10-30 12:10 MST: MR's standard ladder complete; §14.5's readout does not exist yet
+
+**Box:** 40 IQL runs in 8 sweeps, **median 176k steps/h**.
+- The standard lanes (AN, AP, AR, AT) moved on to the ensemble mean's r16 (`mgt2ndvb`,
+  `h353fa21`, `g66e3f7m`, `sd2a5aff`; it reads MR's r16 models).
+- The candidate lanes (AM, AO, AQ, AS) are on MR r128 (`unuump42`, `l1jej02t`, `ackh0rug`,
+  `m8ex62xo`), the last cell of MR's candidate ladder: medium mazes at 3–5/10, large mazes'
+  seeds 1–5 at about 800k.
+- No stale heartbeats. The registry and both readouts are unchanged.
+
+**MR's sparsity ladder, standard (with terminals): complete.** Each cell's own mean ± sd only
+(§13.9; DESCRIPTIVE):
+
+| variant | r16 | r32 | r64 | **r128** (new) |
+|---|---|---|---|---|
+| medium_play | 0.606 ± 0.090 | 0.663 ± 0.051 | 0.643 ± 0.044 | **0.648 ± 0.057** (`k9ca327l`) |
+| medium_diverse | 0.648 ± 0.064 | 0.655 ± 0.103 | 0.645 ± 0.041 | **0.683 ± 0.036** (`kt6bc7zh`) |
+| large_play | 0.500 ± 0.060 | 0.469 ± 0.076 | 0.479 ± 0.061 | **0.441 ± 0.056** (`1iacgkuk`) |
+| large_diverse | 0.317 ± 0.128 | 0.304 ± 0.093 | 0.312 ± 0.079 | **0.312 ± 0.088** (`386hz2xl`) |
+
+**MR's sparsity ladder, candidate (without terminals): completeness only.** r16, r32 and
+**r64** are complete, 10/10 on all four variants (r64: `qiftbceg`, `g8sr6nd1`, `qqg9icef`,
+`m7b1doev`). r128 is running and should finish around 17:30 (medium mazes) to 19:00 (large).
+
+**CORRECTION to §14.65–§14.67: §14.5's registered readout has not been built.**
+- `exp_readout.py` implements §13.9/§13.11, which is RQ2's BNN-centred reading. It refuses
+  to run under the hold, and it has no usability check, no manipulation check and no
+  tests (a)–(c).
+- Nothing else implements RQ1. "Run the registered readout for MR" in §14.65–§14.67
+  assumed a tool that does not exist.
+- **It must be built, self-tested and committed before any candidate-arm score is read**,
+  as §12 and §13.9 were (§13.14.1: "written before any result"). No candidate score has
+  been read so far: every candidate cell has been reported by completeness only.
+
+**What the build needs (proposal, for the author):**
+1. **Cells.** Standard: `exp_readout.collect_exp(..., protocol="standard")` at the stage-4
+   winners. Candidate: the same with `protocol="candidate"` at the no-terminals winners.
+   Full data: the anchor cell (standard) and the at-winner no-terminals cell (candidate).
+   Trivial and task-reward cells come from `control_readout`.
+2. **Usability check** per variant: task − zero under the candidate protocol at full data,
+   one-sided exact Wilcoxon at 0.025 over ten seeds.
+3. **Manipulation check:** the degradation slope of A, held-out preference accuracy on each
+   seed's clean, tie-free validation split, per (variant, seed).
+   - **MR, PT and NMR:** from the reward-model runs' logged validation accuracy. That is an
+     unweighted batch mean, so per-pair counts are recovered as §13.13's floor tool does.
+   - **The ensemble mean:** "the accuracy of its mean reward" is **logged nowhere**. It
+     needs a box-side measurement: mean reward over each MR run's snapshots past burn-in,
+     on that seed's validation pairs. That is anchor + r16–r128, × 4 variants × 10 seeds =
+     200 model sets for sparsity, plus the noise levels later.
+4. **Tests (a), (b), (c)** per family and ladder on the usable variants:
+   - the OLS degradation slope against log2(pairs), the anchor included, signed as §14.5
+     defines;
+   - the one-sided exact Wilcoxon over the pooled (variant, seed) units, reusing
+     `exp_readout.signed_rank_exact`;
+   - the exact stratified bootstrap, reusing `exp_readout.stratified_exact`.
+   The verdict is SENSITIVE iff all three reject; partial results are reported as partial.
+5. **The completeness gate** (§12.5): a family and ladder are read only when every cell is
+   complete and audit-clean. The secondary non-inferiority check and the motion reward are
+   reported beside, with no test.
+6. A self-test on synthetic data. The first live run is the reading.
