@@ -25068,3 +25068,78 @@ registered readout for MR (§14.5) should be runnable in about 18 h** (around 20
    complete and audit-clean. The secondary non-inferiority check and the motion reward are
    reported beside, with no test.
 6. A self-test on synthetic data. The first live run is the reading.
+
+### 14.69 §14.5's readout built: `results/rq1_readout.py`, and A's measurement `results/rq1_accuracy.py` (agent, 2026-10-30; author's go-ahead; no candidate-arm ladder score read)
+
+**Built before any candidate-arm ladder score was read** (every candidate cell so far was
+reported by completeness only). It implements §14.5 as fixed on 2026-10-20 and changes
+nothing in it. Both self-tests pass.
+
+**`results/rq1_readout.py [--axis sparsity|noise]`:**
+- **Cells:**
+  - standard: `exp_readout.collect_exp(..., "standard")` at the stage-4 winners, with the
+    anchor cell as the full-data point;
+  - candidate: `collect_exp(..., "candidate")` at the no-terminals winners (the §14.61
+    files), with the at-winner no-terminals cell as the full-data point (MR and the task
+    reward via `control_readout.at_winner`);
+  - trivial and motion cells from `control_readout`.
+- **The degradation slope:** the OLS slope over all of the ladder's points, the anchor
+  included, against log2(pairs) or the flip fraction. Signed so that positive means "falls
+  as the data degrades": sparsity +1, noise −1.
+- **Tests:** `exp_readout.signed_rank_exact` (one-sided, 0.025) over the pooled (variant,
+  seed) units, `exp_readout.stratified_exact` pooled, and `eval_readout.exact_bootstrap` per
+  variant. Both are already tested against scipy and brute force.
+- **The order of reading:**
+  1. the usability check, per variant (candidate, full data, task − zero);
+  2. the manipulation check, per family, on all four variants;
+  3. (a), (b) and (c) on the usable variants.
+  Verdicts: SENSITIVE iff all three reject; NOT SENSITIVE naming the parts that did not; FLAGGED
+  when the manipulation check does not reject (shown, but not a sensitivity test). "No
+  usable variant" reads as RQ1 refuted. RQ1 on the ladder holds in full only when all
+  four families are SENSITIVE; otherwise it is reported as partial.
+- **The gate:** a family and ladder are NOT READ, with every reason listed, while any
+  standard cell, candidate cell or A value is missing, incomplete or audit-failed. Nothing
+  of an unread family's candidate arm is computed or printed.
+- **Beside, no test:**
+  - the secondary non-inferiority check with terminals at full data, in §12's three-way
+    form (NOT BEHIND / TOO FAR BEHIND / INCONCLUSIVE, margin 0.10), per variant and pooled;
+  - family − motion at full data under both protocols.
+- **Self-test, synthetic:** both ladders' sign conventions; SENSITIVE; NOT SENSITIVE on (b)
+  and on (c); FLAGGED; an excluded variant (out of (a)–(c), kept in the manipulation
+  check); no usable variant; the gate on one incomplete cell and on one missing A; the
+  secondary check's three verdicts; the A cross-check.
+
+**A, the manipulation check's accuracy (`results/rq1_accuracy.py measure`, on the box):**
+- Per-pair accuracy on each seed's clean validation split, for every reward model of the
+  ladders: MR, PT, NMR (best models) and the ensemble mean (MR's snapshots from epoch 100,
+  the ensemble sweeps' `mr_burn_in`). Anchor + r16–r128 + n01–n045, 4 variants, seeds
+  1–10: 1,600 records.
+- **Best models** are rebuilt with `iql_eval`'s loaders and scored with their own
+  trainer's `evaluation` (MRTrainer; PTTrainer for PT and NMR, as in training) on ONE
+  batch of all pairs, so `eval_acc` is per pair.
+  - The batch-of-64 mean is recorded beside it. **The readout requires it to equal the
+    training run's logged `eval_acc_reloaded` (to 1e-6)**, or that A is not read. This
+    checks loader, data and scoring at once.
+- **The ensemble mean:** the mean over snapshots of each snapshot's mean-pooled segment
+  logit. Pooling is linear, and the per-draw centring cancels within a pair. For every MR
+  best model the script asserts that this pooling path gives the trainer's own count.
+- **Why not recover A from the logs:** the logged value is a batch mean (64 + r pairs).
+  The per-pair count is unique for 77, 107 and 54 pairs, but not always for large_diverse's
+  110 = 64 + 46. Probed 2026-10-30: 2 MR, 5 PT and 4 NMR of 400 units each are ambiguous,
+  all large_diverse r16 or n045. The ensemble mean is logged nowhere.
+- Output: `exp/rq1_accuracy.json` (`exp/` is gitignored; copy it over by hand), resumable.
+
+**Live run, 2026-10-30, before A exists and with MR's candidate r128 still running:**
+- **Usability check (registered): all four variants USABLE.** Task − zero (candidate, full
+  data): medium_play +0.672 [+0.651, +0.694], medium_diverse +0.289 [+0.238, +0.334],
+  large_play +0.207 [+0.179, +0.238], large_diverse +0.100 [+0.075, +0.127]; each 10/10,
+  exact one-sided p = 1/1024. §14.5's expectation that the large mazes might fail is not
+  borne out.
+- **Families:** all four NOT READ. MR waits on A and on its candidate r128 cells; PT, NMR
+  and the ensemble mean also wait on their ladder cells.
+- **Beside:** with terminals, every trivial reward is TOO FAR BEHIND every family, per
+  variant and pooled (pooled zero − family between −0.45 and −0.52). That matches §13.15.2.
+
+**From now on, a sweep check also runs `results/rq1_readout.py`** (later with `--axis
+noise` too). A family's first READ output is its registered reading; keep it in
+`results/rq1_readout_latest.txt`.
