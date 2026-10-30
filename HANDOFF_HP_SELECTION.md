@@ -24980,3 +24980,30 @@ needed, since all queued work is already in lanes or waiters.
 r64 without terminals start. MR's sparsity ladder should be complete in both protocols in
 about 1.5 days (r128 without terminals is the last), and then the registered readout runs
 for MR.
+
+### 14.67 Sweep check 2026-10-30 00:45 MST: MR r64 with terminals and MR r32 without terminals complete
+
+**Box:** 40 IQL runs in 8 sweeps, **median 176k steps/h**, inside the baseline. Every lane is
+on its third cell. MR r128 with terminals (`k9ca327l`, `kt6bc7zh`, `1iacgkuk`, `386hz2xl`)
+and MR r64 without terminals (`qiftbceg`, `g8sr6nd1`, `qqg9icef`, `m7b1doev`) are at 5/10
+on the medium mazes; on the large mazes seeds 1–5 are at 850–950k.
+- No stale heartbeats. The registry and both readouts are unchanged.
+
+**Sparsity ladder, MR, standard (with terminals): each cell's own mean ± sd** (§13.9;
+DESCRIPTIVE, no comparison across levels):
+
+| variant | r16 | r32 | **r64** (new) |
+|---|---|---|---|
+| medium_play | 0.606 ± 0.090 | 0.663 ± 0.051 | **0.643 ± 0.044** (`25t1gyjc`) |
+| medium_diverse | 0.648 ± 0.064 | 0.655 ± 0.103 | **0.645 ± 0.041** (`ehdeebhd`) |
+| large_play | 0.500 ± 0.060 | 0.469 ± 0.076 | **0.479 ± 0.061** (`sbzauu8z`) |
+| large_diverse | 0.317 ± 0.128 | 0.304 ± 0.093 | **0.312 ± 0.079** (`761x7ug0`) |
+
+**Sparsity ladder, MR, candidate (without terminals): completeness only.** r16 and **r32**
+are complete, 10/10 on all four variants (r32: `7ktifg33`, `kf8dzfel`, `lq99pgo8`,
+`prdtz3oh`). r64 is running.
+
+**MR's ladder** needs r128 under both protocols. With terminals it should finish in about
+4–6 h; without terminals, r64 finishes in 4–6 h and r128 about 11 h after that. **So the
+registered readout for MR (§14.5) should be runnable in about 18 h** (around 2026-10-30
+19:00 MST).
