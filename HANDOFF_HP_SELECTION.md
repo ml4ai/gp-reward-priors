@@ -25154,3 +25154,60 @@ noise` too). A family's first READ output is its registered reading; keep it in
   rewritten atomically, so a copy taken mid-run is whole; `--fams` filter; a restart
   resumes from the file. MR, PT and NMR come first in the order, so their A values were
   already in the file when the run was stopped.
+
+### 14.70 RQ1, sparsity ladder: MR's REGISTERED reading — NOT SENSITIVE, (a) did not reject (2026-10-31)
+
+**Steps done (author, 2026-10-30):**
+- The first `rq1_accuracy.py` run was stopped. Its file was copied to `exp/rq1_accuracy.json`
+  on the Mac: MR, PT and NMR 400/400 each, ensemble mean 53.
+- The ensemble mean was restarted on the box, single-threaded (`--fams ens_mean`, log
+  `exp/rq1_accuracy.log`).
+
+**`results/rq1_readout.py` (sparsity), first run with MR complete in both protocols.**
+This is MR's registered reading under §14.5. The output is in
+`results/rq1_readout_latest.txt`.
+
+| step | pooled effect [exact stratified 95%] | one-sided exact Wilcoxon | result |
+|---|---|---|---|
+| usability (per variant, task − zero, candidate, full data) | +0.672 / +0.289 / +0.207 / +0.100 | p = 1/1024 each | **all four USABLE** |
+| manipulation check: slope of A (40 units) | +0.0311 [+0.0264, +0.0359] | p = 9.1e-13 | **REJECTS** (accuracy falls with fewer pairs, on every variant) |
+| (a) candidate slope of S (40 units) | +0.0212 [+0.0135, +0.0286] | **p = 0.0311** | **does NOT reject** |
+| (b) candidate − standard slope | +0.0275 [+0.0190, +0.0361] | p = 7.0e-5 | REJECTS |
+| (c) family − zero / − mean-constant, full data | +0.323 / +0.326 | p = 9.1e-13 each | REJECTS |
+
+**VERDICT for MR on the sparsity ladder: NOT SENSITIVE — (a) the candidate protocol does
+not respond.**
+- **Per variant, descriptive** (the candidate slope of S, per doubling of pairs, positive =
+  falls as pairs fall): medium_play **+0.086** [+0.057, +0.114]; medium_diverse −0.003
+  [−0.009, +0.003]; large_play +0.003 [−0.003, +0.009]; large_diverse −0.001 [−0.005,
+  +0.002]. The response is on medium_play alone. Without terminals the other three show
+  no slope.
+- **Why the interval and the test disagree:** the pooled stratified interval of (a) lies
+  above zero, but the registered test is the rank test, and with three of four variants
+  centred on zero its p is 0.031. The verdict follows the test (§14.5), not the interval.
+  Both are reported.
+- **(b) rejects:** the candidate slope exceeds the standard slope per unit, mainly on
+  medium_play (+0.082) and large_play (+0.021).
+- **Read as fixed.** By §14.5's do-NOTs nothing above is re-selected, re-scoped or changed
+  after this reading.
+
+**§14.5's "refuted" clause, for the author.** §14.5 says RQ1 "is refuted on a ladder if (a)
+or (b) fails on the usable variants". It does not say whether a failure for ONE family
+refutes the ladder, or only a failure for every family. Read per family, MR's (a) already
+refutes RQ1's second part on the sparsity ladder. Read for every family, it waits on PT,
+NMR and the ensemble mean. The readout prints "1 of 4 families read" and makes no
+ladder-level claim. **The author decides the reading.** In either case "holds in full"
+(SENSITIVE for every family) can no longer happen on this ladder.
+
+**A's cross-check, one failure:** NMR large_play r128 seed 7. The box measured 48/54, the
+training run logged 47/54. large_play's 54 pairs are a single batch, so the logged value is
+exact. The likely cause is a near-tied pair whose logits cross between CPU (box
+measurement) and GPU (training) LSTM arithmetic. That A value is NOT READ, as the rule
+says. It blocks nothing yet, since NMR's ladder cells come after PT's. To resolve before
+NMR is read: re-measure that model on GPU, or have the author decide.
+
+**Other families:** PT, NMR and the ensemble mean are NOT READ (ladder cells not run or
+incomplete; the ensemble mean's A is still being measured).
+
+**Beside (no test):** every trivial reward is TOO FAR BEHIND every family with terminals,
+per variant and pooled.
