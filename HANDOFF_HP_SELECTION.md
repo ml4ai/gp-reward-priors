@@ -25358,3 +25358,14 @@ so every new run has the `iql_eval` temp-directory fix.
 
 **At each sweep check from now on:** list sweeps with failed runs (any new damage), and
 add each one to `superseded_sweeps.json` with a re-run.
+
+**The NMR cross-check mismatch (§14.70), re-measured on GPU (2026-10-31, author's request):**
+- `rq1_accuracy.py measure` gained `--device` (best models; `cuda` moves each batch to the
+  GPU, as the training scripts' `_evaluate` does) and `--only KEY[,KEY]`, which re-measures
+  just those records and overwrites them. Each best-model record now notes its device;
+  an absent device means CPU (the first run). The other 1,599 records stay as measured.
+- Command: `--device cuda --only 'nmr|r128|large_play|7'`.
+- **If the GPU gives 47/54** (the logged value), the cross-check passes and the mismatch was
+  CPU against GPU arithmetic on a near-tied pair; NMR's A is then complete.
+- **If it gives 48/54 again,** the device is not the cause, and the author decides how to
+  treat that value.
