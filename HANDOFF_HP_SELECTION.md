@@ -25315,3 +25315,46 @@ readouts are unchanged. Every complete ladder cell is still read by completeness
 except these with-terminals cells, each its own mean ± sd: ensemble mean r16 0.709 ± 0.042,
 0.694 ± 0.028, 0.465 ± 0.103, 0.302 ± 0.095 (medium_play, medium_diverse, large_play,
 large_diverse); r32 0.722 ± 0.031 (medium_play), 0.682 ± 0.024 (medium_diverse).
+
+### 14.73 Repairing §14.72's damage: whole-cell re-runs, superseded sweeps (author's choice, 2026-10-31)
+
+**DECIDED (author): each damaged cell is re-run whole.**
+
+**Built (`phase2_sweeps.py`):**
+- **`results/superseded_sweeps.json`**: `{sweep id: {file, reason, date}}` for every
+  damaged sweep.
+- **`iql_sweeps` skips them.** Every collector (`eval_readout`, `exp_readout`,
+  `control_readout`, `rq1_readout`, `register`) lists sweeps through that one function,
+  so a cell with a superseded sweep reads as "no evaluation sweep" until its re-run exists.
+- **A re-run is a fresh sweep of the same, unchanged file,** so the cell again has
+  exactly one sweep and needs no merging.
+- **Self-test:** superseded sweeps and listing duplicates are both skipped, and every
+  entry carries a file and a reason.
+- **Checked live:** all 13 damaged cells read NONE; the undamaged cells beside them are
+  unchanged.
+
+**The 13 superseded sweeps** (any failed run since 2026-10-30 = a lost seed; states only were read):
+
+| protocol | cells (ensemble mean) | sweeps |
+|---|---|---|
+| candidate | r16 medium_play, large_play, large_diverse; r32 all four | `aqrhjapv`, `10ks43ow`, `mdvzpsad`; `j3msevwg`, `r42lv3v0`, `m6czjebu`, `7i1x9ee7` |
+| standard | r32 large_play, large_diverse; r64 all four | `dfre1vv2`, `mizb7nol`; `ezctg0wz`, `tqxsdetl`, `l3dlys23`, `0z3wtvu6` |
+
+The undamaged cells are not re-run: candidate r16 medium_diverse; standard r16 (all four);
+standard r32 medium_play and medium_diverse.
+
+**Repair lanes, two extra (10 lanes until they end):**
+- **BK** (GPUs 1 2 3 4 5): the 7 candidate cells.
+- **BL** (GPUs 0 2 3 4 5): the 6 standard cells.
+- About 3 days at 11.3 h a cell. The ensemble mean's sparsity verdict waits on them.
+- Watch the speed rule: 10 lanes is above the 8 the baseline was measured at.
+
+**Optional: cancel the five superseded sweeps still running** (`7i1x9ee7`, `m6czjebu`,
+`j3msevwg`, `l3dlys23`, `0z3wtvu6`). Their remaining seeds are wasted, since the cells are
+re-run whole; cancelling frees their lanes for the next item at once.
+
+**Before anything new launches:** the `/tmp` cleanup finished, and `git pull` on the box,
+so every new run has the `iql_eval` temp-directory fix.
+
+**At each sweep check from now on:** list sweeps with failed runs (any new damage), and
+add each one to `superseded_sweeps.json` with a re-run.
