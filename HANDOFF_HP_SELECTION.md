@@ -25199,6 +25199,22 @@ NMR and the ensemble mean. The readout prints "1 of 4 families read" and makes n
 ladder-level claim. **The author decides the reading.** In either case "holds in full"
 (SENSITIVE for every family) can no longer happen on this ladder.
 
+**DECIDED (author, 2026-10-31): the refutation clause is read PER FAMILY.**
+- One read family whose (a) or (b) does not reject (or with no usable variant) refutes RQ1's
+  second part on that ladder. A FLAGGED family (failed manipulation check) is not a
+  sensitivity test and does not refute.
+- **So RQ1's second part is REFUTED on the sparsity ladder, by MR's (a).**
+- **Disclosure:** the clause was ambiguous in §14.5 as fixed, and this reading was chosen
+  **after** MR's sparsity result had been seen. The write-up must say so. Reported beside it,
+  so the reader can judge: under the other reading (every family must fail), the sparsity
+  ladder would still be open.
+- **The other families are still read and reported** as they complete. Each family's own
+  verdict (SENSITIVE / NOT SENSITIVE / FLAGGED) stands on its own, and the noise ladder gets
+  its own verdict.
+- `rq1_readout.py` encodes it (`ladder_verdict`; self-tested: (b) failing refutes, FLAGGED
+  does not, no usable variant refutes). Its "RQ1 ON THIS LADDER" line now reads "REFUTED on
+  this ladder (per-family reading, §14.70): MR: (a) did not reject".
+
 **A's cross-check, one failure:** NMR large_play r128 seed 7. The box measured 48/54, the
 training run logged 47/54. large_play's 54 pairs are a single batch, so the logged value is
 exact. The likely cause is a near-tied pair whose logits cross between CPU (box
