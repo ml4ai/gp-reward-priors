@@ -25244,3 +25244,74 @@ per variant and pooled.
 - **Descriptive** (the registered reading is `rq1_readout.py`'s manipulation check), and
   committed without outputs. Tested by running the notebook's setup cells and the new cells
   as a script; the figures were checked by eye.
+
+### 14.72 INCIDENT 2026-10-31: the box's root filesystem filled with D4RL maze XMLs, and every eval failed
+
+**What happened.** From 10:34 UTC (03:34 MST) IQL runs began FAILING (state `failed`, not
+`crashed`) at random steps, in every lane, and the rate rose through the day:
+
+| UTC, Oct 31 | 10 | 12–14 | 15–16 | 17–19 |
+|---|---|---|---|---|
+| finished / failed | 8 / 1 | 9 / 8 | 18 / 13 | 3 / 28 |
+
+At the sweep check (19:50 UTC) only 27 of 40 slots were running.
+
+**The cause:**
+- Every failure is the same traceback. `eval_actor` → `gym.vector.AsyncVectorEnv` →
+  `_check_spaces` → `BrokenPipeError` / `ConnectionResetError`: an eval worker died just
+  after it was forked.
+- The agent logs hold the workers' own error: **`OSError: [Errno 28] No space left on
+  device: '/tmp/tmp….xml'`**.
+- D4RL's maze env writes each maze layout to a `tempfile.mkstemp` `.xml` and never deletes
+  it. Every eval builds 25 envs. On the box (author, 2026-10-31): **16,839,395 such files
+  of the author's, 221 GB**. `/tmp` is the root filesystem: 6.3 TB, 96% used, 268 GB free
+  at the time of checking. Inodes were fine (12%).
+- **Ruled out:** host memory (13–17% in use, ~600 GB available, ~2 GB per run, from wandb
+  system metrics around the failures); GPU memory (4–5% used); `/dev/shm` (1%); processes
+  (1,183 of a 2.9M limit, no zombies or orphans); the kernel log (nothing).
+- The rise in the failure rate fits a disk at its limit: more failures meant more
+  half-built envs, and the free space hovered around zero.
+
+**Fixed:**
+1. **Cleanup (author, running 2026-10-31):** `find /tmp -maxdepth 1 -user $USER -name
+   'tmp*.xml' -mmin +30 -delete`.
+2. **The leak is closed in `algorithms/offline/iql_eval.py` (`_private_tempdir`):**
+   - while the eval worker pool is built, `tempfile.tempdir` points at a private
+     `iql_eval_env_*` directory. The workers fork inside that window and inherit it, so
+     their XMLs land there.
+   - The parent's setting is restored at once, so wandb's own threads never see the
+     directory. The directory is removed when the envs close, or if building them fails.
+   - **Results-neutral:** only where a throwaway file lives changes.
+   - Tested here with forked workers calling `tempfile.mkstemp`, the files written both
+     during and after the window.
+   - **An error of the agent's, caught by that test before commit:** the first edit put the
+     helper between `@torch.inference_mode()` and `def eval_actor`. That moved the
+     decorator onto the helper and would have run evals with autograd on. Fixed; the
+     decorators were checked with `ast`.
+   - Runs pick the fix up from their next start after `git pull` on the box. Runs already
+     going still leak until they end, a few thousand files each.
+
+**The damage (finished sweeps with seeds missing; a grid sweep never retries a failed seed):**
+
+| cell (ensemble mean) | protocol | seeds finished / 10 |
+|---|---|---|
+| r16 medium_play, large_play, large_diverse | candidate | 9, 8, 9 |
+| r32 medium_diverse, medium_play | candidate | 2, 1 |
+| r32 large_play, large_diverse | standard | 8, 8 |
+| r64 medium_play, medium_diverse, large_play | standard | 5, 3, 0 |
+
+Also affected while running: candidate r32 on the large mazes (`m6czjebu`, `7i1x9ee7`),
+standard r64 large_diverse (`0z3wtvu6`), and standard r128 medium_play and medium_diverse.
+Nothing was read from any damaged cell: the gate marks them incomplete.
+
+**Still to do:** re-run the missing seeds. The collectors take one sweep per cell and only
+seed lists 1–10 (`collect_exp`'s lineage check; "two sweeps → cell NOT read"). So a repair
+needs either (a) seed-subset repair sweeps, with the collectors merging a cell's seeds
+across sweeps (cheapest, more code), or (b) whole-cell re-runs, with the damaged sweep ids
+listed as superseded so the collectors skip them (simplest, more runs). The author decides.
+
+**Sweep check, the rest (2026-10-31 12:50 MST):** the registry and the controls and leveling
+readouts are unchanged. Every complete ladder cell is still read by completeness only,
+except these with-terminals cells, each its own mean ± sd: ensemble mean r16 0.709 ± 0.042,
+0.694 ± 0.028, 0.465 ± 0.103, 0.302 ± 0.095 (medium_play, medium_diverse, large_play,
+large_diverse); r32 0.722 ± 0.031 (medium_play), 0.682 ± 0.024 (medium_diverse).
