@@ -25227,3 +25227,20 @@ incomplete; the ensemble mean's A is still being measured).
 
 **Beside (no test):** every trivial reward is TOO FAR BEHIND every family with terminals,
 per variant and pooled.
+
+### 14.71 Reward-model accuracy charts along both ladders (agent, 2026-10-31, author's request)
+
+- **`results/experiments_results.ipynb`, new final section "Reward-model accuracy on the
+  clean validation split":** the experiment figures' layout (one panel per variant, one
+  series per reward model, full data on the left), with per-pair validation accuracy × 100
+  on the y-axis. Two figures, sparsity and noise (primary arm), each with a table.
+- **Source:** `exp/rq1_accuracy.json` through `rq1_readout.load_accuracy` and its logged
+  cross-check. A point is drawn only when all ten seeds are measured and pass.
+- **The file is now complete:** ensemble mean 400/400, 981 snapshots per model. The
+  single-threaded run finished, and the author copied it at 03:01.
+- **Dashed reference:** the path-length floor (§13.13, `heuristic_floor.floor_correct`) on
+  the same pairs. It stays flat along a ladder, because the validation split never changes.
+- **Not drawn:** NMR large_play r128 (9/10; the one cross-check failure of §14.70).
+- **Descriptive** (the registered reading is `rq1_readout.py`'s manipulation check), and
+  committed without outputs. Tested by running the notebook's setup cells and the new cells
+  as a script; the figures were checked by eye.
