@@ -25143,3 +25143,14 @@ nothing in it. Both self-tests pass.
 **From now on, a sweep check also runs `results/rq1_readout.py`** (later with `--axis
 noise` too). A family's first READ output is its registered reading; keep it in
 `results/rq1_readout_latest.txt`.
+
+**The measurement's cost was underestimated (agent's error), 2026-10-30 23:15 MST.**
+- I said "a few minutes". The ensemble mean dominates: each MR run keeps ~980 snapshots
+  past the burn-in (5,000 epochs, a checkpoint every 5), so its 400 model sets are ~390k
+  checkpoint loads. The run had gone on for hours.
+- Default multithreaded torch also took cores from the IQL agents: the median fell from
+  176k to **140k steps/h**.
+- **Fixed (`f7cd63b`):** single-threaded torch by default (`--threads`); the output is
+  rewritten atomically, so a copy taken mid-run is whole; `--fams` filter; a restart
+  resumes from the file. MR, PT and NMR come first in the order, so their A values were
+  already in the file when the run was stopped.
