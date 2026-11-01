@@ -25411,3 +25411,77 @@ than 8.
 
 **Ladder cells, standard, each its own mean ± sd** (nothing new beyond §14.72's): ensemble
 mean r16 and r32 as reported there. Candidate cells are reported by completeness only.
+
+### 14.75 Why MR's policy score does not follow its accuracy on three mazes: an informal assessment, and a prediction for the noise ladder (author and agent, 2026-11-01; DESCRIPTIVE, not a test)
+
+**The question (author):** MR's per-pair validation accuracy falls along the sparsity ladder
+on every variant (§14.71), yet without terminals its policy score falls only on
+medium_play (§14.70). By what mechanism?
+
+**The numbers.** MR's candidate ladder is complete and was read (§14.70), so its per-level
+cells may be shown. The reference rewards are at full data without terminals. Only MR
+against reference rewards; no family against another.
+
+| variant | MR full | r128 | r64 | r32 | r16 | task | motion | zero / mean-const |
+|---|---|---|---|---|---|---|---|---|
+| medium_play | 0.652 | 0.585 | 0.503 | 0.377 | 0.275 | 0.672 | 0.303 | 0.001 / 0.009 |
+| medium_diverse | 0.318 | 0.312 | 0.297 | 0.340 | 0.329 | 0.306 | 0.328 | 0.017 / 0.001 |
+| large_play | 0.228 | 0.221 | 0.223 | 0.231 | 0.208 | 0.207 | 0.217 | 0.000 / 0.000 |
+| large_diverse | 0.114 | 0.137 | 0.119 | 0.129 | 0.121 | 0.100 | 0.134 | 0.000 / 0.000 |
+
+MR's A, full → r16: 0.92 → 0.83, 0.90 → 0.75, 0.95 → 0.76, 0.91 → 0.74. MR on medium_play
+spreads out as pairs fall (sd 0.067 at full data, 0.262 at r16).
+
+**The assessment (agreed with the author, 2026-11-01):**
+1. **A ceiling, not a floor, explains the three flat mazes.** On medium_diverse,
+   large_play and large_diverse, without terminals, MR at every level, the task reward
+   (perfect goal information) and the motion reward (no goal information; its map points
+   away from the goal, §13.14.11) land on the same plateau per maze: about 0.31–0.34,
+   0.21–0.23 and 0.10–0.14. No reward, however good, rises above it. So the limit there is
+   not the reward's information but IQL's use of a goal signal without terminals, and a
+   degraded MR has nowhere to fall.
+2. **The plateau is not behaviour cloning or random wandering.** The trivial rewards (IQL =
+   behaviour cloning, §14.7) score about 0 on every maze. The plateau is what any reward
+   that values movement reaches: competent, efficient wandering that finds the goal at a
+   base rate.
+3. **A degraded MR keeps exactly what the plateau needs.** At r16 its accuracy is still
+   0.74–0.76, well above chance, and the labels track motion. It loses the finer,
+   goal-related distinctions first (the author's intuition), but not the movement signal.
+   That is why accuracy falls while the score does not.
+4. **Medium_play is the one maze with headroom** (task 0.672 against motion 0.303), and
+   there MR does degrade: to 0.275 at r16, at or just below the motion plateau, with some
+   seeds collapsing. Where the benchmark can register reward quality, MR degrades under
+   sparsity, which is Study 2's premise.
+
+**Consequences, recorded and not acted on:**
+- **The registered verdicts stand** (MR NOT SENSITIVE on sparsity; the sparsity ladder
+  refuted per family, §14.70). Nothing in §14.5 changes.
+- §14.5's usability check (task − zero > 0) cannot detect a missing headroom, because zero
+  is behaviour cloning. A **headroom check** (task − motion > 0, without terminals, full
+  data) would have passed medium_play only: task − motion is about −0.02, −0.01, −0.03 on
+  the other three. Any analysis using it is NEW and post hoc for MR, and must be disclosed
+  as such. It would rest on one variant, 10 units.
+- Options for Study 2's motivation, the author's list: an evaluation metric with more
+  resolution than binary success (final distance to the goal, steps-to-goal); policy-free
+  measures of reward quality (reward-map goal alignment, distance to the task reward);
+  other datasets; and leaning on the noise ladder (below).
+
+**PREDICTION for the noise ladder, written 2026-11-01 before any noise-ladder IQL cell has
+run** (the noise cells are queued behind the NMR waiters, which are behind lanes still on
+the ensemble mean):
+- **Sparsity** removes pairs but keeps the labels' motion signal, so the reward stays on the
+  plateau.
+- **Label noise at flip 0.4–0.45** pushes accuracy toward 0.5–0.6 (§14.71's charts show
+  this for every family). That erodes the motion component itself.
+- **So, without terminals, the high-noise cells should fall below the plateau toward the
+  behaviour-cloning floor (about 0) on every maze, the three plateau mazes included.**
+  Accordingly, MR's noise-ladder test (a) is more likely to reject than its sparsity test
+  did.
+- Read against this when the noise readout runs; record it as confirmed or refuted.
+
+**Cheap descriptive checks of the mechanism, not yet run:**
+- reward-map goal alignment along MR's ladder (`goal_structure.py`, box). The prediction:
+  it decays with sparsity on medium_play and is absent at every level elsewhere;
+- per-seed A against S on medium_play;
+- final positions under MR and under the motion reward on a plateau maze. The prediction:
+  the same behaviour.
