@@ -25726,3 +25726,32 @@ BO (behind BM) are launched. The box now holds 10 running lanes (AM–AT, BK, BL
 waiters: NMR AU–BB, noise BC–BJ, check 3's BM, and the companion arms' BN and BO. Log names
 run up to `stage4_queue_BO.log`. `pgrep -fc 'while pgrep -f'` should read 19 until the
 first waiter starts its queue (8 NMR + 8 noise + BM + BN + BO).
+
+**DECIDED (author, 2026-11-01): the companion arms extend to the noise ladder, both arms**,
+before any noise-ladder IQL cell has run (the noise cells are queued behind the NMR
+waiters), so prospective for every family.
+- **Primary arm:** n01–n045 for all five unscaled cells.
+- **Sensitivity arm:** n01o–n045o for MR, PT and NMR on medium_play, which also run at index
+  1 there. The ensemble mean has no sensitivity arm.
+- The companion indices are the same as above.
+- **40 more files**, 65 in all, written by the same generator (`rescale_arm_spec` now loops
+  over sparsity + noise primary + noise sensitivity). The self-test checks the count, and
+  that there are no sensitivity files for the ensemble mean or medium_diverse. Every file
+  differs from its frozen candidate cell in `normalize_reward` only.
+- **Queue, two more waiters:**
+  - **BP** behind BN (GPUs 1–5): MR primary, MR sensitivity, ensemble mean primary, NMR
+    medium_diverse primary. 20 cells.
+  - **BQ** behind BO (GPUs 0 2 3 4 5): PT primary, PT sensitivity, NMR medium_play primary,
+    NMR medium_play sensitivity. 20 cells.
+  - Each pattern names its predecessor's first item with a bracket
+    (`ctrl[:]rescale_noterm_antmaze_medium_play_mr@control`, `…_pt@control`), so it matches
+    that waiter while it waits and its queue once started, and never matches itself.
+    `…_medium_play_mr@` is not a substring of `…_medium_play_nmr@`.
+- **Timing:** BP starts in about 8.5 days and BQ in about 10; each runs about 9.4 days at
+  11.3 h a cell. So the noise companions land at roughly the same time as the noise ladders
+  themselves.
+- **Prediction for the noise companions, written now:** by §14.75's noise prediction, high
+  flip rates should push the reward below the plateau toward the behaviour-cloning floor
+  whatever the index, because they erode the reward's content, not just its spread. So the
+  frozen and companion noise curves should both fall at high p. Any gap between them at low
+  p measures the index's effect on scale.
