@@ -25567,3 +25567,50 @@ ladder is complete and read):
   lane is added while the box is past the speed rule.
 - **Prediction:** the three end-position distributions are alike (the same "competent
   wandering"), with success rates near 0.31–0.33 for all three.
+
+**Check 1 RESULT** (`exp/goal_structure_mr_ladder.txt`, author ran it 2026-11-01; 200 models,
+none failed; DESCRIPTIVE). Mean ρ of MR's reward map against BFS distance to the goal, over
+seeds 1–10 (negative = rises toward the goal), and the goal cell's median reward rank:
+
+| variant | full | r128 | r64 | r32 | r16 | goal-cell rank, full → r16 |
+|---|---|---|---|---|---|---|
+| medium_play | −0.58 | −0.61 | −0.65 | −0.70 | −0.70 | 6 → 2 of 26 |
+| medium_diverse | +0.33 | +0.35 | +0.31 | +0.30 | +0.29 | 17 → 12 of 26 |
+| large_play | −0.19 | −0.31 | −0.42 | −0.47 | −0.64 | 3 → 2 of 46 |
+| large_diverse | −0.19 | −0.19 | −0.22 | −0.32 | −0.22 | 5 → 3 of 46 |
+
+The spread across seeds grows with sparsity everywhere; for example, medium_diverse r16
+seeds range from −0.64 to +0.91.
+- **The prediction is REFUTED as written.** Goal alignment does not decay with sparsity.
+  On medium_play and large_play the maps grow MORE goal-aligned as pairs fall; on
+  medium_diverse and large_diverse the mean is flat.
+- **medium_diverse:** at full data MR's map rises AWAY from the goal (+0.33), yet that maze
+  is on the plateau. More evidence that the plateau does not need goal information.
+- **Within medium_play r16, alignment does go with the score** (ρ(goal ρ, S) = −0.78): seed
+  9, the least aligned at −0.19, scores 0.01. But seeds 4 and 10 (−0.65, −0.58) also
+  collapse, while seed 2 at −0.65 holds 0.39. Across the ladder, alignment improves while
+  the score falls. So map-level goal alignment does not explain medium_play's decline.
+- **§14.75 point 3's "goal information degrades first" is therefore NOT supported by the
+  reward maps.**
+
+**A sharper hypothesis (agent, 2026-11-01, before any data on it): reward SCALE under the
+normalization index.**
+- MR's no-terminals index on medium_play is **1**, which is `r − 1`: a shift only
+  (`iql_eval.modify_reward`). On the plateau mazes MR's indices are 7, 6 and 6, which divide
+  by the return range.
+- A model trained on fewer pairs may output a smaller spread of reward. Under index 1 that
+  smaller spread reaches IQL unchanged. Without terminals a constant shift drops out of the
+  advantages, so small spread means small advantages, and IQL's advantage-weighted policy
+  update tends to behaviour cloning, which scores about 0 (§14.7).
+- With terminals the reward's level relative to termination is multiplied over the
+  remaining horizon, so even a small reward still makes reaching the goal pay. That fits
+  MR r16 with terminals on medium_play, at index 0 (also unscaled), not collapsing (0.606).
+- On the range-normalized indices the spread is rescaled away, so the plateau holds.
+- **Prediction:**
+  - on medium_play, MR's raw reward spread (sd, and p95 − p5 over the dataset) falls with
+    sparsity;
+  - within r16, the collapsed seeds (4, 9 and 10 at about 0; 3 and 7 at 0.11–0.15) have
+    the smallest spread;
+  - on the plateau mazes, the raw spread may fall too, but it does not matter there.
+- **Measurement:** `goal_structure.py` now prints each model's `raw sd` and `p95-p5`. Re-run
+  check 1's command; the output file is overwritten with the extra columns.
