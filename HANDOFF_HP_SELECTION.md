@@ -25385,3 +25385,29 @@ repair lanes BK and BL are launched; the superseded sweeps still running were ca
 - No failed run has been created since 22:00 UTC.
 - The box is at 10 lanes (AM–AT plus BK, BL), with the NMR waiters AU–BB and noise waiters
   BC–BJ behind the eight original lanes.
+
+### 14.74 Sweep check 2026-10-31 21:30 MST: 10 lanes at 157k; no new damage; the repairs under way
+
+**Box:** 50 IQL runs in 10 sweeps, **median 157k steps/h**. That is about 10% below the
+175–185k baseline, right at the speed rule's threshold, and is the cost of 10 lanes rather
+than 8.
+- No new lanes (none are planned). When BK and BL end, the box returns to 8.
+- No stale heartbeats. **No sweep has a failed run since the superseded ones**, so the fix
+  holds so far.
+
+**Lanes:**
+- **Standard:** ensemble mean r128 (`8uih8eb5`, `pwnzxfsv` at 5/10; `3ppmumj4`, `nfnxlln1`
+  in progress).
+- **Candidate:** ensemble mean r64 (`0ngwbklp`, `k5yla4mh` 5/10, `5e092o1g`, `f0hs1srf`).
+- **Repairs:** BK on candidate r16 medium_play (`nbskbddj`), BL on standard r32 large_play
+  (`ehgev7ha`).
+
+**The registry and the controls and leveling readouts are unchanged.** RQ1 (sparsity):
+- MR's reading stands as §14.70 recorded it.
+- The NMR cross-check note is gone, now that A is complete.
+- The ensemble mean waits only on its ladder cells (25 reasons, every one a cell running or
+  under repair). PT and NMR wait on their ladder cells.
+- The saved output is refreshed in `results/rq1_readout_latest.txt`.
+
+**Ladder cells, standard, each its own mean ± sd** (nothing new beyond §14.72's): ensemble
+mean r16 and r32 as reported there. Candidate cells are reported by completeness only.
