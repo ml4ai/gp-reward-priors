@@ -25369,3 +25369,9 @@ add each one to `superseded_sweeps.json` with a re-run.
   CPU against GPU arithmetic on a near-tied pair; NMR's A is then complete.
 - **If it gives 48/54 again,** the device is not the cause, and the author decides how to
   treat that value.
+- **RESULT (author ran it, 2026-10-31 15:48):** the GPU gives **47/54**, with batch mean
+  0.870370388 against the logged 0.8703703880. It was CPU-versus-GPU arithmetic on one
+  near-tied pair. Only that record was rewritten (`device: cuda`).
+- **`exp/rq1_accuracy.json` now passes the cross-check in full: 1,600 of 1,600 read, none
+  refused.** NMR's A is complete. The other 1,199 best-model records are CPU measurements
+  that match their logs exactly.
