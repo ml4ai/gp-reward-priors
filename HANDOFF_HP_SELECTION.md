@@ -25661,3 +25661,62 @@ run's 200, against its last-10 mean; MR, candidate):
 - §14.75 points 1, 2 and 4 stand: the plateau, its not being behaviour cloning, and
   medium_play's headroom.
 - Check 3 (final positions on medium_diverse) is still to come.
+
+### 14.78 The rescaling companion arms (author, 2026-11-01): is a decline lost information, or raw spread under an unscaled index?
+
+**Why.** §14.5 freezes each family's no-terminals index at its seed-0, full-data grid
+winner. That is the protocol under test, and it does not confound the registered verdicts.
+But a frozen index is not a frozen SCALE:
+- indices 2–7 divide each model's reward by its own return range, recomputed per model;
+- indices 0 (raw) and 1 (`r − 1`) pass a model's raw spread to IQL.
+
+MR's raw spread falls with sparsity on every maze (§14.77), and the one decline seen so far
+(MR, medium_play) is at index 1. Across levels, "less information" and "less spread under an
+unscaled index" cannot be told apart, so the mechanism is confounded even though the test is
+not.
+
+**DECIDED (author, 2026-11-01): every candidate cell at an unscaled index gets a companion
+at the family's best rescaling index.**
+- **Post hoc for MR**, whose ladder was read (§14.70). **Decided BEFORE PT's, NMR's and the
+  ensemble mean's ladders were read**, so prospective for them.
+- Sparsity ladder only. Noise companions are an open option, to be decided before the noise
+  ladders are read.
+
+| cell (candidate) | frozen index | companion index (best of 2–7 in the same seed-0 grid) |
+|---|---|---|
+| MR, medium_play | 1 | **2** (.674) |
+| PT, medium_play | 1 | **3** (.357) |
+| NMR, medium_play | 1 | **3** (.662) |
+| ensemble mean, medium_play | 1 | **2** (.499) |
+| NMR, medium_diverse | 0 | **2** (.385) |
+
+**Built (`phase2_sweeps.py control --rescale [--write]`, `RESCALE_ARM`, `rescale_arm_spec`):**
+- 25 files, full data plus r16–r128 per cell:
+  - `ctrl_sweeps/rescale_noterm_antmaze_<v>_<fam>` (`Lineage: CONTROL rescale`);
+  - `<fam>_sweeps/<cond>/rescale_noterm_<base>` (`Lineage: EXPERIMENT <cond>, RESCALE
+    companion`).
+- Each file is asserted to differ from its frozen candidate cell in `normalize_reward` only.
+- **No collector counts a companion.** Each matches its frozen cell's spec entry, and every
+  collector checks the index: `collect_exp` ("not this experiment's lineage, ignored"),
+  `collect_controls` (index ≠ stage-4 index or grid winner, ignored), and
+  `classify_noterm` (IGNORE). Checked by reading those paths and by self-test assertions.
+- **Descriptive. Not part of §14.5's test, and it changes no registered verdict.**
+
+**Queue (the box is past the speed rule, so two waiters and no new lane):**
+- **BN** behind repair lane BK (GPUs 1–5): MR (full, r128–r16), then the ensemble mean,
+  then NMR medium_diverse full and r128. 12 cells.
+- **BO** behind BM (check 3's final positions), on BL's GPUs (0 2 3 4 5): PT, then NMR
+  medium_play, then NMR medium_diverse r64–r16. 13 cells.
+- **Timing at about 11.3 h a cell:** BN starts in about 2.5–3 days, so MR's arm completes
+  in about 5 days. BO starts in about 4 days and ends in about 10.
+
+**How it will be read:** per cell, companion against frozen, level by level, each with its
+own mean ± sd, plus each arm's degradation slope with its exact interval. That needs a
+small descriptive readout, to be built before the first companion cell completes.
+
+**Prediction for MR, medium_play (written before any companion cell has run):** the
+decline persists at index 2, at least in part. Within each level, spread did not predict
+which seeds collapse (§14.77), and the failures split into never reaching the goal and
+reaching it then losing it, which a rescaling should not cure.
+- If the companion is flat, medium_play's decline was largely an artifact of index 1.
+- If it declines as steeply, the decline is lost information.
