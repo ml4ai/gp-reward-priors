@@ -25755,3 +25755,9 @@ waiters), so prospective for every family.
   whatever the index, because they erode the reward's content, not just its spread. So the
   frozen and companion noise curves should both fall at high p. Any gap between them at low
   p measures the index's effect on scale.
+
+**Steps done (author, 2026-11-01):** the box pulled `62d1755`; waiters BP (behind BN) and
+BQ (behind BO) are launched. The box now holds 10 running lanes (AM–AT, BK, BL) and 21
+waiters: NMR AU–BB, noise BC–BJ, check 3's BM, and the companion arms' BN, BO, BP and BQ.
+Log names run up to `stage4_queue_BQ.log`. `pgrep -fc 'while pgrep -f'` should read 21
+until the first waiter starts its queue.
