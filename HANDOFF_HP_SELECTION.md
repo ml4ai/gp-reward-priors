@@ -25375,3 +25375,13 @@ add each one to `superseded_sweeps.json` with a re-run.
 - **`exp/rq1_accuracy.json` now passes the cross-check in full: 1,600 of 1,600 read, none
   refused.** NMR's A is complete. The other 1,199 best-model records are CPU measurements
   that match their logs exactly.
+
+**Steps done (author, 2026-10-31):** the `/tmp` cleanup finished; the box pulled the fix;
+repair lanes BK and BL are launched; the superseded sweeps still running were cancelled.
+- **Checked on wandb:** BK's first cell (candidate r16 medium_play, `nbskbddj`) and BL's
+  (standard r32 large_play, `ehgev7ha`) each have 5 runs going, at git commit `ad88491`,
+  which includes the fix (`21d8f74`).
+- `7i1x9ee7` and `0z3wtvu6` are CANCELED; `m6czjebu`, `j3msevwg` and `l3dlys23` FINISHED.
+- No failed run has been created since 22:00 UTC.
+- The box is at 10 lanes (AM–AT plus BK, BL), with the NMR waiters AU–BB and noise waiters
+  BC–BJ behind the eight original lanes.
