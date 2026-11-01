@@ -25517,3 +25517,53 @@ or under repair; PT and NMR on their ladders. The saved output is refreshed.
 - standard: the repairs (r32 large_diverse; r64 ×4).
 - BL's queue is the longest: 5 cells left, at 11.3 h each at baseline speed, about 2.5
   days. So the ensemble mean's reading is about 2.5–3 days away.
+
+### 14.77 §14.75's three mechanism checks (author's request, 2026-11-01): check 2 done; checks 1 and 3 built
+
+**Check 2, per-seed A against S** (MR, candidate protocol, sparsity; DESCRIPTIVE; MR's
+ladder is complete and read):
+
+| variant | ρ(A, S), 50 (level, seed) points | within-level ρ (full, r128, r64, r32, r16) | ρ(slope A, slope S), 10 seeds |
+|---|---|---|---|
+| medium_play | +0.33 (p 0.02) | +0.42, −0.11, −0.17, −0.57, −0.03 | −0.09 (p 0.80) |
+| medium_diverse | −0.21 (p 0.14) | +0.28, −0.06, −0.30, −0.07, −0.41 | +0.42 (p 0.23) |
+| large_play | +0.16 (p 0.26) | +0.22, +0.75, −0.24, −0.12, −0.16 | −0.16 (p 0.65) |
+| large_diverse | −0.02 (p 0.92) | −0.21, +0.21, +0.08, +0.26, −0.18 | −0.25 (p 0.49) |
+
+- **The plateau mazes:** no relationship between accuracy and score at any grain. That fits
+  §14.75 point 1: there, the score does not depend on reward quality.
+- **medium_play:** the overall link is carried by the levels; there is none within a level,
+  and none per seed. The score splits as pairs fall. Seeds below motion's mean (0.303):
+  full 0/10, r128 1/10, r64 1/10, r32 4/10, r16 6/10. At r16 the seeds score 0.26, 0.39,
+  0.15, 0.00, 0.58, 0.66, 0.11, 0.60, 0.01, 0.01, with accuracies of 0.77–0.87.
+- **This qualifies §14.75 point 3.** On medium_play a degraded MR does not only lose goal
+  detail and fall to the motion plateau. Three r16 seeds sit at about 0, the
+  behaviour-cloning floor, while seeds of the same accuracy (0.82–0.86) score 0.58–0.66.
+  So (i) aggregate preference accuracy does not predict which seeds collapse, and (ii) a
+  degraded reward can MISLEAD the policy, not just lose information, where there is
+  headroom. Check 1 tests what separates those seeds.
+
+**Check 1, reward-map goal alignment along MR's ladder (box):**
+- `results/goal_structure.py` gained `--conds` (anchor and experiment conditions,
+  `model_root`; self-tested).
+- Run: `--kinds MR --conds "anchor r128 r64 r32 r16" --seeds "1 2 3 4 5 6 7 8 9 10"`, output
+  to `exp/goal_structure_mr_ladder.txt` (gitignored). That is 200 models, each labelling
+  1M transitions with an MLP: minutes.
+- **Prediction:** goal alignment (ρ against BFS distance; negative = rises toward the goal)
+  decays with sparsity on medium_play, and is weak at every level on the other three. On
+  medium_play the r16 seeds near 0 (seeds 4, 9, 10) should be the least goal-aligned.
+
+**Check 3, final positions on a plateau maze (box, IQL runs):**
+- `phase2_sweeps.py control --poslog-mech --write` writes three cells on medium_diverse,
+  all without terminals at index 7, seeds 1–10. Each is an existing sweep file plus ONE
+  key, `log_final_positions`, asserted:
+  - `ctrl_sweeps/poslog_rerun_noterm_antmaze_medium_diverse_mr` (MR, full data);
+  - `ctrl_sweeps/poslog_noterm_sweep_antmaze_medium_diverse_r16` (MR, r16);
+  - `ctrl_sweeps/poslog_atwin_noterm_antmaze_medium_diverse_heuristic` (motion).
+- They match no collector's spec, so no readout counts them. Read with
+  `results/final_positions.py <sweep ids>`; the medium layout is checked against the live
+  maze.
+- **Queued as waiter BM behind repair lane BL** (30 runs, about 34 h once BL ends), so no
+  lane is added while the box is past the speed rule.
+- **Prediction:** the three end-position distributions are alike (the same "competent
+  wandering"), with success rates near 0.31–0.33 for all three.
