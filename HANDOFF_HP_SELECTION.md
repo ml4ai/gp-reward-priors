@@ -25485,3 +25485,35 @@ the ensemble mean):
 - per-seed A against S on medium_play;
 - final positions under MR and under the motion reward on a plateau maze. The prediction:
   the same behaviour.
+
+### 14.76 Sweep check 2026-11-01 09:15 MST: the ensemble mean's standard ladder in, its candidate r64 in; the first repairs done; no new damage
+
+**Box:** 50 IQL runs in 10 sweeps, **median 154k steps/h**, about 12% below baseline: the
+cost of 10 lanes. No new lanes (none planned); 8 lanes again once BK and BL end.
+- No stale heartbeats and **no failed run** (the damage scan is empty).
+- The standard lanes have moved on to **PT r16**. The candidate lanes are on the ensemble
+  mean's **r128**.
+- BK is on its 2nd cell (candidate r16 large_play, `ursp8yfq`); BL on its 2nd (standard
+  r32 large_diverse, `tpf064f1`).
+
+**The registry and the controls and leveling readouts are unchanged.**
+
+**New complete cells:**
+- **Standard, each its own mean ± sd** (§13.9; DESCRIPTIVE, no comparison across levels):
+  - ensemble mean **r128**: medium_play 0.720 ± 0.042 (`8uih8eb5`), medium_diverse 0.688 ±
+    0.024 (`pwnzxfsv`), large_play 0.472 ± 0.060 (`3ppmumj4`), large_diverse 0.268 ± 0.073
+    (`nfnxlln1`);
+  - **repaired** r32 large_play 0.461 ± 0.066 (`ehgev7ha`, BL's first cell).
+- **Candidate, completeness only:** ensemble mean **r64**, all four variants (`0ngwbklp`,
+  `k5yla4mh`, `5e092o1g`, `f0hs1srf`); **repaired** r16 medium_play (`nbskbddj`, BK's first
+  cell).
+
+**RQ1 (sparsity):** MR's reading stands. The ensemble mean waits on 15 cells, all running
+or under repair; PT and NMR on their ladders. The saved output is refreshed.
+
+**What the ensemble mean still needs:**
+- candidate: r128 ×4 (the main lanes), and the repairs (r16 large_play and large_diverse;
+  r32 ×4);
+- standard: the repairs (r32 large_diverse; r64 ×4).
+- BL's queue is the longest: 5 cells left, at 11.3 h each at baseline speed, about 2.5
+  days. So the ensemble mean's reading is about 2.5–3 days away.
