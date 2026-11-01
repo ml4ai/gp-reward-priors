@@ -25614,3 +25614,50 @@ normalization index.**
   - on the plateau mazes, the raw spread may fall too, but it does not matter there.
 - **Measurement:** `goal_structure.py` now prints each model's `raw sd` and `p95-p5`. Re-run
   check 1's command; the output file is overwritten with the extra columns.
+
+**Reward-scale RESULT** (re-run, `exp/goal_structure_mr_ladder.txt`, 2026-11-01 11:43; 200
+models; DESCRIPTIVE). Median raw reward sd over seeds, full → r128 → r64 → r32 → r16:
+- medium_play 8.0 → 3.7 → 3.8 → 3.1 → 2.3;
+- medium_diverse 6.6 → 4.6 → 3.8 → 3.0 → 1.7;
+- large_play 6.1 → 5.7 → 4.0 → 2.4 → 1.4;
+- large_diverse 4.8 → 3.3 → 2.9 → 2.6 → 2.0.
+
+- **Spread falls with sparsity on every maze**, which is the first half of the prediction.
+- **But it does not pick out the collapsing seeds; the second half is REFUTED.**
+  - On medium_play, within r16, ρ(sd, S) = −0.43, the wrong sign.
+  - Seed 10 has the largest spread (3.48) and scores 0.01; seed 5 has the smallest (1.34)
+    and scores 0.58.
+  - At full data, seeds 7 and 9 have spread about 2.4 and score 0.66 and 0.63.
+  - ρ(sd, S) over all 50 points is +0.40, carried by the levels.
+- **So reward scale under index 1 is at most a contributor, not the mechanism.**
+
+**What does separate them: two modes of failure on medium_play** (the best evaluation of a
+run's 200, against its last-10 mean; MR, candidate):
+- **Never reaching the goal** (best ≈ 0): r64 seed 5 (best 0.06); r16 seeds 4, 9 and 10
+  (best 0.01–0.07).
+- **Reaching the goal, then losing it** (best → last-10):
+  - r128 seed 5 (0.42 → 0.18);
+  - r64 seed 4 (0.66 → 0.32);
+  - r32 seeds 2 (0.47 → 0.09), 5 (0.66 → 0.07) and 10 (0.57 → 0.09);
+  - r16 seeds 3 (0.59 → 0.15), 7 (0.57 → 0.11) and 1 (0.49 → 0.26).
+- At full data every seed peaks at 0.64–0.93 and keeps most of it (last-10 within 0.10–0.16
+  of the peak).
+- **Within r16 goal alignment does track the mode.** The three seeds that hold (5, 6, 8:
+  last-10 0.58–0.66) have the three most goal-aligned maps (ρ −0.81 to −0.95). The three
+  never-learners have −0.19 to −0.65. At full data, alignment of −0.37 to −0.78 was enough
+  for every seed.
+- **A reading, not tested:** at full data the reward carries structure that cell-level map
+  alignment does not measure (finer shaping), and that is what sparsity removes. Once it is
+  gone, only seeds whose coarse map happens to point at the goal still succeed, and many
+  runs that do reach the goal cannot hold it without terminals.
+- **For the registered statistic:** the last-10 mean counts "reached, then lost" as failure,
+  which is §14.9's max versus last-10 issue. The max would show a smaller decline, but still
+  one (seed means: full 0.79, r16 0.48).
+
+**So, for §14.75, two corrections:**
+- Point 3's "goal information degrades first" is not supported at the map level.
+- Medium_play's decline is an increase in runs that never learn or cannot hold the goal,
+  not a smooth shift toward the motion plateau.
+- §14.75 points 1, 2 and 4 stand: the plateau, its not being behaviour cloning, and
+  medium_play's headroom.
+- Check 3 (final positions on medium_diverse) is still to come.
