@@ -25720,3 +25720,9 @@ which seeds collapse (§14.77), and the failures split into never reaching the g
 reaching it then losing it, which a rescaling should not cure.
 - If the companion is flat, medium_play's decline was largely an artifact of index 1.
 - If it declines as steeply, the decline is lost information.
+
+**Steps done (author, 2026-11-01):** the box pulled `bfecea0`; waiters BN (behind BK) and
+BO (behind BM) are launched. The box now holds 10 running lanes (AM–AT, BK, BL) and these
+waiters: NMR AU–BB, noise BC–BJ, check 3's BM, and the companion arms' BN and BO. Log names
+run up to `stage4_queue_BO.log`. `pgrep -fc 'while pgrep -f'` should read 19 until the
+first waiter starts its queue (8 NMR + 8 noise + BM + BN + BO).
