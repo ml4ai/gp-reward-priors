@@ -25927,3 +25927,41 @@ that use trajectory lengths.
 - **Prediction:** both cells fall to about 0, like their own indices 0–5. If they stay near
   0.11–0.13, the leak is not what carries the plateau.
 - **To be queued only if test 1 confirms the concentration** (the author's order).
+
+**Test 1 RESULT (`exp/leak_measure.txt`, author ran it 2026-11-02 13:28; DESCRIPTIVE). THE
+LEAK IS CONFIRMED.** Identical for the motion reward and MR seeds 1–3 on each maze:
+
+| maze | bonus on terminals / elsewhere | bonus mass on terminals (terminals' share of transitions) | sd: own part / bonus | bonus map ρ (goal cell rank) |
+|---|---|---|---|---|
+| medium_play | 968 / 1.2 | 88.7% (0.98%) | 0.13–0.16 / 96.7 | −0.63 (1 of 26) |
+| medium_diverse | 905 / 1.1 | 61.3% (0.20%) | 0.14–0.15 / 42.0 | −0.52 (1 of 26) |
+| large_play | 938 / 1.7 | 87.3% (1.25%) | 0.13–0.14 / 107.6 | −0.64 (1 of 46) |
+| large_diverse | 896 / 1.6 | 77.8% (0.62%) | 0.13–0.16 / 74.2 | −0.65 (1 of 46) |
+
+- **Indices 6/7 add about +900–970 on goal (terminal) steps and +1–2 elsewhere.** Every
+  length-1 segment is a terminal.
+- **The bonus's spread is 300–800 times the reward model's own**, and the same for every
+  reward tested: it does not depend on the reward model.
+- The goal cell ranks first in the bonus map on every maze.
+- **The leak-free bonus is exactly constant** (sd ~1e-15).
+- The decomposition reproduces `modify_reward` to within 1.6e-4.
+- **Against the prediction:** concentration, goal rank 1 and the constant leak-free bonus
+  are CONFIRMED. "ρ near −1" was WRONG: −0.52 to −0.65, because the bonus is a spike on goal
+  steps, not a gradient.
+- **So, without terminals at indices 6/7, IQL learns from a goal-arrival reward rebuilt from
+  the terminals, with the learned reward a small perturbation on it.** That is the plateau
+  of §14.75 on medium_diverse, large_play and large_diverse: MR ≈ motion ≈ task there, A
+  does not predict S (§14.77), and the ladders are flat. medium_play's frozen index 1 does
+  not leak, which is why reward quality shows there.
+- **Consequences to settle (the author's):**
+  - (i) §14.5's candidate protocol is not goal-free at indices 6/7. The registered readings
+    stand as computed but must carry this disclosure. MR's sparsity verdict is
+    NOT SENSITIVE, driven by three mazes whose frozen index (6/7) leaks.
+  - (ii) Whether to correct the candidate protocol (e.g. `return_range_split "length"`,
+    or indices 0–5 only) for the families not yet read, which changes §14.5 after MR's
+    reading and so needs disclosing.
+  - (iii) The same leak sits in the PT pipeline's own antmaze normalization (§13.13.2: its
+    `normalize()` is index 7). With terminals it adds the bonus on top of the terminal
+    channel.
+- **Test 2 (the IQL control) remains the behavioural check:** does removing the leak drop
+  the large_diverse cells to about 0? Queueing it now.
