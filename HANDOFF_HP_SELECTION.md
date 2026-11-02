@@ -25965,3 +25965,17 @@ LEAK IS CONFIRMED.** Identical for the motion reward and MR seeds 1–3 on each 
     channel.
 - **Test 2 (the IQL control) remains the behavioural check:** does removing the leak drop
   the large_diverse cells to about 0? Queueing it now.
+
+**Test 2 queued (author's choice, 2026-11-02): a temporary 11th lane, BR**, on GPUs
+2 3 4 5 0, one agent each, both cells in order (motion, then MR); about a day. It is an
+exception to the 10% speed rule, taken because this result decides how the whole candidate
+protocol is read; the other lanes run a little slower until it ends. Log
+`stage4_queue_BR.log`.
+- **Reader:** `control_readout.py` section I (added now, before any run):
+  - each leak-free cell's mean ± sd;
+  - as run − leak-free, paired by seed: the motion reward's `atwin` cell and MR at its
+    no-terminals winner (the `rerun` cell).
+- `phase2_sweeps.leakfree_spec()` reads the two cells' specs off their generated files.
+  `return_range_split` stays in their fixed params, so exact matching keeps them apart from
+  the cells they copy.
+- These are controls, not §14.5 candidate cells, so no registered-reading gate applies.
