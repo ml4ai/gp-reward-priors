@@ -25853,3 +25853,77 @@ from the session's scratch area.
 - **The ensemble mean waits on 7 cells:** candidate r32 ×4 (BK) and standard r64
   medium_diverse, large_play and large_diverse (BL). BK's 4 cells set the pace: about 2
   days.
+
+### 14.82 Do normalization indices 6 and 7 put the goal back into the reward? (author's question, 2026-11-02) — the leak hypothesis, its tests, and predictions
+
+**The mechanism (read from `iql_eval.py`; no data yet).** `train` builds the reward, shifts
+it (`gauge_reward max0`), normalizes it (`modify_reward`), and only then zeroes the terminals
+(`drop_terminals`).
+- At indices 6 and 7, `modify_reward` subtracts `min_ret / trj_len` per transition, divides
+  by `R = max_ret − min_ret` and multiplies by 1000.
+- **`trj_len` is the length of the transition's segment as `return_reward_range` cuts the
+  data: at every terminal, i.e. every goal arrival (§13.13.1), or every 1000 steps.**
+- So the index-7 reward is `1000·r/R + 1000·(−min_ret)/(trj_len·R) − 1`: the reward
+  model's own part plus a BONUS that grows as the segment shortens.
+- After the shift `min_ret` is very negative and `max_ret ≈ 0`, so `−min_ret/R ≈ 1`.
+  Consecutive goal steps are all terminals, so each is its own length-1 segment with a bonus
+  of about **+1000**, against about +1 in a full 1000-step segment.
+- Indices 0–5 use only dataset-wide constants, so they cannot carry this.
+- `drop_terminals`'s comment says the order keeps "the normalization constants the
+  anchor's". But `trj_len` is a per-transition quantity derived from the terminals.
+
+**The evidence already in hand** (the seed-0 no-terminals grids, `control_readout` §E;
+indices 0–5 against 6 / 7):
+- motion, medium_diverse: .006 .000 .053 .094 .006 .012 against **.304 / .332**;
+- motion, large_play: .000 .000 .000 .003 .000 .000 against **.192 / .150**;
+- MR, large_diverse: .000 .000 .000 .004 .000 .000 against **.152 / .123**;
+- PT, NMR and the ensemble mean on large_diverse: .000 at all of 0–5, against 0.11–0.14 at
+  6 / 7.
+
+A goal-blind reward (motion) sits at the behaviour-cloning floor except at the two indices
+that use trajectory lengths.
+
+**If confirmed, it reframes §14.75 and §13.15:**
+- The "plateau" on medium_diverse, large_play and large_diverse would be this leaked goal
+  signal, not a limit of IQL. Every family's frozen no-terminals index there is 6 or 7
+  (NMR medium_diverse, 0, aside), and the leak does not depend on reward quality. That fits
+  MR ≈ motion ≈ task, A not predicting S, and the flat ladders.
+- medium_play's frozen index is 1, which does not leak; that is why reward quality shows
+  there.
+- **The candidate protocol at indices 6/7 is not goal-free.** §14.5's registered verdicts
+  stand as computed, but their meaning on those mazes would need disclosure, and the
+  protocol a correction (the author's call).
+- §13.15.3's "without terminals, every reward still carries the goal" would be partly the
+  leak.
+- The rescaling companions (§14.78) use indices 2 and 3: leak-free as built.
+
+**Test 1, offline, no IQL (box, minutes): `results/leak_measure.py`.**
+- For the motion reward and MR's anchor models (seeds 1–3), on all four mazes, built exactly
+  as `iql_eval` builds them. It splits index 7 into the reward's own part and the bonus,
+  and asserts that the split reproduces `modify_reward` (the max error is printed).
+- It reports the bonus mass on terminal transitions against the rest; the share of
+  length-1 segments and how many of them are terminals; the sd of each part; the bonus's
+  cell map against BFS distance to the goal (ρ and the goal cell's rank); and the leak-free
+  bonus.
+- Self-tested on a toy sequence.
+- **Prediction:** on every maze and for both rewards, the bonus is far larger on terminal
+  transitions than elsewhere, carries most of its variance there, and its cell map is
+  strongly goal-aligned (ρ near −1, goal cell rank 1). The leak-free bonus is about
+  constant.
+
+**Test 2, IQL (box): two no-terminals cells on large_diverse at full data, 20 runs.**
+- `phase2_sweeps.py control --leakfree --write`:
+  - `ctrl_sweeps/leakfree_atwin_noterm_antmaze_large_diverse_heuristic` (motion, index 7;
+    normally 0.134 ± 0.040);
+  - `ctrl_sweeps/leakfree_rerun_noterm_antmaze_large_diverse_mr` (MR, index 6; normally
+    0.114 ± 0.029).
+  - Each is the existing file plus ONE key, **`return_range_split: "length"`**, a new
+    `iql_eval` option, OFF by default ("terminals"). It cuts the trajectories every 1000
+    steps only.
+- **Tested here:** the default reproduces the original `modify_reward` bit for bit at every
+  index (against `git show HEAD`); `"length"` makes the bonus constant; `leak_measure`'s
+  decomposition matches both. On synthetic data with clustered terminals, the bonus averaged
+  275 on terminal steps against 29 elsewhere, and a flat 23 with `"length"`.
+- **Prediction:** both cells fall to about 0, like their own indices 0–5. If they stay near
+  0.11–0.13, the leak is not what carries the plateau.
+- **To be queued only if test 1 confirms the concentration** (the author's order).
