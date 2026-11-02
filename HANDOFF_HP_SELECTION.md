@@ -25761,3 +25761,36 @@ BQ (behind BO) are launched. The box now holds 10 running lanes (AM–AT, BK, BL
 waiters: NMR AU–BB, noise BC–BJ, check 3's BM, and the companion arms' BN, BO, BP and BQ.
 Log names run up to `stage4_queue_BQ.log`. `pgrep -fc 'while pgrep -f'` should read 21
 until the first waiter starts its queue.
+
+### 14.79 Sweep check 2026-11-01 16:20 MST: PT's first cells; no new damage; the companion readout built
+
+**Box:** 47 IQL runs in 10 sweeps (one cell in its last two seeds), **median 152k
+steps/h**, about 13% below baseline: the 10-lane cost. No new lanes.
+- No stale heartbeats and **no failed run**.
+- The standard lanes are on PT r16 and r32. The candidate lanes are finishing the ensemble
+  mean's r128. BK (candidate r16 large_play) and BL (standard r32 large_diverse) are on
+  their second cells.
+
+**The registry and the controls and leveling readouts are unchanged.** (`register`
+regenerated the notebook's generated cells after the formatter had re-wrapped them:
+cosmetic, no outputs.) RQ1: MR's reading stands; the ensemble mean waits on 15 cells.
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:** **PT r16** medium_play 0.574 ± 0.132 (`4imwno4a`),
+  medium_diverse 0.575 ± 0.099 (`httbra1g`).
+- **Candidate, completeness only:** ensemble mean **r128 medium_diverse** (`rhyjxfsi`).
+
+**Built: `results/rescale_readout.py [--axis sparsity|noise]`** (§14.78's readout, before any
+companion cell exists):
+- Per (variant, family): per level, the frozen and companion cells each as their own mean ±
+  sd, and companion − frozen paired with exact intervals.
+- Per arm: the degradation slope per seed (as `rq1_readout.dslope`), its exact 10-seed
+  interval, and companion − frozen slope.
+- **The gate:** `REGISTERED_READ` lists the registered readings made, currently {sparsity:
+  MR}. A family's frozen candidate cells and its companions are neither fetched nor shown
+  before its registered reading, because the frozen cells are §14.5's candidate arm.
+  **Add each family to `REGISTERED_READ` as its registered reading is made.**
+- Completeness and audit as every readout: the companions are found by exact match plus
+  their own index; two sweeps for one cell means not read.
+- Self-test: a declining frozen arm against a flat companion; the gate; completeness.
+- From now on, sweep checks also run it.
