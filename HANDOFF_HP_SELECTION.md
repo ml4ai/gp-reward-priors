@@ -26036,3 +26036,36 @@ protocol is read; the other lanes run a little slower until it ends. Log
 
 **Scheduling note:** reward-model training (3) does not depend on the protocol, so it can
 overlap Study 1's tail, within the 10% speed rule.
+
+**Decision 3 (author, 2026-11-02): TRAIN NEW REWARD MODELS for seeds 100–110.** What it
+entails, inventoried from the code:
+- **The seed also picks the data.** A training seed s reads
+  `data/antmaze/<env>/eval/seed_<s>/` (`train_rewards.sh`). New seeds therefore need new
+  splits, all from the same `_pref_nt.hdf5` pool and each generator's own seeded rule:
+  - `scripts_bnn/split_pref_nt_seeds.py 100 … 110`: the 70/15/15 train/val/test split;
+  - `scripts_bnn/make_reduction_sets.py 101 … 110`: the nested r128 ⊃ … ⊃ r16 sets;
+  - `scripts_bnn/make_noise_sets.py 101 … 110 --parts train,test`: the nested flips.
+    Val is never corrupted (§11.2).
+  - All three take seeds as arguments and write only those seeds' directories.
+  - The new seeds' partitions overlap the old ones' (same pool, new permutations). That is
+    a fresh draw, not disjoint data.
+- **Trainings:** MR, PT and NMR only. The ensemble mean reads the MR models (`mr_ensemble`
+  over `root("mr")`), and the BNN stays under the hold. Per family:
+  - anchors (full data): seeds 100–110 × 4 mazes = 44;
+  - sparsity r16–r128: seeds 101–110 × 4 levels × 4 mazes = 160;
+  - noise primary n01–n045: seeds 101–110 × 5 × 4 = 200.
+  - No sensitivity arm and no ties (decision: main hypothesis only).
+  - **404 per family, 1,212 in all.** Each family's hyper-parameters stay frozen at their
+    Study 1 values (the configs are reused).
+- **Accuracy A** is re-measured on the new models (`rq1_accuracy.py`, on each new seed's
+  clean validation split).
+- **Plumbing to build** (protocol-independent, so it can come first):
+  - a second seed lineage: held-out seed 100, evaluation seeds 101–110;
+  - `experiment_conditions` refuses every seed outside 1–10 by design (the `EVAL_SEEDS`
+    guard), and so does `train_rewards.sh`'s COND preflight;
+  - `phase2_sweeps` (`EVAL_SEEDS`; the grid's seed 0);
+  - the readouts' `SEEDS` (`eval_readout`, `rq1_readout`, `rq1_accuracy`, ladder status).
+  - Study 1's paths and guards stay exactly as they are; the new lineage is added beside
+    them.
+- **Box time:** the box is past the 10% speed rule with BR running. Training goes behind
+  Study 1's lanes as they free up, or earlier only on the author's call.
