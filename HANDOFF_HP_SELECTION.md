@@ -26142,3 +26142,47 @@ entails, inventoried from the code:
     §14.82's leak seen from the other side;
   - the task reward fits at 6/7 only because it is itself the goal indicator.
 - The corrected protocol is cleared for the replication's grids.
+
+**CORRECTION and decision (author, 2026-11-02): the reward models' hyper-parameters are
+RE-SELECTED at seed 100.** This replaces "each family's hyper-parameters stay frozen at
+their Study 1 values" in decision 3's inventory, which was Claude's assumption, not the
+author's.
+- Seed 100 plays seed 0's role for EVERYTHING selected: the reward models' stage-1
+  searches AND the IQL normalization grids. The replication is then independent of
+  Study 1 in every selection draw.
+
+**The procedure, Study 1's own, unchanged except for the seed:**
+- One Bayes sweep per family × variant (MR, PT, NMR × 4 = 12 sweeps), ONE agent each
+  (serial history for the optimiser; deterministic per-seed output paths).
+- Ranges and metric are the current sweep files' own: §3.2.16's common capacity ranges;
+  `eval_loss_at_selected`, the validation loss at the checkpoint picked on the test split
+  (§4.3.107); run cap 130.
+- Stopping rule: K = 15 trials without improvement (`check_sweep_convergence.py`). The
+  winner is the stopping-rule winner; the best of all trials is reported beside, and any
+  disagreement disclosed.
+- NMR's search is its §14.14 stage-1 file.
+- The winner's RECORDED wandb config becomes the production config
+  (`scripts_bnn/make_production_config.py --family mr|pt|nmr`).
+- seed = 100 picks both the model seed and the `seed_100` split (generated, on the box).
+
+**Consequences:**
+- **Separate replication configs.** Study 1's production configs (each also its sweep's
+  base config) must not change. The replication gets its own base/production configs,
+  starting as UNSELECTED-BASE copies so `train_rewards.sh` refuses them until a winner is
+  written. Its sweep files are generated with seed 100 and pointed at those configs, under
+  a NEW sweep-id cache, so nothing resumes a Study 1 sweep (§10.5).
+- **`train_rewards.sh` gets a config-set switch**, with a guard: seeds 100–110 train only
+  from replication configs, and seeds 0–10 only from Study 1's.
+- **Architectures may differ from Study 1's.** The IQL side must take its per-family
+  settings from the replication's winners; e.g. PT's `seq_labeller` depends on the winner's
+  head count (§14.28, `PT_ONE_HEAD`).
+- **Order on the box:**
+  1. the 12 selection sweeps;
+  2. the production configs;
+  3. the 1,212 trainings;
+  4. accuracy A;
+  5. the IQL grids at seed 100;
+  6. the IQL ladders.
+
+**Timing (author, 2026-11-02): all replication GPU work, the selection sweeps included,
+starts after Study 1's lanes finish.** Nothing is launched before then.
