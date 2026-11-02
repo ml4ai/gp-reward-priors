@@ -26125,3 +26125,20 @@ entails, inventoried from the code:
 - the replication's readouts (`rq1_readout`, `rq1_accuracy`, the ladder status) over
   101–110.
 - Registered before any replication IQL run.
+
+**Splits and the leak audit (author ran both on the box, 2026-11-02).**
+- The seeds 100–110 splits, the reductions (101–110) and the noise train/test files
+  (101–110) were generated and counted (11 / 40 / 100 per maze) by the author.
+- **LEAK AUDIT (`exp/leak_audit.txt`, split "length"): PASS on all four mazes.**
+  - At every index 0–7, for the task reward, the motion reward and three Gaussian draws,
+    the normalized reward is identical (max |difference| = 0) on the real terminals and on
+    all-zero terminals.
+  - Affine residuals: ≤ 2e-4 at 4/5 (float32), ≤ 7e-7 elsewhere: every index is one
+    global map.
+- **The old split ("terminals") fails at 2–7 for every reward**, with 0 and 1 clean:
+  - at 2–5 the global scale or offset moves (by 2.4–5e4 depending on the reward);
+  - **at 6/7 the relative affine residual is 1.0 for the motion reward and the Gaussian
+    draws: the normalized reward is essentially unrelated to its input**, which is
+    §14.82's leak seen from the other side;
+  - the task reward fits at 6/7 only because it is itself the goal indicator.
+- The corrected protocol is cleared for the replication's grids.
