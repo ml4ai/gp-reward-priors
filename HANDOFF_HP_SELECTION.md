@@ -25979,3 +25979,60 @@ protocol is read; the other lanes run a little slower until it ends. Log
   `return_range_split` stays in their fixed params, so exact matching keeps them apart from
   the cells they copy.
 - These are controls, not §14.5 candidate cells, so no registered-reading gate applies.
+
+### 14.83 After the leak: finish Study 1 as registered, then a corrected candidate protocol on new seeds (author's direction, 2026-11-02) — NOT YET REGISTERED
+
+**The author's direction:**
+- Every running Study 1 test and check runs to completion under §14.5 as registered. All
+  results and verdicts are reported, each with the §14.82 disclosure.
+- Then a NEW candidate protocol with the goal information removed from indices 6/7. Under
+  it, hyper-parameter selection and the sparsity and label-noise ladders run on completely
+  new seeds: 100 held out, 101–110 for evaluation.
+- The same hypothesis, checks and tests as §14.5. The ablations and sensitivity arms are
+  NOT re-run; the main hypothesis only.
+- This settles §14.82's (ii): Study 1's protocol is not changed mid-study. It also removes
+  the pressure to decide before the ensemble mean's registered reading, which goes ahead
+  as registered.
+
+**Open decisions, to register before any new-seed run:**
+1. **The correction.** Two options:
+   - `return_range_split "length"` at EVERY index;
+   - dropping indices 6/7.
+   - Claude recommends "length". The normalization then never reads the terminals, and
+     every index becomes one global affine map of the learned reward. The grid keeps its 8
+     options.
+   - Dropping 6/7 leaves indices 2–5 scaling by a range computed from terminal-cut
+     segments: a single global constant, so nothing goal-shaped reaches a transition, but
+     the normalization still reads the terminals.
+   - Code check (2026-11-02): before `drop_terminals`, iql_eval reads the terminals only
+     in `return_reward_range`. The dataset builders use them for an episode-step counter
+     that does not drop transitions; transitions are dropped at the timeouts only.
+2. **A registrable leak audit** for the new protocol: offline, every index, every family.
+   The normalized reward minus its best global affine fit to the learned reward must have
+   sd at float precision. Extends `results/leak_measure.py`; runs before any new grid.
+3. **Reward models for seeds 100–110.** IQL seed s loads reward model `{root}_s` by design
+   (`iql_eval`, `reward_model_root`). Two options:
+   - New seeds mean training new reward models: model 100 at full data per
+     family × variant, and models 101–110 at every ladder level and family. Accuracy A
+     is then re-measured (`rq1_accuracy.py`).
+   - Or decouple the IQL seed from the model seed (a new key) and reuse models 1–10. Only
+     IQL is then new. The units of the A-slope test are the same model draws as Study 1,
+     so it is not an independent replication on the model side.
+   - "Completely new seeds" reads as the first; it is the larger cost.
+4. **What "hyper-parameter selection" re-runs.** §14.5 selected only the normalization
+   index without terminals (the full-data grid, frozen for the ladder); the other IQL
+   hyper-parameters came from the standard protocol. Claude assumes the same here: the
+   8-index grid at seed 100, per family × variant, with "length".
+5. **The references the test needs, re-run on the new seeds under the new protocol:**
+   - the task reward (usability check; its own grid winner);
+   - the zero reward (usability and test (c));
+   - any other reference (c) uses.
+   - Index 0 is unaffected by the split, but the seeds change.
+6. **Whether the standard arm (with terminals) is re-run on the new seeds**: only if the
+   hypothesis or its checks compare protocols. Not affected by the correction otherwise.
+7. **Disclosure:** the new protocol is motivated by Study 1's result (§14.82). The new
+   seeds keep the test fresh, but the design change itself is post hoc and is reported
+   as such.
+
+**Scheduling note:** reward-model training (3) does not depend on the protocol, so it can
+overlap Study 1's tail, within the 10% speed rule.
