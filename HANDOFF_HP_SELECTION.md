@@ -26069,3 +26069,59 @@ entails, inventoried from the code:
     them.
 - **Box time:** the box is past the 10% speed rule with BR running. Training goes behind
   Study 1's lanes as they free up, or earlier only on the author's call.
+
+**Decisions 1, 4, 5, 6 (author, 2026-11-02: "use your picks"):**
+1. **The correction: `return_range_split "length"` at every index.**
+   - Applied in BOTH protocols. Test (b) compares the candidate slope with the standard
+     slope per unit, so the two arms must share one normalization rule and differ only in
+     the terminals.
+   - So the standard arm's index is re-selected too, at seed 100. This extension follows
+     from (b); the author can overrule it.
+   - Every replication sweep carries `return_range_split: length` explicitly, index 0 and
+     the trivial rewards included (no effect there). Exact matching then keeps every
+     Study 1 collector off the replication's sweeps.
+4. **Selection: only the 8-index normalization grid**, seed 100, full data, per family ×
+   variant × protocol, plus the task reward's candidate grid. The other IQL
+   hyper-parameters stay inherited, as in Study 1.
+5. **References, the ones the checks and tests read, on seeds 101–110 under the new
+   protocol:**
+   - the task reward, candidate, at its own grid winner (usability);
+   - the zero and mean-constant rewards, candidate, index 0 (usability and (c)).
+   - The "reported beside" items are NOT re-run: the motion reward and the standard-arm
+     non-inferiority check.
+6. **The standard arm IS re-run.** §14.5's test (b) is per unit, candidate slope −
+   standard slope (`rq1_readout.py`'s docstring), so the decision follows from the
+   registered test.
+
+**IQL size of the replication:**
+- grids: (4 families × 2 protocols + task) × 4 variants = 36 cells × 8 = 288 runs;
+- ladders: 4 families × 9 distinct levels (full, r16–r128, n01–n045) × 4 variants × 2
+  protocols = 288 cells × 10 = 2,880 runs;
+- references: 12 cells, 120 runs;
+- **about 3,290 runs in all.**
+
+**Built now (2026-11-02), all protocol-independent or protocol-defining:**
+- **The leak audit, registered:** `results/leak_measure.py --audit [--split length]`.
+  - Criterion: for every variant and every index 0–7, the normalized reward on the real
+    terminals equals the one on all-zero terminals EXACTLY.
+  - Checked on the task reward, the motion reward and three shifted Gaussian draws. These
+    are not learned rewards, so a pass holds for any reward model.
+  - Beside it: the relative residual of a global affine fit (float32 puts indices 4/5 near
+    1.5e-4).
+  - Self-tested on iql_eval's own `modify_reward`: "length" passes at every index;
+    "terminals" fails at 2–7 (6/7 also not a single map) and passes at 0 and 1.
+  - **The audit must PASS on the box before any replication grid is generated.**
+- **The training side accepts the replication seeds.** `experiment_conditions.check_allowed`
+  admits 101–110 for MR/PT/NMR on the sparsity ladder and the noise primary arm only. It
+  refuses BNN, the sensitivity arm, ties, seed 100 under a condition, and anything past
+  110. Anchors at 100–110 need no condition. Self-tested; `train_rewards.sh` usage notes
+  added.
+- **Model directories** are `…_eval_<seed>`, so 100–110 never collide with 1–10. Nothing
+  globs model directories (checked); every readout names its seeds.
+
+**Still to build, once the splits and audit are done:**
+- the IQL side: `phase2_sweeps` grid and ladder specs for seeds 100 / 101–110 with
+  "length";
+- the replication's readouts (`rq1_readout`, `rq1_accuracy`, the ladder status) over
+  101–110.
+- Registered before any replication IQL run.

@@ -54,6 +54,11 @@
 #   ./train_rewards.sh bnn                      # BNN, 1 GPU/job (6 concurrent)
 #   ./train_rewards.sh bnn "0 1 2 3 4 5" 3      # BNN, 3 GPUs/job (2 concurrent, all 6 used)
 #   SEEDS="1 2 3" ./train_rewards.sh mr         # only seeds 1-3
+#   SEEDS="$(seq -s ' ' 100 110)" ./train_rewards.sh mr
+#                                               # the replication's anchors (§14.83)
+#   COND="r16 r32 r64 r128" SEEDS="$(seq -s ' ' 101 110)" ./train_rewards.sh mr
+#                                               # its ladders: 101-110, MR/PT/NMR, no
+#                                               # sensitivity arm, no ties (checked)
 #   COND="r16 r32 r64 r128" NUM_CHAINS=128 ./train_rewards.sh bnn "2 3 4 5" 4
 #                                               # sparsity BNN models, seeds 1-10
 #   DRY_RUN=1 COND="r16" ./train_rewards.sh mr  # show the commands only

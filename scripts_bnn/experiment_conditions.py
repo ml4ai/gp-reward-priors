@@ -57,6 +57,14 @@ ROOT = os.path.dirname(HERE)
 FAMILIES = ("bnn", "mr", "pt", "nmr")                  # NMR added 2026-10-22 (handoff 14.17)
 VARIANTS = ("medium_play", "medium_diverse", "large_play", "large_diverse")
 EVAL_SEEDS = tuple(range(1, 11))
+# The corrected-protocol replication (handoff §14.83, author 2026-11-02): NEW reward models
+# on new seeds, 100 held out (its anchor models only) and 101-110 for evaluation.  Its
+# scope is the main hypothesis: the sparsity ladder and the noise PRIMARY arm, for MR, PT
+# and NMR (the ensemble mean reads the MR models; the BNN stays under the §14.1 hold).
+# No sensitivity arm and no ties at these seeds.
+REPL_HELDOUT_SEED = 100
+REPL_EVAL_SEEDS = tuple(range(101, 111))
+REPL_FAMILIES = ("mr", "pt", "nmr")
 REDUCTION_SIZES = (16, 32, 64, 128)                    # decided 2026-10-12, §13.5
 NOISE_LEVELS = ("01", "02", "03", "04", "045")         # p = 0.1 ... 0.45
 SPARSITY = tuple(f"r{n}" for n in REDUCTION_SIZES)
@@ -125,9 +133,14 @@ def check_allowed(family, variant, seed, cond):
             raise ValueError(f"ties: the ablation is MR, PT and NMR only, not {family} (§14.2 item 3)")
         if variant not in TIES_VARIANTS:
             raise ValueError(f"ties: the ablation runs on {' and '.join(TIES_VARIANTS)} only (§14.2 item 3)")
-    if int(seed) not in EVAL_SEEDS:
-        raise ValueError(f"seed {seed}: the experiments run at seeds 1-10 only; nothing is "
-                         "re-selected under a condition, so there is no seed-0 lineage (§11.1)")
+    if int(seed) in REPL_EVAL_SEEDS:
+        if family not in REPL_FAMILIES or c["kind"] == "ties" or c["arm"] == "oracle":
+            raise ValueError(f"seed {seed}: the replication (§14.83) trains MR, PT and NMR on the "
+                             "sparsity ladder and the noise primary arm only")
+    elif int(seed) not in EVAL_SEEDS:
+        raise ValueError(f"seed {seed}: the experiments run at seeds 1-10 (and 101-110, §14.83) "
+                         "only; nothing is re-selected under a condition, so there is no "
+                         "held-out lineage (§11.1)")
     if c["arm"] == "oracle":
         if family not in ORACLE_FAMILIES:
             raise ValueError(f"{cond}: the sensitivity arm is MR, PT and NMR only; the {family} "
@@ -381,6 +394,22 @@ def selftest():
         except ValueError:
             pass
     check_allowed("pt", "medium_play", 10, "n045o")
+    # the replication's seeds (§14.83): MR/PT/NMR, sparsity and noise primary only; never 100
+    for f in REPL_FAMILIES:
+        for c in SPARSITY + NOISE_PRIMARY:
+            check_allowed(f, "large_diverse", 101, c)
+            check_allowed(f, "medium_play", 110, c)
+    for args in (("mr", "medium_play", 100, "r16"), ("bnn", "medium_play", 101, "r16"),
+                 ("mr", "medium_play", 101, "n01o"), ("pt", "large_play", 105, "ties"),
+                 ("mr", "medium_play", 111, "r16")):
+        try:
+            check_allowed(*args)
+            raise AssertionError(f"allowed {args}")
+        except ValueError:
+            pass
+    a = cli_args("nmr", "large_play", 107, "n03", R)
+    assert a[1].endswith("/eval/seed_107/noise/antmaze-large-play-v2_pref_train_107_03.hdf5"), a
+    assert a[-1] == "./exp/reward_learning/antmaze_large_play_nmr_n03_eval", a     # + "_107" by the script
     # cli args: flat, in a fixed order, with the family's own output key
     a = cli_args("bnn", "large_play", 3, "r32", R)
     assert a == ["--train_dataset",
@@ -460,7 +489,7 @@ def selftest():
         _, probs = preflight("bnn", ["medium_play"], [1], ["n01o"], dr, mr, num_chains=128)
         assert probs and "no jobs" in probs[0]
         _, probs = preflight("mr", ["large_play"], [0], ["r16"], dr, mr)
-        assert probs and "seeds 1-10 only" in probs[0]
+        assert probs and "seeds 1-10 (and 101-110, §14.83) only" in probs[0]
 
     # ---- label caching ----
     lc = label_commands(VARIANTS, EVAL_SEEDS, SPARSITY, gpu=3)
