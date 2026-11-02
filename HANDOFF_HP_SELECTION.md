@@ -25794,3 +25794,40 @@ companion cell exists):
   their own index; two sweeps for one cell means not read.
 - Self-test: a declining frozen arm against a flat companion; the gate; completeness.
 - From now on, sweep checks also run it.
+
+### 14.80 Sweep check 2026-11-02 00:10 MST: the ensemble mean's candidate r128 in; PT's first cells; `results/ladder_status.py`
+
+**Box:** 50 IQL runs in 10 sweeps, **median 154k steps/h**: the 10-lane cost, no new lanes.
+- Both sets of main lanes are on **PT** (standard r32, candidate r16).
+- BK is on its 3rd repair (candidate r16 large_diverse, `sy3rkawy`); BL is on its 3rd
+  (standard r64 medium_play, `rkhbupcs`).
+- No stale heartbeats; **no damage**.
+- The registry and the controls and leveling readouts are unchanged. RQ1: MR's reading
+  stands; the others are NOT READ.
+- The companion readout's first live run works: MR's companions do not exist yet, and every
+  other family is held back by the gate.
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:** ensemble mean r32 large_diverse **repaired** 0.293 ±
+  0.101 (`tpf064f1`, BL's 2nd cell); PT r16 large_play 0.124 ± 0.142 (`tqidsvkl`),
+  large_diverse 0.168 ± 0.117 (`dhzyl3zv`).
+- **Candidate, states only:** ensemble mean **r128 all four** (`5p4g0jv1`, `rhyjxfsi`,
+  `1k7xbk4i`, `bsvrqubs`); **repaired** r16 large_play (`ursp8yfq`).
+- **What the ensemble mean still needs for its reading:** candidate r16 large_diverse (BK,
+  running) and candidate r32 ×4 (BK, queued); standard r64 ×4 (BL, running). BK's 5
+  remaining cells set the pace: about 2.5 days.
+
+**A transient audit flag, cleared:** BL's cell `rkhbupcs` showed "reward_model_path None" on
+a run at step 0 (`jhymchrw`; then `k49w83c0` as the next seed started). Checked: `jhymchrw`
+now carries `…_mr_r64_eval_6` and `max0`. It is the step-0 config-sync race of §14.54.
+The readout simply reads it later.
+
+**Built: `results/ladder_status.py [--axis sparsity|noise] [--since DATE]`**, the sweep
+check's ladder section as a tracked tool. The scratchpad helpers it replaces disappeared
+from the session's scratch area.
+- **DAMAGE:** non-superseded sweeps created since `--since` with any failed run.
+- **STANDARD:** each with-terminals cell's own mean ± sd, or its completeness.
+- **CANDIDATE and COMPANION:** run states only; no score is fetched (§14.5).
+- **From now on a sweep check runs** `box_status.py`, `register --write`,
+  `control_readout.py`, `leveling_readout.py`, `rq1_readout.py`, `rescale_readout.py` and
+  `ladder_status.py` (later `--axis noise` too).
