@@ -26282,3 +26282,13 @@ launched; it waits for Study 1's lanes.
 - **A check the task grid relies on:** indices 0–3 cover every distinct index only if the
   minimum segment return is 0. `leak_measure.py --audit` now prints it per maze and split,
   with its own TASK GRID verdict. It needs one more audit run on the box.
+
+**Audit re-run (author, 2026-11-02; `exp/leak_audit.txt`): LEAK AUDIT PASS (unchanged);
+TASK GRID 0–3 covers every distinct index.**
+- The task reward's minimum segment return is 0 on all four mazes under both splits, so
+  indices 4/6 equal 2 and 5/7 equal 3 exactly. The replication's task grid stays 0–3.
+- For the record, under "length" the task reward's maximum segment return is 744–799 (it
+  is 1 under "terminals", where every segment ends at a goal). So the task reward's scale
+  at indices 2–5 differs from Study 1's by that factor; its grid re-selects the index.
+- Nothing else is left to check before the replication's GPU work, which waits for
+  Study 1's lanes.
