@@ -26231,3 +26231,54 @@ launched; it waits for Study 1's lanes.
    (locally), commit, pull on the box.
 3. `CONFIG_SET=repl ./train_rewards.sh mr|pt|nmr` (anchors 100–110), then with
    `COND="r16 r32 r64 r128 n01 n02 n03 n04 n045"` (101–110).
+
+**The replication's IQL side, BUILT (2026-11-02, author's go-ahead).** Nothing launched.
+- **CORRECTION to the size above: 10 levels, not 9.** They are full, r16–r128 and
+  n01–n045, so 320 ladder cells. With the 36 grids and the 12 reference cells that makes
+  **368 files and about 3,600 IQL runs** (288 + 3,200 + 120).
+- **`replication.py`** (repo root) is the single spec, everything under `repl_sweeps/`:
+  - **grids** (seed 100, full data; Study 1's stage-4 rule):
+    - `grid_{std,cand}_antmaze_<v>_<fam>`, fam in mr, pt, nmr, ens_mean, indices 0–7;
+    - `grid_cand_antmaze_<v>_task`, indices 0–3, as Study 1's no-terminals task grid.
+  - **cells** (seeds 101–110, at their grid's winner):
+    - `{std,cand}_<level>_antmaze_<v>_<fam>`;
+    - `cand_full_antmaze_<v>_task`;
+    - `cand_{zero,mean}_antmaze_<v>`, index 0.
+  - **Every file is Study 1's same cell with only these changes** (checked on the rendered
+    text): `return_range_split: length`; `seq_labeller: 3` for PT and NMR; the seeds.
+    - `seq_labeller 3` reads PT's head count correctly for ANY winner. Study 1 kept 2 only
+      so old runs stayed matched, and the replication's PT architectures are not known in
+      advance. For NMR, 3 ≡ 2.
+    - `reward_model_root` is Study 1's; iql_eval appends `_<seed>`.
+    - All run `iql_eval.py`, as Study 1's no-terminals cells did.
+  - **Write gating:**
+    - a learned family's files only once its replication config is selected (no
+      UNSELECTED-BASE; the ensemble mean follows MR);
+    - a cell only once its grid's winner is in `results/repl_grid_winners.json`.
+  - `replication.py winners [--write]` scores the seed-100 grids (audit, then
+    `iql_score.select_normalization`), refusing to change a recorded winner.
+  - **Never a Study 1 cell (self-tested):** no Study 1 spec has `return_range_split`.
+    - The one exception is the leak control (§14.82): `cand_full_antmaze_large_diverse_mr`
+      has the same settings as its MR cell, told apart by the seeds (1–10 vs 101–110).
+    - Every collector, on both sides, checks seeds. Confirmed on wandb today: the running
+      BR sweeps are not picked up.
+- **Written now: the 12 model-free files** (4 task grids, 8 trivial cells). The other 356
+  wait for selection and grid winners.
+- **`repl_sweeps/launch.sh`**: one sweep at a time (no "all").
+- **`stage4_queue.sh`** gains the `@repl` tag ("Lineage: REPLICATION"); dry-run checked,
+  including a refusal under the wrong tag.
+- **`results/repl_readout.py`:**
+  - `status`: grids' states and winners; standard cells' own mean ± sd; candidate cells'
+    STATES ONLY, as in Study 1.
+  - `rq1 [--axis]`: §14.5's registered reading, run through `rq1_readout`'s OWN functions,
+    unchanged.
+    - Each cell's scores, and each accuracy, are re-keyed seed s → unit s − 100. Pairing is
+      unchanged; a run at any other seed fails the audit.
+    - "Beside" items print NOT READ (not re-run, decision 5).
+  - Self-tested on synthetic re-keyed cells end to end (SENSITIVE verdicts, audit
+    failures, incomplete cells). `status` was run on wandb.
+- **`results/rq1_accuracy.py measure --repl`**: seeds 101–110, `exp/rq1_accuracy_repl.json`;
+  refuses to write Study 1's file.
+- **A check the task grid relies on:** indices 0–3 cover every distinct index only if the
+  minimum segment return is 0. `leak_measure.py --audit` now prints it per maze and split,
+  with its own TASK GRID verdict. It needs one more audit run on the box.
