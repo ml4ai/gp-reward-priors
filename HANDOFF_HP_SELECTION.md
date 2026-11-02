@@ -25831,3 +25831,25 @@ from the session's scratch area.
 - **From now on a sweep check runs** `box_status.py`, `register --write`,
   `control_readout.py`, `leveling_readout.py`, `rq1_readout.py`, `rescale_readout.py` and
   `ladder_status.py` (later `--axis noise` too).
+
+### 14.81 Sweep check 2026-11-02 10:30 MST: PT's r16 and r32 cells; the ensemble mean down to 7 cells
+
+**Box:** 50 IQL runs in 10 sweeps, **median 156k steps/h**: the 10-lane cost, no new lanes.
+- No stale heartbeats; **no damage** (`ladder_status.py`).
+- BK is on its 4th repair (candidate r32 medium_play, `plo37lvv`), with 3 more behind it.
+  BL is on its 4th (standard r64 medium_diverse, `0mcp5isz`), with 2 more.
+- The main lanes are on PT (standard r32 → r64, candidate r16 → r32).
+- The registry and the controls and leveling readouts are unchanged. RQ1: MR's reading
+  stands, the others NOT READ. Companions: none exist yet (MR's start behind BK).
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - **PT r32:** medium_play 0.611 ± 0.075 (`krtc15pm`), medium_diverse 0.608 ± 0.070
+    (`3trx0p5x`), large_diverse 0.117 ± 0.127 (`x4ca26kd`);
+  - ensemble mean **r64 medium_play, repaired**, 0.724 ± 0.045 (`rkhbupcs`). §14.80's step-0
+    audit flag on this cell has cleared.
+- **Candidate, states only:** ensemble mean r16 large_diverse **repaired** (`sy3rkawy`); PT
+  **r16** medium_play, medium_diverse, large_diverse (large_play 9/10, its last run ending).
+- **The ensemble mean waits on 7 cells:** candidate r32 ×4 (BK) and standard r64
+  medium_diverse, large_play and large_diverse (BL). BK's 4 cells set the pace: about 2
+  days.
