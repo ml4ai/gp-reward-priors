@@ -26186,3 +26186,48 @@ author's.
 
 **Timing (author, 2026-11-02): all replication GPU work, the selection sweeps included,
 starts after Study 1's lanes finish.** Nothing is launched before then.
+
+**The replication's selection tooling, BUILT (2026-11-02, author's go-ahead).** Nothing
+launched; it waits for Study 1's lanes.
+- **`scripts_bnn/make_repl_selection.py [--write]`** writes, for MR / PT / NMR × 4 mazes:
+  - `scripts_<fam>/antmaze_<v>_<fam>_antmaze_eval_repl.yaml`, the replication base and
+    production config:
+    - Study 1's production config with IDENTICAL values (checked by parsing both);
+    - a header carrying UNSELECTED-BASE, so `train_rewards.sh` refuses it;
+    - every swept field marked PLACEHOLDER, so the winner rewrites it even when it equals
+      Study 1's value;
+    - written only when absent: a selected file is never overwritten.
+  - `scripts_<fam>/sweep_antmaze_<v>_<fam>_antmaze_eval_repl.yaml`: Study 1's sweep file
+    with exactly two values changed (seed 0 → 100; config_path → the repl config).
+    Checked by parsing; a sweep file without the expected lines is refused.
+  - **All 24 files written and committed.**
+- **`launch_hp_sweeps.sh repl`:** the 12 sweeps, one agent each.
+  - GPU map is the union of the baselines and NMR maps: MR ×4 on GPU 0, PT 2 per GPU on
+    1–2, NMR 2 per GPU on 4–5; GPU 3 free.
+  - Its own cache `exp/sweep_ids_repl_round1.txt` and `repl_` keys, so nothing can resume
+    a Study 1 sweep.
+  - The preflight checks the seed_100 splits and that each sweep is seed 100 on a
+    `*_repl.yaml` base that is still unselected (a selected base means the search already
+    ran).
+- **Winner tools, as in Study 1:**
+  - `check_sweep_convergence.py` (K = 15) picks the stopping-rule winner, with the best of
+    all trials beside it.
+  - `make_production_config.py --family mr|pt|nmr --set repl <variant> <run_id> [--write]`
+    writes the repl config. It refuses a winner that is not a seed-100 trial on a
+    `*_repl.yaml` base, and refuses a replication trial without `--set repl`.
+  - Self-tested: header and every PLACEHOLDER replaced; the UNSELECTED-BASE marker gone.
+    The test caught a header that would have kept the marker in its own text, which would
+    have made `train_rewards.sh` refuse a selected config. Fixed.
+- **`train_rewards.sh CONFIG_SET=repl`:** trains from the repl configs.
+  - Seeds and config sets are locked together: repl trains only seeds 100–110, and seeds
+    ≥ 100 only under repl. BNN is refused under repl.
+  - Default seeds: 100–110 for anchors, 101–110 with COND.
+  - All five guards exercised on a dry run, including the UNSELECTED-BASE refusal of the
+    current repl configs.
+
+**Box sequence, once Study 1's lanes are done:**
+1. `./launch_hp_sweeps.sh repl` (from the gp_reward-priors root).
+2. Per sweep: convergence check, then `make_production_config.py --set repl … --write`
+   (locally), commit, pull on the box.
+3. `CONFIG_SET=repl ./train_rewards.sh mr|pt|nmr` (anchors 100–110), then with
+   `COND="r16 r32 r64 r128 n01 n02 n03 n04 n045"` (101–110).

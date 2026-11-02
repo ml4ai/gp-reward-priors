@@ -45,6 +45,11 @@
 #             (seed 0 is refused: nothing is re-selected under a condition), jobs
 #             run condition by condition, and a preflight checks every split file,
 #             every output directory and the BNN chain budget before anything starts.
+#   CONFIG_SET  empty (Study 1, the default) | repl.  repl trains from the replication's
+#             configs, scripts_<m>/antmaze_<v>_<m>_antmaze_eval_repl.yaml (handoff 14.83),
+#             MR / PT / NMR only.  Seeds and config sets are locked together: seeds
+#             100-110 train ONLY with CONFIG_SET=repl, and repl trains ONLY seeds 100-110.
+#             Under repl SEEDS defaults to 100..110 (anchors) or 101..110 (COND).
 #   ALLOW_EXISTING=1  with COND: allow writing into a non-empty model directory.
 #   DRY_RUN=1   print every job's full command, in order, and launch nothing.
 #
@@ -54,9 +59,9 @@
 #   ./train_rewards.sh bnn                      # BNN, 1 GPU/job (6 concurrent)
 #   ./train_rewards.sh bnn "0 1 2 3 4 5" 3      # BNN, 3 GPUs/job (2 concurrent, all 6 used)
 #   SEEDS="1 2 3" ./train_rewards.sh mr         # only seeds 1-3
-#   SEEDS="$(seq -s ' ' 100 110)" ./train_rewards.sh mr
-#                                               # the replication's anchors (§14.83)
-#   COND="r16 r32 r64 r128" SEEDS="$(seq -s ' ' 101 110)" ./train_rewards.sh mr
+#   CONFIG_SET=repl ./train_rewards.sh mr       # the replication's anchors, seeds 100-110
+#                                               # (§14.83; after its seed-100 selection)
+#   CONFIG_SET=repl COND="r16 r32 r64 r128" ./train_rewards.sh mr
 #                                               # its ladders: 101-110, MR/PT/NMR, no
 #                                               # sensitivity arm, no ties (checked)
 #   COND="r16 r32 r64 r128" NUM_CHAINS=128 ./train_rewards.sh bnn "2 3 4 5" 4
@@ -119,11 +124,29 @@ GPU_LIST="${2:-0 1 2 3 4 5}"
 PACK_ARG="${3:-}"
 VARIANTS="${VARIANTS:-medium_play medium_diverse large_play large_diverse}"
 COND="${COND:-}"     # experiment condition(s); empty = the production (anchor) models
-if [[ -n "$COND" ]]; then
+CONFIG_SET="${CONFIG_SET:-}"   # empty = Study 1's configs; repl = the replication's (14.83)
+if [[ "$CONFIG_SET" == "repl" ]]; then
+  if [[ -n "$COND" ]]; then
+    SEEDS="${SEEDS:-101 102 103 104 105 106 107 108 109 110}"   # no held-out lineage under a condition
+  else
+    SEEDS="${SEEDS:-100 101 102 103 104 105 106 107 108 109 110}"
+  fi
+elif [[ -n "$CONFIG_SET" ]]; then
+  echo "ERROR: CONFIG_SET must be empty (Study 1) or 'repl' (got '$CONFIG_SET')" >&2; exit 1
+elif [[ -n "$COND" ]]; then
   SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10}"   # no seed-0 lineage under a condition
 else
   SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10}"
 fi
+# Seeds and config sets are locked together (handoff 14.83): a replication seed trained
+# from a Study 1 config, or the reverse, would silently mix the two selections.
+for s in $SEEDS; do
+  if [[ "$CONFIG_SET" == "repl" ]] && (( s < 100 || s > 110 )); then
+    echo "ERROR: CONFIG_SET=repl trains seeds 100-110 only (got seed $s)" >&2; exit 1
+  elif [[ "$CONFIG_SET" != "repl" ]] && (( s >= 100 )); then
+    echo "ERROR: seed $s is a replication seed: set CONFIG_SET=repl (handoff 14.83)" >&2; exit 1
+  fi
+done
 NUM_CHAINS="${NUM_CHAINS:-8}"
 COND_PY="scripts_bnn/experiment_conditions.py"
 
@@ -134,6 +157,10 @@ case "$METHOD" in
   nmr) SCRIPT="scripts_nmr/run_nmr_training_antmaze_eval.py"; CFG_DIR="scripts_nmr"; CFG_SUF="_nmr_antmaze_eval.yaml" ;;
   *)   echo "ERROR: METHOD must be bnn | mr | pt | nmr (got '${METHOD:-<empty>}')" >&2; exit 1 ;;
 esac
+if [[ "$CONFIG_SET" == "repl" ]]; then
+  [[ "$METHOD" == "bnn" ]] && { echo "ERROR: the replication trains MR, PT and NMR only (the BNN is held, 14.1)" >&2; exit 1; }
+  CFG_SUF="${CFG_SUF%.yaml}_repl.yaml"
+fi
 
 read -ra GPUS <<< "$GPU_LIST"
 NGPU=${#GPUS[@]}

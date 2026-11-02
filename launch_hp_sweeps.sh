@@ -6,6 +6,8 @@
 #   ./launch_hp_sweeps.sh bnn        # round-3 BNN sweeps             (4 sweeps)
 #   ./launch_hp_sweeps.sh baselines  # MR + PT stage 1                (8 sweeps)
 #   ./launch_hp_sweeps.sh nmr        # NMR stage 1 (handoff 14.14)    (4 sweeps)
+#   ./launch_hp_sweeps.sh repl       # REPLICATION, seed 100: MR + PT + NMR (12 sweeps;
+#                                    # handoff 14.83; files from make_repl_selection.py)
 #
 # There is no combined mode: the two sets' GPU maps overlap (both use 0-2), so
 # running them together would oversubscribe.  The baselines' phase-1 sweeps are
@@ -68,8 +70,8 @@ export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-$OMP_NUM_THREADS}"
 export OMP_WAIT_POLICY="${OMP_WAIT_POLICY:-PASSIVE}"
 
 SET="${1:-}"
-if [[ "$SET" != "bnn" && "$SET" != "baselines" && "$SET" != "nmr" ]]; then
-    echo "usage: $0 bnn|baselines|nmr" >&2
+if [[ "$SET" != "bnn" && "$SET" != "baselines" && "$SET" != "nmr" && "$SET" != "repl" ]]; then
+    echo "usage: $0 bnn|baselines|nmr|repl" >&2
     exit 1
 fi
 
@@ -125,8 +127,24 @@ NMR_ENTRIES=(
     "nmr_large_play|scripts_nmr/sweep_antmaze_large_play_nmr_antmaze_eval.yaml|4"
     "nmr_large_diverse|scripts_nmr/sweep_antmaze_large_diverse_nmr_antmaze_eval.yaml|5"
 )
+# REPLICATION (handoff 14.83, 2026-11-02): Study 1's MR / PT / NMR searches re-run at
+# seed 100, one agent each, on the union of the two sets' GPU maps (MR 4 on GPU 0, PT 2
+# per GPU on 1-2, NMR 2 per GPU on 4-5; GPU 3 free).  The sweep files differ from Study
+# 1's in seed and config_path only (make_repl_selection.py checks that).  Its own cache:
+# keyed by entry name, so the "repl_" keys and the new file can never resume a Study 1
+# sweep.
+REPL_ENTRIES=()
+for e in "${BASELINE_ENTRIES[@]}" "${NMR_ENTRIES[@]}"; do
+    k="${e%%|*}"; rest="${e#*|}"; y="${rest%%|*}"; g="${rest##*|}"
+    REPL_ENTRIES+=("repl_${k}|${y%.yaml}_repl.yaml|${g}")
+done
+SPLIT_SEED=0                         # the selection lineage's split, checked below
 
-if [[ "$SET" == "bnn" ]]; then
+if [[ "$SET" == "repl" ]]; then
+    ENTRIES=("${REPL_ENTRIES[@]}")
+    IDS_FILE="exp/sweep_ids_repl_round1.txt"
+    SPLIT_SEED=100
+elif [[ "$SET" == "bnn" ]]; then
     ENTRIES=("${BNN_ENTRIES[@]}")
     # ROUND 5 (bumped 2026-09-18).  The cache is keyed by ENTRY NAME, so reusing
     # a previous round's filename silently RESUMES those sweeps with the old
@@ -165,11 +183,12 @@ for m in ("torch", "optbnn", "wandb", "pyrallis"):
 PYEOF
 (( fail )) && echo "PREFLIGHT: python import check failed (PYTHONPATH/env wrong?)" >&2
 
-# seed-0 eval splits + tuning sets (data/ is gitignored: copied manually)
+# the selection seed's eval splits (seed 0; seed 100 for repl) + tuning sets
+# (data/ is gitignored: copied manually)
 for variant in antmaze-medium-play-v2 antmaze-medium-diverse-v2 \
                antmaze-large-play-v2 antmaze-large-diverse-v2; do
     for split in train val test; do
-        f="data/antmaze/${variant}/eval/seed_0/${variant}_pref_${split}_0.hdf5"
+        f="data/antmaze/${variant}/eval/seed_${SPLIT_SEED}/${variant}_pref_${split}_${SPLIT_SEED}.hdf5"
         [[ -f "$f" ]] || { echo "PREFLIGHT: missing $f" >&2; fail=1; }
     done
     t="data/antmaze/${variant}/${variant}_tuning_set.hdf5"
@@ -185,6 +204,19 @@ for entry in "${ENTRIES[@]}"; do
     # Match FILL_ME only as a parameter VALUE — a yaml's header comments may
     # legitimately mention FILL_ME when describing this very guard.  The round-2
     # sweeps inherit nothing and so have none, but the check is generic.
+    # repl: the sweep must be seed 100 on a replication base config, and that base
+    # must still be the unselected copy (a selected one means the search already ran).
+    if [[ "$SET" == "repl" ]]; then
+        rbase=$(awk '$1=="config_path:"{f=1;next} f&&$1=="value:"{v=$2; gsub(/"/,"",v); print v; exit}' "$yaml")
+        rseed=$(awk '$1=="seed:"{f=1;next} f&&$1=="value:"{print $2; exit}' "$yaml")
+        if [[ "$rseed" != "100" || "$rbase" != *_repl.yaml || ! -f "$rbase" ]]; then
+            echo "PREFLIGHT: $yaml is not a seed-100 sweep on an existing *_repl.yaml base (seed '$rseed', base '$rbase')" >&2
+            fail=1
+        elif ! grep -q 'UNSELECTED-BASE' "$rbase"; then
+            echo "PREFLIGHT: $rbase is no longer the unselected copy -- has this search already run?" >&2
+            fail=1
+        fi
+    fi
     if grep -qE "value: *FILL_ME" "$yaml" 2>/dev/null; then
         echo "PREFLIGHT: $yaml still contains FILL_ME values" >&2
         fail=1
