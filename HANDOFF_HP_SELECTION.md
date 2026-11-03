@@ -26292,3 +26292,40 @@ TASK GRID 0–3 covers every distinct index.**
   at indices 2–5 differs from Study 1's by that factor; its grid re-selects the index.
 - Nothing else is left to check before the replication's GPU work, which waits for
   Study 1's lanes.
+
+### 14.84 Sweep check 2026-11-03: PT's r64 and r32 cells; BR halfway; the ensemble mean down to 5 cells
+
+**Box:** 55 IQL runs in 11 sweeps (10 lanes plus BR), **median 146k steps/h**: below the
+10% rule (157.5k), so no new lanes.
+- No damage (`ladder_status.py`).
+- BK: candidate r32 medium_play repaired (`plo37lvv`); now on r32 medium_diverse
+  (`46c5iaxa`), with large_play and large_diverse behind it.
+- BL: standard r64 medium_diverse repaired (`0mcp5isz`); now on r64 large_play
+  (`0l0ilp4c`), with large_diverse behind it.
+- The registry and the leveling readout are unchanged. RQ1: MR's reading stands; the
+  others are NOT READ, with fewer reasons than last check (PT 22 → 14, ensemble mean 7 → 5).
+  Companions: none exist yet (MR's start behind BK).
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - **PT r64:** medium_play 0.651 ± 0.085 (`uufd2rbb`), medium_diverse 0.592 ± 0.090
+    (`flow1gm1`), large_diverse 0.147 ± 0.123 (`azxi6maw`);
+  - PT r32 large_play 0.181 ± 0.159 (`umu2g6oa`);
+  - ensemble mean r64 medium_diverse, repaired, 0.686 ± 0.034 (`0mcp5isz`).
+- **Candidate, states only:**
+  - PT r16 large_play (`c6zkihim`);
+  - PT r32 medium_play (`sr0lchqk`), medium_diverse (`izzwh0ks`) and large_diverse
+    (`6280avqf`); large_play is 5/10;
+  - ensemble mean r32 medium_play, repaired (`plo37lvv`).
+- **The ensemble mean waits on 5 cells:** candidate r32 medium_diverse, large_play and
+  large_diverse (BK), and standard r64 large_play and large_diverse (BL). At about 14 h per
+  cell, BK's three finish in about 1.7 days.
+
+**BR, the leak control (§14.82, test 2):**
+- The motion reward's leak-free cell (`04xb56cs`, index 7) is 5/10, with seeds 6–10 at
+  about 280k steps.
+- The MR cell starts after it. BR should finish in about 19 h.
+- `control_readout.py` section I lists it; nothing is read until both cells are complete.
+
+**Latest files updated:** `results/rq1_readout_latest.txt`, `results/control_readout_latest.txt`
+(section I added).
