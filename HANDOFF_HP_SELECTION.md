@@ -26329,3 +26329,25 @@ TASK GRID 0–3 covers every distinct index.**
 
 **Latest files updated:** `results/rq1_readout_latest.txt`, `results/control_readout_latest.txt`
 (section I added).
+
+**What "length" does to the grid (author's question, 2026-11-03; for the write-up).**
+- **Mechanics.** On AntMaze the loaded dataset has 999,000 transitions (999 × 1000), so
+  under "length" every segment is a full 1000-transition chunk and `trj_lens` = 1000
+  everywhere. The chunks are positions in the array, not episodes: loading drops each
+  episode's timeout transition, so each chunk runs one transition further into the next
+  episode than the last.
+- **Indices 2–7 then share one scale, 1000/R with R = max_ret − min_ret, and differ only
+  by a per-step constant:** 0 (index 2), −1 (3), −1000·min_ret/R (4), −1000·min_ret/R − 1
+  (5), −min_ret/R (6), −min_ret/R − 1 (7).
+  - Index 6 is now return normalization proper: chunk returns map onto [0, 1000].
+  - Indices 0 and 1 stay on the raw scale.
+- **Sentence for the write-up:** "Under the corrected normalization, indices 2–7 apply
+  the same rescaling and differ only by a constant added to every reward. Without
+  terminals every transition bootstraps, and at IQL's fixed point a constant c shifts Q and
+  V alike by c/(1−γ), leaving advantages and the extracted policy unchanged. In the
+  candidate protocol the grid therefore chooses, in effect, between the raw and the
+  rescaled reward, while the offsets among 2–7 matter only through training dynamics (the
+  networks must learn an offset of about 100·c at γ = 0.99 within a fixed step budget).
+  With terminals the offsets do not cancel (§5.1)."
+- This does not change the procedure. The grid still selects by Study 1's stage-4 rule,
+  and Study 1's indices 2–5 were already offset-only variants of one another.
