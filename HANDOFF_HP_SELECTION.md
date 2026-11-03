@@ -26351,3 +26351,40 @@ TASK GRID 0–3 covers every distinct index.**
   With terminals the offsets do not cancel (§5.1)."
 - This does not change the procedure. The grid still selects by Study 1's stage-4 rule,
   and Study 1's indices 2–5 were already offset-only variants of one another.
+
+### 14.85 Sweep check 2026-11-03 (later): TEST 2, FIRST CELL — the motion reward without the leak falls to 0; PT's r128 cells; NMR's ladder lanes start
+
+**Box:** 53 IQL runs in 11 sweeps, **median 141k steps/h**: below the 10% rule, no new
+lanes. No damage. The registry and the leveling readout are unchanged.
+
+**TEST 2 (§14.82), the motion reward's cell. DESCRIPTIVE; `control_readout.py` section I:**
+- Motion reward, large_diverse, no terminals, index 7:
+  - as run (`8txcmwfd`): **0.134 ± 0.040**;
+  - leak-free, `return_range_split "length"` (`04xb56cs`): **0.001 ± 0.001**;
+  - **difference +0.133, exact 95% [+0.109, +0.155]**; as run ahead on 10/10 seeds.
+- **The prediction (written before the runs: falls to about 0, like its own indices 0–5)
+  is CONFIRMED for this cell.**
+  - The leak-free cell matches the motion reward's own seed-0 grid at indices 0–5
+    (0.001, 0.000, 0.007, 0.001, 0.000, 0.000).
+  - At 6/7 that grid read 0.127 and 0.150. Its whole score at index 7 came from the goal
+    bonus the normalization rebuilt from the terminals.
+- **The MR cell** (`0ymwjhdl`, index 6, as run 0.114 ± 0.029) is running: seeds 1–5 at
+  about 700k steps, then 6–10, so about 9 h. Not read until complete.
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - **PT r128:** medium_play 0.640 ± 0.068 (`yyqzx6d7`), medium_diverse 0.630 ± 0.090
+    (`nyedwda5`);
+  - PT r64 large_play 0.156 ± 0.142 (`883uo4hu`).
+- **Candidate, states only:** PT r32 large_play (`h6rltg84`), PT r64 medium_diverse
+  (`51m2p5lg`).
+
+**Started:**
+- PT: candidate r128 medium_diverse, candidate r64 large_play, standard r128 large_play.
+- **NMR's first ladder cells:** standard r16 medium_play and medium_diverse.
+
+**Readiness:**
+- PT's RQ1 blockers 14 → 9. The ensemble mean still has 5, but progressing: candidate r32
+  medium_diverse 5/10, standard r64 large_play 8/10.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
