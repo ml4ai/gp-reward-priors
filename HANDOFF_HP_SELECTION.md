@@ -26388,3 +26388,54 @@ lanes. No damage. The registry and the leveling readout are unchanged.
   medium_diverse 5/10, standard r64 large_play 8/10.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
+
+### 14.86 Sweep check 2026-11-03 (evening): TEST 2 COMPLETE — the leak is confirmed in IQL; PT and the ensemble mean near their readings
+
+**Box:** 50 IQL runs in 10 sweeps (BR finished), **median 149k steps/h**: below the 10%
+rule, no new lanes. No damage. The registry and the leveling readout are unchanged.
+
+**TEST 2 (§14.82), both cells. DESCRIPTIVE; `control_readout.py` section I; large_diverse,
+no terminals:**
+
+| reward, index | as run | leak-free ("length") | as run − leak-free, exact 95% | as run ahead |
+|---|---|---|---|---|
+| motion, 7 | 0.134 ± 0.040 (`8txcmwfd`) | **0.001 ± 0.001** (`04xb56cs`) | +0.133 [+0.109, +0.155] | 10/10 |
+| MR, 6 | 0.114 ± 0.029 (`pz1xoooh`) | **0.024 ± 0.034** (`0ymwjhdl`) | +0.089 [+0.062, +0.116] | 9/10 |
+
+- **The prediction (both fall to about 0, like their own indices 0–5) is CONFIRMED for
+  both.**
+  - Each leak-free cell lands on its reward's own leak-free level.
+  - Motion: its seed-0 grid at 0–5 read 0.000–0.007.
+  - MR: its seed-0 grid at 0–5 read 0.000–0.004. Its seeds 1–10 control at index 3
+    (`i1bcasgj`) read **0.024 ± 0.039**, the same as the leak-free index-6 cell.
+- **THE LEAK'S VERDICT, combining tests 1 and 2 (for the disclosure; DESCRIPTIVE):**
+  - Without terminals, normalization indices 6 and 7 rebuild a goal-arrival reward from
+    the dataset's terminals. It is about +900–970 on goal steps, 300–800 times the spread
+    of the learned reward's own part, and the same whichever reward is used (test 1).
+  - **Removing it alone (one key, nothing else changed) takes both IQL cells from
+    0.11–0.13 to their rewards' own leak-free level (test 2).**
+  - **So under §14.5's candidate protocol, a cell at index 6 or 7 measures mostly the
+    leaked goal signal, not the reward model.**
+  - That covers the frozen candidate index on medium_diverse (7), large_play (6) and
+    large_diverse (6) for MR, the ensemble mean and NMR's large mazes, and PT's 6/7 cells.
+    Only medium_play's index 1 is leak-free in Study 1's candidate arm.
+  - The registered readings stand as computed and carry this disclosure. The corrected
+    protocol is the replication's (§14.83).
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - **PT r128:** large_play 0.353 ± 0.108 (`8z1y401l`), large_diverse 0.135 ± 0.083
+    (`66ks5vvk`);
+  - ensemble mean r64 large_play 0.474 ± 0.072 (`0l0ilp4c`);
+  - **NMR r16:** medium_play 0.491 ± 0.227 (`64yhsvq1`), medium_diverse 0.372 ± 0.342
+    (`9g7ohvi5`). NMR's first ladder cells; the spreads are large.
+- **Candidate, states only:** PT r64 medium_play, large_play, large_diverse; ensemble mean
+  r32 medium_diverse.
+
+**Readiness:**
+- **PT: 4 cells left**, all candidate r128 (three at 5/10, large_play at 0/5): about a day.
+- **The ensemble mean: 3 left:** candidate r32 large_play (5/10) and large_diverse (not
+  started); standard r64 large_diverse (5/10). About a day.
+- NMR: 30.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
