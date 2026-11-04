@@ -26525,3 +26525,54 @@ large_diverse, r64 medium_play and medium_diverse.
 - BN (MR's companions) starts after BK's last cell, this one.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+### 14.88 REMINDER: Study 3 needs an online fine-tuning script that matches `iql_eval.py` (author, 2026-11-04; not started, no code yet)
+
+Study 3 (online adaptation; dissertation Ch. 5) will fine-tune IQL online from the offline
+policy. The repository's online script, `algorithms/finetune/iql.py` (CORL), does not run
+our pipeline. Before any Study 3 run, it needs a modified copy that matches
+`algorithms/offline/iql_eval.py` in everything the offline protocol fixes. Nothing here is
+decided beyond "match the offline protocol". This is a list of the differences found on
+2026-11-04, so none is missed.
+
+**What IQL's own fine-tuning does** (Kostrikov et al. 2022, Appendix C, and CORL's script):
+1M offline gradient steps, then training continues while the policy collects data into the
+replay buffer, one gradient update per environment step, with every other setting
+unchanged. For AntMaze that keeps expectile 0.9 and inverse temperature 10, matching
+`configs/offline/iql/antmaze/*.yaml`. Exploration samples the Gaussian policy (no added
+noise on AntMaze). The buffer starts as the offline dataset, and offline and online
+transitions are sampled together.
+
+**Differences to close, `finetune/iql.py` against `iql_eval.py`:**
+- **Reward source.** CORL uses the environment's reward (`modify_reward`: minus 1 on
+  AntMaze; `modify_reward_online` the same for each new step). Ours must label every
+  transition, offline and online, with the learned reward: MR, PT, NMR
+  (`seq_labeller`, with the preceding context a non-Markovian model needs), the averaging
+  MR ensemble, and the BNN's or the CVaR MR ensemble's CVaR (`bnn_alpha`, `mr_alpha`,
+  `centre_draws`). Online, each new transition gets the current conservative reward, and
+  the whole buffer is relabeled at every posterior refresh (Ch. 5: the centering, shift
+  and normalization constants are refresh-synchronous).
+- **The reward shift** (`gauge_reward max0`) and **the normalization grid**
+  (`normalize_reward`, `modify_reward`'s eight indices). Use the corrected, leak-free
+  normalization of §14.83 (decision 1), not the leaky indices 6/7 of §14.82. Decide how the
+  shift's maximum and the normalization's constants are re-estimated online (Ch. 5 says
+  from the current buffer, at each refresh).
+- **Terminals.** CORL stores `real_done` (a goal arrival before the time limit) as a
+  terminal for every online transition. Under the without-terminals variant
+  (`drop_terminals`), the offline buffer's terminals are cleared, and online goal
+  arrivals must not be stored as terminals either. The environment still ends the episode
+  at the goal, and evaluation is unchanged. Whichever variant RQ1 settles applies to both
+  phases.
+- **Reference rewards** (`trivial_reward`, `heuristic_reward`), if Study 3 needs any
+  online.
+- **Evaluation and scoring.** 100 episodes per evaluation (`n_episodes: 100` in the
+  AntMaze configs), `eval_freq` as offline, and the mean of the last ten evaluations as the
+  score.
+- **Seeds and model loading** (`reward_model_root`, the seed-to-model convention).
+- **New in Study 3, in neither script:** the behavior anchor (an explicit
+  `lambda_anchor * KL(pi || pi_beta)` penalty during fine-tuning), its schedule and the
+  conservatism level's schedule, driven by measured statistics (Ch. 5), plus the query,
+  BALD and chain-continuation loop.
+
+**When:** after Study 1's protocol is settled and before the Study 3 pilot (the one-week
+cost measurement in the proposal's plan).
