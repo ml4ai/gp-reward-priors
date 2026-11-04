@@ -26456,3 +26456,72 @@ no terminals:**
 - NMR: 30.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
+
+### 14.87 Sweep check 2026-11-04: PT's REGISTERED SPARSITY READING — NOT SENSITIVE ((b)); the ensemble mean one cell away
+
+**Box:** 50 IQL runs in 10 sweeps, **median 153k steps/h**: below the 10% rule, no new
+lanes. No damage. The registry and the controls and leveling readouts are unchanged.
+- **Check 3 (BM)** is running: MR medium_diverse, no terminals, index 7, final positions
+  logged (`949xf9dp`, 5/10).
+
+**PT, sparsity ladder: the registered reading (`rq1_readout.py`, §14.5 as registered; the
+§14.70 per-family refutation rule, decided after MR's reading and disclosed as such).**
+- **Manipulation check REJECTS:** slope of A pooled +0.0492 [+0.0436, +0.0547],
+  p = 9.1e-13. Positive on every maze (+0.028 to +0.083).
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S REJECTS:** pooled +0.0248 [+0.0139, +0.0357], p = 0.0021.
+- **(b) candidate − standard slope does NOT reject:** pooled −0.0002 [−0.0136, +0.0132],
+  p = 0.67.
+- **(c) REJECTS:** PT − zero +0.253 [+0.210, +0.293]; PT − mean-constant +0.255
+  [+0.214, +0.294]; p = 9.1e-13 both.
+- **VERDICT: NOT SENSITIVE ((b): the candidate protocol does not respond more than the
+  standard one).**
+- **RQ1 on the sparsity ladder: REFUTED** (per-family reading). MR: (a) did not reject;
+  PT: (b) did not reject. 2 of 4 families read.
+
+**Per maze (DESCRIPTIVE, not the registered test), read against the leak (§14.82,
+§14.86):**
+
+| maze | PT's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+0.090 [+0.049, +0.132]** | **+0.070 [+0.031, +0.109]** |
+| medium_diverse | 6 (leaky) | +0.007 [−0.003, +0.015] | −0.001 [−0.024, +0.024] |
+| large_play | 7 (leaky) | +0.002 [−0.007, +0.010] | −0.060 [−0.082, −0.041] |
+| large_diverse | 7 (leaky) | +0.001 [−0.004, +0.005] | −0.010 [−0.029, +0.008] |
+
+- **The pattern is MR's.** On the one maze whose frozen index does not leak, the candidate
+  protocol tracks the degraded reward, and more steeply than the standard protocol. On
+  the three that leak, the candidate slope is flat.
+- On large_play the standard protocol responds more (−0.060). The leak's goal signal
+  swamps PT's reward under the candidate protocol, while with terminals PT's own shaping
+  still shows.
+- **Disclosure:** PT's registered verdict stands as computed. It rests mostly on three
+  mazes whose frozen candidate index rebuilds the goal from the terminals; the corrected
+  protocol is the replication's (§14.83).
+- **Beside, no test:** the trivial rewards with terminals are TOO FAR BEHIND PT on every
+  maze (pooled −0.45). PT − motion, without terminals: medium_play +0.106 [−0.064,
+  +0.272], the others about 0.
+
+**Gate:** `results/rescale_readout.py` `REGISTERED_READ` now holds PT on sparsity, so PT's
+companion arms can be read once they exist. The self-test's example of a still-gated family
+moved from PT to NMR; it passes.
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - ensemble mean r64 large_diverse 0.284 ± 0.105 (`098jkueb`);
+  - **NMR r16:** large_play 0.391 ± 0.151 (`w50fsrhu`), large_diverse 0.079 ± 0.102
+    (`rbd7f5m6`);
+  - **NMR r32:** medium_play 0.619 ± 0.241 (`2nd6l7bs`), medium_diverse 0.510 ± 0.178
+    (`sl5whj9q`).
+- **Candidate, states only:** PT r128 on all four mazes; ensemble mean r32 large_play.
+
+**Started:** NMR candidate r16 on all four mazes; NMR standard r32 large_play and
+large_diverse, r64 medium_play and medium_diverse.
+
+**Readiness:**
+- **The ensemble mean: 1 cell left**, candidate r32 large_diverse (`j3u8z95i`, 3/8, seeds
+  6–8 just started), about half a day.
+- NMR: 26.
+- BN (MR's companions) starts after BK's last cell, this one.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
