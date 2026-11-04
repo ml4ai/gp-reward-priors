@@ -26416,9 +26416,26 @@ no terminals:**
     0.11–0.13 to their rewards' own leak-free level (test 2).**
   - **So under §14.5's candidate protocol, a cell at index 6 or 7 measures mostly the
     leaked goal signal, not the reward model.**
-  - That covers the frozen candidate index on medium_diverse (7), large_play (6) and
-    large_diverse (6) for MR, the ensemble mean and NMR's large mazes, and PT's 6/7 cells.
-    Only medium_play's index 1 is leak-free in Study 1's candidate arm.
+  - **Which candidate cells this covers** (the frozen no-terminals indices,
+    `results/control_grid_winners.json`, checked 2026-11-03):
+
+    | reward | medium_play | medium_diverse | large_play | large_diverse |
+    |---|---|---|---|---|
+    | MR | 1 | **7** | **6** | **6** |
+    | ensemble mean | 1 | **7** | **6** | **6** |
+    | PT | 1 | **6** | **7** | **7** |
+    | NMR | 1 | 0 | **6** | **6** |
+    | motion | **7** | **7** | **6** | **7** |
+    | task | 0 | 2 | 2 | 3 |
+
+    - Bold is leaky: 3 of 4 mazes for MR, the ensemble mean and PT; 2 of 4 for NMR; all 4
+      for the motion reward.
+    - Leak-free: every family's medium_play (index 1), NMR's medium_diverse (index 0), and
+      the task reward everywhere.
+    - At 2/3 the task reward's scale is set from terminal-cut segments, but as one global
+      constant, so no goal-shaped signal reaches a step (§14.83 audit).
+    - (Corrected the same day: a first draft of this bullet missed NMR's medium_diverse
+      and the task reward.)
   - The registered readings stand as computed and carry this disclosure. The corrected
     protocol is the replication's (§14.83).
 
