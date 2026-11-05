@@ -26083,6 +26083,10 @@ entails, inventoried from the code:
 4. **Selection: only the 8-index normalization grid**, seed 100, full data, per family ×
    variant × protocol, plus the task reward's candidate grid. The other IQL
    hyper-parameters stay inherited, as in Study 1.
+   - *Pointer (added 2026-11-04):* this item covers IQL's settings only. The reward
+     models' hyper-parameters ARE re-selected at seed 100, by the author's correction
+     below ("CORRECTION and decision (author, 2026-11-02)"). Seed 100 plays seed 0's role
+     for every selection.
 5. **References, the ones the checks and tests read, on seeds 101–110 under the new
    protocol:**
    - the task reward, candidate, at its own grid winner (usability);
