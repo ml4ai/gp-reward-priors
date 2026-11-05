@@ -26580,3 +26580,71 @@ transitions are sampled together.
 
 **When:** after Study 1's protocol is settled and before the Study 3 pilot (the one-week
 cost measurement in the proposal's plan).
+
+### 14.88 Sweep check 2026-11-04 (later): THE ENSEMBLE MEAN'S REGISTERED SPARSITY READING — NOT SENSITIVE ((a), narrowly); MR's companions start
+
+**Box:** 50 IQL runs in 10 sweeps, **median 158k steps/h**: back inside the 10% rule
+(157.5k), just. No lane needs adding; every queued item already has a waiter. No damage.
+The registry and the leveling readout are unchanged.
+- **BK finished** with the ensemble mean's last cell. **BN started:** MR's companion arm,
+  full data, medium_play, index 2 (`k95u2t83`).
+- Its params equal the original MR no-terminals control's, so `control_readout` and
+  `rq1_readout` note it as "index 2 (expected 0) -- ignored", as designed (§14.78).
+  `rescale_readout` reads it.
+
+**The ensemble mean, sparsity ladder: the registered reading (`rq1_readout.py`, §14.5 as
+registered; §14.70's per-family rule).**
+- **Manipulation check REJECTS:** slope of A pooled +0.0295 [+0.0247, +0.0343],
+  p = 1.8e-12. Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S does NOT reject:** pooled +0.0192 [+0.0107, +0.0273],
+  **p = 0.029** against α = 0.025.
+  - **The exact stratified interval excludes 0 while the registered test does not
+    reject.** The test (one-sided exact Wilcoxon over the 40 units) decides; the interval
+    is reported beside it. Disclosed as a narrow miss.
+- **(b) candidate − standard slope REJECTS:** pooled +0.0216 [+0.0115, +0.0317],
+  p = 0.016.
+- **(c) REJECTS:** ENS_MEAN − zero +0.299 [+0.278, +0.318]; − mean-constant +0.301
+  [+0.280, +0.319]; p = 9.1e-13.
+- **VERDICT: NOT SENSITIVE ((a): the candidate protocol does not respond).**
+- **RQ1 on the sparsity ladder: REFUTED** (per-family reading). MR (a), PT (b), ENS_MEAN
+  (a); 3 of 4 families read, all NOT SENSITIVE. NMR remains (22 cells).
+
+**Per maze (DESCRIPTIVE), against the leak:**
+
+| maze | frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+0.077 [+0.044, +0.108]** | **+0.077 [+0.044, +0.109]** |
+| medium_diverse | 7 (leaky) | −0.003 [−0.008, +0.003] | −0.001 [−0.011, +0.009] |
+| large_play | 6 (leaky) | +0.002 [−0.006, +0.010] | +0.006 [−0.009, +0.024] |
+| large_diverse | 6 (leaky) | +0.001 [−0.002, +0.003] | +0.005 [−0.008, +0.018] |
+
+- **The same pattern as MR and PT, now three families out of three.** Only on the
+  leak-free maze does the candidate protocol track the degraded reward, and there it
+  tracks it more steeply than the standard one. On the three leaky mazes the candidate
+  slope is flat.
+- One leak-free maze out of four pulls the pooled (a) to p = 0.029. A pooled test over
+  four mazes, three of which carry the leaked goal signal, cannot show sensitivity
+  however the leak-free maze behaves.
+- **Disclosure as for MR and PT:** the verdict stands as computed; it rests mostly on
+  three leaky mazes; the corrected protocol is the replication's (§14.83).
+- **Beside, no test:** the trivial rewards are TOO FAR BEHIND the ensemble mean with
+  terminals (pooled −0.52). ENS_MEAN − motion, without terminals: medium_play +0.287
+  [+0.236, +0.330], the others about 0.
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ` now holds MR, PT and ENS_MEAN on
+sparsity (self-test passes). The ensemble mean's companions can be read once BN reaches
+them.
+
+**New complete cells:**
+- **Standard:** NMR r32 large_diverse 0.088 ± 0.062 (`bvlx3j7x`).
+- **Candidate, states only:** ensemble mean r32 large_diverse (`j3u8z95i`); NMR r16
+  medium_play, medium_diverse, large_diverse.
+
+**Started:** NMR candidate r32 medium_play, medium_diverse, large_diverse; NMR standard
+r64 large_diverse.
+
+**Readiness:** NMR 26 → 22 cells.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt` (BN's
+note).
