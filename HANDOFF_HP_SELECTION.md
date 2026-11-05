@@ -26648,3 +26648,42 @@ r64 large_diverse.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt` (BN's
 note).
+
+### 14.89 Sweep check 2026-11-05: NMR down to 10 cells; check 3 two-thirds done; the noise ladders start
+
+**Box:** 50 IQL runs in 10 sweeps, **median 160k steps/h**: inside the 10% rule. Nothing
+needs a lane. No damage. The registry and the controls and leveling readouts are
+unchanged.
+
+**Check 3 (BM, final positions on medium_diverse, §14.75):**
+- MR full data (`949xf9dp`) and MR r16 (`3v7xgws1`) are FINISHED.
+- The motion reward (`2svtkigt`) has 3 finished and 5 running, with seeds 1–5 near 900k
+  steps. About 6 h left.
+- Read with `results/final_positions.py 949xf9dp 3v7xgws1 2svtkigt` once all three are
+  complete (next check).
+
+**MR's companions (BN):** full data (`k95u2t83`) FINISHED; r128 (`vfiiu7w8`) running.
+`rq1_readout` notes the r128 sweep as "not this experiment's lineage, ignored", as
+designed.
+
+**The noise ladders have started:** MR standard n01 on medium_play (`x8uae12n`) and
+medium_diverse (`eos82f4f`).
+
+**New complete cells:**
+- **Standard, each its own mean ± sd:**
+  - **NMR r64:** medium_play 0.659 ± 0.236 (`bd9h81z9`), medium_diverse 0.588 ± 0.160
+    (`lrimxzf7`), large_play 0.379 ± 0.130 (`qp2eg2r4`), large_diverse 0.121 ± 0.070
+    (`al1i5yet`);
+  - **NMR r128:** medium_play 0.675 ± 0.081 (`jvben9v2`), medium_diverse 0.648 ± 0.061
+    (`cwaz6taq`);
+  - NMR r32 large_play 0.391 ± 0.130 (`t6i9rca7`).
+- **Candidate, states only:** NMR r16 large_play; NMR r32 on all four mazes.
+
+**Readiness:**
+- **NMR: 10 cells left:** candidate r64 ×4 (running) and r128 ×4; standard r128 large_play
+  and large_diverse (running). About 1.5 days.
+- NMR's frozen candidate indices: 1 (medium_play) and 0 (medium_diverse) are leak-free,
+  6/6 on the large mazes are leaky (§14.86). So NMR has TWO leak-free mazes, unlike MR, PT
+  and the ensemble mean.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
