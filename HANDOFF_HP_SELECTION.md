@@ -25200,6 +25200,9 @@ ladder-level claim. **The author decides the reading.** In either case "holds in
 (SENSITIVE for every family) can no longer happen on this ladder.
 
 **DECIDED (author, 2026-10-31): the refutation clause is read PER FAMILY.**
+> **SUPERSEDED 2026-11-05 (§14.90):** the author says this record did not reflect their
+> intent. The clause is read for EVERY family (one family's failure does not refute the
+> ladder). Read §14.90 before using anything below about the ladder's verdict.
 - One read family whose (a) or (b) does not reject (or with no usable variant) refutes RQ1's
   second part on that ladder. A FLAGGED family (failed manipulation check) is not a
   sensitivity test and does not refute.
@@ -26687,3 +26690,40 @@ medium_diverse (`eos82f4f`).
   and the ensemble mean.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+### 14.90 CORRECTION (author, 2026-11-05): RQ1's refutation clause is read for EVERY family, not per family
+
+**What changes.** §14.70 recorded, as the author's 2026-10-31 decision, that one read
+family whose (a) or (b) does not reject refutes RQ1's main hypothesis on that ladder (the
+"per-family" reading). The author said on 2026-11-05 that this was not what they meant.
+What they meant is the other reading:
+- **Each family keeps its own verdict** (SENSITIVE / NOT SENSITIVE / FLAGGED), as before.
+- **RQ1's main hypothesis on a ladder:**
+  - **HOLDS IN FULL** iff every family that passed the manipulation check is SENSITIVE (as
+    §14.5);
+  - **REFUTED** only if every family that passed the manipulation check fails (a) or (b)
+    there, or if no variant is usable;
+  - **otherwise PARTIAL SUPPORT**, reported family by family;
+  - **OPEN** while any such family is unread and the others have all failed.
+- A FLAGGED family (failed manipulation check) is not a sensitivity test and counts toward
+  neither side, as before.
+
+**Where the sparsity ladder stands under this reading (2026-11-05):** MR NOT SENSITIVE (a),
+PT NOT SENSITIVE (b), ensemble mean NOT SENSITIVE (a, narrowly); NMR unread. **OPEN.** If NMR
+also fails (a) or (b), the hypothesis is refuted on the sparsity ladder. If NMR is
+SENSITIVE, partial support.
+
+**Disclosure for the write-up.** The clause was ambiguous in §14.5 as fixed. This reading
+was settled after MR's, PT's and the ensemble mean's sparsity results had been seen, and
+after an earlier record (§14.70) stated the stricter reading. Report the stricter reading
+beside it (MR's failure alone would refute the sparsity ladder), so the reader can judge.
+The proposal says so in Preliminary Results and Study 1.
+
+**TO DO (coding agent):** `results/rq1_readout.py` encodes the superseded reading
+(`ladder_verdict`, and the "RQ1 ON THIS LADDER" line, which now prints "REFUTED on this
+ladder (per-family reading, §14.70)"). Change `ladder_verdict` to the rule above (HOLDS IN
+FULL / REFUTED / PARTIAL / OPEN), print the stricter reading beside it as a labelled
+alternative, and update the self-test cases ((b) failing in ONE family no longer refutes;
+every read family failing does; FLAGGED counts toward neither; no usable variant still
+refutes). Re-run the readout and update `rq1_readout_latest.txt`. No registered quantity,
+test or family verdict changes. Only the ladder-level label does.
