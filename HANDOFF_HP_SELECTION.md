@@ -27197,3 +27197,92 @@ and medium_diverse running. Candidate n01 medium_play, medium_diverse and large_
 running.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+### 14.98 Why the H3 gate fails — stage B RESULT (author ran the box job, 2026-11-06)
+
+**Data:** `exp/calibration_b/`, 160 files (BNN, MR, PT, NMR × 4 variants × seeds 1–10),
+copied over complete.
+- Analysis: `results/calibration_stage_b.py analyse` →
+  `calibration_results/held_bnn_cvar/mechanism_stage_b.txt`.
+- **Cross-check passed on every model:** the chains' pooled mean logit reproduces the
+  gate's measurement to within 4e-7.
+- POST HOC, DESCRIPTIVE. The registered verdict does not change.
+
+**(i) THE 2× UNDER-SCALING IS THE BNN'S ALONE.** One leave-one-seed-out temperature per
+family, on the same validation pairs:
+
+| variant | BNN T (ECE) | MR T (ECE) | PT T (ECE) | NMR T (ECE) |
+|---|---|---|---|---|
+| medium_play | 0.56 (0.080) | 1.54 (0.035) | 1.22 (0.033) | 2.20 (0.050) |
+| medium_diverse | 0.44 (0.116) | 1.07 (0.020) | 1.42 (0.033) | 1.37 (0.028) |
+| large_play | 0.56 (0.088) | 1.34 (0.032) | 2.12 (0.054) | 3.18 (0.047) |
+| large_diverse | 0.47 (0.114) | 1.12 (0.018) | 1.33 (0.039) | 1.67 (0.032) |
+
+- MR, PT and NMR use the SAME mean-pooled Bradley-Terry likelihood and pooling. They are
+  well calibrated or mildly OVER-confident (T > 1, as point estimates usually are). Only the
+  BNN is under-confident.
+- So the likelihood and the pooling are ruled out. The cause is in what the BNN alone
+  has: its prior, its sampler, or its selection.
+
+**(ii) EVERY CHAIN IS SOFT; the mixture does not make it so.**
+- Per-chain temperatures are 0.45–0.61, the same as the mixture's.
+- Chains agree with the mixture: median mean_c|d_c| / |d̄| = 1.00 on every maze.
+- Between-chain variance is 25–38% of the total; one scale factor per chain explains only
+  7–13% of it.
+- **Mechanism (b), sharp chains disagreeing, is RULED OUT.** Neither is the spread a
+  per-chain scale mode.
+
+**(iii) THE PRIOR, EXACTLY: the inverted spread is inherited from the prior's structure.**
+- Under the map prior, a pair's logit-difference variance is
+  `amp2 [sig_g2 (w1−w2)' Kgeo (w1−w2) + nugget]`. It grows with how far apart the pair's
+  two segments are in the maze (heat-kernel distance between their cell occupancies), and
+  says nothing about novelty.
+- **The prior's own spread already has the inverted error-AUROC:** 0.42, 0.33, 0.38, 0.33.
+  Pairs whose segments lie in different places get a wide prior and are EASY; co-located
+  pairs get a narrow prior and are hard.
+- **The prior's spread is anti-correlated with novelty:** raw −0.17 to −0.28; body −0.04
+  to −0.13.
+- **The posterior's spread follows the prior's** (Spearman +0.18 to +0.38), at about 1%
+  of its size (median ratio 0.008–0.011).
+- **Normalizing does not rescue it:** posterior sd / prior sd still has error-AUROC 0.40,
+  0.33, 0.49, 0.40. The data's shrinkage of the prior does not mark the errors either.
+- **Generic, not specific to this prior:** any prior gives two dissimilar segments a
+  larger prior variance of their difference. Dissimilar pairs are also the easy ones. So
+  "the spread of the logit difference" is confounded with pair dissimilarity by
+  construction, and the position-only kernel makes "dissimilar" mean "far apart in the
+  maze".
+
+**(iv) Positional familiarity does not predict errors** (AUROC 0.48–0.56). The posterior
+is mildly aware of it on the large mazes (ρ with the spread +0.19 and +0.27).
+
+**Synthesis (stages A to B):**
+1. **Miscalibration:** the BNN's mean logits are about 2× too small, in every chain, while
+   the other families with the same likelihood are not.
+   - The GP prior is about 100× wider than the posterior at these pairs, so its marginal
+     amplitude is not what caps the logits on this evidence. This weakens §14.93's (a).
+   - Remaining candidates: the SAMPLER (how fSGHMC weights the likelihood, i.e. the
+     dataset-size scaling or a temperature, any weight-space prior term, the cyclical
+     schedule) and the SELECTION criterion (round 5's CVaR cross-entropy).
+   - **Downstream it should not matter** for IQL (§14.93: global normalization, CVaR
+     scale-equivariance). It matters for reported calibration, and a validation-fitted
+     temperature corrects it post hoc (held-out ECE 0.08–0.12 → 0.02–0.03).
+2. **The gate's failure:** the statistic, the posterior spread of the pair's logit
+   difference, is dominated by how DIFFERENT the two segments are.
+   - That property is inherited from the prior (here: their maze separation), and it makes
+     pairs easier, so the AUROC inverts.
+   - Beyond it, the spread is blind to novelty in every space tested (§14.95), even
+     relative to the prior.
+   - Half the diverse-maze errors are human judgments against the motion cue (§14.94).
+
+**Possible next steps, for the author; none taken:**
+- **B2, desk, cheap: read the sampler.** How does `f_pref_net.py`'s fSGHMC scale the
+  likelihood against the functional prior (N vs minibatch, any temperature, any weight
+  prior)? A factor of about 2 would point straight at the under-scaling. No compute.
+- **For Study 2's BNN (before its seed-100 selection):**
+  - (a) fix the under-scaling at its source if B2 finds it, or adopt a validation-fitted
+    temperature, which is cheap but post hoc;
+  - (b) a prior that sees body state and action, if distance-awareness beyond position is
+    wanted. It changes the method; stage C compute;
+  - (c) re-register H3 with a statistic not confounded with pair dissimilarity, e.g.
+    predictive entropy, or spread conditional on margin. That changes the question, not
+    the method. Decided before Study 2's BNN models exist.

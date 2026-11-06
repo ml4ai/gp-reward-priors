@@ -13,5 +13,6 @@ where they are, as raw data.
 | `mechanism_stage_a.txt` | why the H3 gate fails, stage A (desk; `scripts_bnn/calibration_mechanism.py`), under the author's scoped exception of 2026-11-06 (handoff §14.92–§14.93) |
 | `mechanism_stage_a2.txt` | stage A2: what the errors are (human-label proxies, novelty; `calibration_mechanism.py --a2`), handoff §14.94 |
 | `mechanism_stage_a3.txt` | stage A3: novelty in the network's input space (`calibration_mechanism.py --a3`), handoff §14.95 |
+| `mechanism_stage_b.txt` | stage B: temperatures of all four families, the BNN's chains, the prior's exact spread (`results/calibration_stage_b.py analyse`), handoff §14.98 |
 
 The parent repo's outputs are stashed in `~/iqlpref/results/held_bnn_cvar/`.

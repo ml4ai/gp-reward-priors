@@ -1,0 +1,41 @@
+BNN H3 CALIBRATION, MECHANISM STAGE B (handoff §14.96; scoped hold exception; post hoc, descriptive)
+
+=== medium_play
+  (i)  bnn  accuracy 0.906  T 0.558  held-out ECE 0.080 -> 0.027  CE 0.268 -> 0.230
+  (i)  mr   accuracy 0.918  T 1.544  held-out ECE 0.035 -> 0.035  CE 0.245 -> 0.228
+  (i)  pt   accuracy 0.897  T 1.224  held-out ECE 0.033 -> 0.023  CE 0.266 -> 0.262
+  (i)  nmr  accuracy 0.918  T 2.202  held-out ECE 0.050 -> 0.028  CE 0.286 -> 0.228
+  check: the chains' pooled mean logit vs the gate's measurement, max |difference| 3.76e-08
+  (ii) variance between chains 0.38 of the total; of the between-chain part, one scale factor per chain explains 0.10; median mean_c|d_c| / |d_bar| 1.00; per-chain T (first 16 chain indices) median 0.589 [0.567, 0.624]
+  (iii) prior sd vs posterior sd: Spearman +0.181, median ratio posterior/prior 0.010; prior sd vs novelty: z_body -0.132, raw -0.274; error-AUROC of the prior sd 0.415, of posterior sd / prior sd 0.399
+  (iv) positional novelty (fewer training steps in the pair's cells): error-AUROC 0.564; Spearman with the posterior sd +0.084, with the excess spread +0.107
+
+=== medium_diverse
+  (i)  bnn  accuracy 0.906  T 0.438  held-out ECE 0.116 -> 0.028  CE 0.286 -> 0.215
+  (i)  mr   accuracy 0.903  T 1.071  held-out ECE 0.020 -> 0.019  CE 0.217 -> 0.218
+  (i)  pt   accuracy 0.864  T 1.418  held-out ECE 0.033 -> 0.025  CE 0.310 -> 0.299
+  (i)  nmr  accuracy 0.907  T 1.366  held-out ECE 0.028 -> 0.024  CE 0.231 -> 0.224
+  check: the chains' pooled mean logit vs the gate's measurement, max |difference| 1.22e-07
+  (ii) variance between chains 0.25 of the total; of the between-chain part, one scale factor per chain explains 0.07; median mean_c|d_c| / |d_bar| 1.00; per-chain T (first 16 chain indices) median 0.450 [0.428, 0.471]
+  (iii) prior sd vs posterior sd: Spearman +0.195, median ratio posterior/prior 0.008; prior sd vs novelty: z_body -0.044, raw -0.169; error-AUROC of the prior sd 0.333, of posterior sd / prior sd 0.333
+  (iv) positional novelty (fewer training steps in the pair's cells): error-AUROC 0.493; Spearman with the posterior sd +0.034, with the excess spread +0.064
+
+=== large_play
+  (i)  bnn  accuracy 0.881  T 0.556  held-out ECE 0.088 -> 0.022  CE 0.326 -> 0.286
+  (i)  mr   accuracy 0.948  T 1.337  held-out ECE 0.032 -> 0.026  CE 0.164 -> 0.161
+  (i)  pt   accuracy 0.913  T 2.124  held-out ECE 0.054 -> 0.019  CE 0.280 -> 0.216
+  (i)  nmr  accuracy 0.937  T 3.183  held-out ECE 0.047 -> 0.021  CE 0.319 -> 0.193
+  check: the chains' pooled mean logit vs the gate's measurement, max |difference| 3.01e-07
+  (ii) variance between chains 0.38 of the total; of the between-chain part, one scale factor per chain explains 0.13; median mean_c|d_c| / |d_bar| 1.00; per-chain T (first 16 chain indices) median 0.614 [0.567, 0.659]
+  (iii) prior sd vs posterior sd: Spearman +0.379, median ratio posterior/prior 0.011; prior sd vs novelty: z_body -0.113, raw -0.272; error-AUROC of the prior sd 0.378, of posterior sd / prior sd 0.494
+  (iv) positional novelty (fewer training steps in the pair's cells): error-AUROC 0.516; Spearman with the posterior sd +0.274, with the excess spread +0.329
+
+=== large_diverse
+  (i)  bnn  accuracy 0.905  T 0.471  held-out ECE 0.114 -> 0.023  CE 0.309 -> 0.252
+  (i)  mr   accuracy 0.909  T 1.122  held-out ECE 0.018 -> 0.022  CE 0.246 -> 0.246
+  (i)  pt   accuracy 0.859  T 1.333  held-out ECE 0.039 -> 0.020  CE 0.320 -> 0.311
+  (i)  nmr  accuracy 0.893  T 1.672  held-out ECE 0.032 -> 0.024  CE 0.294 -> 0.278
+  check: the chains' pooled mean logit vs the gate's measurement, max |difference| 2.69e-08
+  (ii) variance between chains 0.36 of the total; of the between-chain part, one scale factor per chain explains 0.07; median mean_c|d_c| / |d_bar| 1.00; per-chain T (first 16 chain indices) median 0.512 [0.485, 0.547]
+  (iii) prior sd vs posterior sd: Spearman +0.333, median ratio posterior/prior 0.008; prior sd vs novelty: z_body -0.128, raw -0.278; error-AUROC of the prior sd 0.331, of posterior sd / prior sd 0.398
+  (iv) positional novelty (fewer training steps in the pair's cells): error-AUROC 0.477; Spearman with the posterior sd +0.188, with the excess spread +0.266
