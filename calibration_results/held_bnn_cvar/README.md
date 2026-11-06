@@ -11,5 +11,6 @@ where they are, as raw data.
 | `goal_structure_run1.txt`, `goal_structure_run2.txt` | reward maps for MR, PT **and** BNN (mixed; `results/goal_structure.py` now defaults to MR and PT) |
 | `heuristic_floor.txt` | trivial-heuristic floor for MR, PT **and** BNN (mixed; `scripts_bnn/heuristic_floor.py` now prints MR and PT only) |
 | `mechanism_stage_a.txt` | why the H3 gate fails, stage A (desk; `scripts_bnn/calibration_mechanism.py`), under the author's scoped exception of 2026-11-06 (handoff §14.92–§14.93) |
+| `mechanism_stage_a2.txt` | stage A2: what the errors are (human-label proxies, novelty; `calibration_mechanism.py --a2`), handoff §14.94 |
 
 The parent repo's outputs are stashed in `~/iqlpref/results/held_bnn_cvar/`.

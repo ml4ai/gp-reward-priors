@@ -1,0 +1,26 @@
+BNN H3 CALIBRATION, MECHANISM STAGE A2 (handoff §14.94; scoped hold exception; post hoc, descriptive)
+Proxies from each segment's torso (x, y); progress uses straight-line distance to the goal (no walls).
+
+=== medium_play: 770 pairs, error rate 0.094
+  human label agrees with progress toward the goal : 0.643 of pairs | model error rate where it agrees 0.109, where it disagrees 0.065 | share of errors on disagreeing pairs 0.250
+  human label agrees with path length              : 0.786 of pairs | model error rate where it agrees 0.071, where it disagrees 0.176 | share of errors on disagreeing pairs 0.403
+  human label disagrees with BOTH proxies on 0.064 of pairs; model error rate there 0.122
+  novelty: error-AUROC 0.572; Spearman with the spread -0.091, with the excess spread +0.005  (mean over seeds)
+
+=== medium_diverse: 1070 pairs, error rate 0.094
+  human label agrees with progress toward the goal : 0.579 of pairs | model error rate where it agrees 0.081, where it disagrees 0.113 | share of errors on disagreeing pairs 0.505
+  human label agrees with path length              : 0.878 of pairs | model error rate where it agrees 0.046, where it disagrees 0.443 | share of errors on disagreeing pairs 0.574
+  human label disagrees with BOTH proxies on 0.072 of pairs; model error rate there 0.519
+  novelty: error-AUROC 0.680; Spearman with the spread -0.195, with the excess spread -0.130  (mean over seeds)
+
+=== large_play: 540 pairs, error rate 0.117
+  human label agrees with progress toward the goal : 0.772 of pairs | model error rate where it agrees 0.118, where it disagrees 0.114 | share of errors on disagreeing pairs 0.222
+  human label agrees with path length              : 0.807 of pairs | model error rate where it agrees 0.110, where it disagrees 0.144 | share of errors on disagreeing pairs 0.238
+  human label disagrees with BOTH proxies on 0.100 of pairs; model error rate there 0.111
+  novelty: error-AUROC 0.653; Spearman with the spread -0.126, with the excess spread +0.052  (mean over seeds)
+
+=== large_diverse: 1100 pairs, error rate 0.095
+  human label agrees with progress toward the goal : 0.548 of pairs | model error rate where it agrees 0.093, where it disagrees 0.099 | share of errors on disagreeing pairs 0.467
+  human label agrees with path length              : 0.888 of pairs | model error rate where it agrees 0.055, where it disagrees 0.415 | share of errors on disagreeing pairs 0.486
+  human label disagrees with BOTH proxies on 0.057 of pairs; model error rate there 0.413
+  novelty: error-AUROC 0.659; Spearman with the spread -0.204, with the excess spread -0.044  (mean over seeds)

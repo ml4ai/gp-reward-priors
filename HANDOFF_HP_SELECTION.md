@@ -26974,3 +26974,77 @@ small. It does NOT come from posterior averaging.**
   temperature), and only if A2 and B point there. A different H3 statistic for Study 2
   (e.g. one free of the margin) would be a re-registration, decided before Study 2's BNN
   models exist.
+
+### 14.94 Why the H3 gate fails — stage A2 (desk, local data): the errors, and a spread that ignores novelty
+
+**CORRECTION to §14.93's working hypothesis.** It assumed the labels were deterministic
+(task-return) labels. **They are HUMAN preferences** (Chapter 3, "the held-out human
+preference"; `heuristic_floor.py`). Checked before computing anything. A held-out error
+can therefore be a pair the human judged against the pattern the rest of the data
+teaches. A2 was reframed accordingly.
+
+**Method** (`scripts_bnn/calibration_mechanism.py --a2`, self-tested; output
+`calibration_results/held_bnn_cvar/mechanism_stage_a2.txt`; POST HOC, DESCRIPTIVE).
+- Each measurement's labels were checked to equal its validation file's, pair for pair,
+  on all 40 models.
+- Per pair, from the segments' torso (x, y) over valid steps:
+  - **progress:** straight-line distance to the goal at the start minus at the end. The
+    goal is each env's printed `target_goal`; walls are ignored, because the offline
+    large-maze layout does not match D4RL's.
+  - **path:** path length, the heuristic floor's statistic.
+  - **novelty:** distance of the segment's (x, y) at 10 evenly spaced steps to the nearest
+    segment in that seed's TRAINING split, the larger over the pair's two segments.
+
+**Results (pooled over seeds 1–10):**
+
+| variant | error rate | human agrees with path | BNN error where it agrees / disagrees | share of errors on disagreeing pairs | novelty error-AUROC | Spearman(novelty, spread) | Spearman(novelty, excess spread) |
+|---|---|---|---|---|---|---|---|
+| medium_play | 0.094 | 0.786 | 0.071 / 0.176 | 0.40 | 0.572 | −0.091 | +0.005 |
+| medium_diverse | 0.094 | 0.878 | 0.046 / 0.443 | 0.57 | 0.680 | −0.195 | −0.130 |
+| large_play | 0.117 | 0.807 | 0.110 / 0.144 | 0.24 | 0.653 | −0.126 | +0.052 |
+| large_diverse | 0.095 | 0.888 | 0.055 / 0.415 | 0.49 | 0.659 | −0.204 | −0.044 |
+
+**Reading (descriptive):**
+- **About half the errors on the diverse mazes are pairs where the human preferred the
+  segment that moved LESS.**
+  - medium_diverse and large_diverse: the BNN errs on 41–44% of those pairs, against
+    5% elsewhere; they hold 49–57% of all its errors.
+  - The BNN, like the heuristic floor, follows motion. Those errors are human judgments
+    against the dominant cue, which no epistemic spread can be expected to foresee unless
+    the pairs are also unusual.
+  - On the play mazes the effect is weaker (24–40% of errors).
+- **Straight-line progress is a poor proxy** (humans agree with it on only 55–77% of
+  pairs). Read nothing into it.
+- **Errors ARE somewhat more novel** (error-AUROC 0.57–0.68): held-out segments far from
+  the training segments are misjudged more often.
+- **But the posterior's spread does NOT grow with novelty.** It is slightly NEGATIVELY
+  correlated with it (−0.09 to −0.20); the excess spread (§14.93) is uncorrelated
+  (−0.13 to +0.05).
+  - **This is the substantive defect.** An epistemic spread should widen away from the
+    data, and here it does not.
+  - On every maze, the novelty measure predicts errors better than the spread does
+    (0.57–0.68 against 0.25–0.42; the excess spread reaches 0.42–0.57).
+
+**So the H3 failure has two parts:**
+- (i) **Label-side:** about half the diverse-maze errors are human judgments against the
+  motion cue.
+- (ii) **Posterior-side:** the spread is mostly scale-proportional (§14.93) and otherwise
+  blind to distance from the training data.
+- Part (ii) is what a fix would address.
+
+**Caveats:**
+- Novelty here is in (x, y) only. The reward's input is the full 29-d state plus the
+  8-d action, so a segment new in (x, y) may not be new to the network.
+- One novelty measure; one goal approximation.
+
+**Next (none launched):**
+- **A3, desk, local:** novelty in the network's own input space (per step, the full
+  state and action against the training steps). Does the spread still ignore it?
+  - If yes, the posterior is not distance-aware. Prime suspects: the prior (the
+    map-informed GP prior ties functions across the maze through its heat kernel, and
+    `map_amp2` sets a scale the spread follows) and the sampler's mixing.
+  - If the spread does track full-input novelty, part (ii) is a feature-space mismatch
+    with this (x, y) proxy.
+- **B, light, box:** as §14.93 lists, especially (ii) per-chain logits. A spread that is
+  mostly between-chain disagreement in overall scale would explain both §14.93's scale
+  part and the blindness to novelty.

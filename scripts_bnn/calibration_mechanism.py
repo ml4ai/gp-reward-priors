@@ -30,6 +30,8 @@ STAGE A (desk, no GPU).  Per variant, the anchor's ten models, from the per-pair
 
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py \\
         > calibration_results/held_bnn_cvar/mechanism_stage_a.txt
+    /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --a2 \\
+        > calibration_results/held_bnn_cvar/mechanism_stage_a2.txt      (stage A2, §14.94)
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --selftest
 """
 import argparse
@@ -163,6 +165,135 @@ def run(meas=MEAS, out=print):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# STAGE A2 (desk, local data): what are the errors?  (handoff §14.94)
+# ---------------------------------------------------------------------------
+# The labels are HUMAN preferences (Chapter 3; heuristic_floor.py), not a deterministic
+# task-return rule, so a held-out "error" may be a pair the human judged against the
+# pattern the rest of the data teaches.  Two objective proxies are computed from each
+# segment's torso (x, y) over its valid steps, and one novelty measure:
+#   progress  straight-line distance to the goal at the segment's start minus at its end
+#             (the goal: each env's target_goal as D4RL printed it, exp/leak_audit.txt;
+#             walls are ignored -- the offline layout for the large maze does not match
+#             D4RL's, so no BFS distance is used)
+#   path      the torso's path length (heuristic_floor.py's statistic)
+#   novelty   distance from the segment's descriptor (x, y at 10 evenly spaced valid steps)
+#             to the nearest segment of that seed's TRAINING split; a pair's novelty is the
+#             larger of its two segments'
+GOALS = {"medium_play": (20.424, 20.832), "medium_diverse": (20.553, 20.374),
+         "large_play": (32.729, 24.692), "large_diverse": (32.774, 25.224)}
+DATA = os.path.join(ROOT, "data", "antmaze")
+
+
+def segment_stats(states, mask, goal):
+    """-> (progress, path, descriptor [10 x 2 flattened]) per segment."""
+    xy, m = np.asarray(states)[:, :, :2], np.asarray(mask) > 0
+    prog, path, desc = [], [], []
+    g = np.asarray(goal, float)
+    for i in range(xy.shape[0]):
+        p = xy[i][m[i]]
+        if len(p) < 2:
+            p = xy[i][:2]
+        prog.append(np.linalg.norm(p[0] - g) - np.linalg.norm(p[-1] - g))
+        path.append(np.linalg.norm(np.diff(p, axis=0), axis=1).sum())
+        desc.append(p[np.linspace(0, len(p) - 1, 10).round().astype(int)].ravel())
+    return np.asarray(prog), np.asarray(path), np.asarray(desc)
+
+
+def nearest(q, ref, chunk=256):
+    out = []
+    for i in range(0, len(q), chunk):
+        dd = ((q[i:i + chunk, None, :] - ref[None, :, :]) ** 2).sum(-1)
+        out.append(np.sqrt(dd.min(1)))
+    return np.concatenate(out)
+
+
+def pair_proxies(variant, seed, data=DATA):
+    import h5py
+    env = f"antmaze-{variant.replace('_', '-')}-v2"
+    sd = os.path.join(data, env, "eval", f"seed_{seed}")
+    out = {}
+    with h5py.File(os.path.join(sd, f"{env}_pref_val_{seed}.hdf5"), "r") as f:
+        a = segment_stats(f["states"][:], f["attn_mask"][:], GOALS[variant])
+        b = segment_stats(f["states_2"][:], f["attn_mask_2"][:], GOALS[variant])
+        out["y1"] = f["labels"][:, 0]
+    with h5py.File(os.path.join(sd, f"{env}_pref_train_{seed}.hdf5"), "r") as f:
+        ta = segment_stats(f["states"][:], f["attn_mask"][:], GOALS[variant])[2]
+        tb = segment_stats(f["states_2"][:], f["attn_mask_2"][:], GOALS[variant])[2]
+    ref = np.concatenate([ta, tb])
+    out["d_prog"], out["d_path"] = a[0] - b[0], a[1] - b[1]
+    out["novelty"] = np.maximum(nearest(a[2], ref), nearest(b[2], ref))
+    return out
+
+
+def analyse_a2(recs, proxies):
+    """recs, proxies: {seed: ...} for one variant -> pooled summary."""
+    from scipy.stats import spearmanr
+    rows = {k: [] for k in ("wrong", "agree_prog", "agree_path", "novelty", "spread", "excess", "margin")}
+    per_seed = []
+    for s, r in recs.items():
+        px = proxies[s]
+        assert np.allclose(np.asarray(r["y1"], float), px["y1"]), (s, "measurement and file disagree")
+        y = np.asarray(r["y1"], float) > 0.5
+        d, sp = np.asarray(r["d_mean"], float), np.asarray(r["spread"], float)
+        wrong = (np.asarray(r["p_pred"]) > 0.5) != y
+        _, b, _, _ = spread_split(d, sp)
+        excess = sp ** 2 - b * d ** 2
+        ag_prog = (px["d_prog"] > 0) == y
+        ag_path = (px["d_path"] > 0) == y
+        for k, v in (("wrong", wrong), ("agree_prog", ag_prog), ("agree_path", ag_path),
+                     ("novelty", px["novelty"]), ("spread", sp), ("excess", excess), ("margin", np.abs(d))):
+            rows[k].append(v)
+        ok = 0 < wrong.sum() < wrong.size
+        per_seed.append((G.auroc(px["novelty"], wrong) if ok else np.nan,
+                         spearmanr(px["novelty"], excess)[0], spearmanr(px["novelty"], sp)[0]))
+    R = {k: np.concatenate(v) for k, v in rows.items()}
+    o = {"n": int(R["wrong"].size), "err": float(R["wrong"].mean())}
+    for k in ("prog", "path"):
+        ag = R[f"agree_{k}"].astype(bool)
+        o[f"agree_{k}"] = float(ag.mean())
+        o[f"err_if_agree_{k}"] = float(R["wrong"][ag].mean()) if ag.any() else np.nan
+        o[f"err_if_disagree_{k}"] = float(R["wrong"][~ag].mean()) if (~ag).any() else np.nan
+        o[f"errors_that_disagree_{k}"] = float((~ag[R["wrong"].astype(bool)]).mean()) if R["wrong"].any() else np.nan
+    both = (~R["agree_prog"].astype(bool)) & (~R["agree_path"].astype(bool))
+    o["disagree_both"] = float(both.mean())
+    o["err_if_disagree_both"] = float(R["wrong"][both].mean()) if both.any() else np.nan
+    ps = np.asarray(per_seed, float)
+    o["auroc_novelty_err"] = float(np.nanmean(ps[:, 0]))
+    o["rho_novelty_excess"], o["rho_novelty_spread"] = float(np.nanmean(ps[:, 1])), float(np.nanmean(ps[:, 2]))
+    return o
+
+
+def report_a2(name, o, out=print):
+    out(f"\n=== {name}: {o['n']} pairs, error rate {o['err']:.3f}")
+    for k, lab in (("prog", "progress toward the goal"), ("path", "path length")):
+        out(f"  human label agrees with {lab:25s}: {o[f'agree_{k}']:.3f} of pairs | model error rate where it "
+            f"agrees {o[f'err_if_agree_{k}']:.3f}, where it disagrees {o[f'err_if_disagree_{k}']:.3f} | "
+            f"share of errors on disagreeing pairs {o[f'errors_that_disagree_{k}']:.3f}")
+    out(f"  human label disagrees with BOTH proxies on {o['disagree_both']:.3f} of pairs; model error rate there "
+        f"{o['err_if_disagree_both']:.3f}")
+    out(f"  novelty: error-AUROC {o['auroc_novelty_err']:.3f}; Spearman with the spread {o['rho_novelty_spread']:+.3f}, "
+        f"with the excess spread {o['rho_novelty_excess']:+.3f}  (mean over seeds)")
+
+
+def run_a2(meas=MEAS, data=DATA, out=print):
+    import json
+    out("BNN H3 CALIBRATION, MECHANISM STAGE A2 (handoff §14.94; scoped hold exception; post hoc, descriptive)")
+    out("Proxies from each segment's torso (x, y); progress uses straight-line distance to the goal (no walls).")
+    for v in G.E.VARIANTS:
+        recs, prox = {}, {}
+        for s in G.SEEDS:
+            path = os.path.join(meas, f"antmaze_{v}_bnn_eval_{s}.json")
+            if os.path.exists(path):
+                recs[s] = json.load(open(path))
+                prox[s] = pair_proxies(v, s, data)
+        if len(recs) != len(G.SEEDS):
+            out(f"\n=== {v}: {len(recs)} of {len(G.SEEDS)} measurements -- not read")
+            continue
+        report_a2(v, analyse_a2(recs, prox), out)
+    return 0
+
+
 def selftest():
     rng = np.random.default_rng(0)
     # a model whose logits are too small by a factor 3 is under-confident; T recovers ~1/3
@@ -192,6 +323,23 @@ def selftest():
     assert 0.85 < o["T_plug"][0] < 1.2, o["T_plug"]
     a, b, r2, share = spread_split(np.array([1.0, 2.0, 3.0]), np.sqrt(np.array([1.0, 1.0, 1.0])))
     assert abs(b) < 1e-9 and abs(a - 1.0) < 1e-9 and abs(share) < 1e-9, (a, b, share)   # constant spread: no scale part
+    # A2: segment statistics on a hand-made segment, and the error split by proxy agreement
+    st = np.zeros((1, 4, 29))
+    st[0, :, :2] = [[0, 0], [3, 4], [3, 4], [6, 8]]             # 2 x (3,4) steps; goal at (6, 8)
+    prog, path, desc = segment_stats(st, np.array([[1, 1, 0, 1]]), (6, 8))
+    assert abs(prog[0] - 10.0) < 1e-12 and abs(path[0] - 10.0) < 1e-12 and desc.shape == (1, 20)
+    assert np.allclose(nearest(np.zeros((2, 3)), np.array([[3.0, 4, 0], [0, 0, 1]])), [1.0, 1.0])
+    recs, prox = {}, {}
+    for s in range(1, 4):
+        y = np.array([1, 1, 0, 0, 1, 0, 1, 0], float)
+        dp = np.array([1, 1, -1, -1, -1, 1, 1, -1], float)          # pairs 4, 5: the human disagrees with the proxy
+        p = np.where(dp > 0, 0.8, 0.2)                              # the model follows the proxy
+        recs[s] = {"y1": y.tolist(), "p_pred": p.tolist(), "d_mean": np.log(p / (1 - p)).tolist(),
+                   "spread": (0.1 + 0.01 * np.arange(8)).tolist()}
+        prox[s] = {"y1": y, "d_prog": dp, "d_path": dp, "novelty": np.arange(8, dtype=float)}
+    o = analyse_a2(recs, prox)
+    assert o["agree_prog"] == 0.75 and o["err_if_agree_prog"] == 0.0 and o["err_if_disagree_prog"] == 1.0
+    assert o["errors_that_disagree_prog"] == 1.0 and o["disagree_both"] == 0.25
     print("selftest OK")
     return 0
 
@@ -200,8 +348,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--meas", default=MEAS)
+    ap.add_argument("--a2", action="store_true", help="stage A2: what the errors are (handoff §14.94)")
     a = ap.parse_args()
-    return selftest() if a.selftest else run(a.meas)
+    return selftest() if a.selftest else run_a2(a.meas) if a.a2 else run(a.meas)
 
 
 if __name__ == "__main__":
