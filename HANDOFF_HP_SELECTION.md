@@ -26784,3 +26784,50 @@ controls and leveling readouts are unchanged.
 - **Checked on wandb:** the registry is back to 22 of 28 without terminals, and the
   notebook it would write is identical to the committed one. Box status names the two
   runs and drops them (47 running, median 159k).
+
+### 14.91 Sweep check 2026-11-05 (night): CHECK 3 COMPLETE — three rewards, one behaviour; PT's companions start
+
+**Box:** 47 IQL runs, **median 160k steps/h**: inside the 10% rule. No damage.
+- `box_status` drops the two index-stale `aqszat8y` runs as designed (§14.90 addendum).
+- The registry is 22 of 28, notebook unchanged. The leveling readout is unchanged.
+- BM is done, so **BO started:** PT's companion arm, full data, medium_play, index 3
+  (`iaz2xd46`). Its params equal PT's at-winner control's, so `control_readout` and
+  `rq1_readout` note it "ignored", as designed.
+
+**CHECK 3 (§14.75; final positions, medium_diverse, no terminals, index 7;
+`results/final_positions.py 949xf9dp 3v7xgws1 2svtkigt`; DESCRIPTIVE):**
+
+| reward | sweep | success (pooled, 10 seeds) | failures ending at BFS distance 8 | top failure cells |
+|---|---|---|---|---|
+| MR, full data | `949xf9dp` | 0.318 | 38% | (4,2) 1,721; (2,2) 722 |
+| MR, r16 | `3v7xgws1` | 0.335 | 39% | (4,2) 1,734; (2,2) 756 |
+| motion | `2svtkigt` | 0.324 | 37% | (4,2) 1,657; (2,2) 765 |
+
+- **The prediction ("the three end-position distributions are alike, the same competent
+  wandering; success near 0.31–0.33") is CONFIRMED.** MR r16's 0.335 is a hair above the
+  stated range.
+- The distance profiles agree to within about 0.02 at every BFS distance. The same two
+  cells take about a third of the failures in all three.
+- **Three different rewards, one of them not learned from preferences at all, end their
+  episodes in the same places at the same rates.** At index 7 on medium_diverse, the
+  policy is set by what the three share: the goal bonus the normalization rebuilds from
+  the terminals (§14.82, §14.86). It is not set by each reward's own shape.
+- This is the behavioural side of the plateau (§14.75, §14.77), and closes the three
+  mechanism checks.
+
+**New complete cells:**
+- **Standard:** NMR r128 large_diverse 0.137 ± 0.057 (`fxn97k0g`).
+- **Candidate, states only:** NMR r64 medium_play, large_diverse.
+- **MR's companions:** r128 FINISHED (`vfiiu7w8`); r64 running (`mng4gtgf`).
+
+**Started:**
+- NMR candidate r128 medium_play and large_diverse.
+- Noise: MR standard n01 large_diverse and n02 medium_play (MR n01 medium_diverse 8/10).
+
+**Readiness: NMR 6 cells left:**
+- candidate r128 medium_play, medium_diverse, large_diverse (running) and large_play;
+- candidate r64 large_play (5/10);
+- standard r128 large_play (5/10, seeds 6–10 near 950k).
+- About a day.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
