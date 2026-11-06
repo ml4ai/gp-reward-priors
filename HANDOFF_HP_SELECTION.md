@@ -27355,3 +27355,39 @@ differences (§14.98). Left, roughly in order:
 - **3** needs no runs: the round-5 sweep's trials, if their logged validation CE at
   conservatism 0 and their configs are compared by amplitude. A wandb read of BNN sweep
   trials, inside §14.92's scope (calibration of the BNN reward models).
+
+### 14.100 Why the H3 gate fails — B3 BUILT (author's choice, 2026-11-06): is it the within-cell (motion) part that the BNN shrinks?
+
+**`results/calibration_stage_b3.py`** (parent repo).
+- Scope: §14.92's exception.
+- Box output: `exp/calibration_b3/<variant>_<seed>.npz` (gitignored).
+- Analysis: `calibration_results/held_bnn_cvar/mechanism_stage_b3.txt`.
+- POST HOC, DESCRIPTIVE.
+
+**`measure` (box; resumable, atomic, torch threads capped at 4).** Per variant × seeds 1–10,
+on each seed's validation pairs, per step:
+- the BNN's posterior-mean reward (each draw centred by its mean over the valid steps,
+  then averaged over all draws);
+- the MR anchor model's reward;
+- each step's maze cell (the live layout, `_live_prior`; refused if it does not load);
+- the torso's step length (speed).
+
+**`analyse` (here).** Each model's reward is split into a positional part (each cell's
+mean) and a within-cell part (the rest). Then, BNN against MR:
+1. the sd of each part;
+2. the within-cell slope of reward on speed;
+3. each part's mean-pooled pair logits, median |d_BNN| / |d_MR|;
+4. each part's accuracy on the human labels.
+
+First, a cross-check: the BNN's pooled per-step mean must reproduce the gate's `d_mean`.
+
+**Prediction (§14.99 candidate 1):** the BNN / MR ratio is much smaller for the
+within-cell part than for the positional part, in amplitude, in the speed slope and in the
+pair logits. Ratios near equal would point away from the nugget, towards the sampler or the
+selection.
+
+**Self-test:** synthetic rewards with the within-cell (speed) part shrunk to 0.3 recover a
+speed-slope ratio of 0.3, a positional ratio of about 1, and a within-cell logit ratio below
+0.45. The parts add up exactly, and step speed handles the last valid step.
+
+Cost: one pass over every draw, as stage B's measure, plus one MR forward pass per seed.
