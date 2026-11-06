@@ -26831,3 +26831,57 @@ controls and leveling readouts are unchanged.
 - About a day.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
+
+### 14.92 Study 2 carries the replication forward; the BNN calibration failure to be investigated first (author's direction, 2026-11-06)
+
+**The author's direction:**
+1. **If the replication's hypothesis holds in general** (across families, mazes and both
+   degradation ladders), Study 2 carries forward the replication's candidate protocol
+   (`return_range_split "length"`, §14.83) and its reward models (seeds 100–110).
+2. **Study 2 therefore needs NEW BNN models at seeds 100–110.**
+3. **The BNN models at seeds 0–10 are kept as DIAGNOSTIC runs.** Only the anchor
+   feasibility pilot and the calibration checks were observed on them; no main Study 2
+   test was.
+4. **Before Study 2 launches: investigate why the calibration checks failed**
+   (§4.3.177: the H3 calibration gate FAILS at the anchor on all four variants), looking
+   for a mechanism and a possible fix.
+   - LOW priority behind Study 1 and the replication.
+   - Any part needing heavy compute waits.
+
+**Consequences and open points (Claude, 2026-11-06), none acted on:**
+- **The hold (§14.1) covers this investigation.** BNN calibration measurements are a
+  BNN diagnostic ("every cell, grid, control, diagnostic and readout"). The rules,
+  §4.3.177 and `calibration_results/measurements/` have NOT been read for this; only
+  their section headings and file names were located.
+  - **An explicit, scoped exception from the author is needed first.** Proposed scope:
+    read-only access to the BNN reward models' calibration diagnostics (§4.3.177,
+    §13.10–§13.12, `calibration_results/measurements/`, the BNN models and saved chains),
+    for the mechanism investigation only.
+    - NOT the BNN or ensemble-CVaR IQL results.
+    - Outputs kept out of the reporting path (under `results/held_bnn_cvar/` or
+      `calibration_results/held_bnn_cvar/`).
+    - Nothing quoted in the benchmarking chapter.
+- **Order matters.** A calibration fix that changes the BNN's configuration or procedure
+  must be settled BEFORE the BNN's seed-100 selection; otherwise that selection would have
+  to be redone.
+  - So: investigate → decide on a fix → BNN selection at seed 100 → BNN training 100–110.
+  - The replication tooling deliberately refuses BNN today (`REPL_FAMILIES`,
+    `make_production_config --set repl`, `train_rewards.sh CONFIG_SET=repl`). Extending
+    it waits for that decision.
+- **The BNN's seed-100 selection is the heavy part.** It is Study 1's round-5 procedure
+  (32-chain trials, gates, the 128-chain escalation). Re-running it at seed 100 is
+  consistent with the other families' re-selection (§14.83).
+- **"Holds in general" needs a registered definition before any replication reading.**
+  For example: every family SENSITIVE on both ladders; or a stated minimum such as all
+  families on at least one ladder. Otherwise the carry-forward decision would be made
+  after seeing the result.
+- **Study 2 reads BNN CVaR by design**, so lifting the hold for Study 2 itself remains the
+  author's decision (§14.1).
+- **Staging by compute** (once the exception is granted):
+  - (A) desk: read the gate's rule and the existing measurements; characterize the
+    failure (which statistic, which direction, per variant, per seed); check it against
+    the mechanisms already on record.
+  - (B) light: recompute calibration from SAVED chains under alternative choices, for
+    example centred vs raw draws, pooled vs per-chain, or a validation-fitted temperature,
+    to test candidate mechanisms without training.
+  - (C) heavy, waits: retrain BNNs under a candidate fix.
