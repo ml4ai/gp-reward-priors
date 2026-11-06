@@ -26727,3 +26727,43 @@ alternative, and update the self-test cases ((b) failing in ONE family no longer
 every read family failing does; FLAGGED counts toward neither; no usable variant still
 refutes). Re-run the readout and update `rq1_readout_latest.txt`. No registered quantity,
 test or family verdict changes. Only the ladder-level label does.
+
+### 14.90 Sweep check 2026-11-05 (later): a wandb index glitch on `aqszat8y` (registry only, reverted); check 3's MR cells
+
+**Box:** 49 IQL runs, **median 157–159k steps/h**: inside the 10% rule. No damage. The
+controls and leveling readouts are unchanged.
+
+**A wandb inconsistency, not damage:**
+- `box_status.py` listed two runs of `aqszat8y` as running with a stale heartbeat
+  (20,000 min, i.e. 23 Oct): seeds 7 (`bip07qk9`) and 8 (`a0qfr2ck`). `aqszat8y` is the
+  task reward, no terminals, medium_play, index 0, the usability check's medium_play cell.
+- **Both runs are complete and FINISHED.** Their history reaches step 1,000,000, and the
+  run objects, `sweep.runs` and a per-sweep query all say FINISHED.
+- But wandb's project-level `state: running` filter still returns them. Previous checks
+  did not show them, so the index changed on wandb's side.
+- `rq1_readout`, `control_readout` and `ladder_status` read each run's own state, so they
+  are unaffected: usability on medium_play is still +0.672, USABLE.
+- **`phase2_sweeps.py register` uses the filtered query.** It marked the cell running
+  (8/10), giving 21 of 28 no-terminals cells, and rewrote `results/results_table.ipynb`.
+  **That change was REVERTED** (`git checkout`); the committed registry keeps 22 of 28.
+- Until wandb's index catches up, expect `box_status` to list these two stale runs, and
+  `register --write` to try the same change. Do not commit it.
+- Fix only if it persists, e.g. make the registry read run states from the run objects.
+
+**Check 3 (final positions, medium_diverse, no terminals, index 7; `results/final_positions.py`):**
+- The two MR cells are complete. The motion cell (`2svtkigt`) is 5/10, with seeds 6–10 at
+  about 850–970k steps. **The full reading waits for it (next check).**
+- MR full data (`949xf9dp`): pooled success **0.318**. 38% of failed episodes end at BFS
+  distance 8; top cell (4, 2) with 1,721 of 6,824 failures.
+- MR r16 (`3v7xgws1`): pooled success **0.335**. 39% at distance 8; top cell (4, 2) with
+  1,734 of 6,648.
+
+**Progress:**
+- **NMR: 9 cells left:** candidate r64 large_play and large_diverse (5/10), medium_play
+  (8/10); candidate r128 medium_diverse started, the other three r128 not yet; standard
+  r128 large_play and large_diverse (5/10).
+- Candidate NMR r64 medium_diverse finished.
+- **MR's companions:** r128 5/10.
+- **Noise:** MR n01 standard medium_play and medium_diverse, 5/10 each.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
