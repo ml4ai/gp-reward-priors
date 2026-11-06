@@ -1,0 +1,23 @@
+BNN H3 CALIBRATION, MECHANISM STAGE A3 (handoff §14.95; scoped hold exception; post hoc, descriptive)
+Novelty = mean over a segment's valid steps of the distance to the nearest training step (every 2nd valid step of that seed's training pairs); pair = max of its two segments.
+Per space: error-AUROC of novelty | Spearman(novelty, spread) | (novelty, excess spread) | (novelty, |margin|) -- means over seeds 1-10
+
+=== medium_play
+  raw     error-AUROC 0.532 | rho spread -0.062 | rho excess +0.024 | rho |margin| -0.118
+  z       error-AUROC 0.464 | rho spread +0.017 | rho excess +0.061 | rho |margin| -0.066
+  z_body  error-AUROC 0.438 | rho spread -0.028 | rho excess -0.004 | rho |margin| -0.034
+
+=== medium_diverse
+  raw     error-AUROC 0.598 | rho spread -0.198 | rho excess -0.126 | rho |margin| -0.136
+  z       error-AUROC 0.568 | rho spread -0.138 | rho excess -0.110 | rho |margin| -0.055
+  z_body  error-AUROC 0.549 | rho spread -0.165 | rho excess -0.159 | rho |margin| -0.032
+
+=== large_play
+  raw     error-AUROC 0.582 | rho spread -0.235 | rho excess -0.102 | rho |margin| -0.323
+  z       error-AUROC 0.624 | rho spread -0.214 | rho excess -0.131 | rho |margin| -0.228
+  z_body  error-AUROC 0.556 | rho spread -0.304 | rho excess -0.228 | rho |margin| -0.227
+
+=== large_diverse
+  raw     error-AUROC 0.632 | rho spread -0.252 | rho excess -0.139 | rho |margin| -0.215
+  z       error-AUROC 0.628 | rho spread -0.216 | rho excess -0.131 | rho |margin| -0.158
+  z_body  error-AUROC 0.637 | rho spread -0.272 | rho excess -0.200 | rho |margin| -0.158

@@ -32,6 +32,8 @@ STAGE A (desk, no GPU).  Per variant, the anchor's ten models, from the per-pair
         > calibration_results/held_bnn_cvar/mechanism_stage_a.txt
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --a2 \\
         > calibration_results/held_bnn_cvar/mechanism_stage_a2.txt      (stage A2, §14.94)
+    /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --a3 \\
+        > calibration_results/held_bnn_cvar/mechanism_stage_a3.txt      (stage A3, §14.95)
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --selftest
 """
 import argparse
@@ -294,6 +296,115 @@ def run_a2(meas=MEAS, data=DATA, out=print):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# STAGE A3 (desk, local data): novelty in the network's own input space  (handoff §14.95)
+# ---------------------------------------------------------------------------
+# The BNN's input per step is the raw 29-d state and 8-d action, concatenated with no
+# normalization (util.load_pref_data; calibration_gate.measure_one).  Three spaces:
+#   raw      exactly what the network sees (distances dominated by x, y, up to ~36)
+#   z        every dimension z-scored on that seed's training steps
+#   z_body   the same without x, y: novelty of the ant's body state and action alone
+# A segment's novelty is the mean, over its valid steps, of the distance to the nearest
+# training step (training steps: every TRAIN_STRIDE-th valid step of both segments of
+# every training pair); a pair's is the larger of its two segments'.
+TRAIN_STRIDE = 2
+SPACES = ("raw", "z", "z_body")
+
+
+def valid_steps(f, part):
+    s = f["states" if part == 1 else "states_2"][:]
+    a = f["actions" if part == 1 else "actions_2"][:]
+    m = f["attn_mask" if part == 1 else "attn_mask_2"][:] > 0
+    return np.concatenate([s, a], -1), m                      # [B, T, 37], [B, T]
+
+
+def nn_mean_distance(segs, mask, ref):
+    """[B] mean over each segment's valid steps of the distance to the nearest row of ref."""
+    import torch
+    R = torch.from_numpy(np.ascontiguousarray(ref, dtype=np.float32))
+    out = np.empty(segs.shape[0])
+    for i in range(segs.shape[0]):
+        q = torch.from_numpy(np.ascontiguousarray(segs[i][mask[i]], dtype=np.float32))
+        if len(q) == 0:
+            out[i] = np.nan
+            continue
+        dmin = torch.full((len(q),), float("inf"))
+        for j in range(0, len(R), 8192):
+            dmin = torch.minimum(dmin, torch.cdist(q, R[j:j + 8192]).min(1).values)
+        out[i] = float(dmin.mean())
+    return out
+
+
+def pair_novelty_input(variant, seed, data=DATA):
+    """{space: [B] pair novelty} and the validation labels, for one seed."""
+    import h5py
+    env = f"antmaze-{variant.replace('_', '-')}-v2"
+    sd = os.path.join(data, env, "eval", f"seed_{seed}")
+    with h5py.File(os.path.join(sd, f"{env}_pref_train_{seed}.hdf5"), "r") as f:
+        tr = [valid_steps(f, k) for k in (1, 2)]
+    ref = np.concatenate([x[m] for x, m in tr])[::TRAIN_STRIDE]
+    mu, sd_ = ref.mean(0), ref.std(0) + 1e-6
+    with h5py.File(os.path.join(sd, f"{env}_pref_val_{seed}.hdf5"), "r") as f:
+        va = [valid_steps(f, k) for k in (1, 2)]
+        y1 = f["labels"][:, 0]
+    out = {"y1": y1}
+    for sp in SPACES:
+        if sp == "raw":
+            tf = lambda x: x
+        elif sp == "z":
+            tf = lambda x: (x - mu) / sd_
+        else:
+            tf = lambda x: ((x - mu) / sd_)[..., 2:]
+        r = tf(ref)
+        n1, n2 = (nn_mean_distance(tf(x), m, r) for x, m in va)
+        out[sp] = np.maximum(n1, n2)
+    return out
+
+
+def analyse_a3(recs, nov):
+    from scipy.stats import spearmanr
+    o = {}
+    for sp in SPACES:
+        rows = []
+        for s, r in recs.items():
+            assert np.allclose(np.asarray(r["y1"], float), nov[s]["y1"]), (s, "measurement and file disagree")
+            d, spr = np.asarray(r["d_mean"], float), np.asarray(r["spread"], float)
+            wrong = (np.asarray(r["p_pred"]) > 0.5) != (np.asarray(r["y1"]) > 0.5)
+            _, b, _, _ = spread_split(d, spr)
+            nv = nov[s][sp]
+            ok = 0 < wrong.sum() < wrong.size
+            rows.append((G.auroc(nv, wrong) if ok else np.nan, spearmanr(nv, spr)[0],
+                         spearmanr(nv, spr ** 2 - b * d ** 2)[0], spearmanr(nv, np.abs(d))[0]))
+        rows = np.asarray(rows, float)
+        o[sp] = tuple(float(np.nanmean(rows[:, k])) for k in range(4))
+    return o
+
+
+def run_a3(meas=MEAS, data=DATA, out=print):
+    import json
+    out("BNN H3 CALIBRATION, MECHANISM STAGE A3 (handoff §14.95; scoped hold exception; post hoc, descriptive)")
+    out(f"Novelty = mean over a segment's valid steps of the distance to the nearest training step "
+        f"(every {TRAIN_STRIDE}nd valid step of that seed's training pairs); pair = max of its two segments.")
+    out("Per space: error-AUROC of novelty | Spearman(novelty, spread) | (novelty, excess spread) | "
+        "(novelty, |margin|) -- means over seeds 1-10")
+    for v in G.E.VARIANTS:
+        recs, nov = {}, {}
+        for s in G.SEEDS:
+            path = os.path.join(meas, f"antmaze_{v}_bnn_eval_{s}.json")
+            if os.path.exists(path):
+                recs[s] = json.load(open(path))
+                nov[s] = pair_novelty_input(v, s, data)
+        if len(recs) != len(G.SEEDS):
+            out(f"\n=== {v}: {len(recs)} of {len(G.SEEDS)} measurements -- not read")
+            continue
+        o = analyse_a3(recs, nov)
+        out(f"\n=== {v}")
+        for sp in SPACES:
+            a, r1, r2, r3 = o[sp]
+            out(f"  {sp:7s} error-AUROC {a:.3f} | rho spread {r1:+.3f} | rho excess {r2:+.3f} | rho |margin| {r3:+.3f}")
+    return 0
+
+
 def selftest():
     rng = np.random.default_rng(0)
     # a model whose logits are too small by a factor 3 is under-confident; T recovers ~1/3
@@ -340,6 +451,13 @@ def selftest():
     o = analyse_a2(recs, prox)
     assert o["agree_prog"] == 0.75 and o["err_if_agree_prog"] == 0.0 and o["err_if_disagree_prog"] == 1.0
     assert o["errors_that_disagree_prog"] == 1.0 and o["disagree_both"] == 0.25
+    # A3: nearest-neighbour mean over valid steps only
+    segs = np.zeros((2, 3, 2))
+    segs[0] = [[1, 0], [0, 2], [9, 9]]                          # third step masked out
+    segs[1] = [[3, 4], [3, 4], [3, 4]]
+    mask = np.array([[1, 1, 0], [1, 1, 1]], bool)
+    nd = nn_mean_distance(segs, mask, np.zeros((1, 2)))
+    assert np.allclose(nd, [1.5, 5.0]), nd
     print("selftest OK")
     return 0
 
@@ -349,8 +467,11 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--meas", default=MEAS)
     ap.add_argument("--a2", action="store_true", help="stage A2: what the errors are (handoff §14.94)")
+    ap.add_argument("--a3", action="store_true", help="stage A3: novelty in the input space (handoff §14.95)")
     a = ap.parse_args()
-    return selftest() if a.selftest else run_a2(a.meas) if a.a2 else run(a.meas)
+    if a.selftest:
+        return selftest()
+    return run_a3(a.meas) if a.a3 else run_a2(a.meas) if a.a2 else run(a.meas)
 
 
 if __name__ == "__main__":

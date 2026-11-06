@@ -27048,3 +27048,76 @@ teaches. A2 was reframed accordingly.
 - **B, light, box:** as §14.93 lists, especially (ii) per-chain logits. A spread that is
   mostly between-chain disagreement in overall scale would explain both §14.93's scale
   part and the blindness to novelty.
+
+### 14.95 Why the H3 gate fails — stage A3 (desk, local data): the spread ignores novelty in the network's own input space too
+
+**Method** (`scripts_bnn/calibration_mechanism.py --a3`, self-tested; output
+`calibration_results/held_bnn_cvar/mechanism_stage_a3.txt`; about 5 min on the Mac; POST
+HOC, DESCRIPTIVE).
+- The BNN's input per step is the raw 29-d state plus the 8-d action, concatenated with
+  no normalization (`util.load_pref_data`, `calibration_gate.measure_one`).
+- A segment's novelty is the mean, over its valid steps, of the distance to the nearest
+  training step of that seed (every 2nd valid step of both segments of every training
+  pair). A pair takes the larger of its two segments'.
+- Three spaces:
+  - **raw:** what the network sees, dominated by (x, y);
+  - **z:** each dimension z-scored on the training steps;
+  - **z_body:** z without (x, y), the ant's body state and action only.
+
+**Results (means over seeds 1–10):**
+
+| variant | space | error-AUROC of novelty | ρ(novelty, spread) | ρ(novelty, excess spread) | ρ(novelty, \|margin\|) |
+|---|---|---|---|---|---|
+| medium_play | raw / z / z_body | 0.53 / 0.46 / 0.44 | −0.06 / +0.02 / −0.03 | +0.02 / +0.06 / −0.00 | −0.12 / −0.07 / −0.03 |
+| medium_diverse | raw / z / z_body | 0.60 / 0.57 / 0.55 | −0.20 / −0.14 / −0.17 | −0.13 / −0.11 / −0.16 | −0.14 / −0.06 / −0.03 |
+| large_play | raw / z / z_body | 0.58 / 0.62 / 0.56 | −0.24 / −0.21 / −0.30 | −0.10 / −0.13 / −0.23 | −0.32 / −0.23 / −0.23 |
+| large_diverse | raw / z / z_body | 0.63 / 0.63 / 0.64 | −0.25 / −0.22 / −0.27 | −0.14 / −0.13 / −0.20 | −0.22 / −0.16 / −0.16 |
+
+**Reading (descriptive):**
+- **§14.94's finding is not an artefact of the (x, y) proxy.** In every space and on every
+  maze, the posterior's spread does not grow with novelty; it slightly SHRINKS
+  (ρ −0.03 to −0.30). The excess spread likewise (−0.23 to +0.06).
+- Novelty predicts errors weakly to moderately (0.55–0.64 on three mazes; about 0.5 or
+  below on medium_play), and in every space better than the spread does.
+- **The mean is somewhat novelty-aware:** the margin |d| falls with novelty (ρ −0.03 to
+  −0.32), so the model is less extreme on unfamiliar pairs. The spread is not.
+
+**A candidate mechanism, on record and now matching the data: the prior is a function of
+maze POSITION only.**
+- `MapInformedGPPrior`'s kernel is
+  `k(s, s') = sig_c2 + sig_g2 · K_geo[c(s), c(s')] + sig_n2 · δ`: a constant, a heat
+  kernel over maze CELLS, and a nugget (memory "map-informed GP prior";
+  `optbnn/gp/models/map_informed_prior.py`).
+- Two inputs in the same cell are equally correlated a priori, whatever the ant's body
+  state or action. The functional prior is imposed at measurement points drawn from the
+  dataset (n_meas 256), which covers the maze.
+- So the prior gives the posterior no reason to widen on body or action novelty. In
+  position it widens only as far as the heat kernel's range and the constant term allow.
+- **This would also explain why the spread's structure is mostly a global scale
+  (§14.93):** the prior's constant term `sig_c2`, scaled by `map_amp2`, is a single shared
+  direction across all inputs.
+- **Not yet tested.** It is a hypothesis consistent with A, A2 and A3.
+
+**Stage B (light, box; awaiting the author's go-ahead): the tests that separate
+mechanisms:**
+- (i) MR, PT and NMR temperatures on the same validation splits (uncovered): is the 2×
+  under-scaling BNN-specific?
+- (ii) Per-chain mean logits from the saved chains. Is the spread mostly between-chain
+  disagreement in overall scale, and is each chain sharp?
+- (iii) **The prior predictive on the validation pairs:** draw functions from
+  `MapInformedGPPrior` at the validation steps and compute the same spread.
+  - Does the PRIOR's spread track novelty, by cell and by body?
+  - How does the posterior's spread compare with the prior's, pair by pair?
+  - If the prior is novelty-blind in body space and the posterior inherits it, the
+    position-only prior is the mechanism.
+- (iv) Position-only novelty (how many training steps fall in the pair's cells, against
+  its spread). Desk-able.
+
+**Fix candidates, for the author before any Study 2 BNN selection; none decided:**
+- (a) a prior over (s, a) that sees more than position, e.g. a product or sum kernel with
+  a body-and-action component. This changes the method;
+- (b) a larger nugget, or a weaker constant term, so that functions may vary off the
+  labelled data;
+- (c) re-registering H3 for Study 2 with a statistic the posterior is built to represent,
+  e.g. positional uncertainty. That changes the question, not the method.
+- Each is a decision for the author; (a) and (b) need stage C compute.
