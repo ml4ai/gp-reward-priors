@@ -27121,3 +27121,53 @@ mechanisms:**
 - (c) re-registering H3 for Study 2 with a statistic the posterior is built to represent,
   e.g. positional uncertainty. That changes the question, not the method.
 - Each is a decision for the author; (a) and (b) need stage C compute.
+
+### 14.96 Why the H3 gate fails — stage B BUILT (author's go-ahead, 2026-11-06): one box job, then a local analysis
+
+**`results/calibration_stage_b.py`** (parent repo).
+- Scope: §14.92's exception; no IQL result.
+- Output: `exp/calibration_b/` (box-generated, gitignored; copy it over).
+- Analysis text: `calibration_results/held_bnn_cvar/mechanism_stage_b.txt`.
+- POST HOC, DESCRIPTIVE.
+
+**`measure` (box; resumable, atomic writes, torch threads capped at 4).** Per variant ×
+seeds 1–10, the anchor models:
+- **(i) MR, PT and NMR** (uncovered): each validation pair's mean-pooled logit
+  difference.
+  - MR uses `rq1_accuracy.pooled_logits_mlp`; PT and NMR mirror
+    `PTTrainer.evaluation`.
+  - **Asserted:** the accuracy from these logits equals the trainer's own `eval_acc`.
+- **(ii) BNN, every draw:** each pair's logit difference, kept per chain (each chain's
+  mean and variance), pooled as `calibration_gate` pools.
+- **(iii) The prior's exact spread** of each pair's mean-pooled logit difference:
+  `amp2 [sig_g2 (w1−w2)' Kgeo (w1−w2) + sig_n2 (1/n1 + 1/n2)]`.
+  - w is each segment's cell-occupancy fraction; the constant cancels.
+  - Built with `diagnose_sampling_tail._live_prior` (the live D4RL layout, as the run built
+    it); the job REFUSES if the live layout does not load, because the offline large layout
+    is a different maze (§4.3.110).
+- **(iv) Positional familiarity:** the occupancy-weighted count of the seed's training
+  steps in each segment's cells; a pair takes the smaller.
+
+**`analyse` (here):**
+- (i) one leave-one-seed-out temperature per family, BNN beside MR, PT and NMR: is the 2×
+  under-scaling the BNN's alone?
+- (ii) the between-chain share of the posterior variance; how much of the between-chain
+  part one scale factor per chain explains; chain sharpness (mean_c |d_c| / |d̄|); one
+  temperature per chain index. Are chains sharp and the mixture soft?
+- (iii) the prior's spread against the posterior's (Spearman, median ratio), and against
+  A3's novelty (raw, z_body). Does the prior itself ignore body novelty, and does the
+  posterior follow the prior?
+- (iv) positional novelty against errors and the spread.
+- **First, a cross-check:** the chains' pooled mean logit must reproduce each model's
+  gate measurement (§13.10.1). Otherwise nothing is read.
+
+**Self-test:**
+- The exact prior-variance formula matches 40,000 Monte Carlo draws from
+  `MapInformedGPPrior`'s own Gram matrix, within 3%.
+- Chains differing only by a scale factor give a scale share of 1.
+- Chains disagreeing in sign make the mixture softer than the chains, by the exact
+  expected ratio.
+- Occupancy counts valid steps only.
+
+**Not run yet:** the box job is light (about the original gate measurement's cost plus
+120 small models); the author launches it.
