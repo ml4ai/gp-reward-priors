@@ -26767,3 +26767,20 @@ controls and leveling readouts are unchanged.
 - **Noise:** MR n01 standard medium_play and medium_diverse, 5/10 each.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+**§14.90's glitch, FIXED (author's go-ahead, 2026-11-05), with a corrected diagnosis.**
+- **Correction:** §14.90 said `register` was fooled by wandb's state filter. **It was
+  not.** The registry already read each run's own state, which is FINISHED.
+- What failed was its second condition, summary `_step` ≥ 1,000,000. wandb now reports
+  summary `_step` 999,750 (`bip07qk9`) and 998,500 (`a0qfr2ck`) for those runs, while
+  their `lastHistoryStep`, like the history every readout scores, reaches 1,000,000.
+- Two separate wandb-side changes to the same two runs: the project index's state, and
+  the summary `_step`.
+- **`phase2_sweeps.run_done(r)`:** a run is complete when it is finished AND
+  max(summary `_step`, `lastHistoryStep`) ≥ 1,000,000. `register` uses it. Self-tested,
+  including the aqszat8y case and "never a run that is not finished".
+- **`results/box_status.py`:** keeps only runs whose own state is running. Runs the
+  filter lists but whose own state differs are dropped and named on one line.
+- **Checked on wandb:** the registry is back to 22 of 28 without terminals, and the
+  notebook it would write is identical to the committed one. Box status names the two
+  runs and drops them (47 running, median 159k).
