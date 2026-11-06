@@ -27171,3 +27171,29 @@ seeds 1–10, the anchor models:
 
 **Not run yet:** the box job is light (about the original gate measurement's cost plus
 120 small models); the author launches it.
+
+### 14.97 Sweep check 2026-11-06: NMR one cell from its reading; the noise ladders under way
+
+**Box:** 46 IQL runs, **median 159k steps/h**: inside the 10% rule. No damage. The
+registry (22 of 28), controls and leveling are unchanged.
+- `box_status` again drops the two index-stale `aqszat8y` runs, by design.
+- The author's stage B calibration job (§14.96) is running beside the lanes. It is not a
+  wandb sweep, so it does not appear here.
+
+**NMR, sparsity: 1 cell left**, candidate r128 large_play (`nskr6ho4`, 5/10; seeds 6–10 at
+about 860k steps). The registered reading is likely at the next check.
+- New standard cell: NMR r128 large_play 0.342 ± 0.112 (`43ldui2p`).
+- Candidate finished: NMR r128 medium_play, medium_diverse, large_diverse; NMR r64
+  large_play.
+
+**Companions:**
+- MR: r64 finished (`mng4gtgf`), r32 running (`etlgsd8x`).
+- PT: full data finished (`iaz2xd46`), r128 running (`8bsjcypn`).
+- As designed, `rq1_readout` notes the two running ones as "not this experiment's lineage,
+  ignored".
+
+**Noise ladders (MR):** standard n01 large_play 9/10; n02 large_diverse, n03 medium_play
+and medium_diverse running. Candidate n01 medium_play, medium_diverse and large_diverse
+running.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
