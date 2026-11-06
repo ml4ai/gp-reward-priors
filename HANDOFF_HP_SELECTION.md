@@ -27286,3 +27286,72 @@ is mildly aware of it on the large mazes (ρ with the spread +0.19 and +0.27).
   - (c) re-register H3 with a statistic not confounded with pair dissimilarity, e.g.
     predictive entropy, or spread conditional on margin. That changes the question, not
     the method. Decided before Study 2's BNN models exist.
+
+### 14.99 Why the H3 gate fails — B2 (desk): the sampler's accounting is standard; the nugget hypothesis, tested, fails in its strong form
+
+**Read** (`optbnn/sgmcmc_bayes_net/f_pref_net.py`; the large_play production config):
+- **Gradient accounting is standard SGHMC.** The likelihood term is the batch-mean NLL,
+  the functional-prior gradient is divided by N, and AdaptiveSGHMC multiplies both by
+  `scale_grad = N / temperature`. The target is therefore the posterior tempered by
+  `temperature`.
+- **No temperature is set** in the production config, so the TrainConfig default (1.0)
+  applies. FPrefNet has **no weight-space prior**; the functional GP prior is the only
+  regularizer.
+- **No factor of about 2 is in the accounting.**
+- The config carries nothing else that rescales the likelihood: the same `bt_pool: mean`
+  as MR/PT/NMR, `centre_draws`, a cyclical lr, `fraction_cool 0.25`, 20,000 burn-in
+  steps, 60 samples per chain.
+
+**A hypothesis from the kernel, tested (DESCRIPTIVE):**
+- Under `k = amp2 (sig_c2 + sig_g2 Kgeo[c, c'] + sig_n2 δ)`, two inputs in the same cell
+  differ only through the nugget, so within-cell variation (body state, velocity) has prior
+  variance `amp2·sig_n2` = 6.8 per point. For two co-located 100-step segments that allows
+  a logit difference of sd ≈ 0.37.
+- The humans judge mostly by motion (§14.94), which is a within-cell feature, so the
+  nugget should shrink exactly that.
+- **Prediction:** the BNN's logits, relative to MR's on the same pairs and seeds, are
+  smallest for co-located pairs (small prior spread).
+- **Result:** almost every pair's segments lie in different parts of the maze (prior sd
+  64–82; the 0.37 floor only at the edge of Q1). The shrinkage is close to UNIFORM across
+  prior-spread quartiles:
+
+| maze | median \|d_BNN\| / \|d_MR\|, prior-sd quartiles Q1 → Q4 |
+|---|---|
+| medium_play | 0.24, 0.32, 0.32, 0.34 |
+| medium_diverse | 0.37, 0.40, 0.43, 0.41 |
+| large_play | 0.18, 0.21, 0.26, 0.29 |
+| large_diverse | 0.38, 0.38, 0.40, 0.41 |
+
+- **The strong form is REFUTED:** the BNN's logits are about 0.2–0.4 of MR's everywhere,
+  only weakly more so for co-located pairs. MR is mildly over-confident (T 1.1–1.5), which
+  fits the BNN's 2×.
+- **Not refuted:** a GLOBAL shrinkage of the within-cell (motion) component, since motion
+  matters in every pair, not only co-located ones. Testing it needs per-step rewards,
+  which were not kept.
+- (Computed inline from `exp/calibration_b/`. The numbers are in this table and are
+  reproducible from the per-pair files; no new script.)
+
+**Where the under-scaling stands:** the likelihood, the pooling and the gradient
+accounting are ruled out; so are chain mixing and the prior's marginal amplitude on pair
+differences (§14.98). Left, roughly in order:
+1. The prior's NUGGET regularizing within-cell variation globally, i.e. the motion cue.
+2. The sampler not reaching the posterior's scale: chains starting near zero amplitude and
+   moving slowly under the cyclical schedule. The stationarity gates were passed, but
+   they test drift, not distance travelled.
+3. The round-5 selection criterion (`cvar_ce_conservatism 0.75`) preferring configurations
+   with small amplitudes.
+
+**Tests that would separate them, for the author; none run:**
+- **B3, light, box:** per-step rewards of the BNN's posterior mean and of MR on the
+  validation steps, split into each cell's mean (positional) and within-cell (motion)
+  parts. Is the BNN's within-cell part shrunk much more than its positional part? That
+  tests 1.
+- **C-lite, moderate, box:** one variant and seed, 8 chains, the production config with
+  only ONE change at a time:
+  - `map_sig_n2` × 10 (tests 1);
+  - burn-in × 4 (tests 2);
+  - `n_meas 0`, likelihood-only (the reference).
+  - If the logits grow towards MR's under one change, that is the mechanism.
+- **3** needs no runs: the round-5 sweep's trials, if their logged validation CE at
+  conservatism 0 and their configs are compared by amplitude. A wandb read of BNN sweep
+  trials, inside §14.92's scope (calibration of the BNN reward models).
