@@ -1,0 +1,25 @@
+BNN H3 CALIBRATION, MECHANISM STAGE A (handoff §14.92; scoped hold exception; post hoc, descriptive)
+
+=== medium_play: 770 validation pairs over the ten seeds; labels not 0/1: 0.0%
+  1. ECE  predictive 0.092   plug-in sigma(d_mean) 0.080   probit(d, spread) 0.091   (probit vs predictive, max |dp| 0.007); median |logit p_pred| / |d_mean| 0.93
+  2. one temperature on plug-in d_mean : T = 0.558 (median over the ten leave-one-seed-out fits); held-out CE 0.268 -> 0.230, ECE 0.080 -> 0.027
+  2. one temperature on logit(p_pred)  : T = 0.515 (median over the ten leave-one-seed-out fits); held-out CE 0.280 -> 0.231, ECE 0.092 -> 0.029
+  3. spread^2 = a + b d^2: median R^2 0.29, median share of spread^2 in b d^2 0.29; error-AUROC of the spread 0.371, of the excess spread (spread^2 - b d^2) 0.540
+
+=== medium_diverse: 1070 validation pairs over the ten seeds; labels not 0/1: 0.0%
+  1. ECE  predictive 0.128   plug-in sigma(d_mean) 0.116   probit(d, spread) 0.128   (probit vs predictive, max |dp| 0.006); median |logit p_pred| / |d_mean| 0.94
+  2. one temperature on plug-in d_mean : T = 0.438 (median over the ten leave-one-seed-out fits); held-out CE 0.286 -> 0.215, ECE 0.116 -> 0.028
+  2. one temperature on logit(p_pred)  : T = 0.410 (median over the ten leave-one-seed-out fits); held-out CE 0.298 -> 0.216, ECE 0.128 -> 0.027
+  3. spread^2 = a + b d^2: median R^2 0.20, median share of spread^2 in b d^2 0.26; error-AUROC of the spread 0.252, of the excess spread (spread^2 - b d^2) 0.422
+
+=== large_play: 540 validation pairs over the ten seeds; labels not 0/1: 0.0%
+  1. ECE  predictive 0.108   plug-in sigma(d_mean) 0.088   probit(d, spread) 0.106   (probit vs predictive, max |dp| 0.010); median |logit p_pred| / |d_mean| 0.91
+  2. one temperature on plug-in d_mean : T = 0.556 (median over the ten leave-one-seed-out fits); held-out CE 0.326 -> 0.286, ECE 0.088 -> 0.022
+  2. one temperature on logit(p_pred)  : T = 0.500 (median over the ten leave-one-seed-out fits); held-out CE 0.339 -> 0.285, ECE 0.108 -> 0.019
+  3. spread^2 = a + b d^2: median R^2 0.23, median share of spread^2 in b d^2 0.26; error-AUROC of the spread 0.422, of the excess spread (spread^2 - b d^2) 0.567
+
+=== large_diverse: 1100 validation pairs over the ten seeds; labels not 0/1: 0.0%
+  1. ECE  predictive 0.125   plug-in sigma(d_mean) 0.114   probit(d, spread) 0.125   (probit vs predictive, max |dp| 0.012); median |logit p_pred| / |d_mean| 0.94
+  2. one temperature on plug-in d_mean : T = 0.471 (median over the ten leave-one-seed-out fits); held-out CE 0.309 -> 0.252, ECE 0.114 -> 0.023
+  2. one temperature on logit(p_pred)  : T = 0.439 (median over the ten leave-one-seed-out fits); held-out CE 0.319 -> 0.252, ECE 0.125 -> 0.025
+  3. spread^2 = a + b d^2: median R^2 0.21, median share of spread^2 in b d^2 0.24; error-AUROC of the spread 0.309, of the excess spread (spread^2 - b d^2) 0.448

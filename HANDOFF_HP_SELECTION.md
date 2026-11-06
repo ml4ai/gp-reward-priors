@@ -26885,3 +26885,92 @@ controls and leveling readouts are unchanged.
     example centred vs raw draws, pooled vs per-chain, or a validation-fitted temperature,
     to test candidate mechanisms without training.
   - (C) heavy, waits: retrain BNNs under a candidate fix.
+
+**Scoped exception GRANTED (author, 2026-11-06, "Yes, as scoped").** As proposed above:
+read-only access to the BNN reward models' calibration diagnostics, for the mechanism
+investigation only. BNN and ensemble-CVaR IQL results stay held. Outputs go under
+`calibration_results/held_bnn_cvar/`, and nothing is quoted in the benchmarking chapter.
+The project memory on the hold records the exception.
+
+### 14.93 Why the H3 calibration gate fails — stage A (desk), under §14.92's exception
+
+**Read:** §13.10 (the rule), §13.10.1 (the anchor result, its check, the post-hoc note),
+and the anchor's 40 per-pair measurement files. Each file is one model's validation pairs
+with label, posterior predictive, spread, mean logit difference, CVaR logit difference
+and CVaR penalty; no per-draw values.
+- **New:** `scripts_bnn/calibration_mechanism.py`. Self-tested on a synthetic model whose
+  logits are 3× too small, and on a calibrated one. Output:
+  `calibration_results/held_bnn_cvar/mechanism_stage_a.txt`.
+- **POST HOC and DESCRIPTIVE.** The registered verdict (FAIL, all four variants) is not
+  re-read and does not change.
+
+**Two separate findings.**
+
+**(1) The under-confidence is a single global scale on the MEAN logit, about 2× too
+small. It does NOT come from posterior averaging.**
+
+| variant | ECE predictive / plug-in σ(d_mean) | one temperature T (leave-one-seed-out) | held-out ECE with T | held-out CE with T |
+|---|---|---|---|---|
+| medium_play | 0.092 / 0.080 | 0.56 | 0.080 → 0.027 | 0.268 → 0.230 |
+| medium_diverse | 0.128 / 0.116 | 0.44 | 0.116 → 0.028 | 0.286 → 0.215 |
+| large_play | 0.108 / 0.088 | 0.56 | 0.088 → 0.022 | 0.326 → 0.286 |
+| large_diverse | 0.125 / 0.114 | 0.47 | 0.114 → 0.023 | 0.309 → 0.252 |
+
+- The plug-in prediction from the mean logit is nearly as miscalibrated as the predictive.
+  Averaging over draws softens the logits by only 6–9% (median |logit p_pred| / |d_mean|
+  0.91–0.94), and the probit approximation reproduces the predictive to within 0.012.
+- One global factor, fitted on nine seeds and scored on the tenth, removes most of the
+  miscalibration on every variant. The mean logits are too small by 1/T ≈ 1.8–2.3.
+- Every validation label is 0 or 1.
+- **Candidate mechanisms, to separate in stage B:**
+  - (a) a prior that caps the reward's amplitude. Mean pooling ties per-step reward
+    amplitude to logit size, and `map_amp2` (pinned at 6838 / 6626 by a rule, §4.3.55,
+    §4.3.109) sets the prior's marginal variance. This history is on record in the memory
+    on the map_amp2 collapse.
+  - (b) shrinkage from pooling 128 chains that disagree: each chain sharp, their mixture's
+    mean soft.
+  - (c) the round-5 selection criterion (a CVaR cross-entropy) favouring smaller
+    amplitudes.
+- **Why it matters little downstream:**
+  - The gate's AUROC is scale-invariant, so this scale is not why the gate fails.
+  - IQL sees the reward only after a global normalization. Indices 2–7 divide by the return
+    range; CVaR at a fixed level is scale-equivariant.
+  - So a global under-scaling should not move a policy. It matters for the BNN's reported
+    calibration, and is fixable post hoc by a validation-fitted temperature, or at the
+    source.
+
+**(2) The gate's actual failure: the posterior spread does not flag errors.**
+- Split per model as spread² = a + b·d_mean²:
+  - the part proportional to the margin is only about a quarter of spread² (median share
+    0.24–0.29; R² 0.20–0.29);
+  - so the inversion is not a pure scale mode.
+- The rest, the excess spread, is still uninformative. Its error-AUROC is 0.54, 0.42, 0.57
+  and 0.45 (medium_play, medium_diverse, large_play, large_diverse), against the raw
+  spread's 0.37, 0.25, 0.42, 0.31.
+- Errors sit at small margins (the margin's AUROC is 0.11–0.18, §13.10.1). The draws'
+  disagreement adds nothing per pair beyond that.
+- **Working hypothesis:** the held-out errors are near-ties under the labelling. The task
+  reward's labels are deterministic; a misordered pair is one whose two segments are
+  nearly equal in the model's mean. Those are boundary cases, not regions where plausible
+  functions disagree. If so, the epistemic spread is the wrong statistic for this
+  falsifier rather than a broken posterior. Stage A2 tests it.
+
+**Next stages (none launched):**
+- **A2, desk, data only (local):** recompute each validation pair's TRUE preference
+  strength from its states (the task reward's goal-arrival count per segment, as the
+  labels were made) and each segment's novelty (distance to that seed's training
+  segments). Then:
+  - are errors concentrated on near-ties under the true labelling, or on novel segments?
+  - does the excess spread flag novel pairs even where it misses errors?
+  - This needs the labelling rule confirmed from the data-generation code first.
+- **B, light, box:**
+  - (i) MR, PT and NMR temperatures on the SAME validation splits. These families are
+    uncovered; minutes on the box. Shared under-scaling would point to the likelihood or
+    pooling; BNN-only to the prior or sampler.
+  - (ii) per-chain mean logits from the saved chains: is each chain sharp and the mixture
+    soft (b), or every chain soft (a)?
+  - (iii) the prior's typical mean-pooled logit size against what the data need.
+- **C, heavy, waits:** retrain under a candidate fix (prior amplitude, likelihood
+  temperature), and only if A2 and B point there. A different H3 statistic for Study 2
+  (e.g. one free of the margin) would be a re-registration, decided before Study 2's BNN
+  models exist.
