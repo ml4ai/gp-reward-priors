@@ -27478,3 +27478,77 @@ behind Study 1's remaining cells, within the 10% speed rule.
 **Disclosure for the write-up.** The test was prompted by the advisor's review of the
 method after Study 1's first readings. It was fixed before any of its runs, on new IQL
 seeds, and it decides only the replication's and later studies' rule.
+
+### 14.101 Sweep check 2026-11-06 (later): NMR'S REGISTERED SPARSITY READING — NOT SENSITIVE ((b)); THE SPARSITY LADDER IS COMPLETE: RQ1 REFUTED, 4 of 4 families NOT SENSITIVE
+
+**Box:** 50 IQL runs, **median 155k steps/h**: just under the 10% rule, no new lanes. No
+damage. The registry (22 of 28), controls and leveling are unchanged. The author's B3 job
+(§14.100) runs beside the lanes, outside wandb.
+
+**NMR, sparsity ladder: the registered reading (`rq1_readout.py`, §14.5 as registered;
+§14.70's per-family rule).**
+- **Manipulation check REJECTS:** slope of A pooled +0.0362 [+0.0304, +0.0418],
+  p = 2.7e-12. Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S REJECTS:** pooled +0.0383 [+0.0255, +0.0495], p = 1.5e-5.
+- **(b) candidate − standard slope does NOT reject:** pooled +0.0082 [−0.0063, +0.0222],
+  p = 0.19.
+- **(c) REJECTS:** NMR − zero +0.327 [+0.295, +0.356]; − mean-constant +0.329;
+  p = 9.1e-13.
+- **VERDICT: NOT SENSITIVE ((b): the candidate protocol does not respond more than the
+  standard one).**
+
+**Per maze (DESCRIPTIVE), against the leak:**
+
+| maze | NMR's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+0.094 [+0.054, +0.130]** | **+0.044 [+0.011, +0.075]** |
+| medium_diverse | 0 (leak-free) | **+0.054 [+0.022, +0.076]** | −0.000 [−0.038, +0.035] |
+| large_play | 6 (leaky) | +0.002 [−0.004, +0.009] | +0.012 [−0.012, +0.033] |
+| large_diverse | 6 (leaky) | +0.003 [−0.001, +0.006] | −0.023 [−0.042, −0.004] |
+
+- **NMR is the only family with two leak-free mazes, and both show a clear candidate
+  slope.** That is why its (a) rejects where MR's and the ensemble mean's did not.
+- **But on medium_diverse the standard protocol responds just as much** ((b) ≈ 0). So even
+  with a clean index, the candidate protocol is not uniformly more sensitive than the
+  standard one.
+- The two leaky mazes are flat, as for every family.
+- **Beside, no test:** the trivial rewards are TOO FAR BEHIND NMR with terminals (pooled
+  −0.48). NMR − motion, without terminals: medium_play +0.290 [+0.194, +0.363],
+  medium_diverse +0.045 [−0.039, +0.127], the large mazes about 0.
+
+**THE SPARSITY LADDER, REGISTERED (§14.5), COMPLETE: RQ1 is REFUTED on it.**
+- All four families were read; all four are NOT SENSITIVE:
+
+| family | manipulation | (a) | (b) | (c) | verdict |
+|---|---|---|---|---|---|
+| MR | rejects | **does not reject** | — | — | NOT SENSITIVE (a) |
+| PT | rejects | rejects | **does not reject** | rejects | NOT SENSITIVE (b) |
+| ENS_MEAN | rejects | **does not reject** (p = 0.029) | rejects | rejects | NOT SENSITIVE (a) |
+| NMR | rejects | rejects | **does not reject** | rejects | NOT SENSITIVE (b) |
+
+  MR's row is §14.70's reading; its (b) and (c) are in `rq1_readout_latest.txt`.
+- **The disclosure every verdict carries (§14.82, §14.86):**
+  - Without terminals, normalization indices 6/7 rebuild the goal from the terminals, and
+    that leak, not the reward model, sets the score of every cell at those indices.
+  - The candidate cells at 6/7 are three of four mazes for MR, PT and the ensemble mean,
+    and two of four for NMR.
+  - **Descriptively, every family tracks reward quality without terminals on every
+    leak-free maze:** medium_play for all four, and medium_diverse for NMR. And on
+    medium_play it tracks it more steeply than with terminals.
+  - The pooled registered test cannot show this through the leaky mazes. The corrected
+    protocol is the replication's (§14.83).
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ["sparsity"]` now holds all four families.
+The self-test's still-gated example moved to the noise axis, where nothing is read yet;
+it passes.
+
+**Companions:** MR r32 5/10 (`etlgsd8x`), PT r128 5/10 (`8bsjcypn`).
+
+**Noise ladders (MR):**
+- standard: n02 large_diverse (1/10), n02 large_play, n03 medium_play (5/10), n03
+  medium_diverse (5/10);
+- candidate: n01 medium_play (5/10), medium_diverse (5/10), large_play and large_diverse
+  running.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
