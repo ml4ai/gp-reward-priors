@@ -27665,6 +27665,9 @@ What they meant is the other reading:
 PT NOT SENSITIVE (b), ensemble mean NOT SENSITIVE (a, narrowly); NMR unread. **OPEN.** If NMR
 also fails (a) or (b), the hypothesis is refuted on the sparsity ladder. If NMR is
 SENSITIVE, partial support.
+- **Update 2026-11-06:** NMR is NOT SENSITIVE ((b), §14.101). Every family failed, so RQ1's
+  main hypothesis is REFUTED on the sparsity ladder under the original protocol, under
+  either reading. The reading still matters for the noise ladder.
 
 **Disclosure for the write-up.** The clause was ambiguous in §14.5 as fixed. This reading
 was settled after MR's, PT's and the ensemble mean's sparsity results had been seen, and
