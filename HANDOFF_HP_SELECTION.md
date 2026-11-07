@@ -27683,3 +27683,68 @@ alternative, and update the self-test cases ((b) failing in ONE family no longer
 every read family failing does; FLAGGED counts toward neither; no usable variant still
 refutes). Re-run the readout and update `rq1_readout_latest.txt`. No registered quantity,
 test or family verdict changes. Only the ladder-level label does.
+
+**§14.106's TO DO: DONE (coding agent, 2026-11-06).**
+- `results/rq1_readout.py` `ladder_verdict` now applies the every-family rule: HOLDS IN
+  FULL / REFUTED / PARTIAL SUPPORT / OPEN / not yet. No usable variant still refutes;
+  FLAGGED counts toward neither side.
+- It prints §14.70's stricter per-family reading beside it, labelled as superseded.
+- Self-test cases added:
+  - (b) failing in one family, the others unread → OPEN, the stricter reading REFUTED;
+  - all four failing → REFUTED;
+  - one SENSITIVE among three failing → PARTIAL SUPPORT;
+  - all SENSITIVE → HOLDS IN FULL;
+  - three failing plus one FLAGGED → REFUTED;
+  - FLAGGED alone → not yet;
+  - no usable variant → REFUTED.
+- `rq1_readout`, `repl_readout` and `rescale_readout` self-tests pass. No registered
+  quantity, test or family verdict changed.
+- **Re-run:**
+  - **sparsity: "REFUTED on this ladder: every family that passed the manipulation check
+    fails (a) or (b)"**, with the stricter reading also REFUTED;
+  - noise: not yet, 0 of 4 read.
+- `rq1_readout_latest.txt` updated.
+
+### 14.107 Open points on §14.104 (coding agent, 2026-11-06) — for the author before §14.104 is built; nothing decided here
+
+§14.104 is clear enough to build. These points need the author's answer first:
+1. **Criterion (ii) can pass a degenerate rule.**
+   - (ii) passes A when every family is "disadvantaged alike": every pairwise contrast
+     (S_A,f − S_A,g) − (S_S,f − S_S,g) within ±0.10.
+   - A rule that pushes every family to about 0 makes each contrast −(S_S,f − S_S,g).
+     That passes (ii) wherever S's between-family gaps are already under 0.10, which is
+     plausible on the large mazes without terminals.
+   - Should (ii) carry a floor? For example, every family under A clears the zero reward,
+     as RQ1's test (c) asks, or A passes the usability check (task − zero > 0).
+2. **The task reward's normalization under N or F.**
+   - The replication's usability check needs the task reward "at its own index"
+     (§14.5); `replication.py` gives it a 0–3 grid.
+   - If N or F is adopted, does the task reward also take index 0 (N) or 2 (F), with no
+     grid? The zero and mean-constant references stay at index 0 either way.
+3. **The standard (with-terminals) arm.** The rule is decided only without terminals; the
+   with-terminals arm is descriptive. Yet it applies to the replication's standard arm
+   too. Intended?
+4. **For the advisor, a property worth knowing (§14.83's note on "length"):**
+   - Under "length" and without terminals, N (index 0) and F (index 2) differ only by one
+     global scale factor, 1000/R.
+   - Indices 2–7 differ only by a constant per step, which at IQL's fixed point does not
+     change the policy without terminals.
+   - So N against F tests the reward's SCALE, and S's selection is in effect a choice of
+     scale plus an offset that acts only through training dynamics.
+5. **Reading S's grid.**
+   - §14.104 forbids reading "any arm's evaluation cells" before the test is complete.
+     S's selection-unit grid (seed 50) must be scored to fix S's index before S's
+     evaluation cells run, as Study 1's grids were.
+   - Confirm that this grid reading, and O3's use of it, is allowed. Assumed yes.
+6. **"Only if affordable"** for the with-terminals sensitivity arm (about 610 runs): the
+   author decides when the main arms are queued?
+
+**Code it needs, once these are answered (none built yet):**
+- `iql_eval`: a key setting the reward-model seed apart from the IQL seed, default
+  unchanged, self-tested to reproduce Study 1's loading (§14.104).
+- A generator for S's 16 grids (seed 50) and the S / N / F (/ O3) evaluation cells
+  (seeds 51–60, model s = IQL seed − 50).
+- A readout of criteria (i) and (ii) with §14.5's exact stratified intervals, applying the
+  preference order N → F → O3 → S.
+- And, if N or F is adopted, `replication.py`'s grids dropped and its cells set to the
+  adopted index (§14.104's last decision bullet).
