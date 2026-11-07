@@ -27748,3 +27748,47 @@ test or family verdict changes. Only the ladder-level label does.
   preference order N → F → O3 → S.
 - And, if N or F is adopted, `replication.py`'s grids dropped and its cells set to the
   adopted index (§14.104's last decision bullet).
+
+### 14.108 §14.104 AMENDED by the author's answers to §14.107 (2026-11-07), before any of its runs
+
+Recorded as the author answered; §14.104 otherwise stands.
+1. **A floor on criterion (ii), adopted.**
+   - Under (ii), A passes only if additionally every family clears the zero reward under
+     A, in the form of RQ1's test (c): per family, S_A,f − S_zero > 0 by the one-sided
+     exact Wilcoxon at α = 0.025 over the 40 pooled (dataset, seed) units.
+   - The zero reward runs at index 0, on the same IQL seeds 51–60 and the same protocol.
+   - **This needs zero-reward cells at seeds 51–60:** 4 datasets × 2 protocols × 10 =
+     80 runs. Study 1's zero-reward cells are at seeds 1–10 and cannot be paired.
+   - The floor applies to (ii). A rule passing (i) is non-inferior to S by construction.
+2. **The task reward under N and F: index 1 (r − 1)**, the conventional antmaze
+   normalization of the task reward (no grid).
+   - Under S it keeps Study 1's own grid (indices 0–3), as before.
+   - O3 was not covered by the answer. Assumed index 1 as for N and F, since O3 too is a
+     fixed rule. **Author to confirm.**
+   - "length" does not affect index 1.
+3. and 6. **The rule is chosen on BOTH protocols, cost accepted.** The with-terminals arm is
+   no longer descriptive. It runs in full, beside the without-terminals one:
+   - S's own grid with terminals on the selection unit;
+   - N, F, O3 if needed, on the same units.
+   - **Reading taken here, author to confirm:** ONE rule for both of the replication's
+     arms. A passes only if it passes (i), or (ii) with the floor, under EACH protocol
+     separately. The preference order N → F → O3 then S is unchanged.
+   - (The other reading, a rule chosen per protocol, would let the two arms differ.)
+4. Noted: N against F is a test of the reward's scale; indices 2–7 differ only by offsets
+   without terminals (§14.107 item 4).
+5. Confirmed: S's selection-unit grid (seed 50) is scored to fix S's index before S's
+   evaluation cells run. O3 reads it too. The "do not read" rule covers the arms'
+   evaluation cells.
+
+**Revised cost** (no reward-model training):
+
+| part | runs |
+|---|---|
+| S's grids: 4 families × 4 datasets × 8 indices × 2 protocols | 256 |
+| S, N, F: 3 arms × 160 × 2 protocols | 960 |
+| the floor's zero-reward cells | 80 |
+| **total** | **about 1,300** |
+| O3 if needed (160 per protocol) | + 320 |
+
+At the box's rate this is a large block. It runs behind Study 1's lanes and beside the
+replication's reward-model searches and training, as §14.104 says.
