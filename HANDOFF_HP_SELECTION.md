@@ -27552,3 +27552,67 @@ it passes.
   running.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+### 14.102 Why the H3 gate fails — B3 RESULT: the BNN shrinks its whole reward, and the within-cell (motion) part about twice as much
+
+**Data:** `exp/calibration_b3/`, 40 files (4 variants × seeds 1–10), copied over
+complete.
+- Analysis: `results/calibration_stage_b3.py analyse` →
+  `calibration_results/held_bnn_cvar/mechanism_stage_b3.txt`.
+- **Cross-check passed on every model:** the BNN's pooled per-step mean reproduces the
+  gate's `d_mean` to within 4e-7.
+- POST HOC, DESCRIPTIVE.
+
+| variant | BNN / MR: sd positional | sd within-cell | within-cell slope on speed | pair logits, positional part | pair logits, within-cell part |
+|---|---|---|---|---|---|
+| medium_play | 0.30 | 0.13 | 0.22 | 0.33 | 0.18 |
+| medium_diverse | 0.44 | 0.20 | 0.37 | 0.49 | 0.35 |
+| large_play | 0.31 | 0.11 | 0.15 | 0.31 | 0.14 |
+| large_diverse | 0.44 | 0.27 | 0.36 | 0.47 | 0.38 |
+
+Accuracy on the human labels, by part:
+
+| variant | BNN whole / positional / within-cell | MR whole / positional / within-cell |
+|---|---|---|
+| medium_play | 0.906 / 0.812 / 0.699 | 0.918 / 0.809 / 0.735 |
+| medium_diverse | 0.906 / 0.688 / 0.840 | 0.903 / 0.705 / 0.825 |
+| large_play | 0.881 / 0.781 / 0.772 | 0.948 / 0.830 / 0.787 |
+| large_diverse | 0.905 / 0.678 / 0.865 | 0.909 / 0.674 / 0.874 |
+
+**Reading (descriptive):**
+- **The within-cell part IS shrunk more than the positional part, by roughly 1.3–2.8×,
+  on every maze and in every measure.** Amplitude 0.11–0.27 against 0.30–0.44; pair
+  logits 0.14–0.38 against 0.31–0.49; the speed slope 0.15–0.37.
+  - So §14.99's candidate 1, the nugget regularizing within-cell variation, is
+    CONFIRMED as a contributor, for the motion component globally, as the refined
+    hypothesis put it.
+- **But the positional part is shrunk too: 0.30–0.44 of MR's.** Allowing for MR's mild
+  over-confidence (T 1.1–1.5, §14.98), that is still about 2× too small.
+  - The prior's positional variance is wide (§14.98: about 100× the posterior), so this
+    common factor is NOT the nugget. It points at §14.99's candidates 2 (the sampler not
+    reaching the posterior's scale) or 3 (the selection), which act on the whole reward.
+- **The BNN learns the same structure as MR, only smaller.** Per part, the two models'
+  accuracies agree to within a few points, except the large_play positional part (0.78
+  against 0.83).
+- **The within-cell part carries much of the label information**, most on the diverse
+  mazes (0.84–0.87 against 0.68–0.69 for the positional part). These are the mazes where
+  half the errors are humans going against the motion cue (§14.94).
+- **So the under-scaling has two layers:**
+  - a common factor of about 2 on the whole reward (sampler or selection);
+  - an extra factor of about 1.3–2.8 on the within-cell, motion part (the prior's
+    nugget, `amp2·sig_n2` = 6.8 per point, against the heat-kernel term for positional
+    variation).
+
+**What this means for Study 2's options (§14.98); for the author, not decided:**
+- **(a) the nugget is design-fixed** (`map_sig_n2` 0.001, "never tuned on reward").
+  Raising it, or adding a body-and-action kernel term, gives the motion cue prior room.
+  That changes the prior: the method's design, not a hyper-parameter.
+- **The common factor of about 2 needs §14.99's other tests first:**
+  - the round-5 sweep's trials by amplitude (wandb read, no compute);
+  - **C-lite** (one variant and seed, 8 chains): burn-in × 4 / `map_sig_n2` × 10 /
+    `n_meas 0`.
+  - If burn-in lifts both parts, the sampler. If only the nugget change lifts the
+    within-cell part, it confirms layer 2 causally. If `n_meas 0` lifts both, the
+    functional prior as a whole.
+- **A validation-fitted temperature** would correct the reported calibration either way.
+  IQL should be unaffected, as before (§14.93).
