@@ -34,6 +34,8 @@ STAGE A (desk, no GPU).  Per variant, the anchor's ten models, from the per-pair
         > calibration_results/held_bnn_cvar/mechanism_stage_a2.txt      (stage A2, §14.94)
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --a3 \\
         > calibration_results/held_bnn_cvar/mechanism_stage_a3.txt      (stage A3, §14.95)
+    /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --selection \\
+        > calibration_results/held_bnn_cvar/mechanism_selection.txt     (round-5 selection, §14.103)
     /opt/anaconda3/envs/irl/bin/python scripts_bnn/calibration_mechanism.py --selftest
 """
 import argparse
@@ -405,6 +407,66 @@ def run_a3(meas=MEAS, data=DATA, out=print):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# THE SELECTION (wandb read, no compute): did round 5 pick soft configurations?  (handoff §14.103)
+# ---------------------------------------------------------------------------
+# Round 5's four BNN sweeps (seed 0; 32 chains per trial) chose on val_cvar_ce (CVaR CE at
+# conservatism 0.75), steered by the penalised J.  Per finished trial: the plug-in CE and
+# accuracy at conservatism 0 (val_cvar_ce_c0, val_cvar_acc_c0).  A trial's SOFTNESS relative to
+# its peers is its plug-in CE minus the sweep's linear fit of plug-in CE on accuracy (positive =
+# more CE than its accuracy warrants = logits too small).  Asked: does the selection favour soft
+# trials, and is softness tied to a searched setting?  A softness every trial shares does not
+# show in a residual -- the best trial's own CE answers that.
+ROUND5 = {"medium_play": "37wlya3i", "medium_diverse": "03iccldi", "large_play": "obt9bwtz",
+          "large_diverse": "3svmvmle"}
+
+
+def selection_stats(rows):
+    from scipy.stats import spearmanr
+    acc = np.array([r["acc0"] for r in rows], float)
+    ce0 = np.array([r["ce0"] for r in rows], float)
+    sel = np.array([r["sel"] for r in rows], float)
+    A = np.stack([np.ones_like(acc), acc], 1)
+    res = ce0 - A @ np.linalg.lstsq(A, ce0, rcond=None)[0]
+    i = int(np.argmin(sel))
+    j = int(np.argmin(ce0))
+    o = {"n": len(rows), "rho_sel_ce0": float(spearmanr(sel, ce0)[0]), "rho_sel_soft": float(spearmanr(sel, res)[0]),
+         "win": rows[i]["id"], "win_acc": float(acc[i]), "win_ce0": float(ce0[i]),
+         "win_rank_ce0": int((ce0 < ce0[i]).sum()) + 1, "win_rank_soft": int((res > res[i]).sum()) + 1,
+         "best_ce0": float(ce0[j]), "best_acc": float(acc[j]), "res_sd": float(res.std())}
+    for k in ("sghmc_lr", "sghmc_lr_max", "mdecay"):
+        o[f"rho_soft_{k}"] = float(spearmanr(res, np.log([r[k] for r in rows]))[0])
+    for k in ("width", "depth"):
+        o[f"rho_soft_{k}"] = float(spearmanr(res, [r[k] for r in rows])[0])
+    return o
+
+
+def run_selection(out=print):
+    import wandb
+    api = wandb.Api(timeout=120)
+    out("BNN H3 CALIBRATION, MECHANISM: THE ROUND-5 SELECTION (handoff §14.103; scoped hold exception; post hoc)")
+    for v, sid in ROUND5.items():
+        sw = api.sweep(f"champlin-university-of-arizona/BNN-training/{sid}")
+        rows = []
+        for r in sw.runs:
+            s = r.summary
+            if r.state != "finished" or s.get("val_cvar_ce_c0") is None or s.get("val_cvar_acc_c0") is None:
+                continue
+            rows.append({"id": r.id, "acc0": s["val_cvar_acc_c0"], "ce0": s["val_cvar_ce_c0"], "sel": s["val_cvar_ce"],
+                         **{k: r.config.get(k) for k in ("sghmc_lr", "sghmc_lr_max", "mdecay", "width", "depth")}})
+        o = selection_stats(rows)
+        out(f"\n=== {v} ({sid}): {o['n']} finished trials")
+        out(f"  Spearman: selection CE (c 0.75) vs plug-in CE (c 0) {o['rho_sel_ce0']:+.2f}; vs softness {o['rho_sel_soft']:+.2f}")
+        out(f"  lowest selection CE: {o['win']}, accuracy {o['win_acc']:.3f}, plug-in CE {o['win_ce0']:.3f} "
+            f"(rank {o['win_rank_ce0']} of {o['n']} on plug-in CE; rank {o['win_rank_soft']} softest)")
+        out(f"  the trial with the lowest plug-in CE: {o['best_ce0']:.3f} at accuracy {o['best_acc']:.3f}; "
+            f"softness residual sd {o['res_sd']:.3f}")
+        out("  softness vs " + ", ".join(f"{k} {o[f'rho_soft_{k}']:+.2f}" for k in
+                                        ("sghmc_lr", "sghmc_lr_max", "mdecay", "width", "depth")) +
+            "  (Spearman; log scale for the rates)")
+    return 0
+
+
 def selftest():
     rng = np.random.default_rng(0)
     # a model whose logits are too small by a factor 3 is under-confident; T recovers ~1/3
@@ -458,6 +520,12 @@ def selftest():
     mask = np.array([[1, 1, 0], [1, 1, 1]], bool)
     nd = nn_mean_distance(segs, mask, np.zeros((1, 2)))
     assert np.allclose(nd, [1.5, 5.0]), nd
+    # selection: a sweep whose winner is the softest trial at its accuracy ranks it 1 softest
+    rows = [{"id": f"t{i}", "acc0": a_, "ce0": 0.6 - 0.3 * a_ + e, "sel": e if i else -1.0,
+             "sghmc_lr": 1e-4, "sghmc_lr_max": 1e-3 * (1 + i), "mdecay": 0.5, "width": 5, "depth": 2}
+            for i, (a_, e) in enumerate(zip(np.linspace(0.8, 0.9, 8), [0.05, 0, 0.01, -0.01, 0.02, 0, -0.02, 0.01]))]
+    so = selection_stats(rows)
+    assert so["win"] == "t0" and so["win_rank_soft"] == 1, so
     print("selftest OK")
     return 0
 
@@ -468,9 +536,12 @@ def main():
     ap.add_argument("--meas", default=MEAS)
     ap.add_argument("--a2", action="store_true", help="stage A2: what the errors are (handoff §14.94)")
     ap.add_argument("--a3", action="store_true", help="stage A3: novelty in the input space (handoff §14.95)")
+    ap.add_argument("--selection", action="store_true", help="the round-5 selection, from wandb (handoff §14.103)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.selection:
+        return run_selection()
     return run_a3(a.meas) if a.a3 else run_a2(a.meas) if a.a2 else run(a.meas)
 
 

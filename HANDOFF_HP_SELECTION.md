@@ -27616,3 +27616,56 @@ Accuracy on the human labels, by part:
     functional prior as a whole.
 - **A validation-fitted temperature** would correct the reported calibration either way.
   IQL should be unaffected, as before (§14.93).
+
+### 14.103 Why the H3 gate fails — the round-5 selection, read from wandb: not the selection; every configuration searched is soft
+
+**Read** (`scripts_bnn/calibration_mechanism.py --selection`, self-tested; output
+`calibration_results/held_bnn_cvar/mechanism_selection.txt`; no compute; within §14.92's
+scope: the BNN reward models' selection trials).
+- Round 5's four BNN sweeps: `37wlya3i`, `03iccldi`, `obt9bwtz`, `3svmvmle`. Seed 0,
+  32 chains per trial; 21–50 finished trials each.
+- Per trial: plug-in CE and accuracy at conservatism 0, the selection CE (`val_cvar_ce`,
+  conservatism 0.75), and the searched settings.
+- **Softness** = plug-in CE minus the sweep's linear fit of plug-in CE on accuracy:
+  positive = more CE than the trial's accuracy warrants.
+
+| variant | ρ(selection CE, plug-in CE) | ρ(selection CE, softness) | winner's softness rank | winner's plug-in CE (rank) | lowest plug-in CE in the sweep (accuracy) |
+|---|---|---|---|---|---|
+| medium_play | +0.29 | +0.46 | 14 of 49 | 0.295 (17) | 0.278 (0.870) |
+| medium_diverse | −0.03 | −0.24 | 10 of 50 | 0.320 (37) | 0.300 (0.897) |
+| large_play | −0.13 | −0.07 | 5 of 21 | 0.340 (7) | 0.263 (0.870) |
+| large_diverse | +0.22 | +0.19 | 19 of 30 | 0.307 (12) | 0.293 (0.873) |
+
+("Winner" = the lowest `val_cvar_ce`; for large_play and large_diverse this is the named
+winner, `q45qbz8h` and `owlrd69d`.)
+
+**Reading (descriptive):**
+- **The selection does NOT systematically pick soft trials.**
+  - The selection CE is barely related to plug-in CE (ρ −0.13 to +0.29), and its relation
+    to softness changes sign across mazes.
+  - The winners sit mid-pack on softness (ranks 5–19).
+- The criterion does cost some plug-in CE: each winner is 0.01–0.08 above its sweep's best,
+  most on large_play (0.340 against 0.263).
+- **Peer-relative softness is small** (residual sd 0.007–0.048) against the 2× effect.
+- **Every configuration searched is soft.** The sharpest trial of each sweep still has
+  plug-in CE 0.26–0.30 at accuracy 0.87–0.90; MR's anchor models score 0.16–0.25 at similar
+  accuracy (§14.98; different seeds' splits, so indicative only).
+- **No searched sampler setting is consistently tied to softness:**
+  - `sghmc_lr` −0.21 to +0.11; `sghmc_lr_max` −0.51 to +0.12; `mdecay` −0.06 to +0.36.
+  - Width tends to sharpen (−0.16 to −0.47) and depth to soften (−0.04 to +0.59).
+- **§14.99's candidate 3, the selection, is RULED OUT as the main cause.** The common factor
+  lies in what every trial shares, the FIXED design:
+  - the functional prior (`n_meas 256`, `map_amp2` by rule, the design-fixed nugget and
+    geometry);
+  - the fixed burn-in (20,000 steps) and cyclical schedule.
+  - Candidate 2 (the sampler not reaching the posterior's scale) and the prior as a whole
+    remain.
+
+**What separates them now: C-lite** (§14.99, moderate, box). One variant and seed, 8
+chains, the production config with one change at a time:
+- burn-in × 4: the sampler;
+- `n_meas 0`, likelihood-only: the functional prior as a whole;
+- `map_sig_n2` × 10: the nugget, the within-cell layer (§14.102).
+
+C-lite is stage C compute, so it waits by the author's rule (§14.92) unless the author
+says otherwise.

@@ -1,0 +1,25 @@
+BNN H3 CALIBRATION, MECHANISM: THE ROUND-5 SELECTION (handoff §14.103; scoped hold exception; post hoc)
+
+=== medium_play (37wlya3i): 49 finished trials
+  Spearman: selection CE (c 0.75) vs plug-in CE (c 0) +0.29; vs softness +0.46
+  lowest selection CE: ez84hubu, accuracy 0.883, plug-in CE 0.295 (rank 17 of 49 on plug-in CE; rank 14 softest)
+  the trial with the lowest plug-in CE: 0.278 at accuracy 0.870; softness residual sd 0.016
+  softness vs sghmc_lr -0.08, sghmc_lr_max -0.51, mdecay -0.06, width -0.47, depth +0.30  (Spearman; log scale for the rates)
+
+=== medium_diverse (03iccldi): 50 finished trials
+  Spearman: selection CE (c 0.75) vs plug-in CE (c 0) -0.03; vs softness -0.24
+  lowest selection CE: q2dd6xqt, accuracy 0.888, plug-in CE 0.320 (rank 37 of 50 on plug-in CE; rank 10 softest)
+  the trial with the lowest plug-in CE: 0.300 at accuracy 0.897; softness residual sd 0.048
+  softness vs sghmc_lr -0.03, sghmc_lr_max +0.12, mdecay +0.06, width -0.28, depth -0.04  (Spearman; log scale for the rates)
+
+=== large_play (obt9bwtz): 21 finished trials
+  Spearman: selection CE (c 0.75) vs plug-in CE (c 0) -0.13; vs softness -0.07
+  lowest selection CE: q45qbz8h, accuracy 0.852, plug-in CE 0.340 (rank 7 of 21 on plug-in CE; rank 5 softest)
+  the trial with the lowest plug-in CE: 0.263 at accuracy 0.870; softness residual sd 0.029
+  softness vs sghmc_lr +0.11, sghmc_lr_max -0.12, mdecay +0.36, width -0.28, depth +0.59  (Spearman; log scale for the rates)
+
+=== large_diverse (3svmvmle): 30 finished trials
+  Spearman: selection CE (c 0.75) vs plug-in CE (c 0) +0.22; vs softness +0.19
+  lowest selection CE: owlrd69d, accuracy 0.864, plug-in CE 0.307 (rank 12 of 30 on plug-in CE; rank 19 softest)
+  the trial with the lowest plug-in CE: 0.293 at accuracy 0.873; softness residual sd 0.007
+  softness vs sghmc_lr -0.21, sghmc_lr_max -0.17, mdecay +0.35, width -0.16, depth +0.54  (Spearman; log scale for the rates)
