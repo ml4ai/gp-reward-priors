@@ -27391,3 +27391,90 @@ speed-slope ratio of 0.3, a positional ratio of about 1, and a within-cell logit
 0.45. The parts add up exactly, and step speed handles the last valid step.
 
 Cost: one pass over every draw, as stage B's measure, plus one MR forward pass per seed.
+
+### 14.100 REGISTERED (author, 2026-11-06): which normalization rule the replication uses — a test of two fixed rules against the selected process, fixed before any of its runs
+
+**Why.** The author's advisor reviewed the normalization step on 2026-11-05/06. Selecting
+one of eight transformations per family × dataset × protocol is not principled enough for
+a benchmark whose goal is to compare reward-model quality, not to find deployment
+settings. The advisor favoured no normalization after the reward shift, or one rule for
+every family, as PT did (PT's choice, index 7, was the wrong one). Study 1's original
+protocol and every registered reading under it are UNCHANGED. This test decides the rule
+for the replication (§14.83), both its arms, and for Studies 2 and 3. The replication is
+not yet registered, so the rule is settled before it is.
+
+**Arms.** All use the reward shift (`gauge_reward max0`) and the leak-free split
+(`return_range_split "length"`) at EVERY index. Under it, indices 2–5 also differ from
+Study 1's, because R_max and R_min are computed over 1,000-step chunks.
+- **S, the selected process (the comparison arm):** Study 1's selection procedure, re-run
+  leak-free. The 8-index grid is run on the selection unit, scored by the stage-4 rule
+  (`iql_score.select_normalization`, exact ties to the lowest index), per family ×
+  dataset, then frozen.
+- **N, no normalization:** index 0 after the shift. No selection.
+- **F, one fixed rescaling:** index 2, H·r/(R_max − R_min), for every family and dataset.
+  No selection.
+- **O3, the single best per dataset across families: run ONLY IF N and F both fail.** Its
+  rule is fixed now. From S's selection-unit grid (no new selection runs), for each
+  dataset take the index with the highest mean score over the four families, with exact
+  ties to the lowest index. That index is used for every family on that dataset.
+
+**What is run.**
+- Families: MR, PT, NMR and the averaging MR ensemble (it reads MR's snapshots). No BNN
+  (the hold).
+- Datasets: all four. Full data only. **Without terminals** (the protocol carried
+  forward).
+- **Reward models: Study 1's, seeds 0–10, reused.** IQL seeds are NEW:
+  - selection unit: reward model 0 with IQL seed 50 (S's grid);
+  - evaluation units: reward models 1–10 with IQL seeds 51–60, model s with IQL seed
+    50 + s.
+  - **Code needed:** `iql_eval` loads reward model `{root}_s` for IQL seed s (§14.83,
+    decision 3). Add a key that sets the reward-model seed apart from the IQL seed,
+    default unchanged, and self-test that the default reproduces Study 1's loading.
+- Units: 40 (dataset, evaluation seed) per family, paired across arms. The same reward
+  model and the same IQL seed appear in every arm.
+
+**Criterion, for each alternative A in {N, F, O3}** (scores on 0–1; the margin 0.10 is
+§12.3's). Use the exact stratified bootstrap 95% intervals of §14.5, pooled over datasets
+for the decision, with per-dataset intervals reported beside.
+- **(i) No family disadvantaged:** for EVERY family, the lower end of the interval of
+  S_A − S_S is above −0.10.
+- **(ii) Otherwise, every family disadvantaged alike:** for EVERY one of the six pairs of
+  families (f, g), the per-unit contrast (S_A,f − S_A,g) − (S_S,f − S_S,g) has its whole
+  interval inside (−0.10, +0.10).
+- **A PASSES** if (i) holds, or failing that, (ii) holds.
+- (ii) is noisier (a difference of differences). Expect large-diverse to widen it.
+  INCONCLUSIVE counts as not passing.
+
+**Decision rule, fixed now.**
+- The preference order is **N, then F, then O3**. The first that passes is the
+  replication's normalization rule, for both of its arms, and for Studies 2 and 3.
+- O3 runs only if N and F both fail.
+- **If all three fail, S is used**: leak-free selection per family × dataset × protocol at
+  seed 100, as §14.83 decision 4 already provides.
+- If N or F is adopted, §14.83 decision 4's normalization grids at seed 100 are dropped,
+  and the other IQL settings stay inherited.
+
+**Descriptive sensitivity arm, only if affordable: with terminals.** Arms S (its own grid,
+with terminals, on the selection unit), N and F, same units. Reported beside, with no role
+in the decision.
+
+**Reported beside the decision:** each arm's mean ± sd per family × dataset; S's selected
+indices; per-dataset intervals for (i) and (ii).
+
+**Cost.** S's grid is 4 families × 4 datasets × 8 = 128 runs. Each arm is 4 × 4 × 10 =
+160, so S, N and F make 480. **About 610 IQL runs**, plus 160 if O3 runs. The
+with-terminals arm adds about 610. No reward-model training.
+
+**Order.** It runs before the replication's IQL grids and ladders, and alongside the
+replication's reward-model training and searches, which do not depend on it. It runs
+behind Study 1's remaining cells, within the 10% speed rule.
+
+**Do-NOTs.**
+- Do not read any arm's evaluation cells until every cell of the test is complete.
+- Do not change the arms, criterion, margin, seeds or preference order after any cell has
+  been seen.
+- Nothing here re-reads or changes a Study 1 verdict.
+
+**Disclosure for the write-up.** The test was prompted by the advisor's review of the
+method after Study 1's first readings. It was fixed before any of its runs, on new IQL
+seeds, and it decides only the replication's and later studies' rule.
