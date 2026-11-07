@@ -27669,3 +27669,12 @@ chains, the production config with one change at a time:
 
 C-lite is stage C compute, so it waits by the author's rule (§14.92) unless the author
 says otherwise.
+
+**Decision (author, 2026-11-06): C-lite is HELD until Study 1's lanes are done.** The
+calibration investigation pauses at §14.103. Stages A–B3 and the selection read are complete
+and recorded; nothing of it is pending on the box.
+- Order when Study 1's lanes free up:
+  1. C-lite (one variant and seed, 8 chains; burn-in × 4 / `n_meas 0` / `map_sig_n2` × 10);
+  2. the author's calls on §14.98's Study 2 options;
+  3. then the BNN's seed-100 selection.
+- C-lite is not yet built. Build it when it is due.
