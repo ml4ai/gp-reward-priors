@@ -27917,3 +27917,59 @@ change before any run.
   - in the readout, O3 at one shared index is adopted when N and F fail and it passes both;
   - with one protocol's O3 cell missing, O3 is not run, and the decision asks for it.
 - The 104 files written in §14.109 are unchanged; none is an O3 cell.
+
+### 14.111 Sweep check 2026-11-07: MR'S RESCALING COMPANION COMPLETE — rescaling does not change MR's slope on medium_play; the noise ladder under way
+
+**Box:** 47 IQL runs, **median 159k steps/h**: inside the 10% rule. No damage. The
+registry (22 of 28), controls and leveling are unchanged.
+- `box_status` again drops the two index-stale `aqszat8y` runs.
+- From this check on, the sweep check also runs `ladder_status.py --axis noise` and
+  `rq1_readout.py --axis noise`.
+
+**MR's rescaling companion arm (§14.78; `rescale_readout.py`; DESCRIPTIVE, not §14.5's
+test; MR is read on sparsity, so it is readable).** medium_play, without terminals, frozen
+index 1 against companion index 2 (the best rescaling index):
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.652 ± 0.067 | 0.660 ± 0.064 | +0.008 [−0.040, +0.059] |
+| r128 | 0.585 ± 0.165 | 0.638 ± 0.176 | +0.053 [+0.019, +0.087] |
+| r64 | 0.503 ± 0.218 | 0.457 ± 0.235 | −0.046 [−0.139, +0.044] |
+| r32 | 0.377 ± 0.236 | 0.363 ± 0.225 | −0.013 [−0.107, +0.056] |
+| r16 | 0.275 ± 0.262 | 0.303 ± 0.289 | +0.028 [−0.037, +0.090] |
+
+- **Degradation slopes:** frozen +0.086 [+0.057, +0.114]; companion +0.089 [+0.058,
+  +0.118]; **companion − frozen +0.002 [−0.010, +0.014]**.
+- **Reading:** on MR's one leak-free maze, rescaling the reward (index 1 → 2) leaves its
+  sensitivity to sparsity unchanged. The candidate protocol's response there is not an
+  artefact of index 1's lack of rescaling. Only r128 differs at the cell level (+0.05).
+- **This fits §14.83's note:** without terminals, indices differ mainly in scale and
+  offset, which act only through training dynamics.
+- A note on timing: `ladder_status` showed the r16 companion (`h1sq743t`) at 8/10, but by
+  the time `rescale_readout` queried it all 10 had finished (checked on wandb). The
+  completeness gate held.
+- **The other companions:**
+  - PT: full, r128 and r64 done, r32 running (`ag0tr9b8`), r16 to come;
+  - the ensemble mean's full-data companion has started;
+  - NMR's (medium_play and medium_diverse) are not started.
+  - `rq1_readout` and `control_readout` note the running ones as "ignored", as designed.
+
+**The noise ladder (MR so far):**
+- **Standard, complete, each its own mean ± sd:**
+
+| level | medium_play | medium_diverse | large_play | large_diverse |
+|---|---|---|---|---|
+| n01 | 0.654 ± 0.072 | 0.671 ± 0.035 | 0.440 ± 0.062 | 0.274 ± 0.092 |
+| n02 | 0.663 ± 0.076 | 0.649 ± 0.054 | 0.499 ± 0.038 | 0.268 ± 0.086 |
+| n03 | 0.667 ± 0.045 | 0.624 ± 0.050 | 5/10 | 5/10 |
+| n04 | 0.624 ± 0.045 | 5/10 | — | — |
+| n045 | started | — | — | — |
+
+- **Candidate, states only:** n01 on all four mazes; n02 medium_play and medium_diverse
+  finished; n02 large_play and large_diverse at 5/10; n03 medium_play and medium_diverse
+  started.
+- **RQ1 on the noise ladder:** not yet, 0 of 4 families read. MR has 23 cells to go; PT,
+  NMR and the ensemble mean have not started theirs.
+
+**Latest files updated:** `rq1_readout_latest.txt` (two new "ignored" notes for running
+companions).
