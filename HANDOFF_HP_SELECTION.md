@@ -25200,9 +25200,9 @@ ladder-level claim. **The author decides the reading.** In either case "holds in
 (SENSITIVE for every family) can no longer happen on this ladder.
 
 **DECIDED (author, 2026-10-31): the refutation clause is read PER FAMILY.**
-> **SUPERSEDED 2026-11-05 (§14.90):** the author says this record did not reflect their
+> **SUPERSEDED 2026-11-05 (§14.106):** the author says this record did not reflect their
 > intent. The clause is read for EVERY family (one family's failure does not refute the
-> ladder). Read §14.90 before using anything below about the ladder's verdict.
+> ladder). Read §14.106 before using anything below about the ladder's verdict.
 - One read family whose (a) or (b) does not reject (or with no usable variant) refutes RQ1's
   second part on that ladder. A FLAGGED family (failed manipulation check) is not a
   sensitivity test and does not refute.
@@ -26533,56 +26533,6 @@ large_diverse, r64 medium_play and medium_diverse.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
 
-### 14.88 REMINDER: Study 3 needs an online fine-tuning script that matches `iql_eval.py` (author, 2026-11-04; not started, no code yet)
-
-Study 3 (online adaptation; dissertation Ch. 5) will fine-tune IQL online from the offline
-policy. The repository's online script, `algorithms/finetune/iql.py` (CORL), does not run
-our pipeline. Before any Study 3 run, it needs a modified copy that matches
-`algorithms/offline/iql_eval.py` in everything the offline protocol fixes. Nothing here is
-decided beyond "match the offline protocol". This is a list of the differences found on
-2026-11-04, so none is missed.
-
-**What IQL's own fine-tuning does** (Kostrikov et al. 2022, Appendix C, and CORL's script):
-1M offline gradient steps, then training continues while the policy collects data into the
-replay buffer, one gradient update per environment step, with every other setting
-unchanged. For AntMaze that keeps expectile 0.9 and inverse temperature 10, matching
-`configs/offline/iql/antmaze/*.yaml`. Exploration samples the Gaussian policy (no added
-noise on AntMaze). The buffer starts as the offline dataset, and offline and online
-transitions are sampled together.
-
-**Differences to close, `finetune/iql.py` against `iql_eval.py`:**
-- **Reward source.** CORL uses the environment's reward (`modify_reward`: minus 1 on
-  AntMaze; `modify_reward_online` the same for each new step). Ours must label every
-  transition, offline and online, with the learned reward: MR, PT, NMR
-  (`seq_labeller`, with the preceding context a non-Markovian model needs), the averaging
-  MR ensemble, and the BNN's or the CVaR MR ensemble's CVaR (`bnn_alpha`, `mr_alpha`,
-  `centre_draws`). Online, each new transition gets the current conservative reward, and
-  the whole buffer is relabeled at every posterior refresh (Ch. 5: the centering, shift
-  and normalization constants are refresh-synchronous).
-- **The reward shift** (`gauge_reward max0`) and **the normalization grid**
-  (`normalize_reward`, `modify_reward`'s eight indices). Use the corrected, leak-free
-  normalization of §14.83 (decision 1), not the leaky indices 6/7 of §14.82. Decide how the
-  shift's maximum and the normalization's constants are re-estimated online (Ch. 5 says
-  from the current buffer, at each refresh).
-- **Terminals.** CORL stores `real_done` (a goal arrival before the time limit) as a
-  terminal for every online transition. Under the without-terminals variant
-  (`drop_terminals`), the offline buffer's terminals are cleared, and online goal
-  arrivals must not be stored as terminals either. The environment still ends the episode
-  at the goal, and evaluation is unchanged. Whichever variant RQ1 settles applies to both
-  phases.
-- **Reference rewards** (`trivial_reward`, `heuristic_reward`), if Study 3 needs any
-  online.
-- **Evaluation and scoring.** 100 episodes per evaluation (`n_episodes: 100` in the
-  AntMaze configs), `eval_freq` as offline, and the mean of the last ten evaluations as the
-  score.
-- **Seeds and model loading** (`reward_model_root`, the seed-to-model convention).
-- **New in Study 3, in neither script:** the behavior anchor (an explicit
-  `lambda_anchor * KL(pi || pi_beta)` penalty during fine-tuning), its schedule and the
-  conservatism level's schedule, driven by measured statistics (Ch. 5), plus the query,
-  BALD and chain-continuation loop.
-
-**When:** after Study 1's protocol is settled and before the Study 3 pilot (the one-week
-cost measurement in the proposal's plan).
 
 ### 14.88 Sweep check 2026-11-04 (later): THE ENSEMBLE MEAN'S REGISTERED SPARSITY READING — NOT SENSITIVE ((a), narrowly); MR's companions start
 
@@ -26691,42 +26641,6 @@ medium_diverse (`eos82f4f`).
 
 **Latest files updated:** `rq1_readout_latest.txt`.
 
-### 14.90 CORRECTION (author, 2026-11-05): RQ1's refutation clause is read for EVERY family, not per family
-
-**What changes.** §14.70 recorded, as the author's 2026-10-31 decision, that one read
-family whose (a) or (b) does not reject refutes RQ1's main hypothesis on that ladder (the
-"per-family" reading). The author said on 2026-11-05 that this was not what they meant.
-What they meant is the other reading:
-- **Each family keeps its own verdict** (SENSITIVE / NOT SENSITIVE / FLAGGED), as before.
-- **RQ1's main hypothesis on a ladder:**
-  - **HOLDS IN FULL** iff every family that passed the manipulation check is SENSITIVE (as
-    §14.5);
-  - **REFUTED** only if every family that passed the manipulation check fails (a) or (b)
-    there, or if no variant is usable;
-  - **otherwise PARTIAL SUPPORT**, reported family by family;
-  - **OPEN** while any such family is unread and the others have all failed.
-- A FLAGGED family (failed manipulation check) is not a sensitivity test and counts toward
-  neither side, as before.
-
-**Where the sparsity ladder stands under this reading (2026-11-05):** MR NOT SENSITIVE (a),
-PT NOT SENSITIVE (b), ensemble mean NOT SENSITIVE (a, narrowly); NMR unread. **OPEN.** If NMR
-also fails (a) or (b), the hypothesis is refuted on the sparsity ladder. If NMR is
-SENSITIVE, partial support.
-
-**Disclosure for the write-up.** The clause was ambiguous in §14.5 as fixed. This reading
-was settled after MR's, PT's and the ensemble mean's sparsity results had been seen, and
-after an earlier record (§14.70) stated the stricter reading. Report the stricter reading
-beside it (MR's failure alone would refute the sparsity ladder), so the reader can judge.
-The proposal says so in Preliminary Results and Study 1.
-
-**TO DO (coding agent):** `results/rq1_readout.py` encodes the superseded reading
-(`ladder_verdict`, and the "RQ1 ON THIS LADDER" line, which now prints "REFUTED on this
-ladder (per-family reading, §14.70)"). Change `ladder_verdict` to the rule above (HOLDS IN
-FULL / REFUTED / PARTIAL / OPEN), print the stricter reading beside it as a labelled
-alternative, and update the self-test cases ((b) failing in ONE family no longer refutes;
-every read family failing does; FLAGGED counts toward neither; no usable variant still
-refutes). Re-run the readout and update `rq1_readout_latest.txt`. No registered quantity,
-test or family verdict changes. Only the ladder-level label does.
 
 ### 14.90 Sweep check 2026-11-05 (later): a wandb index glitch on `aqszat8y` (registry only, reverted); check 3's MR cells
 
@@ -27678,3 +27592,91 @@ behind Study 1's remaining cells, within the 10% speed rule.
 **Disclosure for the write-up.** The test was prompted by the advisor's review of the
 method after Study 1's first readings. It was fixed before any of its runs, on new IQL
 seeds, and it decides only the replication's and later studies' rule.
+
+### 14.105 REMINDER (renumbered from a duplicate §14.88 on 2026-11-06): Study 3 needs an online fine-tuning script that matches `iql_eval.py` (author, 2026-11-04; not started, no code yet)
+
+Study 3 (online adaptation; dissertation Ch. 5) will fine-tune IQL online from the offline
+policy. The repository's online script, `algorithms/finetune/iql.py` (CORL), does not run
+our pipeline. Before any Study 3 run, it needs a modified copy that matches
+`algorithms/offline/iql_eval.py` in everything the offline protocol fixes. Nothing here is
+decided beyond "match the offline protocol". This is a list of the differences found on
+2026-11-04, so none is missed.
+
+**What IQL's own fine-tuning does** (Kostrikov et al. 2022, Appendix C, and CORL's script):
+1M offline gradient steps, then training continues while the policy collects data into the
+replay buffer, one gradient update per environment step, with every other setting
+unchanged. For AntMaze that keeps expectile 0.9 and inverse temperature 10, matching
+`configs/offline/iql/antmaze/*.yaml`. Exploration samples the Gaussian policy (no added
+noise on AntMaze). The buffer starts as the offline dataset, and offline and online
+transitions are sampled together.
+
+**Differences to close, `finetune/iql.py` against `iql_eval.py`:**
+- **Reward source.** CORL uses the environment's reward (`modify_reward`: minus 1 on
+  AntMaze; `modify_reward_online` the same for each new step). Ours must label every
+  transition, offline and online, with the learned reward: MR, PT, NMR
+  (`seq_labeller`, with the preceding context a non-Markovian model needs), the averaging
+  MR ensemble, and the BNN's or the CVaR MR ensemble's CVaR (`bnn_alpha`, `mr_alpha`,
+  `centre_draws`). Online, each new transition gets the current conservative reward, and
+  the whole buffer is relabeled at every posterior refresh (Ch. 5: the centering, shift
+  and normalization constants are refresh-synchronous).
+- **The reward shift** (`gauge_reward max0`) and **the normalization grid**
+  (`normalize_reward`, `modify_reward`'s eight indices). Use the corrected, leak-free
+  normalization of §14.83 (decision 1), not the leaky indices 6/7 of §14.82. Decide how the
+  shift's maximum and the normalization's constants are re-estimated online (Ch. 5 says
+  from the current buffer, at each refresh).
+- **Terminals.** CORL stores `real_done` (a goal arrival before the time limit) as a
+  terminal for every online transition. Under the without-terminals variant
+  (`drop_terminals`), the offline buffer's terminals are cleared, and online goal
+  arrivals must not be stored as terminals either. The environment still ends the episode
+  at the goal, and evaluation is unchanged. Whichever variant RQ1 settles applies to both
+  phases.
+- **Reference rewards** (`trivial_reward`, `heuristic_reward`), if Study 3 needs any
+  online.
+- **Evaluation and scoring.** 100 episodes per evaluation (`n_episodes: 100` in the
+  AntMaze configs), `eval_freq` as offline, and the mean of the last ten evaluations as the
+  score.
+- **Seeds and model loading** (`reward_model_root`, the seed-to-model convention).
+- **New in Study 3, in neither script:** the behavior anchor (an explicit
+  `lambda_anchor * KL(pi || pi_beta)` penalty during fine-tuning), its schedule and the
+  conservatism level's schedule, driven by measured statistics (Ch. 5), plus the query,
+  BALD and chain-continuation loop.
+
+**When:** after Study 1's protocol is settled and before the Study 3 pilot (the one-week
+cost measurement in the proposal's plan).
+
+### 14.106 CORRECTION (author, 2026-11-05; renumbered from a duplicate §14.90 on 2026-11-06): RQ1's refutation clause is read for EVERY family, not per family
+
+**What changes.** §14.70 recorded, as the author's 2026-10-31 decision, that one read
+family whose (a) or (b) does not reject refutes RQ1's main hypothesis on that ladder (the
+"per-family" reading). The author said on 2026-11-05 that this was not what they meant.
+What they meant is the other reading:
+- **Each family keeps its own verdict** (SENSITIVE / NOT SENSITIVE / FLAGGED), as before.
+- **RQ1's main hypothesis on a ladder:**
+  - **HOLDS IN FULL** iff every family that passed the manipulation check is SENSITIVE (as
+    §14.5);
+  - **REFUTED** only if every family that passed the manipulation check fails (a) or (b)
+    there, or if no variant is usable;
+  - **otherwise PARTIAL SUPPORT**, reported family by family;
+  - **OPEN** while any such family is unread and the others have all failed.
+- A FLAGGED family (failed manipulation check) is not a sensitivity test and counts toward
+  neither side, as before.
+
+**Where the sparsity ladder stands under this reading (2026-11-05):** MR NOT SENSITIVE (a),
+PT NOT SENSITIVE (b), ensemble mean NOT SENSITIVE (a, narrowly); NMR unread. **OPEN.** If NMR
+also fails (a) or (b), the hypothesis is refuted on the sparsity ladder. If NMR is
+SENSITIVE, partial support.
+
+**Disclosure for the write-up.** The clause was ambiguous in §14.5 as fixed. This reading
+was settled after MR's, PT's and the ensemble mean's sparsity results had been seen, and
+after an earlier record (§14.70) stated the stricter reading. Report the stricter reading
+beside it (MR's failure alone would refute the sparsity ladder), so the reader can judge.
+The proposal says so in Preliminary Results and Study 1.
+
+**TO DO (coding agent):** `results/rq1_readout.py` encodes the superseded reading
+(`ladder_verdict`, and the "RQ1 ON THIS LADDER" line, which now prints "REFUTED on this
+ladder (per-family reading, §14.70)"). Change `ladder_verdict` to the rule above (HOLDS IN
+FULL / REFUTED / PARTIAL / OPEN), print the stricter reading beside it as a labelled
+alternative, and update the self-test cases ((b) failing in ONE family no longer refutes;
+every read family failing does; FLAGGED counts toward neither; no usable variant still
+refutes). Re-run the readout and update `rq1_readout_latest.txt`. No registered quantity,
+test or family verdict changes. Only the ladder-level label does.
