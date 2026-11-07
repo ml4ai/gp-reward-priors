@@ -27868,3 +27868,33 @@ replication's reward-model work):**
 3. `normtest_readout.py`. If it says "run O3": `write --o3 --write`, O3's cells, re-read.
 - Then the replication's IQL files follow the adopted rule (N/F: `replication.py`'s grids
   dropped, cells at the rule's index, the task reward at index 1).
+
+### 14.110 AMENDMENT (author, 2026-11-07): O3 picks ONE index per dataset, shared by both protocols — before any of the test's runs
+
+**The rule.** If N and F both fail and O3 runs, then for each dataset O3's index is the one
+with the **highest mean seed-50 score over the four families AND both protocols** on S's
+selection-unit grids (eight family × protocol scores per index), with exact ties to the
+lowest index. That one index is used for every family, **with and without terminals**, on
+that dataset.
+
+**Why.** The author's aim in making both protocols decide (§14.108) is an equal comparison
+between the replication's with- and without-terminals arms. N and F already apply the same
+index in both. A per-protocol O3 would let the arms differ, which is what the author ruled
+out. The fallback S (all three fail) remains per protocol, as §14.83 provides.
+
+**What it supersedes.**
+- §14.104's O3 bullet ("for each dataset take the index with the highest mean score over
+  the four families"), which did not cover the with-terminals arm.
+- §14.109's built computation ("each protocol × dataset's O3 index"). **Nothing has
+  launched**, so this is a change before any run.
+- O3's task reward stays at index 1, as §14.108 recorded.
+
+**TO DO (coding agent):**
+- `normtest.py winners`: compute O3 per DATASET (pooling both protocols' grids), not per
+  protocol × dataset.
+- `write --o3`: write both protocols' O3 cells at that one index.
+- `normtest_readout.py`: read O3 at the shared index under each protocol. The pass rule is
+  unchanged: (i), or (ii) with the floor, under each protocol separately.
+- Self-test: a dataset whose per-protocol best indices differ gets ONE O3 index, the best
+  pooled mean, and both protocols' O3 cells use it. Keep `winners` refusing to change a
+  recorded entry.
