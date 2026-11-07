@@ -27898,3 +27898,22 @@ out. The fallback S (all three fail) remains per protocol, as §14.83 provides.
 - Self-test: a dataset whose per-protocol best indices differ gets ONE O3 index, the best
   pooled mean, and both protocols' O3 cells use it. Keep `winners` refusing to change a
   recorded entry.
+
+**§14.110's TO DO: DONE (coding agent, 2026-11-07).** Nothing had launched, so this is a
+change before any run.
+- **`normtest.py winners`:** O3 is ONE index per dataset, computed once all eight
+  family × protocol grids of that dataset are scored: the highest mean seed-50 score over
+  the four families and both protocols, exact ties to the lowest index.
+  - Recorded as `o3_<variant>` in `results/normtest_grid_winners.json`; `winners` still
+    refuses to change a recorded entry.
+- **`write --o3`:** both protocols' O3 cells at that one index. A cell another arm already
+  has at that index is shared, as before.
+- **`normtest_readout.py`:** O3 read at the shared index under each protocol. It counts as
+  run only when every protocol's O3 cells exist. The pass rule is unchanged: (i), or (ii)
+  with the floor, under each protocol separately.
+- **Self-tests:**
+  - per-protocol bests 6 (with terminals) and 2 (without) give ONE index, 2, the best pooled
+    mean (0.35 against 0.20), and both protocols' O3 cells use it;
+  - in the readout, O3 at one shared index is adopted when N and F fail and it passes both;
+  - with one protocol's O3 cell missing, O3 is not run, and the decision asks for it.
+- The 104 files written in §14.109 are unchanged; none is an O3 cell.
