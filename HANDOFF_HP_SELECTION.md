@@ -27792,3 +27792,79 @@ Recorded as the author answered; §14.104 otherwise stands.
 
 At the box's rate this is a large block. It runs behind Study 1's lanes and beside the
 replication's reward-model searches and training, as §14.104 says.
+
+**§14.108's reading CONFIRMED (author, 2026-11-07): one rule for both protocols. A rule is
+adopted only if it passes under each protocol separately.** O3's task-reward index was not
+answered; it stays at index 1, as assumed.
+
+### 14.109 The normalization test (§14.104 + §14.108): BUILT (coding agent, 2026-11-07). Nothing launched
+
+**1. `iql_eval`: `reward_model_seed_offset` (default 0).**
+- The model loaded is `{reward_model_root}_{seed − offset}`.
+- An offset, not a second seed key: a wandb grid sweep cannot pair two swept values (it
+  would take their Cartesian product), while one fixed offset per sweep pairs model s with
+  IQL seed s + 50.
+- Refused: a negative model seed, and an offset without a reward model.
+- Checked: offset 50 with seed 53 → model 3; the default → `_<seed>`, Study 1's loading
+  exactly.
+
+**2. `normtest.py`** (repo root; files in `norm_sweeps/`; queue tag `@normtest`, family
+`norm`; `norm_sweeps/launch.sh` launches single sweeps only).
+- **S's grids:** `grid_{std,cand}_antmaze_<v>_<fam>`, IQL seed 50 / model 0, indices 0–7.
+  4 families × 4 datasets × 2 protocols = 32.
+- **Evaluation cells:** `eval_{std,cand}_antmaze_<v>_<fam>_idx<k>`, IQL seeds 51–60 /
+  models 1–10, one per index an arm needs:
+  - 0 (N), 2 (F), S's grid winner, and O3's index if O3 is requested
+    (`write --o3`);
+  - **arms needing the same index share the cell** (the same model, IQL seed and index
+    give the same runs).
+- **The floor's zero cells:** `zero_{std,cand}_antmaze_<v>`, index 0, seeds 51–60.
+- **Every file is Study 1's anchor (or trivial) cell plus exactly:**
+  - `return_range_split: length`;
+  - for a learned reward, `reward_model_seed_offset: 50`;
+  - the seeds.
+  - Checked on the rendered text.
+- **Never a Study 1, replication or leak-control cell** (self-tested). The zero cells equal
+  the replication's zero cells but for the seeds (51–60 against 101–110), and every
+  collector checks seeds.
+- **`normtest.py winners [--write]`:** scores S's grids (Study 1's stage-4 rule), checking
+  each run read model 0 under "length", then each protocol × dataset's O3 index (the best
+  mean over the four families, exact ties to the lowest). Writes
+  `results/normtest_grid_winners.json` and refuses to change a recorded entry.
+- **Written now: 104 files** (32 grids, 64 N and F cells, 8 zero cells). The 32 S cells wait
+  for the grid winners, and O3's only if needed.
+
+**3. `results/normtest_readout.py`, the registered decision:**
+- **Gate:** nothing of the arms is shown until every required cell (S, N, F, zero; both
+  protocols) is complete. States only until then.
+- **Per protocol and alternative:**
+  - (i) per family, the exact stratified 95% interval of S_A − S_S, lower end > −0.10;
+  - (ii) every pairwise contrast's interval inside ±0.10, plus the floor (per family,
+    S_A − S_zero > 0, one-sided exact Wilcoxon at 0.025 over 40 units);
+  - passes = (i), or (ii) with the floor.
+- **Decision:** the first of N, F, O3 passing under BOTH protocols. If N and F both fail and
+  O3 has not run, it says "run O3". If all fail, S.
+- **Beside:** each arm's mean ± sd per family × dataset × protocol, S's indices,
+  per-dataset intervals.
+- **Self-tested:**
+  - N equal to S is adopted;
+  - N hurting one family falls to F;
+  - a degenerate F (every family pushed to 0 from a well-scoring S with small family gaps)
+    passes (ii) but is stopped by the floor, and the decision says "run O3";
+  - one incomplete cell blocks every read.
+- A note found while testing: when S itself scores near 0, a rule near 0 passes (i) by
+  construction (non-inferior within 0.10). That is (i)'s registered meaning; the floor is
+  on (ii) only (§14.108).
+
+**4. `phase2_sweeps.is_control`** now also recognizes `return_range_split` and
+`reward_model_seed_offset`. `register` therefore stays quiet about the with-terminals
+replication and normalization-test sweeps, which are not anchor cells; it is used nowhere
+else.
+
+**Box order, once Study 1's lanes are done (§14.104: behind Study 1, beside the
+replication's reward-model work):**
+1. S's 32 grids, plus N, F and the zero cells (all writable now).
+2. `normtest.py winners --write` → `normtest.py write --write` → S's cells.
+3. `normtest_readout.py`. If it says "run O3": `write --o3 --write`, O3's cells, re-read.
+- Then the replication's IQL files follow the adopted rule (N/F: `replication.py`'s grids
+  dropped, cells at the rule's index, the task reward at index 1).
