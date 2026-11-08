@@ -27996,3 +27996,31 @@ damage. The registry (22 of 28), the leveling readout and RQ1 on sparsity are un
 - MR's r16 companion now shows 10/10 in `ladder_status` too (§14.111's timing note).
 
 **Latest files updated:** `control_readout_latest.txt` (the companion's note).
+
+### 14.113 Sweep check 2026-11-08: MR's noise ladder 8 cells from its reading; the ensemble mean's noise cells start
+
+**Box:** 46 IQL runs, **median 156k steps/h**: just under the 10% rule, no new lanes. No
+damage. The registry (22 of 28), controls, leveling and RQ1 on sparsity are unchanged.
+
+**Noise ladder (MR), standard, new complete cells (each its own mean ± sd):**
+- n04: large_play 0.367 ± 0.090 (`xo4g0lvm`), large_diverse 0.241 ± 0.108 (`myg8d5pq`);
+- n045: medium_play 0.594 ± 0.144 (`e5xnfihx`), medium_diverse 0.620 ± 0.036
+  (`makcc8s6`).
+- Running: n045 large_play and large_diverse.
+- **Candidate, states only:** n03 finished on all four mazes; n04 medium_play finished,
+  medium_diverse 9/10, large_play and large_diverse started; n045 medium_play started.
+- **MR's RQ1 blockers on noise: 18 → 8.** Its registered noise reading is likely within a
+  day or two.
+
+**The ensemble mean's noise cells have started:** standard n01 medium_play (6/10,
+`yayj1hnj`) and medium_diverse (5/10, `sk8bfxk2`).
+
+**Companions:**
+- The ensemble mean's full-data companion finished (`q7q922cu`); its r128 is at 5/10
+  (`7lii6ni2`).
+- PT's r32 finished (`ag0tr9b8`); its r16, the last, is at 5/10 (`j4ye1t99`). PT's
+  companion reading follows.
+- `rq1_readout` notes the two running ones as "not this experiment's lineage, ignored", as
+  designed.
+
+**Latest files updated:** `rq1_readout_latest.txt`.
