@@ -27973,3 +27973,26 @@ index 1 against companion index 2 (the best rescaling index):
 
 **Latest files updated:** `rq1_readout_latest.txt` (two new "ignored" notes for running
 companions).
+
+### 14.112 Sweep check 2026-11-07 (later): the MR noise ladder fills in; companions progressing
+
+**Box:** 50 IQL runs, **median 155k steps/h**: just under the 10% rule, no new lanes. No
+damage. The registry (22 of 28), the leveling readout and RQ1 on sparsity are unchanged.
+
+**Noise ladder (MR), standard, new complete cells (each its own mean ± sd):**
+- n03: large_play 0.450 ± 0.071 (`5kzmhrkk`), large_diverse 0.307 ± 0.121 (`8ejznn9z`);
+- n04: medium_diverse 0.625 ± 0.059 (`uip2sclp`).
+- Running: n04 large_play and large_diverse; n045 medium_play and medium_diverse (5/10).
+- **Candidate, states only:** n02 large_play and large_diverse finished, so n02 is
+  complete on all four mazes; n03 medium_play and medium_diverse at 5/10; n03 large_play
+  and large_diverse started.
+- MR's RQ1 blockers on noise: 23 → 18. PT, NMR and the ensemble mean have not started
+  their noise cells.
+
+**Companions:**
+- PT r32 at 5/10 (`ag0tr9b8`).
+- The ensemble mean's full-data companion at 5/10 (`q7q922cu`). `control_readout` and
+  `rq1_readout` note it "ignored", as designed.
+- MR's r16 companion now shows 10/10 in `ladder_status` too (§14.111's timing note).
+
+**Latest files updated:** `control_readout_latest.txt` (the companion's note).
