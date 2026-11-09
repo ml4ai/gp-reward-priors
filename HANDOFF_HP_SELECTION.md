@@ -28120,3 +28120,73 @@ All three notebooks committed without outputs.
 `experiments_results.ipynb`'s no-terminals noise figure.** No candidate noise cell has been
 seen before its family's registered reading, so nothing needs disclosing. The gate closes
 the gap from here on.
+
+### 14.116 Sweep check 2026-11-09: MR'S REGISTERED NOISE READING — NOT SENSITIVE ((b)); the noise ladder OPEN
+
+**Box:** 50 IQL runs, **median 155k steps/h**: just under the 10% rule, no new lanes. No
+damage. The registry (22 of 28), controls and leveling are unchanged.
+
+**MR, noise ladder (primary arm): the registered reading** (`rq1_readout.py --axis
+noise`, §14.5 as registered; saved as `results/rq1_readout_noise_latest.txt`). Slopes are
+per unit flip fraction, signed positive = falls as the labels degrade.
+- **Manipulation check REJECTS:** slope of A pooled +0.617 [+0.545, +0.693],
+  p = 9.1e-13. Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S REJECTS:** pooled +0.339 [+0.289, +0.391], p = 0.0021.
+- **(b) candidate − standard slope does NOT reject:** pooled +0.191 [+0.124, +0.255],
+  **p = 0.255**.
+- **(c) REJECTS:** MR − zero +0.323; − mean-constant +0.326; p = 9.1e-13.
+- **VERDICT: NOT SENSITIVE ((b): the candidate protocol does not respond more than the
+  standard one).**
+- **Disclosed: the pooled exact interval of (b) EXCLUDES 0 while the registered test does
+  not reject.** This is the ensemble mean's sparsity (a) case again (§14.88), and wider.
+  - The interval is of the mean over units: medium_play's 10 units are large and
+    positive (about +1.2 each).
+  - The test is the one-sided signed-rank over all 40: the other 30 are near 0 or
+    negative (large_play about −0.33), so W+ = 460 of 820.
+  - The registered test decides; the interval is reported beside it.
+
+**Per maze (DESCRIPTIVE), against the leak:**
+
+| maze | MR's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+1.311 [+1.149, +1.481]** | **+1.218 [+1.119, +1.328]** |
+| medium_diverse | 7 (leaky) | +0.031 [−0.061, +0.127] | −0.060 [−0.143, +0.016] |
+| large_play | 6 (leaky) | +0.009 [−0.050, +0.074] | −0.334 [−0.488, −0.180] |
+| large_diverse | 6 (leaky) | +0.005 [−0.032, +0.043] | −0.062 [−0.238, +0.094] |
+
+- **The sparsity pattern again, stronger.** On the leak-free maze, the candidate protocol
+  falls steeply as the labels degrade, far more than the standard protocol. On the three
+  leaky mazes it is flat, and on large_play the standard protocol responds more.
+- The disclosure every Study 1 verdict carries (§14.82, §14.86) applies.
+
+**RQ1 on the noise ladder (§14.106's rule): OPEN.** Every family read so far fails (a) or
+(b): MR, 1 of 4. The stricter §14.70 reading, printed beside it, would refute.
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ["noise"]` now holds MR. MR's noise
+companions (if any) become readable, and `experiments_results.ipynb`'s noise figure now
+draws MR's candidate ladder (the gate of §14.115 reads the same record). The rescale
+self-test's gated example stays NMR on noise; it passes.
+
+**A transient wandb failure:**
+- `rq1_readout.py` (sparsity) failed twice on a read timeout, then a connection reset,
+  in `logged_accuracies`' fetch of the reward-model training runs.
+- Added a 3-try retry with a 30 s back-off there, matching the benchmark notebook's.
+  Self-test passes; the sparsity readout re-run is below.
+
+**New complete cells:**
+- **The ensemble mean, standard noise:** n01 large_play 0.407 ± 0.056 (`mmo8mrf2`),
+  large_diverse 0.207 ± 0.073 (`de5ijp4c`); n02 medium_play 0.689 ± 0.025
+  (`hzhtmilh`), medium_diverse 0.683 ± 0.032 (`tg8g7wun`).
+- **MR, candidate noise:** n04 and n045 complete on all four mazes, so MR's candidate
+  noise ladder is complete.
+- **The ensemble mean's candidate noise n01 has started** (two at 5/10, two started).
+
+**Companions:**
+- NMR's full-data companion finished (`t5uoj7l9`); NMR r128 at 5/10 (`qdcwvgr9`).
+- The ensemble mean's r64 finished; r32 at 5/10 (`i3vynmxn`).
+
+**Latest files:** `rq1_readout_noise_latest.txt` (new).
+- **The sparsity re-run, with the retry: succeeded.** RQ1 on sparsity is unchanged:
+  REFUTED, 4 of 4 NOT SENSITIVE. The only differences are two new "ignored" notes for
+  running companions. `rq1_readout_latest.txt` updated.
