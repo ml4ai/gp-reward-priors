@@ -28190,3 +28190,50 @@ self-test's gated example stays NMR on noise; it passes.
 - **The sparsity re-run, with the retry: succeeded.** RQ1 on sparsity is unchanged:
   REFUTED, 4 of 4 NOT SENSITIVE. The only differences are two new "ignored" notes for
   running companions. `rq1_readout_latest.txt` updated.
+
+### 14.117 MEASURED (author ran it on the box, 2026-11-09): the AntMaze datasets' rewards and terminals mark the EVALUATION goal, never the commanded goals
+
+**Why it was run:** the author's writing agent and a web search disagreed about which goal
+the D4RL AntMaze datasets' rewards mark. `results/goal_check.py` (self-tested; output
+`exp/goal_check.txt`, box-generated) tests two hypotheses on the raw datasets
+(`env.get_dataset()`):
+- **EVAL:** reward = 1 within 0.5 of the environment's target goal, the evaluation goal;
+- **COMMANDED:** reward = 1 within 0.5 of each transition's own commanded goal, the
+  dataset's `infos/goal`, about 760–890 distinct goals per dataset.
+
+| dataset | rewarded = terminals | transitions within 0.5 of their own commanded goal, that goal AWAY from the target | of those, rewarded | rewarded positions: spread about their centroid; centroid's distance from this env's jittered target |
+|---|---|---|---|---|
+| medium_play | 9,787 = 9,787 | 71,679 | **0** | one disc (one outlier at 21.4; see below); 0.40 |
+| medium_diverse | 1,959 = 1,959 | 87,546 | **0** | ≤ 0.63; 0.74 |
+| large_play | 12,517 = 12,517 | 81,627 | **0** | ≤ 0.75; 0.99 |
+| large_diverse | 6,189 = 6,189 | 81,072 | **0** | ≤ 0.82; 0.94 |
+
+- **COMMANDED is REFUTED outright.**
+  - On every dataset, tens of thousands of transitions reach their own commanded goal
+    somewhere else in the maze, and not one is rewarded.
+  - On both medium datasets, no rewarded transition is near its own commanded goal at all.
+  - On the medium datasets, almost no commanded goal is near the target (0.1% and 0.0% of
+    transitions), yet there are 9,787 and 1,959 rewards: an ant passing the evaluation goal
+    on its way elsewhere is rewarded there.
+- **EVAL holds, up to the target's jitter.**
+  - The rewarded positions form ONE small cluster per dataset (about the 0.5 disc, widened
+    to 0.63–0.82 by the target's own jitter). It is centred 0.4–1.0 from the target this
+    `gym.make` drew (the env adds a small random offset per instance).
+  - Against that one jittered point, EVAL agrees with the rewards on 98.2–99.7% of
+    transitions. The misses lie at the disc's edge.
+  - So the labels were computed against the evaluation goal as jittered at collection time,
+    not against the exact point a given evaluation instance uses.
+- **On the large datasets,** 10–15% of transitions have a commanded goal near the target.
+  Those arrivals are rewarded (3,579 and 1,220), as both hypotheses predict there.
+- **One anomaly, unexplained:** medium_play has at least one rewarded position about 21
+  units from the cluster. It is plausibly an episode-boundary row (the ant reset to the
+  start). It does not affect the conclusion; counting such rows would take a small
+  follow-up.
+- **Consequences:**
+  - §13.13.1 and §14.82 stand. The task reward and the terminals both carry the evaluation
+    goal's location.
+  - The index-6/7 leak rebuilds exactly that, which is why its bonus map ranked the
+    evaluation goal's cell first.
+  - The write-up can say plainly: AntMaze's dataset rewards and terminals are relabelled
+    with respect to the fixed evaluation goal, whatever goal the data-collecting policy was
+    commanded to reach.
