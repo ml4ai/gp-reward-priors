@@ -28024,3 +28024,52 @@ damage. The registry (22 of 28), controls, leveling and RQ1 on sparsity are unch
   designed.
 
 **Latest files updated:** `rq1_readout_latest.txt`.
+
+### 14.114 Sweep check 2026-11-08 (later): PT'S RESCALING COMPANION COMPLETE — rescaling lowers PT's scores and halves its slope on medium_play; MR's standard noise ladder complete
+
+**Box:** 50 IQL runs, **median 158k steps/h**: inside the 10% rule. No damage. The
+registry (22 of 28), the leveling readout and RQ1 on sparsity are unchanged.
+
+**PT's rescaling companion arm (§14.78; `rescale_readout.py`; DESCRIPTIVE, not §14.5's
+test; PT is read on sparsity).** medium_play, without terminals, frozen index 1 (r − 1)
+against companion index 3 (1000·r/R − 1, the best rescaling index on PT's seed-0 grid):
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.409 ± 0.267 | 0.187 ± 0.251 | **−0.222 [−0.394, −0.079]** |
+| r128 | 0.218 ± 0.250 | 0.051 ± 0.131 | **−0.167 [−0.331, −0.028]** |
+| r64 | 0.174 ± 0.211 | 0.082 ± 0.169 | −0.092 [−0.215, +0.023] |
+| r32 | 0.053 ± 0.143 | 0.019 ± 0.036 | −0.033 [−0.112, +0.010] |
+| r16 | 0.004 ± 0.007 | 0.002 ± 0.003 | −0.002 [−0.006, +0.002] |
+
+- **Degradation slopes:** frozen +0.090 [+0.049, +0.132] (as in PT's registered reading,
+  §14.87); companion +0.038 [+0.007, +0.071]; **companion − frozen −0.052 [−0.099,
+  −0.015]**.
+- **Reading (descriptive):**
+  - Unlike MR (§14.111: unchanged), PT's scores on its one leak-free maze FALL under the
+    rescaled index, at the levels where it scores at all. Its sensitivity to sparsity is
+    about halved, though still positive.
+  - So for PT, the frozen index 1's response is not an artefact of skipping the
+    rescaling; if anything, rescaling hides part of it.
+  - Without terminals, indices 1 and 3 differ only in scale (raw vs 1000/R) and a constant
+    (§14.83's note). The scale alone changes what IQL learns from PT's reward, through
+    training dynamics.
+  - **This is directly relevant to the normalization test (§14.104): N (raw) against F
+    (rescaled) is that same contrast, and here it splits by family** (MR indifferent, PT
+    hurt). Recorded beside; it decides nothing.
+- **The other companions:**
+  - the ensemble mean's r128 finished, its r64 started;
+  - NMR's medium_play companion started (`t5uoj7l9`, full data);
+  - the running ones are noted "ignored" by the other readouts, as designed.
+
+**Noise ladder:**
+- **MR, standard, now COMPLETE on all four mazes and five levels.** New: n045 large_play
+  0.236 ± 0.129 (`ocvxkluf`), large_diverse 0.201 ± 0.062 (`ju9r6jyh`).
+- **MR, candidate (states only):** n04 large_diverse and medium_diverse finished,
+  large_play 5/10; n045 medium_play and medium_diverse 5/10, large_diverse started.
+  **MR's RQ1 blockers on noise: 8 → 5.**
+- **The ensemble mean, standard:** n01 medium_play 0.687 ± 0.050 (`yayj1hnj`),
+  medium_diverse 0.674 ± 0.025 (`sk8bfxk2`). n01 large_play and large_diverse and n02
+  medium_play and medium_diverse are running.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
