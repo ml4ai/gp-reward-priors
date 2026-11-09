@@ -28073,3 +28073,45 @@ against companion index 3 (1000·r/R − 1, the best rescaling index on PT's see
   medium_play and medium_diverse are running.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `control_readout_latest.txt`.
+
+### 14.115 The results notebooks refreshed (author's request, 2026-11-09); a reading-gate gap in `experiments_results.ipynb` closed
+
+**`benchmark_results.ipynb`: the missing cells were a STALE CACHE.**
+- Its data cache (`results/.cache/benchmark_data.pkl`, gitignored) dated from 27 Oct.
+  It held 8 incomplete control cells since completed:
+  - the trivial mean-constant cells;
+  - the motion reward's and NMR's no-terminals cells on medium_diverse and large_diverse;
+  - the shift ablation's NMR A4/B4 and PT B4;
+  - the ensemble mean's B3;
+  - several of these were re-run after the /tmp damage.
+- With `REFRESH = False`, the notebook kept drawing from it.
+- **Refetched 2026-11-09** (a temporary copy run with `REFRESH = True`; the committed
+  notebook keeps `False`). 77 control cells, ALL complete and audit-clean (was 69, with 8
+  incomplete); 21 anchor cells, all ready. Every chart now draws every cell, checked on
+  charts 1 and 8.
+- **One code fix:** chart 4 (max vs last-10) mapped control cells to families by their
+  name prefix and did not know `leakfree_`, so the leak control's MR cell would have been
+  drawn in the motion reward's colour. Fixed.
+
+**`experiments_results.ipynb`: A GAP IN §14.5's READING GATE, CLOSED.**
+- Its "without terminals" figures drew every complete candidate ladder cell, with no check
+  on whether the family's registered reading on that ladder had been made.
+- On the sparsity ladder this no longer matters (all four read).
+- **On the noise ladder, MR's candidate cells n01–n03 (and the ensemble mean's, once they
+  exist) would have been shown before MR's registered noise reading.**
+- The notebook has never been committed with outputs. **Whether anyone ran it locally and
+  saw that figure since MR's candidate noise cells began finishing (about 2026-11-05) is
+  for the author to say. If so, it is disclosed with MR's noise reading.**
+- **Fix:** `load()` replaces every candidate ladder level of a family not in
+  `rescale_readout.REGISTERED_READ[axis]` (the one record of the readings made) with a
+  placeholder. The table shows it as "not read (§14.5 gate)" and the figure never draws
+  it. The full-data points (the no-terminals controls, already read) stay.
+- Checked by executing the notebook: the noise table reads "not read (§14.5 gate)" for MR
+  and the ensemble mean on every ladder level, and the note lists them.
+- The section's stale text ("the no-terminals ladders have not been run yet") was
+  replaced, with a pointer to the leak.
+- Also committed: the author's formatter diff in the same notebook.
+
+**`results_table.ipynb`:** `register --write` ran: 32 of 32, 22 of 28, unchanged.
+
+All three notebooks committed without outputs.
