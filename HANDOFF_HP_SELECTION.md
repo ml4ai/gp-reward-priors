@@ -28237,3 +28237,48 @@ the D4RL AntMaze datasets' rewards mark. `results/goal_check.py` (self-tested; o
   - The write-up can say plainly: AntMaze's dataset rewards and terminals are relabelled
     with respect to the fixed evaluation goal, whatever goal the data-collecting policy was
     commanded to reach.
+
+### 14.118 Where the AntMaze relabelling happens, and the Preference Transformer's pipeline (read from code, 2026-11-09)
+
+**Question (author):**
+- Another agent said the raw AntMaze data mark the commanded goals, and that
+  `env.get_dataset()` "sanitizes" them to the evaluation goal.
+- Does the Preference Transformer repository (csmile-1006/PreferenceTransformer) get the
+  same labels?
+
+**Read** (the PT repository vendors D4RL; downloaded from GitHub):
+- **Collection** (`d4rl/scripts/generation/generate_ant_maze_datasets.py`):
+  - each step stores `r` and `done` from `env.step()`, with `env.target_goal` set to the
+    episode's commanded goal (`env.set_target_goal()` at every episode end);
+  - it also stores that goal as `infos/goal`.
+  - **So the RAW collection files mark the COMMANDED goals.** The other agent is right on
+    that point.
+- **Relabelling, at dataset-build time** (`d4rl/scripts/generation/relabel_antmaze_rewards.py`):
+  - `rewards` and `terminals` are recomputed as `||next_xy − env.target_goal|| ≤ 0.5`,
+    with `env.target_goal` taken from the evaluation env's `gym.make`;
+  - the result is written to a new file, `<name>_sparse.hdf5`.
+  - The registered dataset URLs point at those `_sparse.hdf5` files
+    (`d4rl/locomotion/__init__.py`: `'reward_type': 'sparse'`).
+- **`get_dataset()`** (`d4rl/offline_env.py`) only loads the HDF5 and checks shapes. **It
+  recomputes nothing.**
+  - The other agent's mechanism is wrong; its conclusion holds: what every D4RL user loads
+    marks the evaluation goal. §14.117 measured exactly that.
+  - It is D4RL's design, made when the files were built.
+- **The PT repository's offline IQL** (`train_offline.py`, `dataset_utils.py`):
+  - **Data:** `D4RLDataset` loads `d4rl.qlearning_dataset(env)`, i.e. `get_dataset()`, so
+    the SAME evaluation-goal rewards and terminals as ours.
+  - **With a reward model:** the rewards are replaced by the model's labels
+    (`reward_from_preference[_transformer]`). The terminals are KEPT: `masks = 1 −
+    terminals`, so bootstrapping stops at evaluation-goal arrivals. That is our standard
+    protocol (with terminals).
+  - **`normalize()`, on AntMaze:** splits trajectories at `dones_float`, which is 1 at every
+    terminal (and at every episode discontinuity). It subtracts `min_return / len_trj`
+    per transition, divides by the return range and multiplies by 1000, then subtracts 1.
+    **That is our index 7 with terminal-cut segments: the leak of §14.82, on top of the
+    terminals** (as §14.82 (iii) said).
+  - **Without a reward model (the task reward):** `rewards − 1` with the terminals, our
+    index 1.
+- **Conclusion:** the PT pipeline uses the same D4RL labels as ours, so the evaluation goal
+  reaches its IQL through the terminals. With a learned reward, its normalization also
+  adds the goal-arrival bonus. No change to our data is implied: our pipeline and PT's
+  read the same files.
