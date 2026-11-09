@@ -28115,3 +28115,8 @@ against companion index 3 (1000·r/R − 1, the best rescaling index on PT's see
 **`results_table.ipynb`:** `register --write` ran: 32 of 32, 22 of 28, unchanged.
 
 All three notebooks committed without outputs.
+
+**§14.115's open question ANSWERED (author, 2026-11-09): the author never ran or saw
+`experiments_results.ipynb`'s no-terminals noise figure.** No candidate noise cell has been
+seen before its family's registered reading, so nothing needs disclosing. The gate closes
+the gap from here on.
