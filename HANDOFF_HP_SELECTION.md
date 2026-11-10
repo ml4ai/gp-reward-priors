@@ -28375,3 +28375,33 @@ frozen index 1 against companion index 2 (its best rescaling index):
 - Its RQ1 noise blockers: 27 → 21. PT and NMR have not started their noise cells.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`; `rq1_readout_latest.txt` and `control_readout_latest.txt` (new "ignored" notes only).
+
+### 14.122 TERMINOLOGY (author, 2026-11-10): what counts as Study 1, its ablation, and its extension
+
+The author's grouping of the work, used from now on in handoff sections, sweep-check
+summaries and the dissertation:
+
+- **Study 1 (original):** the sparsity and noise ladders for every family (MR, PT, NMR, the
+  ensemble mean), each family's registered reading on each ladder (§14.5), and RQ1's verdict
+  per ladder under §14.106. PT's and NMR's noise ladders are Study 1 lanes still to run.
+  They are not queued "after" Study 1.
+  - State at this entry: sparsity REFUTED (4 of 4 read, §14.101). Noise OPEN: MR read
+    (§14.116); the ensemble mean has 21 cells left; PT and NMR have not started.
+- **Post-hoc ablation of Study 1:** the rescaling companion arms (§14.78), DESCRIPTIVE and
+  not §14.5's test.
+  - Sparsity: MR (§14.111), PT (§14.114) and the ensemble mean (§14.121) are complete;
+    NMR's is running.
+  - Noise: each family's companion becomes allowed after its own noise reading. Only MR's
+    is allowed now, and it has not started.
+- **Study 1 extension:** the normalization test (§14.104, §14.108, §14.110), then the
+  replication (§14.83: reward-model selection at seed 100, training and evaluation at seeds
+  101–110, IQL at the rule the test adopts). Both run after Study 1's lanes.
+- **Other threads, separate from the above:**
+  - C-lite, in the calibration-mechanism investigation (§14.92–§14.103), held until
+    Study 1's lanes finish;
+  - the author's calls on the Study 2 BNN options (§14.98 (a)–(c)), due before Study 2's
+    seed-100 selection;
+  - Study 3's online fine-tuning script (§14.105), not started.
+
+Sweep-check summaries group their done / next / queued lists under these headings and carry
+every open item forward.
