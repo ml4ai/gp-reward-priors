@@ -28326,4 +28326,52 @@ No damage. The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 o
   started.
 - NMR's r64 (`9kbpkghh`): 5/10.
 
-**Latest file updated:** `rq1_readout_noise_latest.txt`.
+**Latest files updated:** `rq1_readout_noise_latest.txt`; `rq1_readout_latest.txt` and `control_readout_latest.txt` (new "ignored" notes only).
+
+### 14.121 Sweep check 2026-11-10 (later): THE ENSEMBLE MEAN'S RESCALING COMPANION COMPLETE — rescaling leaves its slope about unchanged on medium_play; NMR's last-maze companion starts
+
+**Box:** 43 IQL runs, **median 159k steps/h**: inside the 10% rule, but only because seven
+lane slots sat between cells at the check. At 50 runs the median has held 155–156k, so no
+new lane. No damage. The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on
+noise (OPEN) are unchanged.
+
+**The ensemble mean's rescaling companion arm (§14.78; `rescale_readout.py`; DESCRIPTIVE,
+not §14.5's test; the ensemble mean is read on sparsity).** medium_play, without terminals,
+frozen index 1 against companion index 2 (its best rescaling index):
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.590 ± 0.071 | 0.523 ± 0.286 | −0.067 [−0.234, +0.074] |
+| r128 | 0.543 ± 0.168 | 0.619 ± 0.145 | **+0.075 [+0.007, +0.154]** |
+| r64 | 0.443 ± 0.219 | 0.473 ± 0.263 | +0.030 [−0.075, +0.128] |
+| r32 | 0.350 ± 0.212 | 0.362 ± 0.293 | +0.011 [−0.110, +0.135] |
+| r16 | 0.258 ± 0.270 | 0.326 ± 0.306 | **+0.068 [+0.009, +0.152]** |
+
+- **Degradation slopes:** frozen +0.077 [+0.044, +0.108]; companion +0.056 [+0.014,
+  +0.097]; **companion − frozen −0.021 [−0.053, +0.009]**.
+- **Reading (descriptive):**
+  - Like MR (§14.111), the ensemble mean's sensitivity to sparsity on its one leak-free maze
+    is about unchanged under the rescaled index. The interval on the slope difference
+    covers zero; its point estimate leans slightly lower.
+  - Two cells differ (r128, r16), both upward and small. At full data the companion's
+    spread is four times the frozen arm's (± 0.286 against ± 0.071): a few seeds score
+    low, so its mean falls without a clear difference.
+  - **So the companions now split two to one:** MR and the ensemble mean are indifferent
+    to the rescaling, PT is hurt by it (§14.114). NMR's is still running. This bears on the
+    normalization test's N-versus-F contrast (§14.104); it is recorded beside and decides
+    nothing.
+- **NMR's companions:** medium_play r64 finished, r32 is running (`hcgrggyg`, 3 finished),
+  r16 to come. **Its medium_diverse companion has started** (`ak051s1d`, index 2, full data,
+  3/10 scored).
+
+**The ensemble mean, noise ladder:**
+- **Standard, new complete cells:** n03 large_diverse 0.249 ± 0.093 (`io8hlr3q`); n04
+  medium_play 0.655 ± 0.076 (`y7byyz2p`), medium_diverse 0.690 ± 0.034 (`9gn6bphl`).
+- Running: n03 large_play 9/10; n04 large_diverse started (`jir6862n`); n045 medium_play
+  and medium_diverse 5/10.
+- **Candidate (states only, §14.5 gate):** n01 complete on all four mazes; n02 medium_play,
+  medium_diverse and large_diverse finished, large_play 5/10; n03 medium_play and
+  medium_diverse 5/10.
+- Its RQ1 noise blockers: 27 → 21. PT and NMR have not started their noise cells.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`; `rq1_readout_latest.txt` and `control_readout_latest.txt` (new "ignored" notes only).
