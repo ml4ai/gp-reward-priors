@@ -28304,3 +28304,26 @@ damage. The registry (22 of 28), controls, leveling and RQ1 on sparsity are unch
 - `rq1_readout` notes both running ones "ignored", as designed.
 
 **Latest files updated:** `rq1_readout_latest.txt`, `rq1_readout_noise_latest.txt`.
+
+### 14.120 Sweep check 2026-11-10: the ensemble mean's n02 large mazes complete; nothing due
+
+**Box:** 50 IQL runs, **median 156k steps/h**: still just under the 10% rule, no new lanes.
+No damage. The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise
+(OPEN) are unchanged. No registered reading or companion arm came due.
+
+**The ensemble mean, noise ladder:**
+- **Standard, new complete cells:** n02 large_play 0.384 ± 0.075 (`bc10mwd5`),
+  large_diverse 0.273 ± 0.094 (`1ryytzz3`).
+- Running: n03 large_play (`7egenlug`) and large_diverse (`io8hlr3q`), 0/10; n04
+  medium_play and medium_diverse, 5/10.
+- **Candidate (states only, §14.5 gate):** n01 large_diverse finished, large_play nearly
+  (5 finished, the rest near 1M); n02 medium_play and medium_diverse 5/10; n02
+  large_diverse started (`jy9ywf06`).
+- Its RQ1 noise blockers: 30 → 27. PT and NMR have not started their noise cells.
+
+**Companions (sparsity):**
+- The ensemble mean's r16 (`02s4bqhc`): 3 seeds finished, two near 1M, the last three
+  started.
+- NMR's r64 (`9kbpkghh`): 5/10.
+
+**Latest file updated:** `rq1_readout_noise_latest.txt`.
