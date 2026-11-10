@@ -28282,3 +28282,25 @@ the D4RL AntMaze datasets' rewards mark. `results/goal_check.py` (self-tested; o
   reaches its IQL through the terminals. With a learned reward, its normalization also
   adds the goal-arrival bonus. No change to our data is implied: our pipeline and PT's
   read the same files.
+
+### 14.119 Sweep check 2026-11-09 (later): the ensemble mean's noise ladder fills in; companions progressing
+
+**Box:** 50 IQL runs, **median 156k steps/h**: just under the 10% rule, no new lanes. No
+damage. The registry (22 of 28), controls, leveling and RQ1 on sparsity are unchanged.
+- From this check on, the sweep check also runs `rescale_readout.py --axis noise`. No noise
+  companion exists yet; MR's, now readable, have not started.
+
+**The ensemble mean, noise ladder:**
+- **Standard, new complete cells:** n03 medium_play 0.667 ± 0.058 (`jewzpdje`),
+  medium_diverse 0.677 ± 0.028 (`9fv9yvuv`).
+- Running: n02 large_play and large_diverse (5/10); n04 medium_play and medium_diverse.
+- **Candidate (states only):** n01 medium_play and medium_diverse finished, large_play and
+  large_diverse 5/10; n02 medium_play and medium_diverse started.
+- Its RQ1 noise blockers: 34 → 30. PT and NMR have not started their noise cells.
+
+**Companions (sparsity):**
+- The ensemble mean's r32 finished; r16, its last, started (`02s4bqhc`).
+- NMR's r128 finished; r64 started (`9kbpkghh`).
+- `rq1_readout` notes both running ones "ignored", as designed.
+
+**Latest files updated:** `rq1_readout_latest.txt`, `rq1_readout_noise_latest.txt`.
