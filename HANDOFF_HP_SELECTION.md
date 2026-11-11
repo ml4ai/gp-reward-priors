@@ -28405,3 +28405,33 @@ summaries and the dissertation:
 
 Sweep-check summaries group their done / next / queued lists under these headings and carry
 every open item forward.
+
+### 14.123 Sweep check 2026-11-11: PT's noise ladder starts; NMR's companions progressing; a transient config-audit flag
+
+**Box:** 50 IQL runs, **median 151k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN) are
+unchanged.
+
+**Study 1, noise ladder:**
+- **PT's noise ladder has started:** n01 standard, medium_play (`7fd9krzf`) and
+  medium_diverse (`0tli6alr`), 5/10 each. NMR's has not started.
+- **The ensemble mean, standard, new complete cells:** n03 large_play 0.440 ± 0.070
+  (`7egenlug`); n045 medium_play 0.662 ± 0.066 (`vqafzjcf`), medium_diverse 0.690 ± 0.046
+  (`c0t8qdgr`). Running: n04 large_play (`3ne7yazs`) and large_diverse (`jir6862n`), 5/10.
+- **The ensemble mean, candidate (states only, §14.5 gate):** n02 complete on all four
+  mazes; n03 medium_play and medium_diverse finished, large_play and large_diverse 5/10;
+  n04 medium_play (`seqfxh5h`) and medium_diverse (`y86husz3`) 5/10.
+- Its RQ1 noise blockers: 21 → 14.
+- **Transient audit flag:** the first pass reported "CONFIG AUDIT FAILED" on the candidate
+  n04 medium_play cell. Run `3m0aqqds` (seed 6) had `reward_model_path None`; it had just
+  started and its config had not synced to wandb yet. On wandb it now has the expected
+  path (`..._mr_n04_eval_6`), as do the sweep's other nine runs. A re-run of the readout
+  shows the cell as INCOMPLETE (5/10), and that re-run is the latest file. No action needed.
+
+**Post-hoc ablation (rescaling companions, sparsity):**
+- NMR medium_play: r32 finished; r16, its last, running (`8qi9nick`, 0/10 scored).
+- NMR medium_diverse: full data finished (`ak051s1d`); r128 running (`v5auzrsp`).
+- Not read until each maze's arm is complete.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt` (the re-run);
+`rq1_readout_latest.txt` (new "ignored" notes only).
