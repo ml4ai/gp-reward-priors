@@ -28435,3 +28435,53 @@ unchanged.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt` (the re-run);
 `rq1_readout_latest.txt` (new "ignored" notes only).
+
+### 14.124 Sweep check 2026-11-11 (later): NMR'S MEDIUM_PLAY RESCALING COMPANION COMPLETE — rescaling lowers NMR's scores and halves its slope, as for PT; MR's noise companion starts
+
+**Box:** 50 IQL runs, **median 153k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN) are
+unchanged.
+
+**Post-hoc ablation: NMR's rescaling companion arm, medium_play (§14.78;
+`rescale_readout.py`; DESCRIPTIVE, not §14.5's test; NMR is read on sparsity).** Without
+terminals, frozen index 1 against companion index 3:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.593 ± 0.123 | 0.367 ± 0.193 | **−0.226 [−0.303, −0.157]** |
+| r128 | 0.541 ± 0.178 | 0.385 ± 0.163 | **−0.156 [−0.218, −0.097]** |
+| r64 | 0.423 ± 0.277 | 0.247 ± 0.192 | **−0.177 [−0.261, −0.090]** |
+| r32 | 0.333 ± 0.281 | 0.258 ± 0.253 | **−0.075 [−0.134, −0.029]** |
+| r16 | 0.171 ± 0.213 | 0.160 ± 0.181 | −0.010 [−0.139, +0.129] |
+
+- **Degradation slopes:** frozen +0.094 [+0.054, +0.130]; companion +0.048 [+0.013,
+  +0.084]; **companion − frozen −0.046 [−0.080, −0.015]**.
+- **Reading (descriptive):**
+  - NMR's medium_play arm behaves like PT's (§14.114). Under the rescaled index its scores
+    fall at every level but r16, and its sensitivity to sparsity is about halved, though
+    still positive.
+  - **The four medium_play companions now split two and two.** MR (§14.111) and the
+    ensemble mean (§14.121) are about unchanged by rescaling; PT and NMR are hurt by it.
+    This bears on the normalization test's N-versus-F contrast (§14.104). It is recorded
+    beside, decides nothing, and is not a cross-family comparison: each row compares one
+    family's two arms.
+  - As for PT, NMR's frozen-index response is not an artefact of skipping the rescaling.
+- **NMR's medium_diverse companion arm** (frozen index 0, companion index 2): full and r128
+  finished; r64 running (`bi3jqk1a`); r32 and r16 to come. Not read until it is complete.
+- **MR's noise companion has started** (§14.78; allowed since MR's noise reading, §14.116):
+  n01 medium_play at companion index 2 (`8us8kpbp`), 0/10 scored.
+
+**Study 1, noise ladder:**
+- **PT, standard, first complete cells:** n01 medium_play 0.699 ± 0.083 (`7fd9krzf`),
+  medium_diverse 0.642 ± 0.096 (`0tli6alr`). n02 medium_play (`0xcpmx0u`) and medium_diverse
+  (`vtgdtpgz`) running. PT's RQ1 noise blockers: 40 → 38. NMR's has not started.
+- **The ensemble mean, standard, new complete cells:** n04 large_play 0.365 ± 0.058
+  (`3ne7yazs`), large_diverse 0.242 ± 0.103 (`jir6862n`). n045 large_play (`w6kqrb10`) and
+  large_diverse (`k6h4mvz1`) are at 5/10. These are its last standard cells.
+- **The ensemble mean, candidate (states only, §14.5 gate):** n03 complete on all four
+  mazes; n04 medium_play and medium_diverse finished, large_diverse 5/10, large_play
+  started; n045 medium_play and medium_diverse started.
+- **Its RQ1 noise blockers: 14 → 8.**
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`, `rq1_readout_latest.txt` (new
+"ignored" notes only).
