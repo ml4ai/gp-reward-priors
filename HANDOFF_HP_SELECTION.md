@@ -28485,3 +28485,24 @@ terminals, frozen index 1 against companion index 3:
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`, `rq1_readout_latest.txt` (new
 "ignored" notes only).
+
+### 14.125 The results notebooks checked again (author's request, 2026-11-11): no code change needed
+
+- **`benchmark_results.ipynb`:** its cache (`results/.cache/benchmark_data.pkl`, gitignored)
+  was refetched from wandb through a temporary copy run with `REFRESH = True`. The data are
+  IDENTICAL to the 2026-11-09 fetch (§14.115): 21 anchor cells, 77 control cells, 4
+  time-only cells, 48 grids. Every cell is ready, and no score changed, as expected: the
+  control readout has not changed since. Executed end to end with no errors.
+- **`experiments_results.ipynb`:** reads wandb live, so new ladder cells appear on every run
+  without a change. Executed end to end with no errors.
+  - The noise tables now carry the ensemble mean's standard cells and PT's first ones (n01
+    medium_play and medium_diverse).
+  - §14.5's gate holds: the ensemble mean's candidate noise cells read "not read (§14.5
+    gate)". PT and NMR have no candidate noise sweeps yet.
+  - The companion-arm sweeps are noted "ignored", as designed. No notebook draws the
+    rescaling companions (the post-hoc ablation); they are read only by
+    `rescale_readout.py`.
+- **`results_table.ipynb`:** its registries are kept by `register --write` on every sweep
+  check (32 of 32, 22 of 28, unchanged).
+- Committed: the author's formatter diffs in `benchmark_results.ipynb` and
+  `experiments_results.ipynb` (layout only). All three notebooks remain without outputs.
