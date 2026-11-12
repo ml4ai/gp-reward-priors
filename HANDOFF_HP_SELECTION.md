@@ -28506,3 +28506,39 @@ terminals, frozen index 1 against companion index 3:
   check (32 of 32, 22 of 28, unchanged).
 - Committed: the author's formatter diffs in `benchmark_results.ipynb` and
   `experiments_results.ipynb` (layout only). All three notebooks remain without outputs.
+
+### 14.126 `benchmark_results.ipynb` chart 10: the rescaling companion arms (author's request, 2026-11-11)
+
+A new section, **"10. The rescaling companion arms: post-hoc ablation of Study 1
+(§14.78)"**, draws the companion arms. Until now they were read only as text, by
+`rescale_readout.py`. Without terminals, one figure per ladder, one column per arm
+(`phase2_sweeps.RESCALE_ARM`):
+- **Top:** success per level at the frozen index (filled, solid) and the companion index
+  (open, dashed); mean ± sd over seeds 1–10, full data on the left, most degraded on the
+  right.
+- **Bottom:** companion − frozen, paired by seed, with its exact 95% bootstrap. The panel
+  title gives companion slope − frozen slope.
+- **Within each family only.** Each column compares one family's two arms.
+- **The gate is `rescale_readout.run`'s.** An arm is drawn only when every cell is complete
+  and audit-clean, and only after the family's registered reading on that ladder (§14.5).
+  Otherwise its column states the reason. The noise figure is all reasons for now: MR's
+  arm is incomplete, and the other families are gated.
+- **Checked:** the four complete sparsity arms draw the same numbers as §14.111, §14.114,
+  §14.121 and §14.124 (slope differences +0.002, −0.052, −0.021, −0.046).
+
+**Data and cache:**
+- Cached in `D["rescale_arms"]`. An arm of a family already read is fetched when it is
+  new, or when it was not drawable last time. A pending arm therefore appears on the first
+  run after it completes, with no `REFRESH`. A drawn arm is not refetched (complete cells
+  do not change).
+- A gated family's arm is never fetched; only the reason is stored.
+- **The fetch is narrow.** A first version went through `rq1_readout.collect`, which
+  fetches every family's ladders and every control, and timed out after an hour.
+  - `exp_readout.collect_exp` and `rescale_readout.companion_cells` gained an optional
+    `only` argument, a set of (variant, family) pairs; other cells are skipped before
+    their runs are fetched.
+  - The default (`None`) leaves every existing caller unchanged. Both self-tests pass.
+  - The full-data frozen point is the no-terminals control at its winner, taken from the
+    cached controls, as in `rq1_readout.collect`.
+
+Committed without outputs.
