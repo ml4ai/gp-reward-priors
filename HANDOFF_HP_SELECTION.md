@@ -28542,3 +28542,79 @@ A new section, **"10. The rescaling companion arms: post-hoc ablation of Study 1
     cached controls, as in `rq1_readout.collect`.
 
 Committed without outputs.
+
+### 14.127 Sweep check 2026-11-12: THE ENSEMBLE MEAN'S REGISTERED NOISE READING — NOT SENSITIVE ((a) and (b)); the noise ladder OPEN, 2 of 4 read
+
+**Box:** 50 IQL runs, **median 155k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling and RQ1 on sparsity (REFUTED) are unchanged.
+
+**Study 1: the ensemble mean, noise ladder (primary arm), the registered reading**
+(`rq1_readout.py --axis noise`, §14.5 as registered; saved as
+`results/rq1_readout_noise_latest.txt`). It became readable when its last cells finished:
+standard n045 large_play 0.360 ± 0.076 (`w6kqrb10`) and large_diverse 0.246 ± 0.108
+(`k6h4mvz1`), and the last candidate cells. Slopes are per unit flip fraction, signed
+positive = falls as the labels degrade.
+- **Manipulation check REJECTS:** slope of A pooled +0.755 [+0.711, +0.800], p = 9.1e-13.
+  Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S does NOT reject:** pooled +0.231 [+0.176, +0.278],
+  **p = 0.096** (W+ 508 of 820).
+- **(b) candidate − standard slope does NOT reject:** pooled +0.165 [+0.095, +0.231],
+  **p = 0.116** (W+ 500).
+- **(c) REJECTS:** ensemble mean − zero +0.299; − mean-constant +0.301; p = 9.1e-13.
+- **VERDICT: NOT SENSITIVE ((a): the candidate protocol does not respond; (b): it does not
+  respond more than the standard protocol).**
+- **Disclosed: for BOTH (a) and (b), the pooled exact interval EXCLUDES 0 while the
+  registered test does not reject.** This is MR's noise (b) case (§14.116) and the ensemble
+  mean's sparsity (a) case (§14.88) again.
+  - The interval is of the mean over units, and medium_play's 10 units are large and
+    positive.
+  - The test is the one-sided signed-rank over all 40, and the other 30 are near 0 or
+    negative.
+  - The registered test decides; the interval is reported beside it.
+
+**Per maze (DESCRIPTIVE), against the leak:**
+
+| maze | the ensemble mean's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+0.987 [+0.776, +1.154]** | **+0.872 [+0.659, +1.047]** |
+| medium_diverse | 7 (leaky) | −0.046 [−0.090, −0.006] | −0.022 [−0.068, +0.029] |
+| large_play | 6 (leaky) | −0.016 [−0.066, +0.041] | −0.158 [−0.287, −0.019] |
+| large_diverse | 6 (leaky) | +0.001 [−0.027, +0.032] | −0.032 [−0.162, +0.087] |
+
+- **MR's noise pattern again.** On the leak-free maze, the candidate protocol falls steeply
+  as the labels degrade, more than the standard protocol. On the three leaky mazes it is
+  flat, and on large_play the standard protocol responds more.
+- The disclosure every Study 1 verdict carries (§14.82, §14.86) applies.
+
+**RQ1 on the noise ladder (§14.106's rule): OPEN.** Every family read so far fails (a) or
+(b): MR (b), the ensemble mean (a) and (b); 2 of 4 read. PT and NMR are still to be read.
+The stricter §14.70 reading, printed beside it, would refute.
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ["noise"]` now holds MR and the ensemble
+mean. From here:
+- `experiments_results.ipynb`'s no-terminals noise figure draws the ensemble mean's
+  candidate ladder (§14.115's gate reads the same record).
+- `benchmark_results.ipynb` chart 10 fetches its noise companion arm once that arm runs.
+- The rescale self-test's gated example stays NMR on noise; it passes.
+
+**Post-hoc ablation (rescaling companions):**
+- **The ensemble mean's noise companion** is in waiter BP (§14.78: MR primary, MR
+  sensitivity, ensemble mean primary, NMR medium_diverse primary). It has not started; the
+  readout now says "no evaluation sweep" in place of the gate's reason.
+- **MR's noise companion:** n01 and n02 finished; n03 running (`mco3qiyg`).
+- **NMR medium_diverse (sparsity):** r64 and r32 finished; r16, its last, running
+  (`e53xeosk`).
+
+**Study 1, the other noise ladders:**
+- **PT, standard:** n01 now complete on all four mazes, with large_play 0.264 ± 0.169
+  (`pc2es2wq`) and large_diverse 0.188 ± 0.144 (`k9mj3g5r`). n02 medium_play 0.681 ±
+  0.079, medium_diverse 0.637 ± 0.090; n03 medium_play 0.685 ± 0.061, medium_diverse
+  0.622 ± 0.093. Running: n02 large_play and large_diverse, n04 medium_play and
+  medium_diverse.
+- **PT, candidate (states only, §14.5 gate):** n01 medium_play and medium_diverse finished,
+  large_play and large_diverse running; n02 medium_play and medium_diverse started.
+- PT's RQ1 noise blockers: 38 → 30. NMR's noise ladder has not started.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`, `rq1_readout_latest.txt` (new
+"ignored" notes only).
