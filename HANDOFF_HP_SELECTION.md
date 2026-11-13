@@ -28618,3 +28618,34 @@ mean. From here:
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`, `rq1_readout_latest.txt` (new
 "ignored" notes only).
+
+### 14.128 Sweep check 2026-11-13: PT's noise ladder fills in; two companion arms near complete; nothing due
+
+**Box:** 50 IQL runs, **median 156k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN, 2 of 4
+read) are unchanged. No registered reading or companion arm came due.
+
+**Study 1, PT's noise ladder:**
+- **Standard, new complete cells:** n02 large_play 0.107 ± 0.106 (`2uerycx2`), large_diverse
+  0.229 ± 0.102 (`8fd31opd`); n04 medium_play 0.705 ± 0.038 (`uwnc43ft`), medium_diverse
+  0.700 ± 0.030 (`5c4y4kuh`). So n01 and n02 are complete on all four mazes, and n03 and
+  n04 on the medium mazes.
+- Running: n03 large_play (`1zwt0kz9`) and large_diverse (`4qh7asnd`); n045 medium_play
+  (`b295a8v8`, 5 finished) and medium_diverse (`hpipsg3d`).
+- **Candidate (states only, §14.5 gate):** n01 complete on all four mazes; n02 medium_play
+  and medium_diverse finished, large_play and large_diverse started; n03 medium_play and
+  medium_diverse started.
+- PT's RQ1 noise blockers: 30 → 22. NMR's noise ladder has not started.
+- **Transient audit flag, as in §14.123:** `ladder_status` reported "CONFIG AUDIT FAILED" on
+  PT's standard n045 medium_play cell. Run `9rllt07q` (seed 10) had `reward_model_path None`;
+  it had just started and its config had not synced. On wandb it now has the expected path
+  (`..._pt_n045_eval_10`), as do the sweep's other nine runs. The cell is incomplete in any
+  case. No action needed.
+
+**Post-hoc ablation (rescaling companions):**
+- **NMR medium_diverse (sparsity):** r16, its last cell, 8/10 scored (`e53xeosk`). Read when
+  it completes.
+- **MR, noise:** n01 and n02 finished; n03 8/10 scored (`mco3qiyg`); n04 and n045 to come.
+- **The ensemble mean, noise:** in waiter BP, not started.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
