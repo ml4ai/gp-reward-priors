@@ -28799,3 +28799,50 @@ per unit flip fraction, positive = falls as the labels degrade:
   (`85uzwvcx`) started. NMR's blockers: 38 → 36.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.132 `rescale_readout.py --axis sensitivity`: the noise sensitivity arm's companions get a readout (author's request, 2026-11-14)
+
+The sensitivity arm's companions (n01o–n045o; MR, PT and NMR on medium_play; §14.78)
+started running in waiters BP and BQ, but `rescale_readout.py` read only the primary arm
+(§14.131). Now it reads both.
+
+**`results/rescale_readout.py`:**
+- **New `--axis sensitivity`.** The same table and slopes as the other two ladders. x is
+  the flip fraction (n0Xo → p), the sign is the noise ladder's (positive = falls), and the
+  anchor (full data, clean labels) is shared with the primary arm.
+  - `AXES` = `rq1_readout.AXES` plus `sensitivity`. `ORACLE_LEVELS` = n01o … n045o.
+  - `ORACLE_PAIRS` = MR, PT, NMR on medium_play: only these three have the arm (§11.3,
+    §14.18). The ensemble mean and NMR medium_diverse do not.
+- **The gate:** the arm is part of the noise experiment, so it waits for the family's
+  registered NOISE reading (`READ_AXIS = {"sensitivity": "noise"}`). The arm is descriptive
+  with no registered test (§14.64). Its frozen candidate cells are read only once the
+  whole arm is complete, which `compare()` already requires.
+- **Data:** the frozen cells come from `exp_readout.collect_exp(..., "noise", "candidate",
+  only=…, levels=ORACLE_LEVELS)`. `collect_exp` gained an optional `levels` argument
+  (default: the axis's own; existing callers unchanged). The full-data frozen point is
+  the no-terminals control at its winner, as in `rq1_readout.collect`.
+- **Self-test:** new cases cover the flip-fraction x, the slope's sign, and the noise-reading
+  gate (NMR gated, MR read). The self-test now fixes `REGISTERED_READ` to its own values
+  while it runs, so later readings no longer break it (as PT's did, §14.87). Passes, and
+  so does `exp_readout`'s.
+- **Live run:** MR's arm reads "frozen n01o: no evaluation sweep" (its companion n01o is at
+  5/10). PT and NMR are gated. The primary noise readout's output is unchanged.
+
+**Why the frozen sensitivity cells do not exist yet (not damage):** in waiters BC–BJ
+(§14.65) each lane runs its sensitivity cells, standard and candidate, AFTER its primary
+noise cells, so they start after NMR's primary noise cells. Only the companions (BP, BQ)
+run earlier. So the arm becomes readable well after its companions finish.
+
+**`benchmark_results.ipynb` chart 10:**
+- A third figure for the sensitivity arm, three columns, with the same gate and the same
+  narrow fetch.
+- The markdown names the three figures and the cache key (`D["rescale_arms"]`, which it
+  had wrong).
+- Executed end to end with no errors:
+  - The sparsity figure now draws all five arms; NMR medium_diverse appeared without
+    `REFRESH`.
+  - The noise figure draws MR's arm (§14.131's numbers).
+  - The sensitivity figure shows only reasons for now.
+- Committed without outputs.
+
+**The sweep check** now also runs `rescale_readout.py --axis sensitivity`.
