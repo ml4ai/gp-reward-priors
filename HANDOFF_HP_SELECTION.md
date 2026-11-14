@@ -28743,3 +28743,59 @@ index 2. No action needed.
 - **The ensemble mean:** in waiter BP, not started.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.131 Sweep check 2026-11-14 (later): MR'S NOISE RESCALING COMPANION COMPLETE — rescaling leaves MR's noise slope about unchanged, slightly steeper; §14.78's prediction holds
+
+**Box:** 50 IQL runs, **median 153k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN, 2 of 4
+read) are unchanged. The transient audit flag of §14.130 has cleared (PT n045 large_play
+now reads INCOMPLETE 5/10).
+
+**Post-hoc ablation: MR's rescaling companion arm, noise ladder (primary arm), medium_play
+(§14.78; `rescale_readout.py --axis noise`; DESCRIPTIVE, not §14.5's test; MR is read on
+noise, §14.116).** Without terminals, frozen index 1 against companion index 2. Slopes are
+per unit flip fraction, positive = falls as the labels degrade:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.652 ± 0.067 | 0.660 ± 0.064 | +0.008 [−0.040, +0.059] |
+| n01 | 0.449 ± 0.205 | 0.512 ± 0.169 | +0.063 [−0.034, +0.158] |
+| n02 | 0.363 ± 0.204 | 0.472 ± 0.189 | **+0.109 [+0.035, +0.210]** |
+| n03 | 0.291 ± 0.238 | 0.191 ± 0.214 | −0.100 [−0.229, +0.027] |
+| n04 | 0.094 ± 0.161 | 0.085 ± 0.151 | −0.010 [−0.088, +0.048] |
+| n045 | 0.024 ± 0.048 | 0.052 ± 0.113 | +0.028 [−0.000, +0.073] |
+
+- **Degradation slopes:** frozen +1.311 [+1.149, +1.481] (the medium_play (a) slope of MR's
+  registered noise reading, §14.116); companion +1.423 [+1.261, +1.574]; **companion −
+  frozen +0.111 [+0.000, +0.252]**, its lower end at zero.
+- **Reading (descriptive):**
+  - As on sparsity (§14.111), rescaling leaves MR's sensitivity on its leak-free maze about
+    unchanged. If anything it is slightly steeper (about +8%), at the edge of the interval.
+  - Only n02 differs at the cell level (+0.11, rescaled higher); n03 leans the other way
+    (−0.10, within noise).
+  - **§14.78's prediction for the noise companions, written before any of them ran,
+    holds for MR.** Both arms fall to near the floor at high flip rates (n04, n045: under
+    0.10, within 0.03 of each other), whatever the index. The only gaps are at low and
+    middle flip rates.
+  - MR's frozen-index noise response is not an artefact of skipping the rescaling.
+- `benchmark_results.ipynb` chart 10's noise figure draws this arm on its next run
+  (§14.126).
+- **The sensitivity arm's companions have started:** MR n01o (`ylfibg8l`), 5/10.
+  `rescale_readout.py` reads the PRIMARY arm only. The sensitivity arm is descriptive with
+  no registered test (§14.64), and its companions have no readout yet.
+
+**Other companions:**
+- **PT, noise:** n01 and n02 finished; n03 5/10 (`j7nvk6uo`). Gated: PT's noise reading has
+  not been made.
+- **The ensemble mean, noise:** in waiter BP, not started.
+
+**Study 1, noise ladders:**
+- **PT:** standard n045 large_play and large_diverse 5/10, its last standard cells.
+  Candidate (states only): n03 complete; n04 medium_play and medium_diverse finished,
+  large_play and large_diverse 5/10; n045 medium_play and medium_diverse 5/10. **PT's RQ1
+  noise blockers: 13 → 8.**
+- **NMR, standard, new complete cells:** n02 medium_play 0.743 ± 0.044 (`9sarvpo0`),
+  medium_diverse 0.642 ± 0.064 (`4mqhuyjo`). n03 medium_play (`zygno0if`) and medium_diverse
+  (`85uzwvcx`) started. NMR's blockers: 38 → 36.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
