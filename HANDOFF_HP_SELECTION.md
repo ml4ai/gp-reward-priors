@@ -28709,3 +28709,37 @@ reading):**
 - PT's RQ1 noise blockers: 22 → 17.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.130 Sweep check 2026-11-14: PT down to its last standard noise cells; NMR's first noise cells; nothing due
+
+**Box:** 43 IQL runs listed, **median 157k steps/h**: just under the 10% rule, no new lanes.
+The count is low because one sweep had launched minutes before the check (below). No
+damage. The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN,
+2 of 4 read) are unchanged. No registered reading or companion arm came due.
+
+**Transient audit flag, the third (as in §14.123, §14.128):** `ladder_status` reported
+"CONFIG AUDIT FAILED (8)" on PT's standard n045 large_play cell (`6662w706`). The sweep's
+five runs started at 06:36Z, just before the check, and their configs had not synced. On
+wandb all five now carry the expected `reward_model_path` (`..._pt_n045_eval_1` … `_5`) and
+index 2. No action needed.
+- The pattern is now clear: a sweep checked within minutes of its launch shows
+  `reward_model_path None`. Re-check on wandb before treating such a flag as damage.
+
+**Study 1, noise ladders:**
+- **PT, standard, new complete cells:** n04 large_play 0.233 ± 0.171 (`zm6dy1gn`),
+  large_diverse 0.246 ± 0.053 (`cepqfezb`). Only n045 large_play (`6662w706`) and
+  large_diverse (`rqk3y5cq`) remain, both running.
+- **PT, candidate (states only, §14.5 gate):** n02 complete on all four mazes; n03
+  medium_play and medium_diverse finished, large_diverse 8/10, large_play 5/10; n04
+  medium_play and medium_diverse 5/10.
+- PT's RQ1 noise blockers: 17 → 13.
+- **NMR, standard, first complete cells:** n01 medium_play 0.735 ± 0.047 (`g7jd4ycp`),
+  medium_diverse 0.650 ± 0.032 (`valgcv4x`). n02 medium_play (`9sarvpo0`) and
+  medium_diverse (`4mqhuyjo`) started. NMR's blockers: 40 → 38.
+
+**Post-hoc ablation (noise companions; read only after each family's noise reading):**
+- **MR:** n01–n04 finished; n045, its last, 5/10 (`sez1iyka`). Read when it completes.
+- **PT:** n01 finished; n02 5/10 (`1k68prcn`). Gated.
+- **The ensemble mean:** in waiter BP, not started.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
