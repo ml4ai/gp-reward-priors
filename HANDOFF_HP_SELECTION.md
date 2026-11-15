@@ -28846,3 +28846,32 @@ run earlier. So the arm becomes readable well after its companions finish.
 - Committed without outputs.
 
 **The sweep check** now also runs `rescale_readout.py --axis sensitivity`.
+
+### 14.133 Sweep check 2026-11-15: PT's standard noise ladder complete, 2 cells from its reading; nothing due
+
+**Box:** 50 IQL runs, **median 153k steps/h**: below the 10% rule, no new lanes. No damage.
+The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (OPEN, 2 of 4
+read) are unchanged. No registered reading or companion arm came due. From this check on,
+the sweep check also runs `rescale_readout.py --axis sensitivity` (§14.132).
+
+**Study 1, noise ladders:**
+- **PT, standard: COMPLETE on all four mazes and five levels.** Last cells: n045 large_play
+  0.226 ± 0.169 (`6662w706`), large_diverse 0.212 ± 0.062 (`rqk3y5cq`).
+- **PT, candidate (states only, §14.5 gate):** n04 complete; n045 medium_play and
+  medium_diverse finished, large_play (`talu5o31`) and large_diverse (`brmd5n67`) 5/10.
+  **PT's RQ1 noise blockers: 8 → 2**, those two cells. Its registered noise reading is due
+  when they finish.
+- **NMR, standard, new complete cells:** n03 medium_play 0.629 ± 0.129 (`zygno0if`),
+  medium_diverse 0.614 ± 0.082 (`85uzwvcx`). Running: n01 large_play (`ujhfxpop`) and
+  large_diverse (`ujdss2m2`) 5/10; n04 medium_play and medium_diverse started.
+- **NMR, candidate (states only, §14.5 gate):** n01 medium_play (`itgg6oio`) and
+  medium_diverse (`g3baxs65`) 5/10. NMR's blockers: 36 → 34.
+
+**Post-hoc ablation (noise companions; read only after each family's noise reading):**
+- **MR, sensitivity arm:** n01o finished; n02o 5/10 (`mmzei4mx`). The arm's frozen cells
+  have not started (§14.132).
+- **PT, primary:** n01–n03 finished; n04 running (`xvewvhdh`). Gated until PT's reading,
+  which is close.
+- **The ensemble mean:** in waiter BP, not started.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
