@@ -28875,3 +28875,112 @@ the sweep check also runs `rescale_readout.py --axis sensitivity` (§14.132).
 - **The ensemble mean:** in waiter BP, not started.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.134 Paper figures and tables come from code: build the pipeline for the proposal's four results floats (author's rule, 2026-11-15)
+
+**The rule (author, 2026-11-15).** Every plot or table that holds real results is generated
+by Python from a saved data snapshot, never typed into LaTeX by hand.
+- **Plots** are written as image files (vector PDF) and embedded with `\includegraphics`.
+  Publishers ask for every figure file to be submitted alongside the paper, so each plot
+  must exist as its own file.
+- **Tables** are written by Python as LaTeX `.tex` files that the document `\input`s. The
+  author chose this over table images, since most venues want tables as text.
+- **Exempt:** schematics with no real data (the overconfidence figure, the pipeline and
+  framework flowcharts, the timeline).
+
+This applies from now on to the proposal, the dissertation and the papers. The proposal's
+four Preliminary Results floats were hand-coded (numbers typed into pgfplots and `tabular`
+by the assistant) and are converted first. The assistant wires the outputs into LaTeX. This
+section only asks for the pipeline and its outputs.
+
+**Design:**
+1. **Extraction (the only step that touches W&B, read-only).** A script reuses the existing
+   collectors (`rq1_readout.collect`, `control_readout.collect_controls` and
+   `collect_grids`, `exp_readout.collect_exp`, `exp/rq1_accuracy.json`) and writes one frozen
+   snapshot per float, or one shared snapshot, as CSV or JSON.
+   - Keep one row per run (family, dataset, seed, arm, level, normalization index,
+     trajectory cut, W&B run id, last-10 mean score), not only the aggregates, so any summary
+     can be recomputed.
+   - Record the extraction date, the W&B project and the code commit in the file.
+   - Commit the snapshot in iqlpref.
+2. **Rendering (never touches W&B).** One script reads only the snapshot and writes all
+   outputs. One command regenerates everything, with `--out DIR`, defaulting to
+   `~/Research/loren/proposal/figures/generated/`.
+   - Leave the outputs there uncommitted. The assistant and author commit them in
+     ml4ai/Research with the LaTeX wiring.
+   - Also keep a copy under `results/` in iqlpref, as the existing plot scripts do with
+     `out/`.
+3. **Captions stay in LaTeX.** The proposal keeps each float's wrapper (`figure`/`table`,
+   `\caption`, `\label`) in its `figures/prelim-*.tex`.
+   - For a plot, Python writes the PDF only, with no title or caption baked in. The panel
+     titles and axis labels stay in the plot.
+   - For a table, Python writes only the `tabular` environment (booktabs rules), not
+     `table`, `\caption` or `\label`.
+
+**The four floats.** Reproduce the current content exactly. The numbers now in the proposal
+are the check (see Verification).
+
+- **`fig_prelim_mr_ladder.pdf`** (now `figures/prelim-mr-ladder.tex`, pgfplots).
+  - MR on the sparsity ladder, original protocol, seeds 1–10, x-axis categorical: full
+    (254–514 pairs by dataset), 128, 64, 32, 16.
+  - **(a) Held-out preference accuracy** (%), one line per dataset, from
+    `exp/rq1_accuracy.json` (MR, clean tie-free validation split).
+  - **(b) Policy score** (% of episodes reaching the goal, last-10 mean × 100), four panels
+    (medium-play, medium-diverse, large-play, large-diverse), each with two lines, with
+    terminals (dashed, open markers, coral) and without terminals (solid, filled markers,
+    teal), y from 0 to 75.
+  - Each panel title gives MR's selected normalization index without terminals (§14.86):
+    medium-play 1, medium-diverse 7, large-play 6, large-diverse 6.
+  - Means over seeds, as now. Adding ±1 sd bands is welcome if they stay legible. Say which
+    you chose.
+- **`tab_prelim_trivial.tex`** (now `figures/prelim-trivial.tex`).
+  - With terminals, full data, mean ± sd over seeds 1–10, × 100, one decimal. Source:
+    `control_readout` sections A and H.
+  - Rows: Zero everywhere, Dataset-average constant, Task reward ($-1$ per step, index 1),
+    MR. Columns: the four datasets.
+- **`tab_prelim_verdicts.tex`** (now `figures/prelim-verdicts.tex`).
+  - RQ1's registered sparsity reading for MR and PT (§14.70, §14.87), from `rq1_readout`.
+  - Rows: Accuracy falls (manipulation check); (a) Score falls without terminals; (b) Falls
+    more than with terminals; (c) Beats zero reward; (c) Beats constant reward; Verdict.
+  - Each cell is the pooled effect with its exact stratified 95% interval and the one-sided
+    exact Wilcoxon p, e.g. `$+2.1\ [+1.4, +2.9]$, $p = 0.031$`.
+  - Slopes are per halving of the training pairs, × 100. Format p as `p < 0.001` below
+    0.001, otherwise two significant figures.
+  - **Bold the failed condition** (MR's (a), PT's (b)) programmatically, from the verdict
+    logic, not by hand.
+  - Extend it to all four families if the ensemble mean and NMR are read by then, and say
+    so. The proposal text currently names only MR and PT in the table.
+- **`tab_prelim_leak.tex`** (now `figures/prelim-leak.tex`).
+  - large-diverse, without terminals, full data, mean ± sd over seeds 1–10, × 100. Source:
+    `control_readout` section I (§14.86).
+  - Rows: Movement heuristic (index 7), MR (index 6). Columns: Index, As run, Leak-free
+    (trajectories cut every 1,000 steps only).
+
+**Style (to match the document):**
+- Letterpaper, 1-inch margins, so the text width is 6.5 in. Size the figure for full width
+  at its natural size (no scaling in LaTeX), about 6.5 × 4.5 in for both parts.
+- The body is 11 pt Latin Modern. Use 8–9 pt in the figure, serif, Computer/Latin Modern if
+  available (`mathtext.fontset = "cm"`).
+- Embed fonts as Type 42 (`pdf.fonttype = 42`), since publishers reject Type 3.
+- Colors (the proposal's palette): teal `#0F6E56`, coral `#D85A30`, purple `#534AB7`, gray
+  `#5F5E5A`. For the four datasets in (a), use teal, coral, purple and gray, with markers
+  circle, square, triangle and diamond, as now.
+
+**Verification (report it here):**
+- Regenerate and compare every number with the current hand-typed values. The current
+  values:
+  - **Trivial table:** zero 0.2±0.2, 1.3±2.7, 0.3±0.2, 1.3±1.0; constant 0.2±0.3, 1.2±0.9,
+    0.3±0.4, 2.2±1.6; task 51.9±8.6, 60.7±5.5, 36.7±7.9, 27.2±4.5; MR 64.2±4.2, 64.7±5.7,
+    42.5±5.4, 24.1±9.8.
+  - **Leak table:** movement 13.4±4.0 → 0.1±0.1; MR 11.4±2.9 → 2.4±3.4.
+  - **Verdicts table and figure:** the values in `figures/prelim-verdicts.tex` and
+    `figures/prelim-mr-ladder.tex` in ml4ai/Research.
+- **List any difference with its cause; do not adjust the code to match.** The hand values
+  were copied from readouts of 2026-11-04 and 05, so a difference may be a copying error on
+  the assistant's side.
+- Confirm that the rendering script runs with the network off.
+
+**Afterwards (assistant, not this section):** replace the pgfplots and hand-typed tabulars
+with `\includegraphics` and `\input`, update the captions' AI-attribution notes, and
+commit the outputs. Later results floats (Study 1's full results, Study 2, the
+dissertation) are added to the same pipeline rather than typed.
