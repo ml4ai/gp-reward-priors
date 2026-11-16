@@ -29068,3 +29068,110 @@ are the check (see Verification).
 with `\includegraphics` and `\input`, update the captions' AI-attribution notes, and
 commit the outputs. Later results floats (Study 1's full results, Study 2, the
 dissertation) are added to the same pipeline rather than typed.
+
+**§14.135: BUILT (coding agent, 2026-11-16). Verification below.**
+
+**The pipeline (iqlpref `results/paper/`):**
+- **`extract_prelim.py`** is the only step that touches W&B (read-only).
+  - It runs the registered collectors unchanged: `exp_readout.collect_exp` (standard and
+    candidate sparsity ladders), `eval_readout.collect` (the anchor),
+    `control_readout.collect_controls`, and `exp/rq1_accuracy.json` through
+    `rq1_readout.load_accuracy` with its logged-accuracy cross-check.
+  - It writes **`snapshot_prelim.json`**: 226 cells, **2,260 run rows**, 800 accuracy
+    records, all 800 passing the cross-check. Committed.
+  - Each run row holds family, dataset, protocol (group), level, seed, normalization
+    index, trajectory cut, sweep and run ids, last-10 / last-20 / max score, and state.
+    Each cell keeps its audit and completeness.
+  - The meta records the extraction time (2026-11-16T08:42:00Z), the W&B project, the
+    iqlpref commit (`e08b9f1`, clean), the gp_reward-priors commit, and SHA-256 hashes of
+    `phase2_winners.json`, `results/control_grid_winners.json` and `exp/rq1_accuracy.json`.
+  - The BNN/CVaR hold applies: the collectors do not fetch the held families.
+- **`render_prelim.py`** reads only the snapshot. One command writes every output:
+  `python results/paper/render_prelim.py [--out DIR]`, with `--out` defaulting to
+  `~/Research/loren/proposal/figures/generated/` (written there, uncommitted).
+  - A copy goes to `results/paper/out/`, committed in iqlpref.
+  - **The verdicts table is not copied from a readout.** The renderer rebuilds the cells
+    and reruns the registered reading offline with `rq1_readout`'s own `assemble` and
+    `run`, so the table cannot drift from the test.
+  - The renderer prints every number it renders.
+- **Code changes behind it** (self-tests of `rq1_readout`, `eval_readout`, `exp_readout`,
+  `control_readout` and `rescale_readout` all pass):
+  - The three collectors now record each run's W&B id, state, index, trajectory cut and
+    `drop_terminals` (`eval_readout.run_meta`; additive `runs` key).
+  - `rq1_readout.assemble` was split out of `collect` (pure, so it can run offline). No
+    registered quantity changed.
+- **Network off: confirmed.** The renderer ran with socket `connect`, `create_connection`
+  and `getaddrinfo` replaced by functions that raise. Two renders are byte-identical (no
+  creation date in the PDF).
+- **Outputs:** `fig_prelim_mr_ladder.pdf`, `tab_prelim_trivial.tex`,
+  `tab_prelim_verdicts.tex`, `tab_prelim_verdicts_mr_pt.tex` (extra: the current
+  two-family layout), `tab_prelim_leak.tex`.
+  - Tables: the `tabular` only (booktabs, `\bm` for bold, as now), plus one comment line
+    naming the snapshot.
+  - Figure: no caption or float title; panel titles and axis labels as now.
+
+**Choices made:**
+- **Figure:**
+  - 6.5 × 4.5 in. cmr10 for text and cm for math: Latin Modern is not installed for
+    matplotlib here.
+  - 8–9 pt. Fonts embedded as Type 42: the PDF holds only a CIDFontType2 (TrueType)
+    subset of cmr10, no Type 3.
+  - The proposal's palette and markers.
+  - **Means only, no ±1 sd bands.** Without terminals, medium-play's sd reaches 25–30
+    points, so bands would cover most of panel (b). (a)'s four bands would overlap.
+- **The verdicts table covers all four families** (MR, PT, NMR, ensemble mean: all are read
+  on sparsity). The proposal text names only MR and PT, so `tab_prelim_verdicts_mr_pt.tex`
+  keeps the current layout as an alternative.
+  - At four columns the effect and the p sit on two lines per cell, the row labels wrap
+    ragged-right in a 2.8 cm column (`\tabularnewline`, no extra package), and the column
+    gaps are 5 pt.
+  - Compiled at 11 pt, letterpaper, 1-inch margins, `\small`: no overfull box.
+- **Rounding: one decimal, half up, on the value with float noise removed.**
+  - Scores sit on a 0.001 lattice, so a mean ×100 is an exact two-decimal number, and
+    about one in ten ends in 5.
+  - Python's float formatting rounds those either way: 46.95 is stored as
+    46.9499…, which prints as 46.9.
+  - Every difference below except two is that boundary.
+- **p:** "p < 0.001" below 0.001, otherwise two significant figures (`#.2g`).
+
+**Verification against the hand-typed values (do not adjust the code to match):**
+- **Figure (a), accuracy:** all 20 values match.
+- **Figure (b), score:** 36 of 40 match. Four differ, all exact .x5 values rounded half up.
+  The hand values followed the float:
+  - MR with terminals, medium-diverse 128: 68.4 (exact 68.35), proposal 68.3;
+  - medium-diverse 64: 64.6 (exact 64.55), proposal 64.5;
+  - medium-diverse 16: 64.9 (exact 64.85), proposal 64.8;
+  - large-play 32: 47.0 (exact 46.95), proposal 46.9.
+- **Trivial table:**
+  - **Medium-play, task reward: 64.8 ± 4.8 (index 1), proposal 51.9 ± 8.6. A CONTENT
+    DIFFERENCE, the author's call.**
+    - The row says "index 1 ($-1$ per step)", and the code renders the index-1 cell
+      (`nv89vprk`).
+    - The hand value is the anchor's task-reward cell at its stage-4 winner, which on
+      medium-play is **index 3** (`79ke5lc3`; `phase2_winners.json`:
+      `tr_sweeps/sweep_antmaze_medium_play: 3`). On the other three datasets the winner
+      is index 1.
+    - Either the row label or the number must change. The code follows §14.135's
+      definition, "index 1". If the proposal means the selected task reward (the
+      standard reference), the row is "Task reward (selected index)" and medium-play
+      reads 51.9 ± 8.6.
+  - Large-diverse, constant: 2.3 ± 1.6 (exact 2.25), proposal 2.2 (rounding).
+  - Large-play, zero (0.3; exact 0.25) and medium-diverse, task reward (60.7; exact
+    60.65): match now, under the half-up rule.
+  - Everything else matches.
+- **Verdicts table:**
+  - MR (c), beats constant: **+32.5** [+30.8, +34.3]; the proposal has +32.6. The exact
+    value is 32.545. The proposal's 32.6 rounded the readout's printed +0.3255 a second
+    time: a copying error.
+  - PT (a): p = **0.0021**; the proposal has p = 0.002. §14.135 asks for two significant
+    figures.
+  - Every other MR and PT number matches, and the bold falls on MR's (a) and PT's (b) as
+    before.
+  - New columns: NMR (bold (b): +0.8 [−0.6, +2.2], p = 0.19) and the ensemble mean (bold
+    (a): +1.9 [+1.1, +2.7], p = 0.029), both "not sensitive", as §14.101 and §14.88.
+- **Leak table:** all four values and both indices (7, 6) match. The renderer checks that
+  the as-run cells were cut at the terminals and the leak-free ones every 1,000 steps
+  (`return_range_split` "length"), and that the two share an index. Both checks pass.
+
+**Not done here (the assistant's part, §14.135 "Afterwards"):** the `\includegraphics` /
+`\input` wiring, the captions, and committing the outputs in ml4ai/Research.
