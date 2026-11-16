@@ -29182,3 +29182,64 @@ index 1 on every dataset.**
   renders. No code change.
 - The proposal's `figures/prelim-trivial.tex` already says so. Its caption gives the
   selected index-3 value on medium-play (51.9 ± 8.6) beside it.
+
+### 14.136 Sweep check 2026-11-16: PT'S NOISE RESCALING COMPANION COMPLETE — rescaling about halves PT's noise slope, as on sparsity; NMR 14 cells from its reading
+
+**Box:** 50 IQL runs, **median 158k steps/h**: inside the 10% rule (floor 157.5k) at full
+load. Nothing outside Study 1 is cleared to start: the normalization test and the
+replication wait for Study 1's lanes (§14.83, §14.104), and C-lite is held. So no new lane.
+No damage. The registry, controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise
+(PARTIAL SUPPORT, 3 of 4 read) are unchanged.
+
+**Post-hoc ablation: PT's rescaling companion arm, noise ladder (primary arm), medium_play
+(§14.78; `rescale_readout.py --axis noise`; DESCRIPTIVE, not §14.5's test; PT is read on
+noise, §14.134).** Without terminals, frozen index 1 against companion index 3. Slopes are
+per unit flip fraction, positive = falls as the labels degrade:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.409 ± 0.267 | 0.187 ± 0.251 | **−0.222 [−0.394, −0.079]** |
+| n01 | 0.156 ± 0.240 | 0.075 ± 0.172 | −0.081 [−0.199, +0.016] |
+| n02 | 0.113 ± 0.214 | 0.060 ± 0.129 | −0.053 [−0.138, +0.016] |
+| n03 | 0.032 ± 0.078 | 0.024 ± 0.043 | −0.008 [−0.049, +0.021] |
+| n04 | 0.003 ± 0.007 | 0.002 ± 0.003 | −0.001 [−0.005, +0.002] |
+| n045 | 0.003 ± 0.008 | 0.001 ± 0.002 | −0.002 [−0.006, +0.001] |
+
+- **Degradation slopes:** frozen +0.806 [+0.533, +1.068] (the medium_play (a) slope of PT's
+  registered noise reading, §14.134); companion +0.371 [+0.107, +0.678]; **companion −
+  frozen −0.436 [−0.689, −0.213]**.
+- **Reading (descriptive):**
+  - **The sparsity pattern again (§14.114):** under the rescaled index, PT's scores fall,
+    clearly at full data (−0.22), and its sensitivity to label noise is about halved,
+    though still positive.
+  - **PT's frozen-index noise response is not an artefact of skipping the rescaling.**
+    Under the rescaled index the response is smaller but present. This bears on the one
+    SENSITIVE verdict (§14.134), on PT's leak-free maze. It is recorded beside the
+    verdict, which it does not change.
+  - **§14.78's prediction holds for PT, as for MR (§14.131):** both arms fall to the
+    floor at high flip rates (n03–n045: under 0.04, within 0.01 of each other). The gap
+    is at full data and low flip rates.
+- **The noise companions read so far:** MR (§14.131, slope about unchanged, slightly
+  steeper) and PT (here, about halved). Each compares one family with itself. Recorded
+  beside the normalization test's N-versus-F contrast (§14.104); it decides nothing.
+- `benchmark_results.ipynb` chart 10's noise figure draws PT's arm on its next run.
+
+**Sensitivity-arm companions (descriptive; their frozen cells come later, §14.132):**
+- MR: n01o–n04o finished; n045o running (`yh5uhfht`).
+- PT: n01o finished; n02o started (`4ugbo337`).
+- **The arm's own cells have begun:** MR's standard sensitivity cells (with terminals,
+  index 0) are running, e.g. n02o (`1t8kswo7`, 5 finished). The candidate ones have not
+  started.
+
+**Study 1, NMR's noise ladder (the last family):**
+- **Standard, new complete cells:** n02 large_play 0.397 ± 0.111 (`psq5cjdy`), large_diverse
+  0.123 ± 0.061 (`fjk28hgs`); n03 large_play 0.424 ± 0.130 (`c8bochrf`), large_diverse
+  0.083 ± 0.073 (`vw6lri63`); n04 medium_diverse 0.483 ± 0.223 (`gfjd5u4f`); n045
+  medium_play 0.396 ± 0.334 (`069dhvtm`), medium_diverse 0.539 ± 0.198 (`ypw9k6cq`).
+  Running: n04 large_play and large_diverse.
+- **Candidate (states only, §14.5 gate):** n01 and n02 complete on all four mazes; n03
+  medium_play and medium_diverse finished, large_play and large_diverse started; n04
+  medium_play and medium_diverse started.
+- **NMR's RQ1 noise blockers: 29 → 14.**
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
