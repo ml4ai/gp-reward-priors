@@ -29175,3 +29175,10 @@ dissertation) are added to the same pipeline rather than typed.
 
 **Not done here (the assistant's part, §14.135 "Afterwards"):** the `\includegraphics` /
 `\input` wiring, the captions, and committing the outputs in ml4ai/Research.
+
+**DECIDED (author, 2026-11-16): the trivial table's task-reward row is the task reward at
+index 1 on every dataset.**
+- Medium-play reads **64.8 ± 4.8** (`nv89vprk`), as `tab_prelim_trivial.tex` already
+  renders. No code change.
+- The proposal's `figures/prelim-trivial.tex` already says so. Its caption gives the
+  selected index-3 value on medium-play (51.9 ± 8.6) beside it.
