@@ -28984,3 +28984,81 @@ are the check (see Verification).
 with `\includegraphics` and `\input`, update the captions' AI-attribution notes, and
 commit the outputs. Later results floats (Study 1's full results, Study 2, the
 dissertation) are added to the same pipeline rather than typed.
+
+### 14.134 Sweep check 2026-11-15 (later): PT'S REGISTERED NOISE READING — SENSITIVE; RQ1 on the noise ladder: PARTIAL SUPPORT (3 of 4 read; the label cannot change)
+
+**Box:** 47 IQL runs listed (sweeps between cells), **median 153k steps/h**: below the 10%
+rule, no new lanes. No damage. The registry, controls, leveling and RQ1 on sparsity
+(REFUTED) are unchanged.
+
+**Study 1: PT, noise ladder (primary arm), the registered reading** (`rq1_readout.py --axis
+noise`, §14.5 as registered; saved as `results/rq1_readout_noise_latest.txt`). It became
+readable when its last candidate cells finished: n045 large_play (`talu5o31`) and
+large_diverse (`brmd5n67`). Slopes are per unit flip fraction, positive = falls as the
+labels degrade.
+- **Manipulation check REJECTS:** slope of A pooled +0.749 [+0.687, +0.812], p = 9.1e-13.
+  Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S REJECTS:** pooled +0.241 [+0.168, +0.311], **p = 3.2e-6**
+  (W+ 723 of 820).
+- **(b) candidate − standard slope REJECTS:** pooled +0.261 [+0.160, +0.366], **p = 0.0017**
+  (W+ 624).
+- **(c) REJECTS:** PT − zero +0.253; − mean-constant +0.255; p = 9.1e-13.
+- **VERDICT: SENSITIVE.** It is the first family SENSITIVE on either ladder. PT was NOT
+  SENSITIVE on sparsity ((b), §14.87).
+- Here the pooled intervals and the registered tests agree, unlike MR's and the ensemble
+  mean's noise readings (§14.116, §14.127).
+
+**Per maze (DESCRIPTIVE), against the leak:**
+
+| maze | PT's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+0.806 [+0.533, +1.068]** | **+0.850 [+0.638, +1.085]** |
+| medium_diverse | 6 (leaky) | **+0.085 [+0.006, +0.180]** | **+0.259 [+0.099, +0.417]** |
+| large_play | 7 (leaky) | +0.034 [−0.000, +0.070] | −0.170 [−0.396, +0.080] |
+| large_diverse | 7 (leaky) | **+0.038 [+0.003, +0.072]** | +0.103 [−0.081, +0.303] |
+
+- **PT's own pattern:** a strong response on its leak-free maze (medium_play). On its three
+  leaky mazes the candidate slopes are small but mostly positive, and medium_diverse's (b)
+  is clearly positive. Across all 40 units, enough are positive for the pooled signed-rank
+  tests to reject.
+- **The disclosure every Study 1 verdict carries (§14.82, §14.86) applies, and here it
+  matters more than for a NOT SENSITIVE verdict.** Part of PT's SENSITIVE verdict rests on
+  units from mazes at leaky indices (6, 7). There the normalization rebuilds the
+  goal-arrival bonus from the terminals, and the score reflects that signal more than the
+  reward model.
+  - What the leak does to PT's slope on those mazes is not measured. Test 2 (§14.82)
+    measured the leak's size at full data, not its effect on a slope.
+  - The registered test decides; this is reported beside it.
+
+**RQ1 on the noise ladder (§14.106's rule): PARTIAL SUPPORT.** MR NOT SENSITIVE (b), PT
+SENSITIVE, the ensemble mean NOT SENSITIVE (a, b); 3 of 4 read.
+- **The label is now settled whatever NMR shows.** With one family SENSITIVE the
+  hypothesis cannot be REFUTED; with two NOT SENSITIVE it cannot HOLD IN FULL. NMR's reading
+  will add its own verdict to the family-by-family report.
+- **The stricter §14.70 reading, printed beside it: REFUTED** (MR's failure alone).
+  §14.106's disclosure applies: report both.
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ["noise"]` now holds MR, the ensemble mean
+and PT. The self-test fixes its own values (§14.132), so it is unaffected, and it passes.
+From here:
+- `experiments_results.ipynb`'s no-terminals noise figure draws PT's candidate ladder.
+- **PT's noise companion is readable once complete:** n01–n04 finished; n045, its last,
+  5/10 (`ix1r2hj2`).
+- PT's sensitivity-arm companions have not started, and neither have its frozen
+  sensitivity cells (§14.132).
+- `benchmark_results.ipynb` chart 10 fetches PT's noise arm on its next run.
+
+**Study 1, NMR's noise ladder (the last family):**
+- **Standard, new complete cells:** n01 large_play 0.364 ± 0.106 (`ujhfxpop`), large_diverse
+  0.151 ± 0.083 (`ujdss2m2`); n04 medium_play 0.441 ± 0.302 (`h8mo7qjt`). n04
+  medium_diverse 9/10; n02 large_play and large_diverse 5/10; n045 medium_play started.
+- **Candidate (states only, §14.5 gate):** n01 medium_play and medium_diverse finished,
+  large_diverse 5/10, large_play started; n02 medium_play 5/10, medium_diverse running.
+- NMR's RQ1 noise blockers: 34 → 29.
+
+**Post-hoc ablation, other noise companions:**
+- MR's sensitivity arm: n01o and n02o finished; n03o 5/10 (`dvmwt5ps`).
+- The ensemble mean: in waiter BP, not started.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
