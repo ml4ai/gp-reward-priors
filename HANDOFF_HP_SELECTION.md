@@ -29016,6 +29016,11 @@ are the check (see Verification).
     `control_readout` sections A and H.
   - Rows: Zero everywhere, Dataset-average constant, Task reward ($-1$ per step, index 1),
     MR. Columns: the four datasets.
+  - **The task reward is at index 1 on all four datasets** (author, 2026-11-15), the
+    terminals-only control, not at its selected index. On medium-play that is the
+    conventional run `nv89vprk` (0.648 ± 0.048), not the headline `79ke5lc3` (index 3,
+    0.519 ± 0.086). The other three datasets selected index 1 (`9pbsrxod`, `xnafxwa2`,
+    `ezttwir0`). Also export the medium-play index-3 value, which the caption cites.
 - **`tab_prelim_verdicts.tex`** (now `figures/prelim-verdicts.tex`).
   - RQ1's registered sparsity reading for MR and PT (§14.70, §14.87), from `rq1_readout`.
   - Rows: Accuracy falls (manipulation check); (a) Score falls without terminals; (b) Falls
@@ -29048,7 +29053,8 @@ are the check (see Verification).
 - Regenerate and compare every number with the current hand-typed values. The current
   values:
   - **Trivial table:** zero 0.2±0.2, 1.3±2.7, 0.3±0.2, 1.3±1.0; constant 0.2±0.3, 1.2±0.9,
-    0.3±0.4, 2.2±1.6; task 51.9±8.6, 60.7±5.5, 36.7±7.9, 27.2±4.5; MR 64.2±4.2, 64.7±5.7,
+    0.3±0.4, 2.2±1.6; task 64.8±4.8, 60.7±5.5, 36.7±7.9, 27.2±4.5 (corrected 2026-11-15: the 51.9±8.6 first
+    listed for medium-play was the index-3 headline, mislabeled as index 1); MR 64.2±4.2, 64.7±5.7,
     42.5±5.4, 24.1±9.8.
   - **Leak table:** movement 13.4±4.0 → 0.1±0.1; MR 11.4±2.9 → 2.4±3.4.
   - **Verdicts table and figure:** the values in `figures/prelim-verdicts.tex` and
