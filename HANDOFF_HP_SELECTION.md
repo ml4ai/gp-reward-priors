@@ -29243,3 +29243,73 @@ per unit flip fraction, positive = falls as the labels degrade:
 - **NMR's RQ1 noise blockers: 29 → 14.**
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.137 `results/wandb_backup.py`: a local copy of every W&B result, on the box's drive (author's request, 2026-11-16)
+
+**Why:** if W&B were lost, every hypothesis test, readout and notebook plot here must be
+recomputable. The script copies everything the readouts read from W&B to
+`/media/mule/scratch/loren/wandb_backup` on leviathan, with an index that says what each
+file is. It runs ON THE BOX (the drive is there), read-only on W&B.
+
+**What it copies:** every project of the entity by default.
+- On 2026-11-16 there are seven: IQL-pref (5,345 runs, 531 sweeps), MR-training (817),
+  PT-training (813), NMR-training (599), BNN-training (518), NMR-timing (1), BB-training
+  (empty). About 8,100 runs in all.
+- Per run: config, summary, state and times, and the FULL history (every logged row, every
+  key). Also its small text files (output.log, config.yaml, requirements.txt,
+  wandb-metadata.json, wandb-summary.json; `--no-files` skips them).
+- Per sweep: its full config and run ids.
+- Also the box-only inputs the readouts need, when present: `exp/rq1_accuracy.json`,
+  `exp/rq1_accuracy_repl.json`, `exp/leak_audit.txt`, `exp/goal_check.txt` (`--extra` to
+  change).
+
+**Layout and naming** (also written to the backup's own `README.md` on every run):
+- `<project>/runs/<run_id>/{run.json, history.jsonl.gz, files/}` and
+  `<project>/sweeps/<sweep_id>.json`. W&B ids name the files, since they are unique and
+  stable.
+- `index/` holds `projects.csv`, `sweeps.csv`, `runs.csv`, `history_keys.csv`,
+  `local_files.csv` and `errors.csv`.
+  - `runs.csv` gives each run's project, sweep, sweep file, state, the config fields the
+    readouts key on (seed, dataset, index, terminals dropped, trajectory cut, reward
+    model), history size, sha256 and path.
+  - `MANIFEST.json` records the last backup.
+- **What a sweep is** comes from the iqlpref sweep file it was launched from. The script
+  matches each sweep's `program` and `parameters` against every sweep YAML in the checkout.
+  - Exact matches go in "sweep_files". Otherwise, matches with `normalize_reward` and
+    `seed` set aside (the same file at another index or other seeds) go in
+    "sweep_files_other_index_or_seeds" ("~" in `runs.csv`).
+  - W&B stores a YAML `0.0` as `0`, so integral floats are compared as ints.
+  - On the 539 sweeps of the test, 487 matched exactly, 33 loosely, and 19 not at all.
+    Those 19 are early-October PT sweeps whose files changed with the PT fix, and MR's
+    July and September HP sweeps; their configs are kept in full anyway.
+
+**How it reads the history:** `run.history(samples=1_000_000)`, a budget far above any run's
+row count, which returns every row, as `iql_score.run_curve` does.
+- Measured on one IQL run (4,000 rows): **0.4 s, against 287 s for `scan_history`**, which
+  would have taken weeks over 5,345 runs.
+- A run that fills the budget falls back to `scan_history`.
+- `--verify K` compares the two, row for row, on K finished runs per project. On the test
+  slice, one run each of IQL-pref, MR-training and NMR-timing were identical.
+
+**Incremental, resumable, safe:**
+- A run whose fingerprint (state, heartbeat, last history step, summary step) is unchanged
+  is skipped. Rerunning the test slice copied 0 and skipped 13.
+- Every file is written to a temporary name and renamed.
+- Failures go to `index/errors.csv` and the exit code is 1; a rerun retries them.
+- `--index-only` rebuilds the index from disk without W&B. `--dry-run` only counts.
+
+**The BNN/CVaR hold (§14.1):** held families' runs are copied byte for byte like any other.
+The script prints counts only, and the index holds identity and config, never a result.
+Nothing of them is read or shown.
+
+**Expected cost of the first full backup:** about 1.5 s per run with 8 workers, so roughly
+25–40 minutes. About 0.3 MB per run, so about 2–3 GB. Later runs copy only what changed.
+
+**Box commands** (from `~/iqlpref`, after `git pull --recurse-submodules`):
+- Count first: `python results/wandb_backup.py --dry-run`
+- The first full backup, in the background with a log, verifying 2 runs per project:
+  `nohup python results/wandb_backup.py --verify 2 > /media/mule/scratch/loren/wandb_backup.log 2>&1 &`
+- Afterwards: `tail -5 /media/mule/scratch/loren/wandb_backup.log` and
+  `cat /media/mule/scratch/loren/wandb_backup/MANIFEST.json`.
+- **Rerun it whenever new results land** (e.g. after a sweep check). It copies only what
+  changed.
