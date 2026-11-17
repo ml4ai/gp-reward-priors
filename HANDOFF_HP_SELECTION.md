@@ -29313,3 +29313,28 @@ Nothing of them is read or shown.
   `cat /media/mule/scratch/loren/wandb_backup/MANIFEST.json`.
 - **Rerun it whenever new results land** (e.g. after a sweep check). It copies only what
   changed.
+
+### 14.138 Sweep check 2026-11-17: NMR 8 cells from its noise reading; the ensemble mean's noise companion starts; nothing due
+
+**Box:** 50 IQL runs, **median 158k steps/h**: inside the 10% rule. Nothing outside Study 1
+is cleared to start (§14.136), so no new lane. No damage. The registry, controls,
+leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (PARTIAL SUPPORT, 3 of 4 read) are
+unchanged. No registered reading or companion arm came due.
+
+**Study 1, NMR's noise ladder (the last family):**
+- **Standard, new complete cells:** n04 large_play 0.261 ± 0.170 (`qwk4ll19`), large_diverse
+  0.088 ± 0.086 (`w9oo232p`). Only n045 large_play (`vwee0ku1`) and large_diverse
+  (`23qj1ssn`) remain, both running.
+- **Candidate (states only, §14.5 gate):** n03 complete on all four mazes; n04 medium_play and
+  medium_diverse finished, large_play and large_diverse started; n045 medium_play and
+  medium_diverse started.
+- **NMR's RQ1 noise blockers: 14 → 8.**
+
+**Post-hoc ablation (rescaling companions):**
+- **The ensemble mean, noise: started** (waiter BP): n01 medium_play at companion index 2
+  (`25hbjahy`). Readable once complete (the ensemble mean is read on noise, §14.127).
+- **MR, sensitivity arm: all five companion cells finished** (n01o–n045o). Not readable until
+  the arm's own candidate cells exist (§14.132); they have not started.
+- **PT, sensitivity arm:** n01o and n02o finished; n03o running (`u0pmp4wl`).
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
