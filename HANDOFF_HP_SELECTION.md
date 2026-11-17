@@ -29402,3 +29402,22 @@ exit, failing because the process had already exhausted its file descriptors. No
 skipped (their files are whole: every write is atomic). **Timing, corrected:** about 0.85 s
 a run with 8 workers, so the first full pass over about 8,100 runs takes roughly 2 hours
 (§14.137 said 25–40 minutes).
+
+**THE FIRST FULL BACKUP IS COMPLETE (author ran it on the box, 2026-11-17, 19:30–20:31 UTC,
+with `--verify 2`; iqlpref `4d229f8`; wandb 0.21.1).** `MANIFEST.json`:
+- **`"complete": true`, 0 errors, `"stopped": null`.**
+- **8,283 runs and 586 sweeps in 7 projects**, every one listed by W&B on disk. For every
+  project, copied + unchanged = runs listed.
+  - IQL-pref: 5,535 runs, 550 sweeps (up from 5,345 / 531 on 2026-11-16).
+  - MR-training 817, PT-training 813, NMR-training 599, BNN-training 518, NMR-timing 1,
+    BB-training 0.
+- This pass copied 4,590 runs. The other 3,693 were already whole from the run that crashed
+  (§14.140) and were skipped, as designed.
+- **History verified on 2 finished runs per project** (1 for NMR-timing): sampled history
+  equal to `scan_history`, row for row, everywhere. 0 mismatches.
+- Local files copied: `exp/rq1_accuracy.json`, `exp/leak_audit.txt`, `exp/goal_check.txt`.
+  `exp/rq1_accuracy_repl.json` does not exist yet (the replication has not run).
+
+**Keeping it current:** rerun the same command after new results land (it copies only new or
+changed runs, so runs that were still going are refreshed). Runs still in progress at a
+backup hold their history up to that moment.
