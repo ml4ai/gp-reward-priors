@@ -29338,3 +29338,34 @@ unchanged. No registered reading or companion arm came due.
 - **PT, sensitivity arm:** n01o and n02o finished; n03o running (`u0pmp4wl`).
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.139 Sweep check 2026-11-17 (later): NMR's standard noise ladder complete, 3 cells from its reading; the sensitivity arm's candidate cells start; nothing due
+
+**Box:** 46 IQL runs listed (sweeps between cells), **median 162k steps/h**: inside the 10%
+rule. No new lane (§14.136). No damage. The registry, controls, leveling, RQ1 on sparsity
+(REFUTED) and RQ1 on noise (PARTIAL SUPPORT, 3 of 4 read) are unchanged. No registered
+reading or companion arm came due.
+
+**Study 1, NMR's noise ladder (the last family):**
+- **Standard: COMPLETE on all four mazes and five levels.** Last cells: n045 large_play
+  0.086 ± 0.124 (`vwee0ku1`), large_diverse 0.055 ± 0.084 (`23qj1ssn`).
+- **Candidate (states only, §14.5 gate):** n04 large_diverse finished, large_play 5/10;
+  n045 medium_play and medium_diverse finished, large_diverse started (`bps5ngob`),
+  large_play not yet launched.
+- **NMR's RQ1 noise blockers: 8 → 3**: candidate n04 large_play, n045 large_play and
+  large_diverse. Its registered noise reading is due when they finish.
+
+**The noise sensitivity arm (descriptive, §14.64):**
+- **Its candidate cells have started:** MR n01o (`qpcbqqas`) and n02o (`8c6wxdsh`), without
+  terminals at index 1.
+- The standard cells are under way (e.g. PT n045o, `2rllzgvj`, 5 finished).
+- `rescale_readout --axis sensitivity` now reads "INCOMPLETE" for MR's first frozen cells,
+  in place of "no evaluation sweep".
+
+**Post-hoc ablation (rescaling companions):**
+- **The ensemble mean, noise:** n01 finished; n02 running (`ke3b3hhg`).
+- **PT, sensitivity arm:** n01o and n02o finished; n03o 8/10 scored (`u0pmp4wl`). Its
+  sweep reads FINISHED with runs still going, as usual once every run has been launched.
+- **MR, sensitivity arm:** all five finished; read when the frozen arm completes.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
