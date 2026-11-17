@@ -29369,3 +29369,36 @@ reading or companion arm came due.
 - **MR, sensitivity arm:** all five finished; read when the frozen arm completes.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.140 `wandb_backup.py` FIX: the first box run ran out of open files (2026-11-17)
+
+**What happened:** the first full backup on leviathan died with `OSError: [Errno 24] Too many
+open files`. The traceback the author saw is wandb's own artifact temp-directory cleanup at
+exit, failing because the process had already exhausted its file descriptors. No
+`MANIFEST.json` was written.
+
+**The cause, in the script:**
+- wandb's `File.download` builds a new `wandb.Api()`, with its own HTTP connections, on
+  every call unless an `api` is passed in (wandb 0.26 source). The script downloaded five
+  small files per run that way.
+- After a few hundred runs the box's default limit of 1,024 open files was gone. The local
+  test (25 runs) was too small to show it.
+
+**Fixed:**
+- Run files are now streamed with ONE `requests` session per worker thread, authenticated
+  as wandb's own download is. `File.download` is no longer used.
+- At start the script lifts its soft open-file limit to the hard limit (recorded in the
+  MANIFEST as `open_file_limit`).
+- A failing project is recorded in `index/errors.csv` and the backup goes on to the next.
+  After any failure or interruption (Ctrl-C, a crash) the README, index and `MANIFEST.json`
+  are still written. MANIFEST's `"complete"` is false and `"stopped"` gives the reason, so
+  the copy on disk is always described.
+- **Checked:** 150 MR-training runs with their 750 files left the process at 18 open file
+  descriptors (11 at start; the 8 worker sessions), not a growing count. An end-to-end
+  rerun skipped the 150 already copied, copied the rest, and wrote
+  `MANIFEST.json` with `"complete": true`, 0 errors.
+
+**Resuming on the box:** rerun the same command. The runs copied before the crash are
+skipped (their files are whole: every write is atomic). **Timing, corrected:** about 0.85 s
+a run with 8 workers, so the first full pass over about 8,100 runs takes roughly 2 hours
+(§14.137 said 25–40 minutes).
