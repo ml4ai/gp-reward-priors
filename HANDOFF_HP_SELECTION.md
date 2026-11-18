@@ -29572,3 +29572,54 @@ The lanes still running hold only descriptive and post-hoc work. **Whether the e
 starts now, beside them, or after them is the author's call.**
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.144 THE STUDY 1 EXTENSION STARTS (author's decision, 2026-11-18): the normalization test's stage 1 and the replication's reward-model selection, beside the descriptive lanes
+
+**Decided (author, 2026-11-18): start now.** Study 1's registered readings are complete
+(§14.143). What still runs is descriptive (the noise sensitivity arm) or post-hoc (the
+companions), so the extension starts beside it rather than after it.
+
+**1. The replication's reward-model selection at seed 100 (§14.83).**
+`./launch_hp_sweeps.sh repl` from `gp_reward-priors`.
+- 12 sweeps (MR, PT, NMR × 4 datasets), one agent each, on the set's GPU map: MR's four on
+  GPU 0, PT two per GPU on 1–2, NMR two per GPU on 4–5. Sweep ids are cached in
+  `exp/sweep_ids_repl_round1.txt`.
+- The preflight refuses a sweep that is not seed 100 on a `*_repl.yaml` base. All 24 files
+  are in the repo.
+- It starts the longest chain of the extension: selection, then `CONFIG_SET=repl
+  train_rewards.sh`, then the replication's IQL runs.
+
+**2. The normalization test, stage 1 (§14.104, §14.108, §14.109, §14.110): all 104 files in
+`norm_sweeps/`.**
+- The files: S's 32 seed-50 grids (8 indices each), the 64 N and F cells (index 0 and 2,
+  seeds 51–60, both protocols), and the 8 zero cells.
+- They are split into four lanes of 26 sweeps, `queues/normtest_{BS,BT,BU,BV}.txt`. Each
+  lane runs its 8 grids FIRST, because the grids gate stage 2, then its N/F/zero cells.
+- Every item carries `@normtest`. All four lanes pass `DRY_RUN=1` locally (26 sweeps each).
+
+| lane | GPUs | grids (8) | then |
+|---|---|---|---|
+| BS | 0 1 2 3 4 | the ensemble mean's | 18 N/F/zero cells |
+| BT | 1 2 3 4 5 | MR's | 18 cells |
+| BU | 2 3 4 5 0 | NMR's | 18 cells |
+| BV | 3 4 5 0 1 | PT's | 18 cells |
+
+- **The speed rule:** the box is at 31 runs, 174k steps/h, with the descriptive lanes
+  draining. 10 lanes (50 runs) ran at 155–156k, under the rule's 157.5k floor. So
+  **BS and BT start now, with the reward-model selection; BU and BV wait** to start behind
+  the descriptive lanes. Their waiters will be written once the box's current queues are
+  known (`pgrep -af 'stage4_queue[.]sh'`, from the author).
+- **Duration:** about 12.6 h per sweep at five runs a time (a 10-seed cell, or an 8-index
+  grid, takes two waves), so about 13–14 days per lane. The grids are done about 4 days
+  after their lane starts.
+
+**3. Then (§14.109):**
+- Once all 32 grids are complete: `normtest.py winners --write` → `normtest.py write
+  --write`, which writes S's 32 cells, and queue them.
+- Then `normtest_readout.py`. If it says "run O3": `write --o3 --write`, O3's cells, re-read.
+- The replication's IQL files follow the adopted rule.
+- The sweep check now also reports the normalization test's progress. `normtest_readout.py`
+  is gated until every cell is complete.
+
+**Box commands:** given to the author in the reply, one-line fenced blocks. Lane logs are
+`stage4_queue_BS.log` … `stage4_queue_BV.log`.
