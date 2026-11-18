@@ -29557,8 +29557,8 @@ run. They have not started: NMR medium_play is in waiter BQ, medium_diverse in B
 - **The noise sensitivity arm:** MR's candidate n01o and n02o finished, n03o and n04o 5/10,
   n045o 6/10. PT's candidate n01o is 5/10 (`90z3df8t`). The standard cells are under way.
 - **Companions:**
-  - the ensemble mean's noise arm: n01 and n02 finished, n03 running (`hv08yvbg`),
-    n04 started;
+  - the ensemble mean's noise arm: n01–n03 finished (n03 `hv08yvbg`, done by the
+    companion readout's rerun), n04 started, n045 to come;
   - PT's sensitivity arm: n01o–n04o finished, n045o 5/10 (`gjxdop4s`);
   - MR's sensitivity arm: complete;
   - NMR's noise arms: not started.
