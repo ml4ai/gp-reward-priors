@@ -29469,3 +29469,27 @@ compared with the committed outputs of the last sweep check (§14.139):
 **On the box:** `python results/restore_test.py` (default backup
 `/media/mule/scratch/loren/wandb_backup`). Run it right after a backup and a sweep check, so
 the two sides are close in time. `--out DIR` keeps both outputs of every readout.
+
+### 14.142 Sweep check 2026-11-18: NMR 2 cells from its noise reading; nothing due
+
+**Box:** 47 IQL runs listed, **median 158k steps/h**: inside the 10% rule. No new lane
+(§14.136). `box_status` again drops the two stale `aqszat8y` runs. No damage. The registry,
+controls, leveling, RQ1 on sparsity (REFUTED) and RQ1 on noise (PARTIAL SUPPORT, 3 of 4
+read) are unchanged; their outputs differ only by a new wandb line, "Network error
+(HTTPError), entering retry loop". Each readout retried and completed. No registered reading
+or companion arm came due.
+
+**Study 1, NMR's noise ladder (the last family):** candidate n04 large_play finished; n045
+large_play (`tobvd8yi`) and large_diverse (`bps5ngob`) 5/10 each. **NMR's RQ1 noise
+blockers: 3 → 2**, those two cells.
+
+**The noise sensitivity arm (descriptive, §14.64):** MR's candidate n01o finished
+(`qpcbqqas`), n02o 8/10 scored (`8c6wxdsh`), n045o started (`p1na77f7`); n03o and n04o not
+yet launched. PT's standard n03o has started (`5ukuz7do`).
+
+**Post-hoc ablation (rescaling companions):**
+- **The ensemble mean, noise:** n01 finished; n02 8/10 scored (`ke3b3hhg`).
+- **PT, sensitivity arm:** n01o–n03o finished; n04o 5/10 (`hxaroyfl`).
+- **MR, sensitivity arm:** complete; read when its frozen arm completes.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
