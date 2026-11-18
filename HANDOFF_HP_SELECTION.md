@@ -29665,3 +29665,7 @@ normalization test (§14.144).
 
 **Logs:** `stage4_queue_BS.log` … `stage4_queue_BV.log`. After the waiters start,
 `pgrep -fc 'while pgrep -f'` counts them.
+
+**Done (author, 2026-11-18):** the box pulled, and the BU and BV waiters are running.
+`pgrep -fc 'while pgrep -f'` reads 2. Lanes BS and BT, the replication's reward-model
+selection, and the two waiters make up the whole Study 1 extension now on the box.
