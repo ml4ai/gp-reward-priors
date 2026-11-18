@@ -29493,3 +29493,82 @@ yet launched. PT's standard n03o has started (`5ukuz7do`).
 - **MR, sensitivity arm:** complete; read when its frozen arm completes.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt`.
+
+### 14.143 Sweep check 2026-11-18 (later): NMR'S REGISTERED NOISE READING — NOT SENSITIVE ((b)). STUDY 1'S REGISTERED READINGS ARE COMPLETE: sparsity REFUTED, noise PARTIAL SUPPORT
+
+**Box:** 31 IQL runs, **median 174k steps/h**: the lanes are draining as Study 1's registered
+cells finish. What still runs is the noise sensitivity arm (descriptive, §14.64) and the
+rescaling companions (the post-hoc ablation). No damage. The registry, controls, leveling
+and RQ1 on sparsity are unchanged.
+
+**Study 1: NMR, noise ladder (primary arm), the registered reading** (`rq1_readout.py --axis
+noise`, §14.5 as registered; saved as `results/rq1_readout_noise_latest.txt`). It became
+readable when its last candidate cells finished: n045 large_play (`tobvd8yi`) and
+large_diverse (`bps5ngob`). Slopes are per unit flip fraction, positive = falls as the labels
+degrade.
+- **Manipulation check REJECTS:** slope of A pooled +0.644 [+0.575, +0.715], p = 9.1e-13.
+  Positive on every maze.
+- **Usability:** all four mazes usable.
+- **(a) candidate slope of S REJECTS:** pooled +0.468 [+0.379, +0.552], p = 1.3e-5 (W+ 705).
+- **(b) candidate − standard slope does NOT reject:** pooled −0.018 [−0.171, +0.126],
+  **p = 0.61** (W+ 389). The interval and the test agree here.
+- **(c) REJECTS:** NMR − zero +0.327; − mean-constant +0.329; p = 9.1e-13.
+- **VERDICT: NOT SENSITIVE ((b): the candidate protocol does not respond more than the
+  standard one).** NMR was NOT SENSITIVE on sparsity too ((b), §14.101).
+
+**Per maze (DESCRIPTIVE), against the leak.** NMR has two leak-free frozen indices:
+
+| maze | NMR's frozen candidate index | (a) candidate slope | (b) candidate − standard |
+|---|---|---|---|
+| medium_play | 1 (leak-free) | **+1.265 [+1.010, +1.473]** | **+0.442 [+0.092, +0.800]** |
+| medium_diverse | 0 (raw, leak-free) | **+0.621 [+0.375, +0.867]** | +0.283 [−0.151, +0.621] |
+| large_play | 6 (leaky) | −0.060 [−0.126, +0.012] | **−0.539 [−0.751, −0.319]** |
+| large_diverse | 6 (leaky) | **+0.046 [+0.020, +0.070]** | **−0.258 [−0.413, −0.098]** |
+
+- **NMR's own pattern:** on both leak-free mazes the candidate protocol falls steeply as the
+  labels degrade. On medium_play it falls more than the standard protocol; on
+  medium_diverse more, but within the noise.
+  - On the two leaky large mazes the candidate is nearly flat, and the STANDARD protocol
+    falls more ((b) clearly negative).
+  - Pooled over the 40 units, (b) is about zero, so it does not reject.
+- The disclosure every Study 1 verdict carries (§14.82, §14.86) applies.
+
+**RQ1 on the noise ladder (§14.106's rule): PARTIAL SUPPORT, 4 of 4 read. FINAL.**
+- MR NOT SENSITIVE ((b), §14.116); PT SENSITIVE (§14.134); NMR NOT SENSITIVE ((b), here);
+  the ensemble mean NOT SENSITIVE ((a) and (b), §14.127).
+- **The stricter §14.70 reading, printed beside it: REFUTED** (MR, NMR and the ensemble
+  mean each fail). §14.106's disclosure applies: report both.
+
+**STUDY 1'S REGISTERED READINGS ARE COMPLETE (original protocol, seeds 1–10):**
+- **Sparsity ladder: REFUTED.** All four families NOT SENSITIVE (MR (a), PT (b), NMR (b), the
+  ensemble mean (a)); §14.70, §14.87, §14.88, §14.101. The stricter reading is also
+  REFUTED.
+- **Noise ladder: PARTIAL SUPPORT.** PT SENSITIVE, the other three NOT SENSITIVE (above). The
+  stricter reading is REFUTED.
+- Every verdict carries the index-6/7 leak disclosure (§14.82, §14.86). The replication
+  (§14.83) re-tests the main hypothesis without the leak, at new seeds.
+
+**Gate:** `rescale_readout.py` `REGISTERED_READ["noise"]` now holds all four families
+(self-test passes). Every candidate ladder cell is readable. `experiments_results.ipynb`
+draws NMR's no-terminals noise ladder, and NMR's noise companions are readable once they
+run. They have not started: NMR medium_play is in waiter BQ, medium_diverse in BP.
+
+**What still runs (descriptive or post-hoc only):**
+- **The noise sensitivity arm:** MR's candidate n01o and n02o finished, n03o and n04o 5/10,
+  n045o 6/10. PT's candidate n01o is 5/10 (`90z3df8t`). The standard cells are under way.
+- **Companions:**
+  - the ensemble mean's noise arm: n01 and n02 finished, n03 running (`hv08yvbg`),
+    n04 started;
+  - PT's sensitivity arm: n01o–n04o finished, n045o 5/10 (`gjxdop4s`);
+  - MR's sensitivity arm: complete;
+  - NMR's noise arms: not started.
+
+**Next by the plan (§14.83, §14.104, §14.109): the Study 1 extension**, once Study 1's lanes are
+free:
+- the normalization test (`norm_sweeps/`, queue tag `@normtest`): stage 1 is S's 32 grids
+  plus N, F and the zero cells;
+- the replication's reward-model selection at seed 100 (`./launch_hp_sweeps.sh repl`).
+The lanes still running hold only descriptive and post-hoc work. **Whether the extension
+starts now, beside them, or after them is the author's call.**
+
+**Latest files updated:** `rq1_readout_noise_latest.txt`.
