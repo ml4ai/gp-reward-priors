@@ -29421,3 +29421,51 @@ with `--verify 2`; iqlpref `4d229f8`; wandb 0.21.1).** `MANIFEST.json`:
 **Keeping it current:** rerun the same command after new results land (it copies only new or
 changed runs, so runs that were still going are refreshed). Runs still in progress at a
 backup hold their history up to that moment.
+
+### 14.141 The restore test: the registered readings recomputed from the W&B backup alone (author's request, 2026-11-17)
+
+**Why:** the backup (§14.137, §14.140) holds the data, but the readouts read W&B. This shows
+they can be recomputed from the backup with the registered code unchanged.
+
+**Built (iqlpref `results/`):**
+- **`wandb_offline.py`:** `OfflineApi`, the part of `wandb.Api` the readouts call, served
+  from the backup. Covered: `project().sweeps()`, `sweep()`, `run()`, `runs()` with the
+  `created_at > t` filter that `production_readout.fetch` uses, and Sweep and Run with
+  config, summary, state, times, `lastHistoryStep`, `history(keys, samples, pandas=False)`
+  and `scan_history`.
+  - Anything else raises `NotImplementedError`, so a readout needing more fails loudly
+    instead of reading less.
+  - A run with more history rows than the requested sample budget is refused, never
+    sampled.
+  - `install(dest)` replaces `wandb.Api` and makes every socket connect raise, so nothing
+    reaches W&B.
+- **`restore_test.py`:** runs each readout unchanged in its own process against the backup,
+  with the network blocked, and compares its output with the W&B output.
+  - The readouts: `rq1_readout` (sparsity and noise), `control_readout`,
+    `leveling_readout`, `rescale_readout` (sparsity and noise).
+  - `rq1_readout` reads A from the BACKUP's `local/exp/rq1_accuracy.json` (`--acc`).
+  - The W&B side is the committed `*_latest.txt` files, or `--live` (the readout run
+    against W&B now). A readout with no committed file is run live.
+  - "note:" lines (sweeps still running) and wandb's log lines are set aside. Every other
+    line must match, or the differing lines are printed for checking.
+
+**Result (local test, 2026-11-17).** A local backup of the four projects the readouts use
+(IQL-pref 5,535 runs, MR-, PT-, NMR-training; 7,764 runs, 570 sweeps, 0 errors) was
+compared with the committed outputs of the last sweep check (§14.139):
+- **`rq1_sparsity` IDENTICAL (110 lines).** RQ1's registered sparsity reading, all four
+  families, recomputed from the backup alone. This includes the logged-accuracy
+  cross-check through `production_readout.fetch` (which only reads the backup here).
+- **`control` IDENTICAL (237 lines), `leveling` IDENTICAL (59), `rescale` IDENTICAL (49).**
+- **`rq1_noise`: one line differs.** It is NMR's "NOT READ" reason list: 3 reasons in the
+  §14.139 file, 2 in the backup. NMR's candidate n04 large_play finished between that
+  check and the backup. MR's, the ensemble mean's and PT's registered noise readings and
+  RQ1's ladder label are identical.
+- **`rescale_noise`: one line differs.** No committed file, so the live W&B run was the
+  comparison. It caught a just-started run of MR's n02 companion with
+  `reward_model_path None` (the sync lag of §14.123, §14.128, §14.130). The backup shows
+  that cell INCOMPLETE.
+- **Both differences are timing; neither is a gap in the backup.**
+
+**On the box:** `python results/restore_test.py` (default backup
+`/media/mule/scratch/loren/wandb_backup`). Run it right after a backup and a sweep check, so
+the two sides are close in time. `--out DIR` keeps both outputs of every readout.
