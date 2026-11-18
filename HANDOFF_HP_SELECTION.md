@@ -29623,3 +29623,45 @@ companions), so the extension starts beside it rather than after it.
 
 **Box commands:** given to the author in the reply, one-line fenced blocks. Lane logs are
 `stage4_queue_BS.log` … `stage4_queue_BV.log`.
+
+### 14.145 The extension launched (author, 2026-11-18); BU and BV queued as waiters behind the first noise lanes to finish
+
+**Launched by the author:** the replication's reward-model selection
+(`./launch_hp_sweeps.sh repl`), and lanes **BS** (GPUs 0 1 2 3 4) and **BT** (1 2 3 4 5) of the
+normalization test (§14.144).
+
+**The box's queues (`pgrep -af 'stage4_queue[.]sh'`, from the author): ten.**
+- BS and BT.
+- **The companion lanes BP and BQ, the longest left:**
+  - BP (GPUs 1 2 3 4 5) is on the ensemble mean's noise companions, then NMR
+    medium_diverse's: about 7 cells.
+  - BQ (GPUs 0 2 3 4 5) is on PT's sensitivity companions, then NMR medium_play's primary
+    and sensitivity: about 10 cells.
+- **Six noise lanes (BC–BJ, §14.65), each on its last sensitivity-arm cells:**
+
+| lane (GPUs) | ladder | cells left after the running one |
+|---|---|---|
+| 0 1 3 4 5 | large_diverse, with terminals | 1 (NMR n02o) |
+| 5 0 1 2 3 | large_play, with terminals | 2 (NMR n01o, n045o) |
+| 0 1 2 3 4 | large_diverse, without terminals | 2 |
+| 0 1 2 3 4 | medium_play, without terminals | 2 |
+| 2 3 4 5 0 | medium_diverse, without terminals | 2 |
+| 4 5 0 1 2 | large_play, without terminals | 3 |
+
+**BU and BV wait behind the two noise lanes that finish first, and take their GPUs:**
+- **BU** behind the large_diverse, with-terminals lane: `stage4_queue[.]sh 0 1 3 4 5 1
+  mr:n01/sweep_antmaze_large_diverse@`. Runs on 0 1 3 4 5.
+- **BV** behind the large_play, with-terminals lane: `stage4_queue[.]sh 5 0 1 2 3 1
+  mr:n01/sweep_antmaze_large_play@`. Runs on 5 0 1 2 3.
+- **Checked locally:**
+  - each pattern matches its lane's command line;
+  - neither matches its own waiter (`[.]` cannot match the literal `[.]`) or a
+    normalization lane;
+  - both lane files pass `DRY_RUN=1` with the new GPU lists. The lane files'
+    headers were updated to them.
+- The lane count stays at ten as BU and BV take over. The four other noise lanes, BP and
+  BQ end over the next days. Whether their slots are refilled is decided at the sweep
+  checks, by the speed rule.
+
+**Logs:** `stage4_queue_BS.log` … `stage4_queue_BV.log`. After the waiters start,
+`pgrep -fc 'while pgrep -f'` counts them.
