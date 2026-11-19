@@ -29750,3 +29750,8 @@ clean test split):
   complete (read once PT's frozen sensitivity cells finish).
 
 **Latest files updated:** `rq1_readout_noise_latest.txt` (new "ignored" notes only).
+- **Checked independently:** for the two sweeps where `check_sweep_convergence.py` printed
+  "since trial ?", the rule was recomputed over the trials in creation order (every trial
+  finished and scored). MR large_diverse `he08te48` fires at 26 with winner trial 11
+  (`bb4d6jh9`); PT large_play `rdomt0mg` fires at 23 with winner trial 8 (`j23chy4p`). Both
+  match the checker. The "?" is a gap in its printout, not an ordering error.
