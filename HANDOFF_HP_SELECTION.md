@@ -29669,3 +29669,84 @@ normalization test (§14.144).
 **Done (author, 2026-11-18):** the box pulled, and the BU and BV waiters are running.
 `pgrep -fc 'while pgrep -f'` reads 2. Lanes BS and BT, the replication's reward-model
 selection, and the two waiters make up the whole Study 1 extension now on the box.
+
+### 14.146 Sweep check 2026-11-19: the replication's selection — 8 of 12 sweeps stopped by the patience-15 rule (late); box at 130k; MR's sensitivity-arm companion complete
+
+**The replication's reward-model selection, seed 100 (§14.83, §14.144): the stopping rule.**
+- The author pointed out (2026-11-19) that these sweeps stop by the same pre-registered
+  rule as the seed-0 selection: **patience 15**, the best-so-far not improving for 15
+  consecutive trials. It is checked out of band with `check_sweep_convergence.py
+  --patience 15`.
+- **That check had not been run on them since launch (my omission).** It now runs at every
+  sweep check while selection sweeps are live.
+- **The selection is unaffected.** The rule's winner is the best trial up to the trigger, so
+  the trials after it, 5–33 per sweep, are discardable and change nothing. They used GPU
+  time. No trial is unsynced or diverged.
+
+| sweep | family, dataset | trials / cap | rule | rule winner (trial) | best-of-all |
+|---|---|---|---|---|---|
+| `he08te48` | MR large_diverse | 42/130 | FIRED at 26 | 0.2404 (`bb4d6jh9`) | 0.2276 (trial 35): **differs, regret 5.3%, disclose** |
+| `6szii3xx` | MR large_play | 72/130 | FIRED at 39 | 0.1001 (24, `uwaasnqh`) | same |
+| `mjgicxwx` | MR medium_diverse | 45/130 | FIRED at 23 | 0.1228 (8, `5v3l3gkp`) | same |
+| `6rjlsume` | MR medium_play | 55/130 | FIRED at 25 | 0.1083 (10, `xvcvb1nm`) | same |
+| `rdomt0mg` | PT large_play | 39/130 | FIRED at 23 | 0.1299 (`j23chy4p`) | 0.1230 (trial 24): **differs, regret 5.3%, disclose** |
+| `n0qw7cjd` | PT medium_play | 27/130 | FIRED at 20 | 0.1659 (5, `d9mk8bbn`) | same |
+| `3nszjeqf` | PT large_diverse | 18/130 | running, 1/15 | | 0.2871 (17) |
+| `84d078uc` | PT medium_diverse | 22/130 | running, 4/15 | | 0.1944 (18) |
+| `7rpciwvy` | NMR large_play | 48/130 | FIRED at 20 | 0.0513 (5, `urhkgu6g`) | same |
+| `j4qascow` | NMR medium_diverse | 32/130 | FIRED at 31 | 0.1292 (16, `8mzo3w7w`) | same |
+| `vur0x7c6` | NMR large_diverse | 30/130 | running, 2/15 | | 0.2320 (28) |
+| `dgj1vbbj` | NMR medium_play | 35/130 | running, 12/15 | | 0.1033 (23) |
+
+(Metric `eval_loss_at_selected`, minimized.)
+- **Box command given to the author:** `wandb sweep --stop` on the eight fired sweeps. It
+  lets each trial in progress finish, avoiding §10.6's orphaned-process trap from killing
+  agents.
+- **MR's selection is complete on all four datasets.** Its replication configs can be
+  written, and its seed 101–110 models trained, ahead of PT and NMR.
+- **The two rule-versus-best differences, both 5.3%**, are reported under the
+  pre-registered rule as Study 1 did (rule winner selected, best-of-all and regret
+  disclosed).
+
+**Box: 42 IQL runs, median 130k steps/h: 26% BELOW the 175k baseline.**
+- This is the first check with all 12 selection agents running beside about 40 IQL runs.
+  §10.7 measured concurrent selection sweeps costing heavily in throughput. Stopping the
+  eight fired sweeps should recover most of it; it is re-measured at the next check.
+- **By the speed rule, no lane is added.** BU and BV are waiters that REPLACE finishing noise
+  lanes, so the lane count does not rise when they start. They are left in place.
+- No damage. The registry, controls, leveling and both RQ1 ladders (sparsity REFUTED; noise
+  PARTIAL SUPPORT, final) are unchanged.
+
+**The normalization test (§14.144):**
+- BS and BT are on their first grids: `g3q7749d` and `wiidcljf`, both large_diverse at
+  seed 50, each with 5 of 8 indices finished and the last 3 running.
+- `normtest_readout.py` is gated, 0 of 104 cells ready, as designed.
+
+**Post-hoc ablation: MR's rescaling companion arm, noise SENSITIVITY arm, medium_play (§14.78,
+§14.132; `rescale_readout.py --axis sensitivity`; DESCRIPTIVE).** Without terminals, frozen
+index 1 against companion index 2 (n0Xo: flips as the primary arm, checkpoint picked on the
+clean test split):
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.652 ± 0.067 | 0.660 ± 0.064 | +0.008 [−0.040, +0.059] |
+| n01o | 0.641 ± 0.141 | 0.600 ± 0.213 | −0.041 [−0.102, +0.009] |
+| n02o | 0.448 ± 0.242 | 0.304 ± 0.264 | −0.144 [−0.326, +0.022] |
+| n03o | 0.273 ± 0.198 | 0.128 ± 0.160 | **−0.145 [−0.268, −0.026]** |
+| n04o | 0.144 ± 0.198 | 0.074 ± 0.111 | −0.070 [−0.192, +0.028] |
+| n045o | 0.043 ± 0.078 | 0.071 ± 0.134 | +0.028 [−0.002, +0.076] |
+
+- **Degradation slopes:** frozen +1.443 [+1.237, +1.628]; companion +1.467 [+1.298, +1.624];
+  **companion − frozen +0.025 [−0.109, +0.157]**.
+- **Reading (descriptive):** as on MR's primary noise arm (§14.131) and sparsity (§14.111),
+  rescaling leaves MR's slope about unchanged. One middle level differs (n03o, rescaled
+  lower). §14.78's prediction holds: both arms reach the floor at the highest flip rates.
+
+**Other progress (descriptive or post-hoc):**
+- **Sensitivity arm:** MR's candidate cells complete; PT's n02o–n045o at 5/10 each; NMR's
+  standard cells under way (n01o 8/10, n02o 6/10).
+- **Companions:** the ensemble mean's noise arm n01–n03 finished, n04 5/10; **NMR's noise
+  companions have started** (medium_play n01, `37o2le9d`, 5/10); PT's sensitivity arm
+  complete (read once PT's frozen sensitivity cells finish).
+
+**Latest files updated:** `rq1_readout_noise_latest.txt` (new "ignored" notes only).
