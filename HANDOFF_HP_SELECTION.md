@@ -29755,3 +29755,6 @@ clean test split):
   finished and scored). MR large_diverse `he08te48` fires at 26 with winner trial 11
   (`bb4d6jh9`); PT large_play `rdomt0mg` fires at 23 with winner trial 8 (`j23chy4p`). Both
   match the checker. The "?" is a gap in its printout, not an ordering error.
+
+**DECIDED (author, 2026-11-19): the replication's configs are written once ALL twelve
+selection sweeps have stopped**, not family by family. MR's configs wait for PT and NMR.
