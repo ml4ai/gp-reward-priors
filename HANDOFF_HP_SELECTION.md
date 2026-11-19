@@ -29816,3 +29816,27 @@ four selection agents left, three of them fired. No new lane.
 - **Sensitivity arm:** PT's candidate cells complete; NMR's candidate cells under way.
 
 **Latest files updated:** `rq1_readout_noise_latest.txt` (new "ignored" notes only).
+
+### 14.148 Sweep check 2026-11-20: 11 of 12 selection sweeps finished; the box recovering (154k); nothing due
+
+**The replication's selection (patience 15, §14.146):**
+- **11 of 12 sweeps are FINISHED**, including the three stopped since §14.147 (PT
+  medium_diverse, NMR large_diverse, NMR medium_play). Rule winners unchanged.
+- **The last, PT large_diverse `3nszjeqf`:** 47 trials, best 0.2728 at trial 39, now **8/15**
+  non-improving; 7 more without a new best would fire it.
+- The replication's configs wait for it (§14.146). No trial unsynced or diverged.
+
+**Box: 42 IQL runs, median 154k steps/h**: up from 144k and 130k as the selection agents
+stopped (one left). 12% below the baseline, just under the 157.5k floor, so no new lane.
+No damage. The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**The normalization test:** BS and BT are on their second grids (large_play, second waves);
+BU is on its second (NMR large_play, `j6nbdynf`); BV still waits on its noise lane.
+`normtest_readout.py` is gated.
+
+**Descriptive and post-hoc, still running:**
+- **Companions:** the ensemble mean's noise arm, its last cell n045 5/10; NMR's medium_play
+  noise arm n02 5/10.
+- **Sensitivity arm:** NMR's candidate cells n01o–n04o at 5/10.
+
+**Latest files:** unchanged.
