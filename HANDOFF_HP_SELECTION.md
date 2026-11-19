@@ -29807,8 +29807,8 @@ four selection agents left, three of them fired. No new lane.
 - **Reading (descriptive):** PT's pattern on its primary noise arm (§14.136) and on sparsity
   (§14.114) again. Rescaling lowers its scores at full data and the lowest flip rate, and
   about halves its slope, which stays positive. Both arms reach the floor from n03o.
-- **All four companions the plan names for the sensitivity arm's MR and PT are now read.**
-  NMR's frozen sensitivity cells have started (n01o–n04o).
+- **MR's and PT's sensitivity-arm companions are now both read.** NMR's is the last; its
+  frozen sensitivity cells have started (n01o–n04o).
 
 **Other progress:**
 - **Companions:** the ensemble mean's noise arm n01–n04 finished, n045 (its last) started;
