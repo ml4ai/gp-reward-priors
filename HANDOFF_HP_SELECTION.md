@@ -29758,3 +29758,61 @@ clean test split):
 
 **DECIDED (author, 2026-11-19): the replication's configs are written once ALL twelve
 selection sweeps have stopped**, not family by family. MR's configs wait for PT and NMR.
+
+### 14.147 Sweep check 2026-11-19 (later): 11 of 12 selection sweeps stopped by the rule; BU started; PT's sensitivity-arm companion complete
+
+**The replication's selection (seed 100; patience 15, §14.146):**
+- **The eight stopped by the author are FINISHED.** Their rule winners are unchanged from
+  §14.146.
+- **Three more have met the rule**, all with the rule winner equal to the best-of-all:
+
+| sweep | family, dataset | trials | fired at | rule winner (trial) |
+|---|---|---|---|---|
+| `84d078uc` | PT medium_diverse | 50 | 33 | 0.1944 (18, `468j9lnt`) |
+| `vur0x7c6` | NMR large_diverse | 65 | 43 | 0.2320 (28, `qgxy6mg6`) |
+| `dgj1vbbj` | NMR medium_play | 77 | 38 | 0.1033 (23, `iy5uaio9`) |
+
+- **Box command given to the author:** `wandb sweep --stop` on these three.
+- **One still searching:** PT large_diverse `3nszjeqf`, 39 trials, a new best at trial 39
+  (0.2728, `v4gbxd0k`), so 0/15. The replication's configs wait for it (author's
+  decision, §14.146).
+- No trial unsynced or diverged.
+
+**Box: 48 IQL runs, median 144k steps/h**: up from 130k, still 18% below the baseline, with
+four selection agents left, three of them fired. No new lane.
+- **BU has started**: its waiter's noise lane (large_diverse, with terminals) finished. BU is
+  on its first grid, NMR large_diverse (`8ecvtnj3`).
+- BV waits on the large_play, with-terminals noise lane.
+- No damage. The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**The normalization test:**
+- BS and BT finished their first grids (large_diverse) and are on their second (large_play:
+  `i12i4m0b`, `v549ed6d`, first wave near 800k). BU is on its first.
+- `normtest_readout.py` is gated, as designed.
+
+**Post-hoc ablation: PT's rescaling companion arm, noise SENSITIVITY arm, medium_play (§14.78,
+§14.132; DESCRIPTIVE).** Frozen index 1 against companion index 3, without terminals:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.409 ± 0.267 | 0.187 ± 0.251 | **−0.222 [−0.394, −0.079]** |
+| n01o | 0.307 ± 0.243 | 0.070 ± 0.128 | **−0.237 [−0.380, −0.098]** |
+| n02o | 0.103 ± 0.167 | 0.060 ± 0.133 | −0.043 [−0.096, +0.005] |
+| n03o | 0.018 ± 0.028 | 0.027 ± 0.057 | +0.009 [−0.009, +0.035] |
+| n04o | 0.033 ± 0.087 | 0.005 ± 0.012 | −0.028 [−0.083, +0.001] |
+| n045o | 0.040 ± 0.118 | 0.004 ± 0.007 | −0.036 [−0.113, +0.005] |
+
+- **Degradation slopes:** frozen +0.867 [+0.601, +1.105]; companion +0.357 [+0.097, +0.650];
+  **companion − frozen −0.509 [−0.780, −0.219]**.
+- **Reading (descriptive):** PT's pattern on its primary noise arm (§14.136) and on sparsity
+  (§14.114) again. Rescaling lowers its scores at full data and the lowest flip rate, and
+  about halves its slope, which stays positive. Both arms reach the floor from n03o.
+- **All four companions the plan names for the sensitivity arm's MR and PT are now read.**
+  NMR's frozen sensitivity cells have started (n01o–n04o).
+
+**Other progress:**
+- **Companions:** the ensemble mean's noise arm n01–n04 finished, n045 (its last) started;
+  NMR's medium_play noise arm n01 finished, n02 started.
+- **Sensitivity arm:** PT's candidate cells complete; NMR's candidate cells under way.
+
+**Latest files updated:** `rq1_readout_noise_latest.txt` (new "ignored" notes only).
