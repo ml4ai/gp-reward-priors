@@ -29840,3 +29840,64 @@ BU is on its second (NMR large_play, `j6nbdynf`); BV still waits on its noise la
 - **Sensitivity arm:** NMR's candidate cells n01o–n04o at 5/10.
 
 **Latest files:** unchanged.
+
+### 14.149 Sweep check 2026-11-20 (later): THE REPLICATION'S SELECTION IS COMPLETE — all 12 configs written; training ready; BV started
+
+**The last selection sweep has met the rule:** PT large_diverse `3nszjeqf` fired at trial 54,
+15 trials without improvement since trial 39. Rule winner 0.2728 (`v4gbxd0k`), the same as
+best-of-all. Box command given: `wandb sweep --stop` on it. **All 12 of the replication's
+seed-100 selections are done** (§14.146–§14.149).
+
+**The replication's configs: WRITTEN (author's decision of §14.146: all twelve together).**
+`scripts_bnn/make_production_config.py --family <f> --set repl <variant> <rule winner>
+--write` for each. Every one reports `VERIFY: PASS`: every behaviour-relevant key equals
+what the trial ran, with PT's derived fields left to `__post_init__`. No PLACEHOLDER or
+UNSELECTED-BASE marker is left in any `*_antmaze_eval_repl.yaml`; the selftest passes.
+
+| family | dataset | rule winner | selected (Study 1's value in brackets) |
+|---|---|---|---|
+| MR | large_diverse | `bb4d6jh9` | width 2^7 (7), depth 4 (2), lr 1.09e-3 (5.59e-4) |
+| MR | large_play | `uwaasnqh` | width 2^6 (7), depth 3 (4), lr 8.44e-4 (6.37e-5) |
+| MR | medium_diverse | `5v3l3gkp` | width 2^7 (4), depth 3 (1), lr 9.58e-3 (1.25e-3) |
+| MR | medium_play | `xvcvb1nm` | width 2^4 (7), depth 4 (4), lr 4.77e-3 (4.10e-4) |
+| PT | large_diverse | `v4gbxd0k` | 4 layers (3), lr 2.07e-4 (1.34e-3), plus embedding/head sizes |
+| PT | large_play | `j23chy4p` | 3 layers (2), lr 4.33e-4 (1.67e-5) |
+| PT | medium_diverse | `468j9lnt` | 2 layers (2), lr 1.33e-3 (8.85e-3) |
+| PT | medium_play | `d9mk8bbn` | 2 layers (4), lr 7.53e-3 (2.05e-5) |
+| NMR | large_diverse | `qgxy6mg6` | embd 2^4 (6), lr 9.16e-4 (9.58e-3) |
+| NMR | large_play | `urhkgu6g` | embd 2^7 (6), lr 1.65e-3 (3.58e-4) |
+| NMR | medium_diverse | `8mzo3w7w` | embd 2^6 (5), lr 4.09e-3 (2.23e-3) |
+| NMR | medium_play | `iy5uaio9` | embd 2^5 (6), lr 3.60e-4 (2.90e-3) |
+
+- **Disclosed:** MR large_diverse and PT large_play use the rule winner where the best-of-all
+  differs (regret 5.3% each, §14.146).
+- The selected values differ from Study 1's in most cells, as a fresh selection at a new
+  seed may.
+
+**Next: training the replication's reward models (§14.83 Decision 3; box sequence step 3).**
+Per family:
+- `CONFIG_SET=repl ./train_rewards.sh <m>`: the anchors at seeds 100–110, 44 models.
+- `CONFIG_SET=repl COND="r16 r32 r64 r128 n01 n02 n03 n04 n045" ./train_rewards.sh <m>`:
+  the ladders at 101–110, 360 models.
+
+In all, 404 per family, 1,212 for MR, PT and NMR. The ensemble mean reads MR's models, and
+the BNN stays held. The splits for 100–110 exist (author, 2026-11-02, §14.83).
+`train_rewards.sh`'s preflight checks every split file and output directory, so the
+commands below start with `DRY_RUN=1`.
+
+**Box: 28 IQL runs, median 165k steps/h: back inside the 10% rule** (one selection agent left,
+now stopping). No damage. The registry, controls, leveling and both RQ1 ladders are
+unchanged.
+
+**The normalization test:**
+- **BV has started**, on its first grid (PT large_diverse, `vhcymkk7`): its waiter's noise lane
+  (large_play, with terminals) finished. All four normalization lanes are now running.
+- BS and BT are on their second grids (large_play), and BU on its second (NMR large_play).
+- `normtest_readout.py` is gated.
+
+**Descriptive and post-hoc:**
+- **Sensitivity arm:** NMR's candidate n03o and n04o finished, n01o and n02o nearly.
+- **Companions:** the ensemble mean's noise arm, its last cell 9/10; NMR's medium_play noise
+  arm n02 8/10, n03 started.
+
+**Latest files:** unchanged.
