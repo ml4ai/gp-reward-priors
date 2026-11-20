@@ -29901,3 +29901,9 @@ unchanged.
   arm n02 8/10, n03 started.
 
 **Latest files:** unchanged.
+
+**Launched (author, 2026-11-20):** the replication's reward-model training, MR → PT → NMR,
+each family's anchors (seeds 100–110) and then its nine conditions (101–110), in one chain on
+the box (`train_repl.log` in `gp_reward-priors`), at `train_rewards.sh`'s default
+concurrency. The last selection sweep was stopped first. From the next sweep check:
+training progress, and the box's speed with training beside the four normalization lanes.
