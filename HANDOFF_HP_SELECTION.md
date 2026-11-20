@@ -30049,3 +30049,15 @@ by exact `program` and `parameters`; no file has a second sweep.
   The full check runs on the box with `DRY_RUN=1` first.
 - **If a lane has moved on before the script runs**, the check fails and nothing changes.
   The split is re-planned from W&B.
+
+**DONE (author ran it on the box, 2026-11-20):** `DRY_RUN=1` passed, then the real run.
+- **Stopped:** BS and BT's queue scripts (exit 143). BU and BV's queue processes were their
+  §14.145 waiters, which bash had replaced with the queue; they show as "Terminated".
+- **Counts:** 10 queue processes (CA–CD, the four BW–BZ waiters, BP, BQ); 4 waiters.
+- **Checked on W&B afterwards:**
+  - the four interrupted sweeps carry on: `td2nhf7z` and `4166rq30` with 5 running, and
+    `kyitzzvo` and `sgnvfd3g` with their last 3 indices running;
+  - the new lanes' first cells have started: CA `o2iygult`, CB `poh0gfxq`, CC `ymqh87dz`,
+    CD `f5kolcf2`, 5 runs each;
+  - no normalization file has a second sweep (17 sweeps, 17 files).
+- BW–BZ start as each interrupted sweep ends.
