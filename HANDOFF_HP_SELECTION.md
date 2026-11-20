@@ -29995,3 +29995,57 @@ terminals:
   finished, n02 running.
 
 **Latest files:** unchanged.
+
+### 14.152 The normalization lanes split, four into eight (author's go-ahead, 2026-11-20): `queues/normtest_split.sh`
+
+**Why:** the normalization test is the replication's critical path (§14.151). The box runs 26
+IQL runs at 164k, inside the rule. At four lanes the test's stage 1 has about 12 days left;
+at eight, about 6.
+
+**Each lane's state, from W&B (2026-11-20).** Every normalization sweep was matched to its file
+by exact `program` and `parameters`; no file has a second sweep.
+
+| lane | GPUs | done | running | not started |
+|---|---|---|---|---|
+| BS | 0 1 2 3 4 | grids 1–3 | grid 4 `td2nhf7z` (std medium_play ens_mean) | 22 |
+| BT | 1 2 3 4 5 | grids 1–3 | grid 4 `4166rq30` (std medium_play mr) | 22 |
+| BU | 0 1 3 4 5 | grids 1–2 | grid 3 `kyitzzvo` (std medium_diverse nmr) | 23 |
+| BV | 5 0 1 2 3 | grid 1 | grid 2 `sgnvfd3g` (std large_play pt) | 24 |
+
+**The split:** each lane's not-started items become two queues, nothing launched twice.
+13 launched or running + 91 queued = all 104 files, no duplicate, no overlap.
+
+| from | continuation (lane's GPUs; waits for the lane's running sweep) | new lane (starts at once) |
+|---|---|---|
+| BS | **BW**: 4 grids + 7 cells = 11 | **CA** on 0 1 2 4 5: 11 cells |
+| BT | **BX**: 4 grids + 7 cells = 11 | **CB** on 2 3 4 5 0: 11 cells |
+| BU | **BY**: 5 grids + 6 cells = 11 | **CC** on 4 5 0 1 2: 12 cells |
+| BV | **BZ**: 6 grids + 6 cells = 12 | **CD** on 3 4 5 0 1: 12 cells |
+
+- **The grids stay first in the continuation lanes**, so stage 2's start is unchanged: about 3
+  days, set by BZ's six grids.
+- The new lanes' GPU lists differ from BS–BV's as strings, so no waiter can match a new lane's
+  sweep.
+- About 8 lanes, roughly 40 IQL runs, at the 10-lane level that ran at 155–158k; BP and BQ
+  end over the coming days.
+- **The queue files:** `queues/normtest_{BW,BX,BY,BZ,CA,CB,CC,CD}.txt` all pass
+  `DRY_RUN=1`. `queues/normtest_{BS,BT,BU,BV}.txt` now record only what those lanes ran
+  before the split.
+
+**`queues/normtest_split.sh`:**
+1. **Checks first and changes NOTHING if any check fails.** Each lane's queue script must
+   match exactly one process. Each lane must still be running the item above, read from its
+   `norm_sweeps/launch.sh` command line. All eight queue files must validate.
+   `DRY_RUN=1` stops after the checks.
+2. Stops the four queue scripts (`pkill` on each lane's own pattern). Their running sweeps,
+   `launch.sh` and agents finish normally, as in §14.57.
+3. Launches BW–BZ as waiters: `while pgrep -f 'norm_sweeps/launch[.]sh [^ ]+ <lane gpus>
+   1$'`, which holds until the lane's running sweep ends. Launches CA–CD at once.
+- **Tested locally:**
+  - the patterns: the lane's sweep matches; a new lane's sweep, a waiter's own command line,
+    and the continuation queue do not match the old lane's patterns;
+  - `bash -n`;
+  - the version guard (it needs bash ≥ 4, which macOS lacks).
+  The full check runs on the box with `DRY_RUN=1` first.
+- **If a lane has moved on before the script runs**, the check fails and nothing changes.
+  The split is re-planned from W&B.
