@@ -29959,3 +29959,39 @@ terminals:
   noise arm n01 started; NMR's sensitivity companions waiting in BQ.
 
 **Latest files:** unchanged.
+
+### 14.151 Sweep check 2026-11-20 (later): MR and PT trained (404 each), NMR half way; the box has room; the normalization test is now the replication's critical path
+
+**The replication's reward-model training:**
+- **MR 404/404 and PT 404/404 FINISHED, none failed.**
+- **NMR 196/404 finished, 10 running**: anchors 44; r16, r32, r64 40 each; r128 32; the five
+  noise levels to come.
+- No crashed or failed run in any family.
+
+**Box: 26 IQL runs, median 164k steps/h: inside the 10% rule.**
+- **The noise lanes (BC–BJ) have finished**, including the sensitivity arm. NMR's last
+  candidate cell n045o is complete.
+- What runs: the four normalization lanes and the two companion lanes, BP and BQ (NMR's
+  noise and sensitivity companions).
+- No damage. The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**The normalization test, where each lane is:**
+- BS and BT: grid 4 of 8 (medium_play, standard).
+- BU: grid 3 (NMR medium_diverse).
+- BV: grid 2 (PT large_play).
+- About 91 sweeps remain after the running ones: 19 grids and 72 N/F/zero cells.
+- **At four lanes that is about 12 days** (about 12.6 h a sweep). The last grid, BV's, is done
+  in about 3 days. Stage 2 (S's 32 cells) follows the grids, and `normtest_readout` needs
+  every cell.
+- **The replication's IQL runs cannot start before the test adopts its rule**, so with MR's
+  and PT's models trained this test is now on the replication's critical path.
+- **Proposal to the author: split the lanes to use the free capacity** (box command plan
+  below, on the author's go-ahead).
+
+**Descriptive and post-hoc:**
+- **The noise sensitivity arm is COMPLETE** (all three families' frozen cells). NMR's
+  sensitivity companions wait in BQ, behind NMR's medium_play primary companions.
+- **NMR's noise companions:** medium_play n01–n03 finished, n04 running; medium_diverse n01
+  finished, n02 running.
+
+**Latest files:** unchanged.
