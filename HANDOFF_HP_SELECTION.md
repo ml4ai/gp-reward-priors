@@ -29907,3 +29907,55 @@ each family's anchors (seeds 100–110) and then its nine conditions (101–110)
 the box (`train_repl.log` in `gp_reward-priors`), at `train_rewards.sh`'s default
 concurrency. The last selection sweep was stopped first. From the next sweep check:
 training progress, and the box's speed with training beside the four normalization lanes.
+
+### 14.150 Sweep check 2026-11-20 (later): MR's 404 replication models trained; the ensemble mean's noise companion complete; box at 151k with training
+
+**The replication's reward-model training (§14.149; counted on W&B, runs outside any sweep at
+seeds ≥ 100):**
+- **MR: all 404 FINISHED, none failed**: anchors 44 (seeds 100–110 × 4 mazes), and 40 per
+  condition for r16–r128 and n01–n045 (101–110 × 4).
+- **PT:** anchors 36/44 finished, 8 running. Its ladders follow.
+- **NMR:** not started.
+- No crashed or failed run in any family. Each model's held-out accuracy is measured after
+  all three families finish (`rq1_accuracy.py measure --repl`, box).
+
+**Box: 31 IQL runs, median 151k steps/h**: 14% below the baseline, under the floor, with PT's
+training beside the lanes. No new lane. Training's load moves to NMR after PT. No damage. The
+registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**The normalization test:** BS and BT are on their third grids (medium_diverse: `5j9fxnky`,
+`880v7jyj`), BU on its second (NMR large_play, second wave), BV on its first (PT
+large_diverse, second wave). `normtest_readout.py` is gated.
+
+**Post-hoc ablation: the ensemble mean's rescaling companion arm, noise ladder (primary arm),
+medium_play (§14.78; DESCRIPTIVE).** Frozen index 1 against companion index 2, without
+terminals:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.590 ± 0.071 | 0.523 ± 0.286 | −0.067 [−0.234, +0.074] |
+| n01 | 0.189 ± 0.199 | 0.117 ± 0.120 | −0.071 [−0.223, +0.070] |
+| n02 | 0.148 ± 0.132 | 0.059 ± 0.052 | **−0.089 [−0.153, −0.031]** |
+| n03 | 0.080 ± 0.130 | 0.050 ± 0.119 | −0.030 [−0.100, +0.015] |
+| n04 | 0.072 ± 0.165 | 0.008 ± 0.022 | −0.064 [−0.175, +0.004] |
+| n045 | 0.044 ± 0.067 | 0.002 ± 0.004 | **−0.043 [−0.086, −0.006]** |
+
+- **Degradation slopes:** frozen +0.987 [+0.776, +1.154] (the medium_play (a) slope of the
+  ensemble mean's registered noise reading, §14.127); companion +0.926 [+0.634, +1.176];
+  **companion − frozen −0.060 [−0.402, +0.283]**.
+- **Reading (descriptive):** as on sparsity (§14.121), rescaling leaves the ensemble mean's
+  slope about unchanged; the interval is wide.
+  - The rescaled arm scores a little lower at most flip rates (two levels clearly). The
+    full-data point is the same cell as sparsity's (the wide companion spread there,
+    §14.121).
+  - **§14.78's prediction holds:** both arms fall to near the floor at high flip rates.
+- **The noise companions read so far:** MR (about unchanged, §14.131), PT (about halved,
+  §14.136), the ensemble mean (about unchanged, here). NMR's are running (medium_play n03,
+  medium_diverse n01). Each compares one family with itself.
+
+**Other progress:**
+- **Sensitivity arm:** NMR's candidate n01o–n04o finished, n045o (its last) started.
+- **Companions:** NMR's medium_play noise arm n01–n02 finished, n03 running; medium_diverse
+  noise arm n01 started; NMR's sensitivity companions waiting in BQ.
+
+**Latest files:** unchanged.
