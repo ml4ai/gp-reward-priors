@@ -30091,3 +30091,35 @@ registry, controls, leveling and both RQ1 ladders are unchanged.
 n02 5/10.
 
 **Latest files:** unchanged.
+
+### 14.154 Sweep check 2026-11-21 (later): ALL 1,212 REPLICATION REWARD MODELS TRAINED; all eight normalization lanes running; the box inside the rule
+
+**The replication's reward-model training is COMPLETE** (§14.83 Decision 3, §14.149).
+- **MR 404, PT 404, NMR 404, all FINISHED, none crashed or failed.** Each family has anchors
+  44 (seeds 100–110 × 4 mazes) and 40 per level for r16–r128 and n01–n045 (101–110 × 4).
+- The ensemble mean reads MR's models; the BNN stays held.
+- **Next on the box: A, the held-out accuracy, for the replication's models.**
+  `python results/rq1_accuracy.py measure --repl`, from `~/iqlpref`.
+  - It covers seeds 101–110, all four families including the ensemble mean, the anchor and
+    all nine levels. It writes `exp/rq1_accuracy_repl.json` and refuses to write Study 1's
+    file.
+  - It runs single-threaded, so it takes no cores from the IQL lanes. The file is rewritten
+    after every record, and a restart resumes.
+  - The ensemble mean dominates the time (about 390k snapshot loads in Study 1).
+  - The file is copied to the analysis Mac by hand and backed up by `wandb_backup.py`
+    (`--extra` default).
+
+**The normalization test (eight lanes, §14.152):**
+- **All four continuations have started:** BW and BX on their first candidate grids
+  (large_diverse), BY on NMR medium_play, BZ on PT medium_diverse.
+- CA–CD are each on their first cell (5/10).
+- **21 of 104 files launched; grids 13/32 complete; cells 0/72.** No file has a second
+  sweep, and no run has failed.
+
+**Box: 48 IQL runs, median 160k steps/h: inside the 10% rule** now that NMR's training has
+ended. No damage. The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** NMR's medium_play noise arm n01–n04 finished, n045 (its last)
+started; medium_diverse noise arm n01–n02 finished, n03 started.
+
+**Latest files:** unchanged.
