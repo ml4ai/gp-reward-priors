@@ -30061,3 +30061,33 @@ by exact `program` and `parameters`; no file has a second sweep.
     CD `f5kolcf2`, 5 runs each;
   - no normalization file has a second sweep (17 sweeps, 17 files).
 - BW–BZ start as each interrupted sweep ends.
+
+### 14.153 Sweep check 2026-11-21: NMR's training nearly done (344/404); eight normalization lanes running; box at 146k
+
+**The replication's reward-model training:**
+- MR 404/404 and PT 404/404 finished.
+- **NMR 344/404, 11 running**: anchors, r16–r128 and n01–n03 complete; n04 20/40; n045
+  to come.
+- No crashed or failed run in any family.
+
+**The normalization test after the split (§14.152; progress counted from W&B by matching every
+sweep to its file):**
+- **17 of 104 files launched; grids 9/32 complete; cells 0/72.** No file has a second sweep,
+  and no run has failed.
+- **The new lanes CA–CD are each on their first cell** (N and F at medium_play, standard:
+  `o2iygult`, `poh0gfxq`, `ymqh87dz`, `f5kolcf2`).
+- **The continuations BW–BZ are waiting, as designed.** The four interrupted sweeps
+  (`td2nhf7z`, `4166rq30`, `kyitzzvo`, `sgnvfd3g`) are still on their last runs.
+- `normtest_readout.py` now lists the first four cells as INCOMPLETE in place of "no
+  evaluation sweep". It stays gated.
+
+**Box: 42 IQL runs, median 146k steps/h**: 17% below the baseline, with eight normalization
+lanes, NMR's training and the two companion lanes. **This is the split's planned load, not new
+lanes**: BW–BZ replace the interrupted sweeps as they end, and NMR's training ends within
+about a day. No new lane by the rule. Re-measured at the next check. No damage. The
+registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** NMR's medium_play noise arm n04 5/10; medium_diverse noise arm
+n02 5/10.
+
+**Latest files:** unchanged.
