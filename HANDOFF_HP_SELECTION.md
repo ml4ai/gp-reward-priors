@@ -30128,3 +30128,52 @@ started; medium_diverse noise arm n01–n02 finished, n03 started.
 `exp/rq1_accuracy_repl.log`, output `exp/rq1_accuracy_repl.json`. When it ends, the file is
 copied to the analysis Mac. `rq1_readout`'s replication pass (`repl_readout.py rq1`, §14.83)
 reads it later, once the replication's IQL cells exist.
+
+### 14.155 Sweep check 2026-11-22: the replication's A measured and verified; NMR's medium_play noise companion complete; grids 17/32
+
+**The replication's A (`exp/rq1_accuracy_repl.json`, measured on the box by the author and
+copied to the analysis Mac, 2026-11-21): COMPLETE AND CLEAN.**
+- **1,600 of 1,600 records**: mr, pt, nmr, ens_mean × anchor and the nine levels × 4 mazes ×
+  seeds 101–110. None missing.
+- **`rq1_readout.load_accuracy` with the logged-accuracy cross-check reads all 1,600.** Every
+  MR, PT and NMR best-model record's batch mean equals the training run's logged
+  `eval_acc_reloaded` (within 1e-6); none excluded. No accuracy value is reported here. A
+  is read with the replication's registered reading.
+- `wandb_backup.py` copies it to the backup drive on its next run (`--extra` default).
+
+**The normalization test (eight lanes, §14.152):**
+- **29 of 104 files launched; grids 17/32 complete; cells 4/72 complete.** No file has a
+  second sweep, and no run has failed.
+- Every lane has finished its first item and is on its second.
+- `normtest_readout.py` is gated.
+
+**Box: 48 IQL runs, median 155k steps/h**: 11% below the baseline, just under the 157.5k floor,
+at the split's planned load (§14.152). No new lane. No damage. The registry, controls,
+leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc ablation: NMR's rescaling companion arm, noise ladder (primary arm), medium_play
+(§14.78; DESCRIPTIVE).** Frozen index 1 against companion index 3, without terminals:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.593 ± 0.123 | 0.367 ± 0.193 | **−0.226 [−0.303, −0.157]** |
+| n01 | 0.510 ± 0.190 | 0.467 ± 0.151 | −0.043 [−0.118, +0.031] |
+| n02 | 0.356 ± 0.263 | 0.367 ± 0.272 | +0.011 [−0.049, +0.077] |
+| n03 | 0.235 ± 0.213 | 0.163 ± 0.161 | −0.072 [−0.195, +0.027] |
+| n04 | 0.123 ± 0.196 | 0.080 ± 0.133 | −0.044 [−0.097, +0.001] |
+| n045 | 0.023 ± 0.032 | 0.075 ± 0.119 | +0.052 [−0.003, +0.128] |
+
+- **Degradation slopes:** frozen +1.265 [+1.010, +1.473] (the medium_play (a) slope of NMR's
+  registered noise reading, §14.143); companion +0.870 [+0.648, +1.089]; **companion −
+  frozen −0.395 [−0.534, −0.246]**.
+- **Reading (descriptive):** as on sparsity (§14.124, §14.129), rescaling lowers NMR's
+  sensitivity, here by about a third, and its full-data score; the slope stays positive. The
+  frozen-index noise response is not an artefact of skipping the rescaling. §14.78's
+  prediction holds: both arms reach the floor at the highest flip rates.
+- **The four medium_play noise companions now read:** MR and the ensemble mean about
+  unchanged; PT (about halved) and NMR (about a third lower) lowered. That is the same split
+  as on sparsity. Each compares one family with itself.
+- Still running: NMR medium_diverse's noise arm (n01–n03 finished, n04 running) and NMR's
+  sensitivity-arm companions (n01o started).
+
+**Latest files:** unchanged.
