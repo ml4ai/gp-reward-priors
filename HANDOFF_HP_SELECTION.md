@@ -30123,3 +30123,8 @@ ended. No damage. The registry, controls, leveling and both RQ1 ladders are unch
 started; medium_diverse noise arm n01–n02 finished, n03 started.
 
 **Latest files:** unchanged.
+
+**Started (author, 2026-11-21):** `rq1_accuracy.py measure --repl` on the box, log
+`exp/rq1_accuracy_repl.log`, output `exp/rq1_accuracy_repl.json`. When it ends, the file is
+copied to the analysis Mac. `rq1_readout`'s replication pass (`repl_readout.py rq1`, §14.83)
+reads it later, once the replication's IQL cells exist.
