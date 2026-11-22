@@ -30241,3 +30241,26 @@ validation splits were copied from the box (`rsync` of `*_pref_val_10[1-9].hdf5`
 - The floor over seeds 101–110: medium_play 77.8 ± 2.9, medium_diverse 89.2 ± 2.2,
   large_play 80.9 ± 2.6, large_diverse 87.8 ± 2.3 (per-pair accuracy × 100; 54–110 pairs
   per seed).
+
+### 14.157 Sweep check 2026-11-22: grids 21/32; nothing due
+
+**The normalization test (eight lanes, §14.152):**
+- **37 of 104 files launched; grids 21/32 complete; cells 8/72 complete.** No file has a
+  second sweep, and no run has failed.
+- Every lane has finished two items and is on its third:
+  - BW and BX on candidate medium_diverse grids;
+  - BY on NMR candidate large_play;
+  - BZ on PT candidate large_diverse;
+  - CA–CD on candidate large_diverse cells, 5/10 each.
+- 11 grids remain: BW and BX 2 each after the running one, BY 3, BZ 4. At about 12.6 h a
+  sweep, the last grid (BZ's) ends in about 2.5–3 days. Stage 2 (S's 32 cells) is written
+  then.
+
+**Box: 46 IQL runs, median 155k steps/h**, at the split's planned load. No new lane. No damage.
+The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):**
+- NMR medium_diverse's noise arm: n01–n03 finished, n04 9/10, n045 (its last) next.
+- NMR's sensitivity-arm companions: n01o finished, n02o started.
+
+**Latest files:** unchanged.
