@@ -30177,3 +30177,58 @@ leveling and both RQ1 ladders are unchanged.
   sensitivity-arm companions (n01o started).
 
 **Latest files:** unchanged.
+
+### 14.156 The results notebooks reorganized (author's rule, 2026-11-22): Study 1 in the three existing notebooks, the extension in two new ones
+
+**The rule (author, 2026-11-22):**
+- Everything of the original Study 1, its post-hoc ablations included, belongs in
+  `results_table.ipynb`, `experiments_results.ipynb` or `benchmark_results.ipynb`.
+- Plots for the normalization test, and anything else of the Study 1 extension, go in NEW
+  notebooks.
+
+**Audit:**
+- The three existing notebooks hold nothing of the extension. The normalization test's
+  seeds 51–60 and the replication's 101–110 are outside the collectors that feed them, and
+  `register` leaves both lineages out (§14.109).
+- **One Study 1 gap:** the noise ladder's SENSITIVITY arm (descriptive, §14.64) was drawn
+  nowhere. Its companions already are, in `benchmark_results` chart 10 (§14.132).
+
+**`experiments_results.ipynb`: new section "Experiment 2, sensitivity arm (descriptive)".**
+- MR, PT and NMR on medium_play, with and without terminals, n01o–n045o, collected with
+  `exp_readout.collect_exp(..., levels=ORACLE_LEVELS)`.
+- The full-data point is the primary arm's (the anchor or the no-terminals control). One
+  figure (two panels) and two tables.
+- **Gate:** candidate cells only after the family's registered noise reading
+  (`rescale_readout.READ_AXIS`); all four are read (§14.143).
+
+**`results/normtest_results.ipynb` (NEW): the normalization test.**
+- **Progress:** states only, per family, dataset and protocol. S's grid (finished runs of 8),
+  its winner once written, and each cell's state (S, N, F), plus the zero cells. No score.
+- **S's seed-50 grids:** drawn only once all 32 are complete. Score per index per family
+  and dataset, with S's index starred and N's and F's indices shaded.
+- **The registered decision:** `normtest_readout.run`, unchanged.
+- **Each arm against S, per family:** test (i)'s S_A − S_S with its exact stratified
+  interval and the −0.10 margin. Drawn only once the decision is readable.
+- §14.104's do-not is kept: nothing of an arm's evaluation cells appears before every cell
+  is complete.
+
+**`results/replication_results.ipynb` (NEW): the replication.**
+- Progress by protocol and level.
+- **Accuracy A at seeds 101–110**, from `exp/rq1_accuracy_repl.json` with the logged-accuracy
+  cross-check. Figures and gating as Study 1's A section in `experiments_results` (A is not
+  §14.5-gated there either). The path-length floor needs the seeds' validation splits, which
+  are only on the box, so it is omitted on the Mac.
+- The ladders with terminals (own mean ± sd).
+- The ladders without terminals, behind **`repl_readout.REGISTERED_READ`**: new, the
+  replication's one record of its readings, empty until each family's replication reading
+  is made.
+- RQ1's registered reading on both ladders (`rq1_readout.run` and `report`, as
+  `repl_readout.py rq1`).
+
+**Checked:** all three executed end to end with no errors (2026-11-22).
+- **normtest:** 17/32 grids; the grid and arm sections print "Not drawn"; the decision
+  prints NOT READ.
+- **replication:** 0/36 grids, 0/332 cells; A drawn for both ladders; the candidate
+  ladders gated for all four families; RQ1 NOT READ.
+- **experiments:** the sensitivity figure drawn.
+All three are committed without outputs. `repl_readout`'s self-test passes.
