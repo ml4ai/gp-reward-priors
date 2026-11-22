@@ -30307,8 +30307,8 @@ terminals:
   `euqhp6sq` (candidate large_play, the ensemble mean, index 0). Re-read minutes later, all ten
   runs are finished (seeds 51–55) or running (56–60), with recent heartbeats. W&B had briefly
   flagged a run, most likely a missed heartbeat. No action.
-- **8 grids remain:** BW 2 after its running grid, BX 1, BY 2, BZ 3. The last ends in about
-  2 days.
+- **8 grids remain, counting the running ones:** BW 2, BX 1, BY 2, BZ 3. The last (BZ's) ends
+  in about 1.5–2 days.
 
 **Box: 47 IQL runs, median 157k steps/h**: at the floor, at the split's planned load. No damage.
 The registry, controls, leveling and both RQ1 ladders are unchanged.
