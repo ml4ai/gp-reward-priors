@@ -30232,3 +30232,12 @@ leveling and both RQ1 ladders are unchanged.
   ladders gated for all four families; RQ1 NOT READ.
 - **experiments:** the sensitivity figure drawn.
 All three are committed without outputs. `repl_readout`'s self-test passes.
+
+**The replication's path-length floor on the Mac (author, 2026-11-22):** the 40 seed 101–110
+validation splits were copied from the box (`rsync` of `*_pref_val_10[1-9].hdf5` and
+`*_pref_val_110.hdf5`, 233 MB, `data/` git-ignored).
+- `replication_results.ipynb` now draws the floor on all four datasets with no code change,
+  checked by executing it.
+- The floor over seeds 101–110: medium_play 77.8 ± 2.9, medium_diverse 89.2 ± 2.2,
+  large_play 80.9 ± 2.6, large_diverse 87.8 ± 2.3 (per-pair accuracy × 100; 54–110 pairs
+  per seed).
