@@ -30264,3 +30264,53 @@ The registry, controls, leveling and both RQ1 ladders are unchanged.
 - NMR's sensitivity-arm companions: n01o finished, n02o started.
 
 **Latest files:** unchanged.
+
+### 14.158 Sweep check 2026-11-22 (later): the noise companions all read (NMR medium_diverse); grids 24/32; a transient "failed" state
+
+**Post-hoc ablation: NMR's rescaling companion arm, noise ladder (primary arm), medium_diverse
+(§14.78; DESCRIPTIVE).** Frozen index 0 (raw, leak-free) against companion index 2, without
+terminals:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.374 ± 0.142 | 0.321 ± 0.121 | **−0.053 [−0.099, −0.005]** |
+| n01 | 0.256 ± 0.190 | 0.227 ± 0.151 | −0.029 [−0.097, +0.032] |
+| n02 | 0.137 ± 0.141 | 0.158 ± 0.153 | +0.021 [−0.033, +0.066] |
+| n03 | 0.193 ± 0.188 | 0.161 ± 0.163 | −0.032 [−0.087, +0.014] |
+| n04 | 0.078 ± 0.131 | 0.072 ± 0.122 | −0.006 [−0.106, +0.095] |
+| n045 | 0.068 ± 0.130 | 0.073 ± 0.141 | +0.005 [−0.001, +0.012] |
+
+- **Degradation slopes:** frozen +0.621 [+0.375, +0.867] (the medium_diverse (a) slope of NMR's
+  registered noise reading, §14.143); companion +0.528 [+0.324, +0.726]; **companion − frozen
+  −0.093 [−0.295, +0.083]**.
+- **Reading (descriptive):** on NMR's raw-index maze, rescaling leaves the noise slope about
+  unchanged (the interval covers zero). Only the full-data cell differs, the same cell as
+  sparsity's (§14.129). Both arms reach the floor at high flip rates (§14.78's prediction).
+- **All five primary noise companions are now read:**
+
+| arm | slope change under rescaling | section |
+|---|---|---|
+| MR medium_play | about unchanged | §14.131 |
+| the ensemble mean, medium_play | about unchanged | §14.150 |
+| PT medium_play | about halved | §14.136 |
+| NMR medium_play | about a third lower | §14.155 |
+| NMR medium_diverse | about unchanged | here |
+
+  Each compares one family with itself. NMR differs between its two mazes (medium_diverse
+  is at the raw index 0, medium_play at r − 1). Of the sensitivity arm's companions, MR's
+  and PT's are read; NMR's is running (n01o–n02o finished, n03o running).
+
+**The normalization test (eight lanes):**
+- **44 of 104 files launched; grids 24/32 complete; cells 12/72 complete.** No file has a
+  second sweep.
+- **A transient "failed" state:** the progress count found one crashed or failed run in
+  `euqhp6sq` (candidate large_play, the ensemble mean, index 0). Re-read minutes later, all ten
+  runs are finished (seeds 51–55) or running (56–60), with recent heartbeats. W&B had briefly
+  flagged a run, most likely a missed heartbeat. No action.
+- **8 grids remain:** BW 2 after its running grid, BX 1, BY 2, BZ 3. The last ends in about
+  2 days.
+
+**Box: 47 IQL runs, median 157k steps/h**: at the floor, at the split's planned load. No damage.
+The registry, controls, leveling and both RQ1 ladders are unchanged.
+
+**Latest files:** unchanged.
