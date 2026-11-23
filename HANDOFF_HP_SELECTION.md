@@ -30335,3 +30335,29 @@ and both RQ1 ladders are unchanged.
 finished, n04o running, n045o last).
 
 **Latest files:** unchanged.
+
+### 14.160 Sweep check 2026-11-23 (later): grids 31/32; stage 2 planned; nothing due
+
+**The normalization test (eight lanes):**
+- **59 of 104 files launched; grids 31/32 complete; cells 20/72 complete.** No file has a
+  second sweep, and no run has failed.
+- **The last grid:** BZ's candidate medium_play (PT), first wave running; about half a day.
+- BW, BX and BY have finished their grids and are on their cells.
+
+**Stage 2 (§14.109), once the 32nd grid is complete:**
+1. `normtest.py winners --write` writes S's 32 winners and the four O3 indices to
+   `results/normtest_grid_winners.json`, with the stage-4 rule on reward model 0.
+2. `normtest.py write --write` writes S's evaluation cells. **Where S's winner is 0 or 2, S's
+   cell IS the N or F cell already queued** (`plan()` merges arms that share an index), so
+   only the S cells at other indices are new: at most 32.
+3. Queue them: split across waiters behind the eight normalization lanes, so each starts as
+   a lane frees. Possibly one lane at once too, if the speed rule allows (the box is at 166k).
+   The queue files and commands follow the 14.152 pattern.
+
+**Box: 41 IQL runs, median 166k steps/h**: inside the rule. No damage. The registry, controls,
+leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** BQ is on NMR's last sensitivity-arm companion (n045o; n01o–n04o
+finished).
+
+**Latest files:** unchanged.
