@@ -30361,3 +30361,20 @@ leveling and both RQ1 ladders are unchanged.
 finished).
 
 **Latest files:** unchanged.
+
+### 14.161 Sweep check 2026-11-24: the last grid on its second wave; nothing due
+
+**The normalization test (eight lanes):**
+- **61 of 104 files launched; grids 31/32 complete; cells 22/72 complete.** No file has a
+  second sweep, and no run has failed.
+- **The last grid** (BZ, PT candidate medium_play, `grid_cand_antmaze_medium_play_pt`): 5/8
+  finished, the last 3 indices running, about 6 h left.
+- Stage 2 (§14.160) is done at the next check. Waiting costs nothing: every lane has about
+  four days of stage-1 cells ahead, so no S cell could start sooner.
+
+**Box: 43 IQL runs, median 163k steps/h**: inside the rule. No damage. The registry, controls,
+leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** BQ's last cell (NMR sensitivity n045o) is still running.
+
+**Latest files:** unchanged.
