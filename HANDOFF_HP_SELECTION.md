@@ -30314,3 +30314,24 @@ terminals:
 The registry, controls, leveling and both RQ1 ladders are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.159 Sweep check 2026-11-23: grids 28/32; companion lane BP finished; nothing due
+
+**The normalization test (eight lanes):**
+- **52 of 104 files launched; grids 28/32 complete; cells 16/72 complete.** No file has a
+  second sweep, and no run has failed.
+- **4 grids remain:**
+  - BW's candidate medium_play (ensemble mean, 7/8);
+  - BY's candidate medium_play (NMR);
+  - BZ's candidate medium_diverse and medium_play (PT).
+- **BX has finished its grids** and is on its cells. The last grid (BZ's) ends in about 1–1.5
+  days, and stage 2 (S's 32 cells) is written then.
+
+**Box: 41 IQL runs, median 167k steps/h: inside the 10% rule.** Companion lane BP has finished
+(NMR medium_diverse's noise arm was its last). No damage. The registry, controls, leveling
+and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** only BQ is left, on NMR's sensitivity-arm companions (n01o–n03o
+finished, n04o running, n045o last).
+
+**Latest files:** unchanged.
