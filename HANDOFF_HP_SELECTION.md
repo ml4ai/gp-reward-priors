@@ -30571,3 +30571,19 @@ is unchanged. No damage. The registry (32 of 32 cells), controls, leveling and b
 ladders are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.166 Sweep check 2026-11-24 (later): cells 35/90; DA's first S cell nearly done; nothing due
+
+**The normalization test:**
+- **76 of 122 files launched; grids 32/32; cells 35/90 complete** (8 more since §14.165). No
+  file has a second sweep, and no run has failed.
+- Each of BW–CD finished another cell and is on its next. BW and BX are halfway through
+  theirs; the other six have just started.
+- **Stage 2:** DA's first S cell, `eval_std_antmaze_medium_play_nmr_idx7` (`rpc2a6ib`): 8/10
+  finished, the last 2 at about 950k steps. DB–DH are waiting behind their lanes.
+- `normtest_readout.py` is gated: 61 of 104 required arm-cells are not ready.
+
+**Box: 42 IQL runs, median 165k steps/h**: inside the rule. No damage. The registry (32 of 32
+cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
+
+**Latest files:** unchanged.
