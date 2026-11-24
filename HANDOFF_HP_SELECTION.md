@@ -30618,3 +30618,22 @@ cells), controls, leveling, both RQ1 ladders and every companion readout are unc
 - The BNN/CVaR hold (§14.1): BNN-training's runs are copied byte for byte. Nothing of them
   was read.
 - **Next refresh:** once the normalization test's 90 cells are complete, before its readout.
+
+### 14.168 Sweep check 2026-11-25: cells 38/90; DA's first S cell complete; nothing due
+
+**The normalization test:**
+- **79 of 122 files launched; grids 32/32; cells 38/90 complete.** No file has a second
+  sweep, and no run has failed.
+- BW and BX are starting their 8th cells. The other six are halfway through their 8th.
+- **Stage 2:** DA's first S cell, `eval_std_antmaze_medium_play_nmr_idx7`, is complete
+  (10/10). Its second, `eval_std_antmaze_medium_play_ens_mean_idx3` (`476p2exe`), is on its
+  first wave. DB–DH are waiting behind their lanes.
+- `normtest_readout.py` is gated: 58 of 104 required arm-cells are not ready.
+- **About 3 days left:** each lane has 4–5 cells to go (about 12 h each), the D waiters 1–2
+  after that.
+
+**Box: 45 IQL runs, median 164k steps/h**: inside the rule, at the planned nine-lane load.
+No damage. The registry (32 of 32 cells), controls, leveling, both RQ1 ladders and every
+companion readout are unchanged.
+
+**Latest files:** unchanged.
