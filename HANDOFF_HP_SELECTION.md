@@ -30378,3 +30378,80 @@ leveling and both RQ1 ladders are unchanged.
 **Post-hoc (companions):** BQ's last cell (NMR sensitivity n045o) is still running.
 
 **Latest files:** unchanged.
+
+### 14.162 Sweep check 2026-11-24 (later): ALL 32 GRIDS COMPLETE; stage 2 written (18 new S cells) and queued behind the lanes
+
+**The normalization test:**
+- **Grids 32/32 complete.** The last one, `klvh7317` (`grid_cand_antmaze_medium_play_pt`), had
+  finished. The progress count still read its runs as running: wandb's state was stale.
+- **Stage 1: 64 of 104 files launched; cells 25/72 complete.** No file has a second sweep, and
+  no run has failed.
+
+**Stage 2 (§14.160), steps 1–2 done:**
+1. `normtest.py winners --write`: 36 entries in `results/normtest_grid_winners.json`, picked
+   by the stage-4 rule on reward model 0. That is S's 32 grid winners plus the four O3 indices
+   (medium_play 0, medium_diverse 3, large_play 3, large_diverse 3). O3 is not written unless
+   N and F both fail (§14.110). The candidate large_diverse grids are all zero, so S's winner
+   there is index 0 for all four families.
+2. `normtest.py write --write`: **122 files, 0 failed, 0 waiting.**
+   - **18 new S cells.** They are S's winners at an index other than 0 or 2. At 0 or 2,
+     S's cell is the N or F cell already queued.
+   - **14 existing N/F files changed in their header comment only** ("arm(s) F" →
+     "arm(s) F/S"). Checked: no file differs outside its comments, so the queued and running
+     sweeps are unaffected.
+   - The 18 S cells, all seeds 51–60:
+     - medium_play: std NMR 7, std ensemble mean 3, cand ensemble mean 1;
+     - medium_diverse: std MR, PT and NMR 3; cand MR, NMR and ensemble mean 7;
+     - large_play: std MR 1, NMR 3 and ensemble mean 3; cand MR 1, NMR 1 and ensemble mean 3;
+     - large_diverse: std MR, PT and ensemble mean 3.
+- **The test is now 122 files and 90 cells.** The gate stands: nothing of the arms is shown
+  until all 90 cells are complete.
+
+**Step 3, the queue (`queues/normtest_stage2.sh`):** eight waiters, no lane at once.
+- **Why no lane at once:** the eight lanes plus BQ make nine, about 45 runs. That is the
+  most the speed rule allows (46–48 runs ran at 155–157k earlier this week). A tenth lane would
+  push the box under the floor.
+- Each waiter runs on its predecessor's GPUs, once that predecessor's queue script has
+  exited.
+
+| waiter | behind | GPUs | S cells |
+|---|---|---|---|
+| **DA** | BQ (ends in about 4 h) | 0 2 3 4 5 | 7: medium_play std NMR 7, std ens 3, cand ens 1; medium_diverse std MR/PT/NMR 3, cand MR 7 |
+| **DB** | BW | 0 1 2 3 4 | 2: medium_diverse cand NMR 7, cand ens 7 |
+| **DC** | BX | 1 2 3 4 5 | 1: large_diverse std MR 3 |
+| **DD** | BY | 0 1 3 4 5 | 2: large_play std MR 1, std NMR 3 |
+| **DE** | CA | 0 1 2 4 5 | 2: large_play std ens 3, cand MR 1 |
+| **DF** | CB | 2 3 4 5 0 | 2: large_play cand NMR 1, cand ens 3 |
+| **DG** | CC | 4 5 0 1 2 | 1: large_diverse std PT 3 |
+| **DH** | CD | 3 4 5 0 1 | 1: large_diverse std ens 3 |
+
+- **Sizing:** each cell takes about 12 h (two waves of 5 at about 1M steps). The lanes have
+  about 5–6.5 cells left. Total load is about 63 cells over 9 lanes, so the split evens every
+  lane at about 7 cells. BZ, which has the most left, gets no waiter. **The test finishes in
+  about 3.5 days.**
+- **Queue files:** `queues/normtest_{DA..DH}.txt`.
+  - They hold exactly the 18 new files, with no duplicate among the live queues
+    (BW–BZ, CA–CD, DA–DH).
+  - All pass `DRY_RUN=1`.
+- **The script checks first and changes NOTHING if any check fails:**
+  - each normalization predecessor's queue script matches exactly one process;
+  - BQ may have ended already, but then its n045o sweep must not be running;
+  - no D queue is launched already;
+  - all eight files validate.
+  `DRY_RUN=1` stops after the checks.
+- **Patterns:** each predecessor's queue is matched by its GPU list plus its first item (BQ:
+  its last item, n045o), with a bracket so a waiter never matches itself. I tested them
+  locally against simulated command lines. Each pattern matches only its own queue. It does
+  not match the waiters, the D queues, or BQ's `launch.sh`. `bash -n` passes. The full check
+  runs on the box (the script needs bash ≥ 4).
+
+**Box: 37 IQL runs, median 173k steps/h**: inside the rule. No damage. The registry, controls,
+leveling and both RQ1 ladders are unchanged.
+
+**Post-hoc (companions):** BQ's last cell, NMR sensitivity n045o: 5/10 finished, the last 5
+at about 300k steps (about 4 h). It is read at the next check after it completes.
+
+**Latest files:** unchanged.
+
+**Box commands:** `git pull --recurse-submodules`, then `DRY_RUN=1 ./queues/normtest_stage2.sh`,
+then `./queues/normtest_stage2.sh`. `pgrep -fc 'while pgrep -f'` should then be 8 higher than before.
