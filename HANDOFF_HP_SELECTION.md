@@ -30455,3 +30455,9 @@ at about 300k steps (about 4 h). It is read at the next check after it completes
 
 **Box commands:** `git pull --recurse-submodules`, then `DRY_RUN=1 ./queues/normtest_stage2.sh`,
 then `./queues/normtest_stage2.sh`. `pgrep -fc 'while pgrep -f'` should then be 8 higher than before.
+
+**DONE (author ran it on the box, 2026-11-24):** the box pulled, then `./queues/normtest_stage2.sh`
+launched waiters DA–DH. `pgrep -fc 'while pgrep -f'` reads 8. DA starts when BQ's n045o cell
+ends; the others start as their lanes finish their stage-1 cells. Check at the next sweep
+check: DA's first cell (`eval_std_antmaze_medium_play_nmr_idx7`) has a sweep, and no S file
+has two.
