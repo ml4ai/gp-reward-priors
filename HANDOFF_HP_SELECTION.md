@@ -30513,3 +30513,12 @@ is small at one variant, one seed and 8 chains.)
 Option (c), re-registering H3's statistic, does not depend on C-lite and can be decided at
 any time before Study 2's BNN models exist. The BNN/CVaR hold (§14.1) and §14.92's scoped
 exception are unchanged.
+
+**AMENDED (author, 2026-11-24, same day): C-lite starts as soon as ONE extension lane
+frees.** This replaces the waiter reading above, which waited for every extension queue to
+exit. When to build it is unchanged: only once everything in the extension is running or
+queued on a waiter.
+- **The waiter:** it watches all of the extension's lanes at the time it is launched and
+  starts C-lite on the first lane whose queue script exits, on that lane's GPUs.
+- **The load does not grow:** C-lite (one variant, one seed, 8 chains) takes a freed lane's
+  place and stays inside the speed rule.
