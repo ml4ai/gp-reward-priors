@@ -30461,3 +30461,25 @@ launched waiters DA–DH. `pgrep -fc 'while pgrep -f'` reads 8. DA starts when B
 ends; the others start as their lanes finish their stage-1 cells. Check at the next sweep
 check: DA's first cell (`eval_std_antmaze_medium_play_nmr_idx7`) has a sweep, and no S file
 has two.
+
+### 14.163 CONFIRMED (author, 2026-11-24): under O3 the task reward is at index 1, before any of O3's or the replication's IQL runs
+
+§14.108 item 2 assumed it and left it for the author to confirm. Now confirmed. **Under every
+fixed rule (N, F and O3), the replication's task reward runs at index 1 (r − 1), with no
+grid.** Only if the fallback S is adopted does the task reward keep Study 1's own grid
+(indices 0–3) on the selection unit.
+
+**Where it applies:**
+- **The normalization test is unaffected.** `normtest.py` has no task-reward cells. Its
+  arms are the four learned families plus the zero-reward floor. O3's index (§14.110, one
+  per dataset: 0 / 3 / 3 / 3 in `results/normtest_grid_winners.json`) applies to the learned
+  rewards only.
+- **The replication's IQL files are affected.** `replication.py` currently writes the task
+  reward as S does: `repl_sweeps/grid_cand_antmaze_<v>_task` on indices 0–3, with
+  `cand_full_antmaze_<v>_task` at the grid's winner. None of these is launched; the
+  replication's IQL waits for the adopted rule.
+
+**TO DO (coding agent, when the replication's IQL files are written at the adopted rule):**
+- If N, F or O3 is adopted, drop the task-reward grid. Write `cand_full_antmaze_<v>_task` at
+  index 1 on every dataset, and add a self-test for it.
+- If S is adopted, keep the grid as it is.
