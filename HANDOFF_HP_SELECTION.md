@@ -30522,3 +30522,52 @@ queued on a waiter.
   starts C-lite on the first lane whose queue script exits, on that lane's GPUs.
 - **The load does not grow:** C-lite (one variant, one seed, 8 chains) takes a freed lane's
   place and stays inside the speed rule.
+
+### 14.165 Sweep check 2026-11-24: NMR'S SENSITIVITY-ARM COMPANION COMPLETE — the post-hoc ablation is fully read; DA has started; box at 165k
+
+**Post-hoc ablation: NMR's rescaling companion arm, noise SENSITIVITY arm, medium_play (§14.78,
+§14.132; DESCRIPTIVE).** BQ's last cell, n045o (`5bkk894k`), finished 10/10. Frozen index 1
+against companion index 3, without terminals:
+
+| level | frozen | companion | companion − frozen |
+|---|---|---|---|
+| full | 0.593 ± 0.123 | 0.367 ± 0.193 | **−0.226 [−0.303, −0.157]** |
+| n01o | 0.556 ± 0.217 | 0.425 ± 0.235 | −0.131 [−0.228, −0.053] |
+| n02o | 0.479 ± 0.180 | 0.328 ± 0.203 | −0.151 [−0.261, −0.049] |
+| n03o | 0.273 ± 0.208 | 0.232 ± 0.175 | −0.041 [−0.162, +0.083] |
+| n04o | 0.168 ± 0.184 | 0.136 ± 0.182 | −0.032 [−0.108, +0.015] |
+| n045o | 0.009 ± 0.013 | 0.030 ± 0.060 | +0.021 [−0.003, +0.053] |
+
+- **Degradation slopes:** frozen +1.300 [+1.084, +1.511]; companion +0.797 [+0.508, +1.070];
+  **companion − frozen −0.503 [−0.663, −0.320]**.
+- **Reading (descriptive):** rescaling lowers NMR's sensitivity on the sensitivity arm by
+  about two-fifths. On the primary arm (§14.155) it was about a third, so the two arms
+  agree. The full-data score is lowered too, and the slope stays positive. Both arms reach
+  the floor at the highest flip rates, as §14.78 predicted.
+- **The three sensitivity-arm companions are now read** (medium_play; MR, PT, NMR, §11.3):
+  - MR about unchanged (+0.025, §14.146);
+  - PT about halved (−0.509, §14.147);
+  - NMR about two-fifths lower (−0.503).
+  This is the same split as on the primary arm and on sparsity. Each compares one family
+  with itself.
+- **THE POST-HOC ABLATION IS COMPLETE.** Every companion is read: sparsity, primary noise and
+  the sensitivity arm. No companion lane remains on the box.
+- **Notebooks:** no edit needed. `benchmark_results.ipynb`'s chart 10 and
+  `experiments_results.ipynb`'s sensitivity section collect from W&B and gate on the
+  family's registered noise reading, so NMR's sensitivity companion appears on their next
+  run.
+
+**The normalization test:**
+- **68 of 122 files launched; grids 32/32; cells 27/90 complete.** No file has a second
+  sweep, and no run has failed.
+- **Stage 2:** DA (behind BQ) has started its first S cell,
+  `eval_std_antmaze_medium_play_nmr_idx7` (`rpc2a6ib`, 5 running). DB–DH are waiting behind
+  their lanes.
+- `normtest_readout.py` is gated: 70 of 104 required arm-cells are not ready. Shared cells
+  count once per arm, so the readout's count differs from the file count.
+
+**Box: 42 IQL runs, median 165k steps/h**: inside the rule. DA took BQ's place, so the load
+is unchanged. No damage. The registry (32 of 32 cells), controls, leveling and both RQ1
+ladders are unchanged.
+
+**Latest files:** unchanged.
