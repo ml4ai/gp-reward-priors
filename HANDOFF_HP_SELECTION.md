@@ -30483,3 +30483,33 @@ grid.** Only if the fallback S is adopted does the task reward keep Study 1's ow
 - If N, F or O3 is adopted, drop the task-reward grid. Write `cand_full_antmaze_<v>_task` at
   index 1 on every dataset, and add a self-test for it.
 - If S is adopted, keep the grid as it is.
+
+### 14.164 DECISION (author, 2026-11-24): C-lite runs after the entire Study 1 extension
+
+This replaces §14.103's "C-lite is HELD until Study 1's lanes are done". Study 1's lanes are
+done, but **C-lite now waits for the whole Study 1 extension**: the normalization test and
+the replication.
+
+**When to build it:** C-lite (§14.103) is built and put on a waiter **once everything in the
+extension is running or queued on a waiter**. That is:
+- the normalization test's 90 cells (stage 2 queued, §14.162);
+- `write --o3` and its cells, if N and F both fail;
+- the replication's IQL files at the adopted rule, launched or queued (with the task reward
+  at index 1 under a fixed rule, §14.163).
+
+Before that, C-lite is not built.
+
+**The waiter:** "run after the entire Study 1 extension" is taken to mean that C-lite starts
+only when EVERY extension queue script has exited, not when the first lane frees. Its
+pattern list must cover all of the extension's lanes at the time it is launched.
+(Alternative, if the author prefers: start as soon as one extension lane frees, since C-lite
+is small at one variant, one seed and 8 chains.)
+
+**The rest of the order is unchanged:**
+1. C-lite;
+2. the author's calls on §14.98's options (a) and (b);
+3. the BNN's seed-100 selection.
+
+Option (c), re-registering H3's statistic, does not depend on C-lite and can be decided at
+any time before Study 2's BNN models exist. The BNN/CVaR hold (§14.1) and §14.92's scoped
+exception are unchanged.
