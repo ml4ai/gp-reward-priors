@@ -30587,3 +30587,34 @@ ladders are unchanged.
 cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.167 The W&B backup refreshed (author ran it on the box, 2026-11-24, 19:22–20:29 UTC, `--verify 2`; iqlpref `78e0973`)
+
+`MANIFEST.json`:
+- **`"complete": true`, 0 errors, `"stopped": null`.**
+- **11,254 runs and 713 sweeps in 7 projects** (up from 8,283 / 586 on 2026-11-17, §14.140).
+  For every project, copied + unchanged = runs listed.
+
+| project | runs | copied | unchanged | sweeps |
+|---|---|---|---|---|
+| IQL-pref | 6,651 | 981 | 5,670 | 666 |
+| MR-training | 1,443 | 615 | 828 | 12 |
+| PT-training | 1,400 | 581 | 819 | 12 |
+| NMR-training | 1,241 | 636 | 605 | 8 |
+| BNN-training | 518 | 0 | 518 | 16 |
+| NMR-timing | 1 | 0 | 1 | 0 |
+| BB-training | 0 | 0 | 0 | 0 |
+
+- **History verified on 2 runs per project** (1 for NMR-timing), 0 mismatches.
+- **Local files:** all four, now including `exp/rq1_accuracy_repl.json`.
+- **What it now holds:**
+  - Study 1 and the post-hoc ablation, final;
+  - the replication's 1,212 reward models and their selection sweeps;
+  - the normalization test as far as it has run (cells 35/90). Runs in progress hold their
+    history up to the backup.
+- Each project's "unchanged" count is slightly above its 2026-11-17 total (by 158 runs in
+  all), so the script was evidently run once more in between. A run is skipped only if it is
+  already whole on disk, so this changes nothing.
+- The BNN/CVaR hold (§14.1): BNN-training's runs are copied byte for byte. Nothing of them
+  was read.
+- **Next refresh:** once the normalization test's 90 cells are complete, before its readout.
