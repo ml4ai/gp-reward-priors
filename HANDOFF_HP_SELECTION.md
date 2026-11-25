@@ -30637,3 +30637,25 @@ No damage. The registry (32 of 32 cells), controls, leveling, both RQ1 ladders a
 companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.169 Sweep check 2026-11-25 (later): cells 45/90 — half the test complete; nothing due
+
+**The normalization test:**
+- **86 of 122 files launched; grids 32/32; cells 45/90 complete.** No file has a second
+  sweep, and no run has failed.
+- **Stage-1 lanes:**
+  - BY, BZ, CA and CB finished their 8th cells and started their 9th.
+  - CC and CD are on their second wave: their agents start the next seed as each run ends,
+    so the two waves overlap.
+  - BW and BX are halfway through their 8th.
+- **Stage 2:**
+  - DA has finished 2 of its 7 S cells (std medium_play NMR 7 and ensemble mean 3).
+  - Its third, `eval_cand_antmaze_medium_play_ens_mean_idx1` (`h98edfg1`), has just
+    started.
+  - DB–DH are waiting behind their lanes.
+- `normtest_readout.py` is gated: 50 of 104 required arm-cells are not ready.
+
+**Box: 45 IQL runs, median 168k steps/h**: inside the rule. No damage. The registry (32 of 32
+cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
+
+**Latest files:** unchanged.
