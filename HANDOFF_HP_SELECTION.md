@@ -30659,3 +30659,22 @@ companion readout are unchanged.
 cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.170 Sweep check 2026-11-25 (night): cells 53/90; the zero-reward floor cells running; nothing due
+
+**The normalization test:**
+- **94 of 122 files launched; grids 32/32; cells 53/90 complete.** No file has a second
+  sweep, and no run has failed.
+- **Stage-1 lanes:** every lane has finished 8–9 cells and has 2–3 to go after its current
+  one.
+  - CA and CB are on two of the zero-reward floor cells (std large_diverse `8u32bwzl`, std
+    large_play `bczdjqal`), the floor for criterion (ii) (§14.108).
+- **Stage 2:**
+  - DA's third S cell (`h98edfg1`): 9/10 finished, the last seed at about 990k steps.
+  - DB–DH are waiting behind their lanes.
+- `normtest_readout.py` is gated: 39 of 104 required arm-cells are not ready.
+
+**Box: 40 IQL runs, median 165k steps/h**: inside the rule. No damage. The registry (32 of 32
+cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
+
+**Latest files:** unchanged.
