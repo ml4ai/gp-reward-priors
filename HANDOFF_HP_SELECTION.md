@@ -30678,3 +30678,31 @@ cells), controls, leveling, both RQ1 ladders and every companion readout are unc
 cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.171 Sweep check 2026-11-26: cells 71/90; BY, CA and CB finished and their waiters DD, DE and DF started; nothing due
+
+**The normalization test:**
+- **112 of 122 files launched; grids 32/32; cells 71/90 complete.** No file has a second
+  sweep, and no run has failed.
+- **Stage-1 lanes:**
+  - **BY, CA and CB have finished** (11/11).
+  - BW and BX are halfway through their last cells (std medium_play ensemble mean, indices 0
+    and 2).
+  - BZ is on its last (std medium_diverse PT idx 2).
+  - CC and CD are on their last, the candidate zero-reward floor cells (medium_diverse
+    `4nsfaukw`, medium_play `sp5detnx`).
+- **Stage 2:**
+  - **DD, DE and DF started** on their first S cells (`gxhu2hi6`, `j4t9aqy9`, `0iz2as9f`).
+  - DA has 4 of its 7 complete; its 5th (std medium_diverse PT 3, `f2qd6jhg`) is at 7/10.
+  - DB, DC, DG and DH are waiting behind BW, BX, CC and CD.
+- **10 files not yet launched:** DA's last 2, DB 2, DC 1, DD 1, DE 1, DF 1, DG 1, DH 1.
+- **Nine lanes are still active** (BW, BX, BZ, CC, CD, DA, DD, DE, DF). BZ has no waiter, so
+  the box drops to eight lanes when it ends, in about 12 h.
+- **About 30 h left:** set by BW's last half-cell and then DB's two cells. The others end
+  within about a day.
+- `normtest_readout.py` is gated: 19 of 104 required arm-cells are not ready.
+
+**Box: 43 IQL runs, median 168k steps/h**: inside the rule. No damage. The registry (32 of 32
+cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
+
+**Latest files:** unchanged.
