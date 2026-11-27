@@ -30706,3 +30706,30 @@ cells), controls, leveling, both RQ1 ladders and every companion readout are unc
 cells), controls, leveling, both RQ1 ladders and every companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.172 Sweep check 2026-11-27: cells 89/90 — one cell left (about 2 h); the box nearly idle; nothing due
+
+**The normalization test:**
+- **122 of 122 files launched; grids 32/32; cells 89/90 complete.** No file has a second
+  sweep, and no run has failed.
+- **Every lane has finished but DB.** DB's last cell, `eval_cand_antmaze_medium_diverse_ens_mean_idx7`
+  (`7mg9bq50`), has 5/10 finished and the last 5 at about 650k steps: about 2 h.
+- `normtest_readout.py` is gated: 1 of 104 required arm-cells is not ready. Nothing of the
+  arms has been shown.
+
+**Box: 5 IQL runs, median 176k steps/h.** Only DB's last wave is running. No damage. The
+registry (32 of 32 cells), controls, leveling, both RQ1 ladders and every companion readout
+are unchanged.
+
+**Next, in order (§14.104, §14.108, §14.110, §14.163, §14.164, §14.167):**
+1. At the first check after `7mg9bq50` completes: the W&B backup (box), then
+   `normtest_readout.py`, the registered reading. N → F → O3 → else S, and one rule must pass
+   under both protocols.
+2. If N and F both fail: `normtest.py write --o3`, then queue O3's cells.
+3. Otherwise, write the replication's IQL files at the adopted rule. Under N, F or O3 the
+   task reward runs at index 1 with no grid (§14.163). Then queue them.
+4. Then build C-lite and put it on a waiter for the first extension lane to free (§14.164).
+- **Until step 1 the box is nearly idle.** Nothing else is cleared to start: the replication
+  waits for the rule, and C-lite waits for the extension to be queued.
+
+**Latest files:** unchanged.
