@@ -30733,3 +30733,68 @@ are unchanged.
   waits for the rule, and C-lite waits for the extension to be queued.
 
 **Latest files:** unchanged.
+
+### 14.173 `replication.py`: the replication's files now follow the adopted rule (author's go-ahead, 2026-11-27); nothing written, no result read
+
+Built while the normalization test's last cell runs, so the files can be written as soon as
+the reading picks a rule. No result of the test was read.
+
+**The rule is a recorded input:**
+- `replication.py rule <N|F|O3|S> --write` records it in `results/repl_rule.json`:
+  - the rule;
+  - its index per dataset (N 0, F 2, O3 from `normtest_grid_winners.json`'s `o3_<v>`, S
+    none);
+  - the task reward's index (1 under a fixed rule).
+- **It is recorded once.** A second call with a different rule exits without writing.
+- **Until the record exists, `write` writes only the eight trivial cells.** Those are fixed
+  in advance (§14.2). Every learned and task file waits, even though all 12 configs are
+  selected.
+
+**Under a fixed rule (N, F or O3), §14.104's decision rule:**
+- **No grids at seed 100**, for the learned families or for the task reward.
+- Every learned cell, in both protocols and at every level, is at the rule's index.
+- **The task reward is at index 1, r − 1, with no grid** (§14.108 item 2, §14.163).
+- The trivial cells are unchanged at index 0.
+- Each file is Study 1's cell with exactly the replication's changes (the check is
+  unchanged). The header says where the index comes from: "the adopted rule N (§14.104)", or
+  for the task reward "r − 1 under the adopted rule N (§14.163)".
+- `write` lists any file in `repl_sweeps/` that is not in the plan as **OBSOLETE**: "git rm
+  it (never launch it)". Under a fixed rule those are the four committed task grids
+  `grid_cand_antmaze_<v>_task`. None was ever launched.
+
+**Under S:** as before. The 36 grids at seed 100, then cells at their grid winners
+(§14.83 decision 4).
+
+**Who reads it:** `grid_spec` and `cell_spec` read the record by default, so they follow the
+rule. That covers `repl_readout.py` (its expected index is the cell's own under a fixed
+rule), `replication_results.ipynb` and `normtest.py`'s cross-check without any change to
+them.
+
+**Checked:**
+- `replication.py --selftest`:
+  - the existing tests, now pinned to S;
+  - before the rule: trivial only, even with every config selected;
+  - for each of N, F and O3: no grids, the same cells as under S, every index as above,
+    every file passing `check()`, fixed params identical to S's (only the index differs),
+    and the task header;
+  - the rule recorded once, a change refused, O3 refused without its indices.
+- `normtest.py --selftest` and `repl_readout.py --selftest` pass.
+- **Dry runs against the real configs**, each rule in a scratch copy, with nothing written
+  in the repository:
+
+| rule | files | of which | obsolete |
+|---|---|---|---|
+| none yet | 8 | trivial; 360 waiting | — |
+| N | 332 | 320 learned at 0, 4 task at 1, 8 trivial | the 4 task grids |
+| F | 332 | 320 learned at 2, 4 task at 1, 8 trivial | the 4 task grids |
+| O3 | 332 | 320 learned at 0 / 3 / 3 / 3, 4 task at 1, 8 trivial | the 4 task grids |
+| S | 44 | 36 grids + 8 trivial; cells wait for winners | — |
+
+- 0 failed in every case. 332 cells is 3,320 IQL runs.
+
+**After the reading (§14.172 step 3):**
+1. `replication.py rule <X> --write`;
+2. `replication.py write --write`;
+3. `git rm` the obsolete task grids;
+4. the queue files and waiters, in the §14.152 pattern;
+5. then C-lite (§14.164).
