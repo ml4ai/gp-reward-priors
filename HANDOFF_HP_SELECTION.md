@@ -30816,3 +30816,70 @@ them.
 and every companion readout are unchanged.
 
 **Latest files:** unchanged.
+
+### 14.175 THE NORMALIZATION TEST'S REGISTERED READING (2026-11-28): N PASSES UNDER BOTH PROTOCOLS — the replication, and Studies 2 and 3, use N (no normalization after the reward shift)
+
+**Read after** the W&B backup (author ran it on the box, 2026-11-28 01:40–02:24 UTC,
+`--verify 2`, iqlpref `21e16c7`):
+- `complete: true`, 0 errors, 11,719 runs and 758 sweeps (IQL-pref 7,116), history verified
+  with 0 mismatches;
+- it holds every run of the test.
+
+`results/normtest_readout.py` was run unchanged (§14.104, §14.108, §14.110). Output:
+`results/normtest_readout_latest.txt`. Margin 0.10, α 0.025. Pooled intervals are exact
+stratified bootstrap 95% over the 40 (dataset, seed) units.
+
+**N (index 0):**
+- **With terminals: PASSES by (ii) with the floor.**
+  - (i) fails: PT S_N − S_S −0.094 [−0.128, −0.064] and ENS_MEAN −0.104 [−0.130, −0.077] are
+    below −0.10. MR −0.040 [−0.060, −0.021] and NMR −0.053 [−0.076, −0.030] are inside.
+  - (ii) holds: every pair's interval lies inside (−0.10, +0.10), but two come close to the
+    margin.
+    - MR−PT +0.054 [+0.017, +0.092]; MR−NMR +0.013 [−0.016, +0.042];
+    - MR−ENS +0.063 [+0.035, +0.092]; PT−NMR −0.041 [−0.081, −0.002];
+    - PT−ENS +0.010 [−0.027, +0.043]; NMR−ENS +0.050 [+0.016, +0.084].
+  - The floor holds: every family clears the zero reward, one-sided exact Wilcoxon,
+    p ≤ 1.5e-8.
+- **Without terminals: PASSES by (i).**
+  - MR −0.053 [−0.066, −0.041]; PT +0.000 [+0.000, +0.000] (S picked index 0 on all four
+    datasets, so S is N); NMR −0.018 [−0.050, +0.011]; ENS_MEAN −0.042 [−0.076, −0.008].
+  - Floor p ≤ 2.3e-10.
+- **DECISION: N** ("N passes under both protocols (std: (ii) + floor, cand: (i))"). It is
+  first in the preference order, so F's result does not enter the decision.
+  - F (index 2) fails with terminals: (i) PT −0.075 [−0.128, −0.026]; (ii) MR−PT and PT−NMR
+    leave the band.
+  - F passes without terminals by (i).
+  - **O3 is not run** (§14.104: only if N and F both fail).
+
+**Checks:**
+- `normtest_readout.py --selftest` passes.
+- Every pooled S_A − S_S and pair contrast, recomputed from the readout's own per-cell means
+  (32 family × dataset × protocol rows), matches its point estimate to within 0.001.
+- No file has a second sweep, and no run failed.
+- `restore_test.py` now includes `normtest`. Its comparison against this backup runs on the
+  box (§14.141).
+
+**What it means (registered, §14.104's decision rule):**
+- The replication's normalization rule is **N** for BOTH arms (with and without terminals),
+  and for Studies 2 and 3.
+- **§14.83 decision 4's seed-100 normalization grids are dropped.** Every learned family runs
+  at index 0 after the reward shift. The task reward runs at index 1, r − 1 (§14.163). The
+  other IQL settings stay inherited.
+- Study 1's protocol and every registered Study 1 reading are unchanged (§14.104 do-NOTs).
+- **Disclosure:** with terminals, N passes on (ii) and not (i), by intervals that reach
+  +0.092 against the 0.10 margin. PT and the ensemble mean each lose about 0.1 under N with
+  terminals, but they lose it alike, which is what (ii) tests. Without terminals N passes
+  (i) outright.
+- **Descriptive beside (not the decision):** each arm's mean ± sd per family × dataset ×
+  protocol, and S's selected indices, are in the latest file. Within-family reading only.
+
+**Notebook:** `results/normtest_results.ipynb` runs the same readout and draws its
+per-family arm-against-S charts once readable. No edit needed.
+
+**Next (§14.172 step 3, §14.173):**
+1. `replication.py rule N --write`;
+2. `replication.py write --write`: 332 cells, 3,320 IQL runs;
+3. `git rm` the four obsolete task grids `repl_sweeps/grid_cand_antmaze_<v>_task.yaml`;
+4. queue files and waiters across the box's nine lanes. About 18 days at 45 runs and
+   168k steps/h;
+5. then C-lite on a waiter for the first replication lane to free (§14.164).
