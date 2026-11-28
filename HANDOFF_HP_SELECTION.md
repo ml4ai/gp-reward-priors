@@ -31029,3 +31029,15 @@ of 1.25 or more:
 3. `./queues/clite_waiter.sh`.
 - When C-lite finishes (`clite_waiter.log` shows the measurements), copy
   `exp/calibration_clite/meas/` to the analysis Mac and run `analyse`.
+
+**DONE (author, on the box, 2026-11-28):** the replication's nine lanes EA–EI
+(`./queues/repl_launch.sh`, §14.176) and the C-lite waiter (`./queues/clite_waiter.sh`,
+§14.177) are launched.
+- **At the next sweep check, confirm on W&B:**
+  - nine replication sweeps started, one per lane's first cell, each with 5 runs;
+  - no cell has a second sweep;
+  - every config audits clean (rule N: index 0, the task reward at index 1, seeds 101–110).
+- **Add to the sweep check from now on:**
+  - `results/repl_readout.py status` (states only for the candidate cells);
+  - the replication's progress per lane;
+  - the box's speed against the 157.5k floor.
