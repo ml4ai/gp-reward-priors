@@ -30883,3 +30883,64 @@ per-family arm-against-S charts once readable. No edit needed.
 4. queue files and waiters across the box's nine lanes. About 18 days at 45 runs and
    168k steps/h;
 5. then C-lite on a waiter for the first replication lane to free (§14.164).
+
+### 14.176 The replication's IQL cells WRITTEN at rule N and QUEUED on nine lanes (author's go-ahead, 2026-11-28)
+
+**Written:**
+- `replication.py rule N --write` → `results/repl_rule.json`: index 0 on all four datasets,
+  the task reward at index 1, source §14.175.
+- `replication.py write --write`: **332 files, 0 failed**, 324 new plus the 8 trivial cells
+  already committed (unchanged). That is:
+  - 320 learned cells: MR, PT, NMR and the ensemble mean × 4 datasets × 2 protocols × 10
+    levels (full, r16–r128, n01–n045), all at index 0;
+  - 4 task cells (`cand_full_antmaze_<v>_task`) at index 1;
+  - 8 trivial cells (zero and mean-constant) at index 0.
+  Each file is Study 1's cell plus exactly the replication's changes (`check()`).
+- **`git rm`** the four obsolete task grids `repl_sweeps/grid_cand_antmaze_<v>_task.yaml`.
+  None was ever launched. No seed-100 grid remains (§14.104: dropped under N).
+- **Nothing launched yet:** `repl_readout.py status` (W&B) finds no sweep for any of the
+  332 cells. Under rule N it lists no grids, as expected.
+
+**The queue (`queues/repl_launch.sh`, `queues/repl_{EA..EI}.txt`):**
+- **Nine lanes at once.** The box is idle, so there are no waiters. Nine lanes of 5 GPUs × 1
+  agent is about 45 runs, the speed rule's limit (§14.162). The GPU lists are the nine of
+  the normalization test (§14.152, §14.162).
+
+| lane | GPUs | cells | lane | GPUs | cells |
+|---|---|---|---|---|---|
+| EA | 0 1 2 3 4 | 37 | EF | 2 3 4 5 0 | 37 |
+| EB | 1 2 3 4 5 | 37 | EG | 4 5 0 1 2 | 37 |
+| EC | 0 1 3 4 5 | 37 | EH | 3 4 5 0 1 | 37 |
+| ED | 5 0 1 2 3 | 37 | EI | 0 2 3 4 5 | 36 |
+| EE | 0 1 2 4 5 | 37 | | | |
+
+- **Order: by block, then dealt round-robin over EA–EI.** The registered reading
+  (`repl_readout.py rq1`, i.e. `rq1_readout.read_family`) uses BOTH protocols' ladder
+  cells, so each block completes whole ladders.
+  1. **The sparsity block, 172 cells (about 19 per lane):** full data, both protocols (32),
+     then the task (4) and trivial (8) cells, then r16, r32, r64 and r128, both protocols
+     (128).
+  2. **The noise block, 160 cells:** n01, n02, n03, n04 and n045, both protocols.
+- **Timing:** about 12 h per cell (two waves of 5 at about 1M steps). So the sparsity block
+  ends in about 9.5 days and the noise block about 9 days later: **about 18.5 days in all,
+  3,320 IQL runs.**
+- **Checked:**
+  - the nine files hold the 332 files exactly once, with no duplicate;
+  - all pass `DRY_RUN=1` (every file exists and carries "Lineage: REPLICATION");
+  - `bash -n` passes.
+- **The launcher checks first and changes NOTHING if any check fails:**
+  - no queue script is running (the box is idle);
+  - no lane is launched already (no log file, no process naming its queue file);
+  - all nine files validate.
+  `DRY_RUN=1` stops after the checks.
+
+**Gates (unchanged):**
+- `repl_readout.REGISTERED_READ` is empty. No replication ladder cell is drawn or tabulated
+  before its registered reading (§14.5).
+- Candidate cells show run states only.
+
+**Then (§14.164):** with the whole extension queued, **C-lite is now due to be built**. It
+goes on a waiter that starts it on the first replication lane to free, on that lane's GPUs.
+
+**Box commands:** `git pull --recurse-submodules`, then `DRY_RUN=1 ./queues/repl_launch.sh`,
+then `./queues/repl_launch.sh`. Expect "Queue scripts now: 9".
