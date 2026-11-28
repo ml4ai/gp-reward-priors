@@ -30944,3 +30944,88 @@ goes on a waiter that starts it on the first replication lane to free, on that l
 
 **Box commands:** `git pull --recurse-submodules`, then `DRY_RUN=1 ./queues/repl_launch.sh`,
 then `./queues/repl_launch.sh`. Expect "Queue scripts now: 9".
+
+### 14.177 C-LITE BUILT (author's go-ahead, 2026-11-28): four arms on one waiter, for the first replication lane to free; the reading guide fixed now, before any run
+
+**Scope:** §14.92's scoped exception. Only the BNN reward models' calibration diagnostics are
+read; no IQL result is.
+- C-lite trains no model that any IQL run uses. Its runs log to a new W&B project,
+  **BNN-clite**, and write under `exp/calibration_clite/` (gitignored, box-generated).
+- The analysis text goes to
+  `calibration_results/held_bnn_cvar/mechanism_clite.txt`.
+- Post hoc, descriptive.
+
+**`results/calibration_clite.py`** (parent repo). One variant and seed, 8 chains, the
+production config with ONE change per arm (§14.99, §14.103):
+
+| arm | change | tests |
+|---|---|---|
+| base | none (production) | the comparison. Its 8 chains are chains 0–7 of the production run, deterministic in (seed, chain index); checked against stage B's measurement of that run |
+| burnin4 | `num_burn_in_steps` 20,000 → 80,000 | the sampler (§14.99 candidate 2) |
+| nmeas0 | `n_meas` 256 → 0 (likelihood-only SGHMC; the sampler skips the prior term explicitly) | the functional prior as a whole |
+| nugget10 | `map_sig_n2` 0.001 → 0.01 | the nugget, i.e. the within-cell layer (§14.102) |
+
+- **Variant medium_diverse, seed 1:** the lowest BNN temperature of the four (0.44, §14.98).
+  These are the same 107 validation pairs as stage B and B3.
+- **`run` (box):**
+  - trains the arms not yet done, one GPU each, all at once;
+  - uses the trainer's own command line, as `train_rewards.sh` builds it for one BNN job,
+    plus `--num_chains 8 --chains_per_gpu 8`, C-lite's own `OUT_DIR` and project, and the
+    arm's one flag;
+  - marks each arm DONE or FAILED;
+  - then measures it. Resumable.
+- **`measure` (box):** stage B's `measure_bnn` and B3's `measure_one` on each arm, unchanged.
+  Both now take an optional `bnn_root`; their default behaviour is the same and both
+  self-tests pass. MR's anchor model is measured once as the reference.
+- **`analyse` (here):** per arm:
+  - accuracy, the fitted temperature T and CE;
+  - median |d| / |d_MR|, whole and per part (positional, within-cell; B3's split);
+  - then each arm's median |d_arm| / |d_base| on the same pairs, whole / positional /
+    within-cell.
+  - Two cross-checks come first: B3's pooled mean must equal stage B's pooled logits for
+    each arm (else that arm is not read), and base's chains are compared with the
+    production run's chains 0–7.
+
+**READING GUIDE, fixed now, before any C-lite run.** A "lift" is a ratio |d_arm| / |d_base|
+of 1.25 or more:
+- burn-in × 4 lifts BOTH parts → the sampler does not reach the posterior's scale;
+- n_meas 0 lifts BOTH parts → the functional prior as a whole holds the logits down;
+- ONLY nugget × 10 lifts the within-cell part → the nugget causes layer 2;
+- none lifts → neither. What remains is the likelihood weighting, which B2 (§14.99) found
+  standard.
+- More than one pattern can hold. One variant and one seed make this a mechanism probe, not
+  an estimate.
+- It feeds the author's calls on §14.98's options (a) and (b). Option (c) does not depend on
+  it.
+
+**`queues/clite_waiter.sh`:**
+- **Checks first and changes NOTHING if any check fails:**
+  - each of EA–EI's queue scripts matches exactly one process;
+  - C-lite is not launched already;
+  - C-lite's self-test passes.
+- Then a waiter watches EA–EI. When the FIRST lane's queue script exits, it runs
+  `calibration_clite.py run --gpus` on the first four of that lane's GPUs. So C-lite takes
+  the freed lane's place and the load does not grow.
+- Each lane is matched by its GPU list plus its first item, with a bracket so the waiter
+  never matches itself. I tested this against simulated command lines.
+- **When:** the lanes are balanced (36–37 cells each), so the first frees in about 18 days,
+  near the replication's end. That is the author's choice (§14.164 amended).
+
+**Checked here:**
+- `calibration_clite.py --selftest`:
+  - each arm's command differs from base's by its one flag only;
+  - no arm writes under `exp/reward_learning`;
+  - the production values the arms multiply are 20,000 and 0.001;
+  - the scale ratios and the reading guide's patterns behave as specified.
+- `analyse` dry-run on real data: stage B's and B3's seed-1 production measurements stood in
+  for every arm, with two arms rescaled synthetically. Both cross-checks behave, and base
+  reproduces stage B (|d| / |d_MR| 0.28, T 0.43). The guide reports exactly the two planted
+  patterns.
+- `bash -n` passes on the waiter.
+
+**Box commands:**
+1. after the replication is launched (§14.176): `git pull --recurse-submodules`;
+2. `DRY_RUN=1 ./queues/clite_waiter.sh`;
+3. `./queues/clite_waiter.sh`.
+- When C-lite finishes (`clite_waiter.log` shows the measurements), copy
+  `exp/calibration_clite/meas/` to the analysis Mac and run `analyse`.
