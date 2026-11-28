@@ -30798,3 +30798,21 @@ them.
 3. `git rm` the obsolete task grids;
 4. the queue files and waiters, in the §14.152 pattern;
 5. then C-lite (§14.164).
+
+### 14.174 Sweep check 2026-11-27 (later): THE NORMALIZATION TEST'S 122 FILES ARE COMPLETE (grids 32/32, cells 90/90); the box idle; the reading waits for the backup
+
+**The normalization test:**
+- **Grids 32/32 and cells 90/90 complete.** DB's last cell, `7mg9bq50`, finished 10/10.
+- No file has a second sweep, and no run has failed. All 16 lanes have exited.
+- **Not read yet.** `normtest_readout.py` was deliberately left out of this check, so
+  nothing of the arms has been shown.
+- **Order (§14.172):**
+  1. the W&B backup on the box, so the reading can be recomputed from the backup alone
+     (`restore_test.py`);
+  2. then `normtest_readout.py`, the registered reading.
+
+**Box: 0 IQL runs.** Idle. Nothing else is cleared to start until the rule is adopted
+(§14.172). No damage. The registry (32 of 32 cells), controls, leveling, both RQ1 ladders
+and every companion readout are unchanged.
+
+**Latest files:** unchanged.
